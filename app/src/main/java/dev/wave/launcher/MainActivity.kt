@@ -36,6 +36,7 @@ import dev.wave.launcher.input.GamepadHandler
 import dev.wave.launcher.input.NavAction
 import dev.wave.launcher.state.UiEffect
 import dev.wave.launcher.state.XmbViewModel
+import dev.wave.launcher.theme.WaveTheme
 import dev.wave.launcher.ui.WaveBackground
 import dev.wave.launcher.ui.XmbScreen
 import kotlinx.coroutines.launch
@@ -45,7 +46,14 @@ class MainActivity : ComponentActivity() {
     private val container get() = (application as WaveApplication).container
 
     private val viewModel: XmbViewModel by viewModels {
-        viewModelFactory { initializer { XmbViewModel(applicationContext, container) } }
+        viewModelFactory {
+            initializer {
+                val app = application as WaveApplication
+                val coldBoot = app.coldBootPending
+                app.coldBootPending = false
+                XmbViewModel(applicationContext, container, coldBoot)
+            }
+        }
     }
 
     private lateinit var gamepad: GamepadHandler
@@ -99,7 +107,11 @@ class MainActivity : ComponentActivity() {
         setContent {
             val state by viewModel.state.collectAsStateWithLifecycle()
             Box(Modifier.fillMaxSize()) {
-                WaveBackground(enabled = state.waveEnabled, speed = state.waveSpeed)
+                WaveBackground(
+                    enabled = state.waveEnabled,
+                    speed = state.waveSpeed,
+                    theme = WaveTheme.byName(state.theme),
+                )
                 XmbScreen(
                     state = state,
                     loadAppIcon = { pkg -> container.apps.icon(pkg, ICON_PX) },

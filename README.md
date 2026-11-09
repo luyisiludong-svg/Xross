@@ -33,6 +33,20 @@ automatically; add others with **Add ROM folder…**. Put games in platform subf
 * Only tested with D-pad key events on an emulator so far, not with physical controllers
   (DualSense, Switch Pro, built-in handheld pads).
 
+## Look and sound
+
+* **Icons** come from `assets/icons` (the design SVGs). `tools/icons/svg_icons.py` splits the
+  icon sheets and converts the ones listed in `tools/icons/icon_map.txt` into
+  `res/drawable/xmb_*.xml`. To change an icon, edit the map and run:
+
+  ```bash
+  python3 tools/icons/svg_icons.py list assets/icons /tmp/icons   # previews every icon id
+  python3 tools/icons/svg_icons.py build assets/icons tools/icons/icon_map.txt app/src/main/res/drawable
+  ```
+* **Themes**: Lavender, Crimson, Sapphire, Emerald, Amber, Rose and Midnight (Settings ▸ Theme).
+* **Sounds**: `app/src/main/assets/sounds`, mapped in `audio/UiSounds.kt`. Settings ▸ Sound
+  toggles effects, volume, the startup cue and the game-start cue.
+
 ## Layout
 
 ```
@@ -42,5 +56,8 @@ app/src/main/java/dev/wave/launcher/
   data/     Room (GameEntity, GameDao, WaveDatabase), GameRepository, AppRepository, SettingsStore
   launch/   EmulatorRegistry (intent matrix), GameLauncher
   state/    MenuTree, NavState, RemapSession, XmbViewModel
-  ui/       XmbScreen, WaveBackground + WaveRenderer (GLSL), Glyphs
+  ui/       XmbScreen, StatusBar, WaveBackground + WaveRenderer (GLSL), Glyphs
+  theme/    WaveTheme palettes
+  audio/    UiSounds (SoundPool effects + streamed boot cues)
+tools/icons/ SVG → VectorDrawable converter and icon role map
 ```

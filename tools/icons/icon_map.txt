@@ -1,0 +1,37 @@
+# Launcher role = source icon id (run `svg_icons.py list` to see ids and previews).
+# Regenerate with:
+#   python3 tools/icons/svg_icons.py build assets/icons tools/icons/icon_map.txt app/src/main/res/drawable
+
+# Category bar
+settings      = group1_04   # toolbox
+games         = group2_01   # controller
+apps          = 7753e258    # package cube
+photo         = group1_20
+music         = group1_25
+video         = group1_27
+network       = group2_08   # globe
+
+# Library
+platform      = group2_04   # folder with controller
+game_cart     = group3_10   # cartridge / card
+game_disc     = group2_06   # disc
+favorites     = group2_11   # playlist
+recent        = group3_02   # clock face "12"
+handheld      = group2_00   # Android games (handheld device)
+folder        = group2_02
+storage       = aa6e2c3a
+trophy        = group2_05
+
+# Settings
+controls      = group1_06   # wrench + controller
+emulators     = group1_11   # wrench + cube
+display       = group1_13   # wrench + theme screen
+sound         = group1_17   # wrench + speaker
+system        = group1_16   # wrench + device
+add           = group2_07
+refresh       = group1_05
+home          = group1_01
+power         = group1_00
+info          = group2_09   # question mark
+download      = group2_10
+users         = group3_04

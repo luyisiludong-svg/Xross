@@ -3,6 +3,7 @@ package dev.wave.launcher.ui
 import android.app.ActivityManager
 import android.content.Context
 import android.opengl.GLSurfaceView
+import android.view.View
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -11,30 +12,34 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-
-private val FallbackGradient = Brush.verticalGradient(listOf(Color(0xFF0A1A4A), Color(0xFF050818)))
+import dev.wave.launcher.theme.WaveTheme
+import kotlin.math.roundToInt
 
 /**
  * GL wave background. The render loop is paused whenever the activity is paused (screen off,
  * emulator in front), so it costs nothing while a game runs.
  */
 @Composable
-fun WaveBackground(enabled: Boolean, speed: Float, modifier: Modifier = Modifier) {
+fun WaveBackground(enabled: Boolean, speed: Float, theme: WaveTheme, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val supported = remember { supportsGles3(context) }
     if (!enabled || !supported) {
-        Box(modifier.fillMaxSize().background(FallbackGradient))
+        Box(modifier.fillMaxSize().background(Brush.verticalGradient(listOf(theme.topColor, theme.bottomColor))))
         return
     }
 
-    val renderer = remember { WaveRenderer() }
-    renderer.params = renderer.params.copy(speed = speed)
+    val renderer = remember {
+        @Suppress("DEPRECATION")
+        val hz = (context.getSystemService(Context.WINDOW_SERVICE) as android.view.WindowManager)
+            .defaultDisplay.refreshRate
+        WaveRenderer(refreshRateHz = hz)
+    }
+    renderer.params = WaveParams(speed = speed, theme = theme)
 
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val view = remember {
@@ -42,6 +47,16 @@ fun WaveBackground(enabled: Boolean, speed: Float, modifier: Modifier = Modifier
             setEGLContextClientVersion(3)
             setRenderer(renderer)
             renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
+            // Render below native resolution; the compositor upscales for free.
+            addOnLayoutChangeListener { v, l, t, r, b, _, _, _, _ ->
+                val w = r - l
+                val h = b - t
+                if (w > 0 && h > 0) {
+                    val scale = WaveRenderer.renderScale(w, h)
+                    (v as GLSurfaceView).holder.setFixedSize((w * scale).roundToInt(), (h * scale).roundToInt())
+                }
+            }
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
         }
     }
     DisposableEffect(lifecycle, view) {
