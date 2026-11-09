@@ -3,10 +3,12 @@ package dev.wave.launcher
 import android.content.Context
 import dev.wave.launcher.audio.UiSounds
 import dev.wave.launcher.data.AppRepository
+import dev.wave.launcher.data.FingerprintQueue
 import dev.wave.launcher.data.GameRepository
 import dev.wave.launcher.data.SettingsStore
 import dev.wave.launcher.data.WaveDatabase
 import dev.wave.launcher.launch.GameLauncher
+import dev.wave.launcher.storage.FingerprintPolicy
 import dev.wave.launcher.storage.StorageVolumes
 
 /** Manual dependency graph; swap for Hilt once the module split happens. */
@@ -20,4 +22,9 @@ class AppContainer(context: Context) {
     val volumes: StorageVolumes by lazy { StorageVolumes(appContext) }
     val launcher: GameLauncher by lazy { GameLauncher(appContext) }
     val sounds: UiSounds by lazy { UiSounds(appContext) }
+    val fingerprints: FingerprintQueue by lazy {
+        FingerprintQueue(database.games(), database.hashes()) {
+            FingerprintPolicy(hashLargeImages = settings.current.hashLargeImages)
+        }
+    }
 }

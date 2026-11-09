@@ -1,0 +1,182 @@
+# Testing Wave on real Android hardware
+
+How to install, exercise and measure Wave on a physical handheld, phone or TV box, and what to
+send back when something is wrong. Feature status and emulator measurements are in
+[`STATUS.md`](STATUS.md).
+
+> **Don't run `tools/device-tests/smoke.sh` on a device that holds your real ROM collection.**
+> It runs `rm -rf /sdcard/ROMs` to seed its own test files and clears Wave's app data. It is
+> meant for a throwaway emulator.
+
+## 1. Connect the device
+
+1. On the device: **Settings ▸ About ▸ tap "Build number" 7 times**, then
+   **Developer options ▸ USB debugging** on.
+2. Plug in over USB-C, accept the prompt on the device, and check it is listed:
+
+   ```bash
+   adb devices
+   ```
+
+Over Wi-Fi (Android 11+): turn on **Wireless debugging**, then pair and connect using the IP and
+ports shown on that screen:
+
+```bash
+adb pair <ip>:<pairing-port>
+```
+
+```bash
+adb connect <ip>:<port>
+```
+
+## 2. Install Wave
+
+| Build | Use it for | Command |
+| --- | --- | --- |
+| `debug` | Functional testing | `./gradlew :app:installDebug` |
+| `profiling` | Smoothness and timing (R8-optimized, same signing key, logs frame timing) | `./gradlew :app:installProfiling` |
+
+Both builds share the same signing key, so you can switch between them without uninstalling.
+
+Grant storage access in the app (**Settings ▸ Library ▸ All files access**) or with:
+
+```bash
+adb shell appops set --uid dev.wave.launcher MANAGE_EXTERNAL_STORAGE allow
+```
+
+## 3. Games and real emulators
+
+- **ROMs:** put them in platform folders such as `ROMs/snes`, `ROMs/psx` or `ROMs/gc`, on
+  internal storage or the SD card. Folders named `ROMs`, `Games`, `Emulation` or `Retro` at the
+  root of any drive are found automatically; others can be added in Settings ▸ Library.
+- **RetroArch:** install it, open it, and download the cores Wave uses with
+  **Online Updater ▸ Core Downloader**: `snes9x`, `mgba`, `fceumm`, `genesis_plus_gx`,
+  `swanstation`, `mupen64plus_next_gles3`, `gambatte`, `melondsds`, `flycast`, `fbneo`.
+  Grant RetroArch storage access too. Wave launches the core at
+  `/data/data/<package>/cores/<core>_libretro_android.so`, which only exists once that core is
+  downloaded.
+- **Standalone emulators:** install DuckStation, Dolphin and PPSSPP from the Play Store;
+  NetherSX2 has to be sideloaded. Open each once and grant it storage access.
+- **Remove the test stand-ins** if they were ever installed. They use the real emulators'
+  package names and would block or replace them:
+
+  ```bash
+  adb uninstall com.retroarch.aarch64
+  ```
+
+  (Likewise `com.github.stenzek.duckstation`, `xyz.aethersx2.android`,
+  `org.dolphinemu.dolphinemu`, `org.ppsspp.ppsspp`, but only if `adb shell pm list packages`
+  shows that package is Wave's stand-in rather than the real emulator.)
+
+**Pass/fail for each emulator:** pick a game and press Confirm. The game must start directly. If
+the emulator opens to its own menu instead, the launch format doesn't match that emulator
+version; capture a log (§8).
+
+| Emulator | Platforms to try |
+| --- | --- |
+| RetroArch | NES, SNES, GB/GBC/GBA, Genesis, N64, Arcade |
+| DuckStation | PS1 (`.chd`, `.cue`, `.m3u`) |
+| NetherSX2 | PS2 (`.iso`, `.chd`) |
+| Dolphin | GameCube, Wii (`.rvz`, `.iso`) |
+| PPSSPP | PSP (`.iso`, `.cso`) |
+
+## 4. Controllers
+
+Test the built-in pad, plus any of DualSense, Switch Pro and Xbox controllers you own:
+
+- [ ] D-pad moves the cursor; holding it repeats smoothly
+- [ ] Left stick moves the cursor; holding it repeats; letting go doesn't bounce one step back
+- [ ] L1/R1 switch categories
+- [ ] Confirm/cancel: with Settings ▸ Controls ▸ Confirm button on **Auto**, Nintendo pads
+      confirm with the right-hand button, others with the bottom one
+- [ ] Button symbols in the bottom-right hints match the controller (✕○△ / A B Y)
+- [ ] Settings ▸ Controls ▸ Remap buttons works, and Reset button mapping restores defaults
+- [ ] Touch: one horizontal swipe moves one category; vertical drag scrolls; tap selects
+
+If a button does nothing, this shows the raw key codes the device sends (press the button while
+it runs, Ctrl+C to stop):
+
+```bash
+adb shell getevent -lt
+```
+
+## 5. Smoothness, memory and startup
+
+Install the `profiling` build. Reset the frame counters:
+
+```bash
+adb shell dumpsys gfxinfo dev.wave.launcher reset
+```
+
+Use the launcher normally for about 30 seconds: scroll a large list, hold the D-pad, switch
+categories. Then read the interface frame stats:
+
+```bash
+adb shell dumpsys gfxinfo dev.wave.launcher
+```
+
+Wave background frame timing and library scan times:
+
+```bash
+adb logcat -s WaveFrames WaveScan
+```
+
+Cold start time (target under 2.5 s):
+
+```bash
+adb shell am force-stop dev.wave.launcher && adb shell am start -W -n dev.wave.launcher/.MainActivity
+```
+
+Memory while a game runs: launch a game, then check that `TOTAL PSS` is 150 MB or less:
+
+```bash
+adb shell dumpsys meminfo dev.wave.launcher
+```
+
+| Measure | Good | Investigate |
+| --- | --- | --- |
+| `gfxinfo` Janky frames | < 5% | > 10% |
+| `gfxinfo` Number Slow UI thread | ~0 | rising while scrolling |
+| `WaveFrames` p95 | ≤ 1.2 × period | missed > 5 per 300 frames |
+| Cold start `TotalTime` | < 2500 ms | |
+| `TOTAL PSS` with a game running | ≤ 150 MB | |
+
+On a 120 Hz screen the `WaveFrames` lines should report `period 8.3ms`.
+
+Check by eye and ear:
+- [ ] The wave background moves smoothly with no visible banding
+- [ ] The focused item's glow pulses gently
+- [ ] Sound effects play at sensible volumes; the startup and game-start sounds play
+      (Settings ▸ Sound can turn each off)
+
+## 6. Library and fingerprints
+
+- [ ] All your platforms appear under Games, with sensible titles
+- [ ] **Settings ▸ Library ▸ Game fingerprints** counts up while Wave is open and stops when a
+      game is running (it shows "Fingerprinting N of M · <title>" while working)
+- [ ] With a large library on an SD card, browsing stays smooth while fingerprinting runs
+- [ ] Optional: turn on **Fingerprint large disc images** and note how long one ISO takes; the
+      timing appears in `adb logcat -s WaveScan` with the `profiling` or `debug` build
+
+## 7. Home screen
+
+**Settings ▸ System ▸ Set as home app** makes Wave the launcher. To undo it, use Android's
+**Settings ▸ Apps ▸ Default apps ▸ Home app**.
+
+## 8. What to send back
+
+The device model and Android version, plus a log, a screenshot, and the `gfxinfo` output:
+
+```bash
+adb logcat -d > wave-log.txt
+```
+
+```bash
+adb exec-out screencap -p > wave-shot.png
+```
+
+```bash
+adb shell dumpsys gfxinfo dev.wave.launcher > wave-gfxinfo.txt
+```
+
+For a controller problem, also include the `getevent -lt` output for the button.

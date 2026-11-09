@@ -131,12 +131,14 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        // Picks up permission grants, installed emulators, and newly mounted drives.
-        viewModel.refreshEnvironment()
+        // Picks up permission grants, installed emulators, and newly mounted drives, and resumes
+        // background fingerprinting.
+        viewModel.onForeground()
     }
 
     override fun onPause() {
         gamepad.release()
+        viewModel.onBackground()
         super.onPause()
     }
 

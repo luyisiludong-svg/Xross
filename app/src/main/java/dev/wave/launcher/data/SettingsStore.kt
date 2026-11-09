@@ -25,6 +25,8 @@ data class WaveSettings(
     val soundVolume: Float = 0.75f,
     val bootSound: Boolean = true,
     val gameBootSound: Boolean = true,
+    /** Fully hash disc images over the size limit (slow on SD cards). */
+    val hashLargeImages: Boolean = false,
 )
 
 /** SharedPreferences-backed settings exposed as a StateFlow. */
@@ -62,6 +64,7 @@ class SettingsStore(context: Context) {
         soundVolume = prefs.getFloat(KEY_SFX_VOLUME, 0.75f),
         bootSound = prefs.getBoolean(KEY_BOOT_SOUND, true),
         gameBootSound = prefs.getBoolean(KEY_GAMEBOOT_SOUND, true),
+        hashLargeImages = prefs.getBoolean(KEY_HASH_LARGE, false),
     )
 
     private fun save(s: WaveSettings) = prefs.edit {
@@ -78,6 +81,7 @@ class SettingsStore(context: Context) {
         putFloat(KEY_SFX_VOLUME, s.soundVolume)
         putBoolean(KEY_BOOT_SOUND, s.bootSound)
         putBoolean(KEY_GAMEBOOT_SOUND, s.gameBootSound)
+        putBoolean(KEY_HASH_LARGE, s.hashLargeImages)
     }
 
     private companion object {
@@ -94,6 +98,7 @@ class SettingsStore(context: Context) {
         const val KEY_SFX_VOLUME = "sound_volume"
         const val KEY_BOOT_SOUND = "boot_sound"
         const val KEY_GAMEBOOT_SOUND = "gameboot_sound"
+        const val KEY_HASH_LARGE = "hash_large_images"
 
         // Keys and values here never contain '=' or newlines (ints, enum names, ids).
         fun encodeMap(map: Map<String, String>) = map.entries.joinToString("\n") { "${it.key}=${it.value}" }

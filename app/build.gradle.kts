@@ -69,6 +69,10 @@ dependencies {
     implementation(libs.compose.ui.tooling.preview)
     debugImplementation(libs.compose.ui.tooling)
 
+    // 7z header/entry access for ROM fingerprinting; xz decodes LZMA-compressed 7z headers.
+    implementation(libs.commons.compress)
+    implementation(libs.xz)
+
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)
     ksp(libs.room.compiler)

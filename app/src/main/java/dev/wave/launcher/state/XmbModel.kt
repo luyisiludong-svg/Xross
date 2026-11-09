@@ -34,6 +34,8 @@ sealed interface Command {
     data object CycleSoundVolume : Command
     data object ToggleBootSound : Command
     data object ToggleGameBootSound : Command
+    data object ToggleLargeImageHashing : Command
+    data object RecheckFingerprints : Command
     data object OpenHomeSettings : Command
     data object OpenAndroidSettings : Command
     data object OpenLibrarySettings : Command
