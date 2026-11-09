@@ -12,6 +12,13 @@ import java.util.Locale
 
 data class FolderEntry(val path: String, val autoDetected: Boolean)
 
+/** Live fingerprinting status; kept out of [MenuSnapshot] so progress never rebuilds game lists. */
+data class FingerprintStatus(
+    val stats: dev.wave.launcher.data.FingerprintStats? = null,
+    /** Title being fingerprinted right now, or null when idle. */
+    val current: String? = null,
+)
+
 /** Everything the menu is derived from. Immutable; rebuilt whenever any input changes. */
 data class MenuSnapshot(
     val games: List<GameEntity> = emptyList(),
@@ -118,7 +125,10 @@ class MenuTree(private val s: MenuSnapshot) {
         folder(SYSTEM, "System", GlyphKey.SYSTEM, "Version ${s.versionName}"),
     )
 
-    private fun librarySettings(): List<XmbNode> = buildList {
+    /** Library settings with live fingerprint rows. Not cached: it's small and changes while hashing. */
+    fun library(status: FingerprintStatus): List<XmbNode> = librarySettings(status)
+
+    private fun librarySettings(status: FingerprintStatus = FingerprintStatus()): List<XmbNode> = buildList {
         add(
             setting(
                 "lib:access",
@@ -130,6 +140,20 @@ class MenuTree(private val s: MenuSnapshot) {
         )
         add(setting("lib:add", "Add ROM folder…", "Pick a folder with system subfolders (snes/, psx/…)", GlyphKey.ADD, Command.AddFolder))
         add(setting("lib:rescan", "Rescan library", s.scanStatus ?: "${s.games.size} games", GlyphKey.REFRESH, Command.Rescan))
+        add(setting("lib:fingerprints", "Game fingerprints", fingerprintSummary(status), GlyphKey.STORAGE, Command.RecheckFingerprints))
+        add(
+            setting(
+                "lib:hashlarge",
+                "Fingerprint large disc images",
+                if (s.settings.hashLargeImages) {
+                    "On — slow on SD cards; runs only while Wave is open"
+                } else {
+                    "Off — ISO/BIN files over 256 MB are skipped"
+                },
+                GlyphKey.STORAGE,
+                Command.ToggleLargeImageHashing,
+            ),
+        )
         add(
             setting(
                 "lib:auto",
@@ -224,6 +248,20 @@ class MenuTree(private val s: MenuSnapshot) {
         XmbNode(id, title, subtitle, NodeIcon.Glyph(glyph), NodeAction.Run(command))
 
     private fun onOff(on: Boolean) = if (on) "On" else "Off"
+
+    private fun fingerprintSummary(status: FingerprintStatus): String {
+        val st = status.stats ?: return "Counting…"
+        if (status.current != null) {
+            return "Fingerprinting ${st.total - st.pending} of ${st.total} · ${status.current}"
+        }
+        val parts = buildList {
+            add("${st.hashed} identified by content")
+            if (st.byName > 0) add(if (st.byName == 1) "1 arcade set by name" else "${st.byName} arcade sets by name")
+            if (st.skipped > 0) add("${st.skipped} skipped")
+            if (st.pending > 0) add("${st.pending} waiting")
+        }
+        return parts.joinToString(" · ")
+    }
 
     private fun GameEntity.isDiscImage(): Boolean =
         fileName.substringAfterLast('.').lowercase() in DISC_EXTENSIONS

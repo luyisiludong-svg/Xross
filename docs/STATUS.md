@@ -1,7 +1,6 @@
 # Project Wave — Implementation Status
 
-Status of the codebase against [`project_scope.md`](../project_scope.md), as of **2026-11-09**
-(commit after `16e4dac`). It covers what has been built, how it was verified, measured
+Status of the codebase against [`project_scope.md`](../project_scope.md), as of **2026-11-09**. It covers what has been built, how it was verified, measured
 performance across device classes, known limitations, and the remaining work split into phases.
 
 Legend: ✅ done and verified · ◐ partial · ❌ not started · 🧪 verified only on the emulator / with stubs
@@ -14,11 +13,11 @@ Legend: ✅ done and verified · ◐ partial · ❌ not started · 🧪 verified
 | --- | --- |
 | Phase 1 (Alpha): XMB navigation, gamepad layer, library, emulator dispatch, wave shader | ✅ complete, with a few small gaps listed in §6 Phase 1b |
 | Visual front end from `assets/examples` (icons, themes, glow, status bar, sounds) | ✅ |
-| Phase 2 (metadata, media hub, theme packs, on-screen controller and keyboard) | ❌ |
+| Phase 2 (metadata, media hub, theme packs, on-screen controller and keyboard) | ◐ step 1 done: archive-aware fingerprinting (§2, §3.4) |
 | Phase 3 (dual screen, hot-swap, RetroAchievements, Web Portal, FTPS) | ❌ (two prerequisites done; see §6) |
 | Phase 4 (onboarding, triage, profiling, plugin API) | ◐ app triage and performance work started |
 
-**Verification in this pass:** 38 JVM/Robolectric unit tests, a 30-check on-device smoke test,
+**Verification:** 53 JVM/Robolectric unit tests, a 31-check on-device smoke test,
 end-to-end launch tests against stub builds of five emulators, and frame-pacing measurements
 across 12 display configurations. Everything passes. All device testing used the Android
 emulator (API 37, host GPU). No physical handheld or controller has been tested yet.
@@ -54,7 +53,11 @@ emulator (API 37, host GPU). No physical handheld or controller has been tested 
 | Total playtime counter | ❌ | Needs session tracking: launch time → return to launcher |
 | Playlists / custom tags | ❌ | |
 | Extension filtering, `.cue`/`.gdi`/`.m3u` track de-duplication | ✅ | |
-| Look inside `.zip`/`.7z`, CRC32/MD5/SHA-1, Redump/No-Intro DAT matching | ❌ | Phase 2 (feeds the scraper) |
+| Look inside `.zip`/`.7z`; CRC32/MD5/SHA-1 fingerprints | ✅ | Background job; see §3.4 |
+| No-Intro header-less hashes (iNES, FDS, SNES copier) | ✅ | Stored alongside the full-file hashes |
+| CHD identification | ✅ | SHA-1 from the v4/v5 header |
+| Per-track hashes for `.cue`/`.gdi` (Redump) | ❌ | Sheets are skipped for now |
+| Redump/No-Intro DAT import and matching | ❌ | Next Phase 2 step; `findByCrc` lookup is ready |
 | Room library, incremental rescan, unmount-safe deletion | ✅ | 5,000 ROMs: first scan 1.9 s, rescan 0.9–1.1 s (emulator) |
 | FTS4 title index + search query | ◐ | DAO query exists; no search UI yet (needs the virtual keyboard) |
 | Multi-volume pooling (internal + microSD) with `ROMs`/`Games`/`Emulation` auto-detect | ✅ | |
@@ -111,7 +114,7 @@ HTTPS Wave Portal (Ktor CIO), FTPS (Apache FtpServer), auth, uploads, library ed
 
 ## 3. Test results
 
-### 3.1 Unit tests — 38/38 pass
+### 3.1 Unit tests — 53/53 pass
 `./gradlew :app:testDebugUnitTest` (JVM + Robolectric on SDK 35)
 
 | Suite | Tests | Covers |
@@ -124,8 +127,10 @@ HTTPS Wave Portal (Ktor CIO), FTPS (Apache FtpServer), auth, uploads, library ed
 | `MenuSettingsTest` | 6 | Settings sections, sound/theme rows, disc vs cartridge icons, folders |
 | `EmulatorIntentTest` | 4 | Every intent recipe: component, extras, data URI, read grant |
 | `SettingsStoreTest` | 2 | Every setting survives a restart; defaults |
+| `FingerprinterTest` | 12 | Known CRC/MD5/SHA-1 vectors; iNES and SNES header stripping; ZIP member choice and header-only mode; 7z; CHD v5; arcade sets; skip rules; missing files |
+| `FingerprintQueueTest` | 3 | Staleness and paging queries, stats, cascade delete, real queue run (Room in memory) |
 
-### 3.2 Device smoke test — 30/30 pass
+### 3.2 Device smoke test — 31/31 pass
 `tools/device-tests/smoke.sh` resets the app, seeds ROMs, and drives the UI with key events.
 It checks screen content through the accessibility tree.
 
@@ -138,6 +143,7 @@ It checks screen content through the accessibility tree.
 | Remapping | Wizard start, 9-button capture, bindings saved, remapped button works, reset |
 | Rescan | New file picked up (+1), deleted file dropped (−1) |
 | Touch | Swipe left/right moves exactly one category; vertical drag scrolls |
+| Fingerprints | Library settings report games identified by content after a rescan |
 | Launch | RetroArch stub receives the right core; ROM readable via granted URI; Recently Played updated |
 
 ### 3.3 Emulator dispatch — 5/5 recipes verified with stubs
@@ -154,6 +160,40 @@ and activity name. Each stub logs the intent it receives and reads the ROM throu
 
 Finding: no emulator could read the raw path without its own storage permission. Real
 emulators are normally granted storage access; if one isn't, it must use the URI.
+
+### 3.4 Fingerprinting (Phase 2, step 1)
+
+How each file type is identified (`storage/Fingerprinter.kt`):
+
+| Input | Result |
+| --- | --- |
+| Plain ROM ≤ 256 MB | CRC32 + MD5 + SHA-1 in one pass; header-less set too for iNES/FDS/SNES copier headers |
+| `.zip` / `.7z` | Picks the member with a platform ROM extension; CRC32 from the archive header, MD5/SHA-1 by decompressing members ≤ 256 MB (7z capped at 96 MB of LZMA memory) |
+| Arcade `.zip` | Recorded as a set, identified by name |
+| `.chd` | SHA-1 from the v4/v5 header (no decompression) |
+| ISO/BIN over 256 MB | Skipped unless Settings ▸ Library ▸ Fingerprint large disc images is on |
+| `.rvz` `.cso` `.gcz` `.wbfs` `.pbp` … | Skipped: compressed containers don't match DATs |
+| `.cue` `.gdi` `.m3u` | Skipped until per-track hashing exists |
+| Missing file (card removed) | Not recorded; retried next session |
+
+The queue (`data/FingerprintQueue.kt`) runs on one background-priority thread **only while Wave
+is in front**. It stops on pause and resumes on return, and it re-hashes a game only when its
+size or modification time changes. Results live in the `game_hashes` table (DB v2, automatic
+migration from v1).
+
+Measured on the emulator (optimized build, upgraded in place from DB v1 without data loss):
+
+| Check | Result |
+| --- | --- |
+| 3,011 small ROMs (mixed library) | 4.7 s; summary: 3,006 by content, 1 arcade set, 4 skipped, each correct |
+| 2,000 more ROMs added + rescan | Scan 0.18 s, fingerprinting 3.8 s |
+| Scrolling a 3,000-game list while hashing | 0 slow UI-thread frames, p99 18 ms |
+| Launching a game mid-job (three 1 GB ISOs) | Queue stopped immediately, 0% CPU while the emulator ran; resumed and finished on return |
+| 300 MB ISO with large-image hashing on | 0.95 s on emulator storage; expect several seconds per GB on SD cards |
+
+Observed: a rescan right after bulk-copying files reported 22 files as "updated" (their
+modification times settled after the first scan), so those were re-hashed once. Harmless, but
+worth watching on real SD cards.
 
 ---
 
@@ -261,7 +301,10 @@ Unisoc T618) before calling it final.**
       melonDS, ScummVM, verified with the stub harness
 
 ### Phase 2 — Metadata, customization & media (Beta)
-- [ ] Archive-aware scanning (zip/7z headers) and CRC32/MD5/SHA-1 hashing in a background job
+- [x] Archive-aware fingerprinting (zip/7z/CHD headers) and CRC32/MD5/SHA-1 hashing in a
+      background job that pauses while a game runs
+- [ ] DAT import (No-Intro / Redump Logiqx XML) → exact titles, regions and revisions offline
+- [ ] Per-track hashing for `.cue`/`.gdi` (Redump matches tracks, not sheets)
 - [ ] Scrapers: ScreenScraper (dev credentials), SteamGridDB (user key), Hasheous; language
       priority list; throttled batch scraper; disk asset cache keyed by UUID
 - [ ] Game detail view (box art, description, release info) and manual match/override tool

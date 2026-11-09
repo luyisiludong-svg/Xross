@@ -138,6 +138,9 @@ adb shell 'rm "/sdcard/ROMs/gba/Metroid Fusion (USA).gba"'
 key KEYCODE_DPAD_CENTER
 pause 1.2
 expect "−1" "rescan drops a deleted file"
+key KEYCODE_DPAD_DOWN
+pause 3
+expect "identified by content" "background fingerprinting reports identified games"
 
 echo "== Touch"
 home

@@ -9,6 +9,8 @@ coreKtx = "1.18.0"
 coroutines = "1.10.2"
 room = "2.8.4"
 junit = "4.13.2"
+commonsCompress = "1.27.1"
+xz = "1.10"
 robolectric = "4.16.1"
 androidxTestCore = "1.6.1"
 
@@ -29,6 +31,8 @@ room-runtime = { module = "androidx.room:room-runtime", version.ref = "room" }
 room-ktx = { module = "androidx.room:room-ktx", version.ref = "room" }
 room-compiler = { module = "androidx.room:room-compiler", version.ref = "room" }
 junit = { module = "junit:junit", version.ref = "junit" }
+commons-compress = { module = "org.apache.commons:commons-compress", version.ref = "commonsCompress" }
+xz = { module = "org.tukaani:xz", version.ref = "xz" }
 robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
 androidx-test-core = { module = "androidx.test:core", version.ref = "androidxTestCore" }
 

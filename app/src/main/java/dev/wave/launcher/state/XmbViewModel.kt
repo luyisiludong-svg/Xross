@@ -34,6 +34,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.flow.sample
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -105,8 +106,21 @@ class XmbViewModel(
     ) { e, games, apps, settings -> MenuTree(e.copy(games = games, apps = apps, settings = settings)) }
         .stateIn(viewModelScope, SharingStarted.Eagerly, MenuTree(env.value))
 
-    val state: StateFlow<XmbUiState> = combine(tree, nav, transient, settingsStore.settings) { t, n, tr, settings ->
-        val view = resolve(t, n)
+    private val fingerprints = container.fingerprints
+
+    /** Sampled so per-file progress doesn't redraw the menu more than twice a second. */
+    @OptIn(kotlinx.coroutines.FlowPreview::class)
+    private val fingerprintStatus: StateFlow<FingerprintStatus> =
+        combine(fingerprints.stats, fingerprints.current) { st, cur -> FingerprintStatus(st, cur) }
+            .sample(500)
+            .stateIn(viewModelScope, SharingStarted.Eagerly, FingerprintStatus())
+
+    private var foreground = false
+
+    val state: StateFlow<XmbUiState> = combine(
+        tree, nav, transient, settingsStore.settings, fingerprintStatus,
+    ) { t, n, tr, settings, fp ->
+        val view = resolve(t, n, fp)
         XmbUiState(
             categories = categories,
             categoryIndex = n.categoryIndex,
@@ -136,10 +150,11 @@ class XmbViewModel(
         val depth: Int get() = breadcrumb.size
     }
 
-    private fun resolve(t: MenuTree, n: NavState): ListView {
+    private fun resolve(t: MenuTree, n: NavState, fp: FingerprintStatus): ListView {
         val category = categories[n.categoryIndex]
         val stack = n.stack(category.id, category.title)
-        val items = t.list(stack.last().key)
+        val key = stack.last().key
+        val items = if (key == MenuTree.LIBRARY) t.library(fp) else t.list(key)
         return ListView(
             breadcrumb = stack.drop(1).map { it.title },
             listKey = stack.last().key,
@@ -149,7 +164,7 @@ class XmbViewModel(
     }
 
     /** Read synchronously from the source flows so rapid inputs never act on a stale frame. */
-    private fun current(): ListView = resolve(tree.value, nav.value)
+    private fun current(): ListView = resolve(tree.value, nav.value, fingerprintStatus.value)
 
     val inputConfig: InputConfig
         get() = settingsStore.current.let { InputConfig(it.confirmLayout, it.deadzone, it.keyRemap) }
@@ -244,6 +259,19 @@ class XmbViewModel(
      * Re-reads permission, ROM folders and installed apps/emulators. Called on resume. Scans
      * quietly on first load, and with a toast when access has just been granted.
      */
+    /** Activity resumed: refresh the environment and continue fingerprinting in the background. */
+    fun onForeground() {
+        foreground = true
+        refreshEnvironment()
+        if (env.value.storageGranted && scanJob?.isActive != true) fingerprints.start(viewModelScope)
+    }
+
+    /** Activity paused (a game or another app is in front): stop background I/O. */
+    fun onBackground() {
+        foreground = false
+        fingerprints.stop()
+    }
+
     fun refreshEnvironment() {
         val wasGranted = env.value.storageGranted
         val granted = hasStorageAccess()
@@ -302,6 +330,7 @@ class XmbViewModel(
             return
         }
         scanJob?.cancel()
+        fingerprints.stop() // resume after the scan, against the updated library
         scanJob = viewModelScope.launch {
             env.update { it.copy(scanStatus = "Scanning…") }
             val roots = env.value.folders.map { File(it.path) }
@@ -319,6 +348,7 @@ class XmbViewModel(
             )
             env.update { it.copy(scanStatus = status) }
             if (!quiet || result.isFailure) toast(status)
+            if (foreground) fingerprints.start(viewModelScope)
         }
     }
 
@@ -443,6 +473,18 @@ class XmbViewModel(
             }
             Command.ToggleBootSound -> settingsStore.update { it.copy(bootSound = !it.bootSound) }
             Command.ToggleGameBootSound -> settingsStore.update { it.copy(gameBootSound = !it.gameBootSound) }
+            Command.ToggleLargeImageHashing -> {
+                settingsStore.update { it.copy(hashLargeImages = !it.hashLargeImages) }
+                if (foreground && scanJob?.isActive != true) fingerprints.restart(viewModelScope)
+            }
+            Command.RecheckFingerprints -> {
+                if (!env.value.storageGranted) {
+                    toast("Grant All files access first")
+                } else if (scanJob?.isActive != true) {
+                    fingerprints.restart(viewModelScope)
+                    toast("Checking for files without fingerprints")
+                }
+            }
             Command.OpenHomeSettings -> emit(UiEffect.StartActivity(Intent(Settings.ACTION_HOME_SETTINGS)))
             Command.OpenAndroidSettings -> emit(UiEffect.StartActivity(Intent(Settings.ACTION_SETTINGS)))
             Command.OpenLibrarySettings -> {
