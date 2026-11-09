@@ -14,3 +14,7 @@ dependencyResolutionManagement {
 }
 rootProject.name = "Wave"
 include(":app")
+
+// Test-only emulator stand-ins (see tools/emulator-stub/build.gradle.kts).
+include(":emulator-stub")
+project(":emulator-stub").projectDir = file("tools/emulator-stub")

@@ -24,6 +24,7 @@ import dev.wave.launcher.launch.GameLauncher
 import dev.wave.launcher.launch.LaunchPlan
 import dev.wave.launcher.storage.PlatformRegistry
 import dev.wave.launcher.theme.WaveTheme
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
@@ -304,7 +305,14 @@ class XmbViewModel(
         scanJob = viewModelScope.launch {
             env.update { it.copy(scanStatus = "Scanning…") }
             val roots = env.value.folders.map { File(it.path) }
+            val started = System.nanoTime()
             val result = runCatching { container.games.scan(roots) }
+            // A newer scan replaced this one: not a failure, nothing to report.
+            if (result.exceptionOrNull() is CancellationException) return@launch
+            if (BuildConfig.PERF_LOG) {
+                val ms = (System.nanoTime() - started) / 1_000_000
+                android.util.Log.i("WaveScan", "scan ${result.getOrNull() ?: result.exceptionOrNull()} in $ms ms")
+            }
             val status = result.fold(
                 onSuccess = { "${it.total} games · +${it.added} −${it.removed}" },
                 onFailure = { "Scan failed: ${it.message}" },

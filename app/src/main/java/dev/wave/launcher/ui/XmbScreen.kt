@@ -6,10 +6,12 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -64,6 +66,7 @@ import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -76,6 +79,7 @@ import dev.wave.launcher.input.NavAction
 import dev.wave.launcher.state.NodeAction
 import dev.wave.launcher.state.NodeIcon
 import dev.wave.launcher.state.RemapSession
+import dev.wave.launcher.state.XmbCategory
 import dev.wave.launcher.state.XmbNode
 import dev.wave.launcher.state.XmbUiState
 import dev.wave.launcher.theme.WaveTheme
@@ -93,21 +97,27 @@ private val IconBottom = Color(0xFFC9C9D3)
 private val Pill = Color(0x59000000)
 
 /**
- * Layout in fractions of the screen, measured from the reference screenshots: the focused
- * category column sits at ~22% width, the category bar at ~25% height and the focused item at
- * ~52% height. Sizes scale with the short side so portrait and odd aspect ratios still work.
+ * Layout measured from the reference screenshots (16:9): focused category column at ~22% of the
+ * width, category bar at ~25% of the height, focused item at ~52%.
+ *
+ * Everything else scales from [s], the usable short side, so 4:3 / 1:1 / 3:2 handhelds, 21:9
+ * phones, portrait and 4K TVs keep the same proportions:
+ *  - the focus column always leaves room for one whole category to its left;
+ *  - vertical positions follow [s], not the raw height, so tall portrait screens don't open a
+ *    gap between the bar and the list.
  */
 private class XmbMetrics(val width: Float, val height: Float) {
-    val s = min(height, width * 0.75f)
+    val s = min(height, width * 0.9f)
 
-    val anchorX = width * if (width >= height) 0.22f else 0.14f
-    val barY = height * 0.25f
     val categorySpacing = s * 0.34f
     val categoryIcon = s * 0.12f
     val categoryFocusScale = 1.38f
+    val anchorX = maxOf(width * 0.22f, categorySpacing + categoryIcon * 0.8f)
+        .coerceAtMost(width * 0.45f)
+    val barY = min(height * 0.25f, s * 0.30f)
     val itemIcon = s * 0.085f
     val itemFocusScale = 1.32f
-    val focusedY = height * 0.52f
+    val focusedY = barY + s * 0.27f
     val itemSpacing = s * 0.15f
     val focusGap = s * 0.05f
     val aboveY = barY - s * 0.19f
@@ -116,6 +126,10 @@ private class XmbMetrics(val width: Float, val height: Float) {
     val subtitleSize = s * 0.036f
     val labelSize = s * 0.037f
     val statusSize = s * 0.042f
+
+    /** How many rows fit above the bar and below the focus; only those are composed. */
+    val rowsAbove = ceil(aboveY / itemSpacing).toInt() + 1
+    val rowsBelow = ceil((height - focusedY - focusGap) / itemSpacing).toInt() + 1
 }
 
 @Composable
@@ -154,18 +168,19 @@ fun XmbScreen(
         fun Float.sp(): TextUnit = with(density) { this@sp.toSp() }
         fun Float.dp(): Dp = with(density) { this@dp.toDp() }
 
-        val catPos by animateFloatAsState(
-            state.categoryIndex.toFloat(),
-            tween(260, easing = FastOutSlowInEasing),
-            label = "category",
-        )
-        val depth by animateFloatAsState(
-            state.depth.coerceAtMost(1).toFloat(),
-            tween(260, easing = FastOutSlowInEasing),
-            label = "depth",
-        )
+        val catPos by animateFloatAsState(state.categoryIndex.toFloat(), NavSpring, label = "category")
+        val depth by animateFloatAsState(state.depth.coerceAtMost(1).toFloat(), NavSpring, label = "depth")
 
-        CategoryBar(state, m, { catPos }, { depth }, { pulse }, onCategoryTap)
+        CategoryBar(
+            categories = state.categories,
+            categoryIndex = state.categoryIndex,
+            breadcrumb = state.breadcrumb,
+            m = m,
+            catPos = { catPos },
+            depth = { depth },
+            pulse = { pulse },
+            onCategoryTap = onCategoryTap,
+        )
         ItemColumn(state, m, { pulse }, loadAppIcon, onItemTap)
 
         StatusBar(
@@ -205,9 +220,15 @@ fun XmbScreen(
 
 // region Category bar
 
+/** Critically damped: no overshoot, ~200 ms settle, and velocity carries across retargets. */
+private val NavSpring = spring<Float>(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = 520f)
+
+/** Takes only what it draws, so cursor moves in the item list don't recompose the bar. */
 @Composable
 private fun CategoryBar(
-    state: XmbUiState,
+    categories: List<XmbCategory>,
+    categoryIndex: Int,
+    breadcrumb: List<String>,
     m: XmbMetrics,
     catPos: () -> Float,
     depth: () -> Float,
@@ -219,7 +240,7 @@ private fun CategoryBar(
     val cellDp = with(density) { m.categorySpacing.toDp() }
     val labelSp = with(density) { m.labelSize.toSp() }
 
-    state.categories.forEachIndexed { i, category ->
+    categories.forEachIndexed { i, category ->
         val focus = { 1f - abs(i - catPos()).coerceAtMost(1f) }
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -255,9 +276,9 @@ private fun CategoryBar(
     }
 
     // Breadcrumb beside the open category while drilled in.
-    if (state.breadcrumb.isNotEmpty()) {
+    if (breadcrumb.isNotEmpty()) {
         GlowText(
-            text = state.breadcrumb.joinToString("  ›  "),
+            text = breadcrumb.joinToString("  ›  "),
             fontSize = with(density) { m.titleSize.toSp() },
             glow = { 0f },
             modifier = Modifier
@@ -292,14 +313,15 @@ private fun ItemColumn(
             lastKey = state.listKey
             scroll.snapTo(state.focusedIndex.toFloat())
         } else {
-            scroll.animateTo(state.focusedIndex.toFloat(), tween(190, easing = FastOutSlowInEasing))
+            scroll.animateTo(state.focusedIndex.toFloat(), NavSpring)
         }
     }
     val enter = remember(state.listKey) { Animatable(0f) }
     LaunchedEffect(state.listKey) { enter.animateTo(1f, tween(280, easing = FastOutSlowInEasing)) }
 
-    val first by remember { derivedStateOf { floor(scroll.value).toInt() - 4 } }
-    val last by remember { derivedStateOf { ceil(scroll.value).toInt() + 6 } }
+    // Compose only the rows that can be on screen for this display.
+    val first by remember(m) { derivedStateOf { floor(scroll.value).toInt() - m.rowsAbove } }
+    val last by remember(m) { derivedStateOf { ceil(scroll.value).toInt() + m.rowsBelow } }
     val range = first.coerceAtLeast(0)..last.coerceAtMost(state.items.lastIndex)
 
     val density = LocalDensity.current
@@ -566,10 +588,12 @@ private fun GlowText(
             ),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.graphicsLayer {
-                alpha = glow()
-                compositingStrategy = CompositingStrategy.ModulateAlpha
-            },
+            modifier = Modifier
+                .clearAndSetSemantics { } // decorative copy; screen readers read the text once
+                .graphicsLayer {
+                    alpha = glow()
+                    compositingStrategy = CompositingStrategy.ModulateAlpha
+                },
         )
         Text(
             text,
@@ -589,13 +613,19 @@ private fun ButtonHints(state: XmbUiState, size: TextUnit, modifier: Modifier) {
     val confirmGlyph = if (state.confirm == ConfirmLayout.EAST) state.family.east else state.family.south
     val backGlyph = if (state.confirm == ConfirmLayout.EAST) state.family.south else state.family.east
     val focused = state.focused
+    if (focused == null || (focused.action == NodeAction.None && state.depth == 0 && focused.optionsLabel == null)) return
+    // Backed so it stays legible where long titles run underneath on narrow (4:3, 1:1) screens.
     Row(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
-        modifier = modifier.graphicsLayer { alpha = 0.8f },
+        modifier = modifier
+            .clip(RoundedCornerShape(50))
+            .background(Color(0x40000000))
+            .padding(horizontal = 10.dp, vertical = 4.dp)
+            .graphicsLayer { alpha = 0.85f },
     ) {
-        if (focused != null && focused.action != NodeAction.None) Hint(confirmGlyph, "Select", size)
+        if (focused.action != NodeAction.None) Hint(confirmGlyph, "Select", size)
         if (state.depth > 0) Hint(backGlyph, "Back", size)
-        focused?.optionsLabel?.let { Hint(state.family.north, it, size) }
+        focused.optionsLabel?.let { Hint(state.family.north, it, size) }
     }
 }
 
@@ -651,7 +681,8 @@ private fun GameBootOverlay(title: String, theme: WaveTheme, m: XmbMetrics) {
             .fillMaxSize()
             .drawBehind {
                 val p = progress.value
-                drawRect(Color.Black.copy(alpha = 0.55f * p))
+                // Fade the menu out first so only the bloom and the game title remain.
+                drawRect(Color.Black.copy(alpha = 0.92f * (p * 1.6f).coerceAtMost(1f)))
                 drawCircle(
                     Brush.radialGradient(
                         0f to theme.glowColor.copy(alpha = 0.85f * p),
@@ -675,22 +706,29 @@ private fun GameBootOverlay(title: String, theme: WaveTheme, m: XmbMetrics) {
 
 // endregion
 
-/** Touch parity: swipe between categories horizontally and through items vertically. */
+/**
+ * Touch parity: a horizontal swipe moves exactly one category (like a D-pad press); a vertical
+ * drag scrolls items continuously, one item per [step] of finger travel.
+ */
 private fun Modifier.swipeNavigation(onAction: (NavAction) -> Unit): Modifier = pointerInput(Unit) {
     val step = 56.dp.toPx()
+    val swipe = 48.dp.toPx()
     var dx = 0f
     var dy = 0f
     var axis = 0 // 0 = undecided, 1 = horizontal, 2 = vertical
+    var categoryMoved = false
     detectDragGestures(
-        onDragStart = { dx = 0f; dy = 0f; axis = 0 },
+        onDragStart = { dx = 0f; dy = 0f; axis = 0; categoryMoved = false },
         onDrag = { change, amount ->
             change.consume()
             dx += amount.x
             dy += amount.y
             if (axis == 0) axis = if (abs(dx) > abs(dy)) 1 else 2
             if (axis == 1) {
-                while (dx <= -step) { onAction(NavAction.RIGHT); dx += step }
-                while (dx >= step) { onAction(NavAction.LEFT); dx -= step }
+                if (!categoryMoved && abs(dx) >= swipe) {
+                    onAction(if (dx < 0) NavAction.RIGHT else NavAction.LEFT)
+                    categoryMoved = true
+                }
             } else {
                 while (dy <= -step) { onAction(NavAction.DOWN); dy += step }
                 while (dy >= step) { onAction(NavAction.UP); dy -= step }

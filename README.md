@@ -26,12 +26,20 @@ automatically; add others with **Add ROM folder…**. Put games in platform subf
 | Wave background | Done. GLSL ES 3.0 ribbon shader with day/night palette and adjustable speed. Pauses whenever the launcher isn't in front |
 | Extras | Favorites, Recently Played, Android apps (games sorted into Games), can be set as the HOME launcher, Android TV leanback entry |
 
-### Not verified yet
+Full feature-by-feature status, test results, device/performance measurements and the
+phased roadmap are in [`docs/STATUS.md`](docs/STATUS.md).
 
-* The intent recipes are taken from each emulator's published launch contract, but none have
-  been tested against real installs yet (the dev emulator has none installed).
-* Only tested with D-pad key events on an emulator so far, not with physical controllers
-  (DualSense, Switch Pro, built-in handheld pads).
+## Testing
+
+```bash
+./gradlew :app:testDebugUnitTest                  # 38 JVM + Robolectric tests
+./gradlew :app:installDebug :emulator-stub:installRetroarchDebug
+tools/device-tests/smoke.sh                       # on-device smoke test (clears Wave's data)
+./gradlew :app:assembleProfiling                  # R8-optimized build for frame timing
+```
+
+`tools/emulator-stub` builds test-only stand-ins for RetroArch, DuckStation, NetherSX2, Dolphin
+and PPSSPP that log the launch intent they receive. Never install them alongside real emulators.
 
 ## Look and sound
 
@@ -59,5 +67,7 @@ app/src/main/java/dev/wave/launcher/
   ui/       XmbScreen, StatusBar, WaveBackground + WaveRenderer (GLSL), Glyphs
   theme/    WaveTheme palettes
   audio/    UiSounds (SoundPool effects + streamed boot cues)
-tools/icons/ SVG → VectorDrawable converter and icon role map
+tools/icons/        SVG → VectorDrawable converter and icon role map
+tools/emulator-stub/ test-only emulator stand-ins (Gradle module :emulator-stub)
+tools/device-tests/  adb-driven smoke test
 ```

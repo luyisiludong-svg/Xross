@@ -9,6 +9,7 @@ android {
     compileSdk = 36
 
     defaultConfig {
+        buildConfigField("boolean", "PERF_LOG", "false")
         applicationId = "dev.wave.launcher"
         minSdk = 28
         targetSdk = 36
@@ -17,16 +18,31 @@ android {
     }
 
     buildTypes {
+        debug {
+            buildConfigField("boolean", "PERF_LOG", "true")
+        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+        }
+        // Release-optimized, debug-signed build for frame-time measurements (installable side by side
+        // isn't needed, so it keeps the same applicationId).
+        create("profiling") {
+            initWith(getByName("release"))
+            signingConfig = signingConfigs.getByName("debug")
+            matchingFallbacks += "release"
+            buildConfigField("boolean", "PERF_LOG", "true")
         }
     }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
     }
 
     buildFeatures {
@@ -59,4 +75,6 @@ dependencies {
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.test.core)
 }

@@ -52,6 +52,8 @@ object EmulatorRegistry {
                 .putExtra("ROM", req.romPath)
                 .putExtra("LIBRETRO", "/data/data/$pkg/cores/${req.core}_libretro_android.so")
                 .putExtra("CONFIGFILE", "/storage/emulated/0/Android/data/$pkg/files/retroarch.cfg")
+                // RetroArch reads the ROM extra; the granted URI covers installs without storage access.
+                .withGrantedData(req)
         },
         EmulatorDef(
             id = "duckstation",
