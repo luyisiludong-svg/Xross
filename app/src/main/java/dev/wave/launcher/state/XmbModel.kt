@@ -6,9 +6,12 @@ sealed interface NodeIcon {
     data class App(val packageName: String) : NodeIcon
 }
 
+/** Icon roles; each maps to an `xmb_*` vector drawable generated from assets/icons. */
 enum class GlyphKey {
-    SETTINGS, GAMES, APPS, FOLDER, GAME, PLATFORM, STAR, HISTORY, CONTROLLER, STORAGE,
-    REFRESH, ADD, EMULATOR, DISPLAY, INFO, ANDROID, TOGGLE_ON, TOGGLE_OFF, WAVE, WARNING, HOME,
+    SETTINGS, GAMES, APPS,
+    PLATFORM, GAME_CART, GAME_DISC, FAVORITES, RECENT, HANDHELD, FOLDER, STORAGE,
+    CONTROLS, EMULATORS, DISPLAY, SOUND, SYSTEM,
+    ADD, REFRESH, HOME, INFO,
 }
 
 sealed interface Command {
@@ -24,6 +27,11 @@ sealed interface Command {
     data class CycleEmulator(val platformId: String) : Command
     data object ToggleWave : Command
     data object CycleWaveSpeed : Command
+    data object CycleTheme : Command
+    data object ToggleSoundEffects : Command
+    data object CycleSoundVolume : Command
+    data object ToggleBootSound : Command
+    data object ToggleGameBootSound : Command
     data object OpenHomeSettings : Command
     data object OpenAndroidSettings : Command
     data object OpenLibrarySettings : Command

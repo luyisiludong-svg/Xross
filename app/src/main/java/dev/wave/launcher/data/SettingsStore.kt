@@ -19,6 +19,12 @@ data class WaveSettings(
     val emulatorChoice: Map<String, String> = emptyMap(),
     val waveEnabled: Boolean = true,
     val waveSpeed: Float = 1f,
+    /** [dev.wave.launcher.theme.WaveTheme] name. */
+    val theme: String = "LAVENDER",
+    val soundEffects: Boolean = true,
+    val soundVolume: Float = 0.75f,
+    val bootSound: Boolean = true,
+    val gameBootSound: Boolean = true,
 )
 
 /** SharedPreferences-backed settings exposed as a StateFlow. */
@@ -51,6 +57,11 @@ class SettingsStore(context: Context) {
         emulatorChoice = decodeMap(prefs.getString(KEY_EMULATORS, null)),
         waveEnabled = prefs.getBoolean(KEY_WAVE, true),
         waveSpeed = prefs.getFloat(KEY_WAVE_SPEED, 1f),
+        theme = prefs.getString(KEY_THEME, null) ?: "LAVENDER",
+        soundEffects = prefs.getBoolean(KEY_SFX, true),
+        soundVolume = prefs.getFloat(KEY_SFX_VOLUME, 0.75f),
+        bootSound = prefs.getBoolean(KEY_BOOT_SOUND, true),
+        gameBootSound = prefs.getBoolean(KEY_GAMEBOOT_SOUND, true),
     )
 
     private fun save(s: WaveSettings) = prefs.edit {
@@ -62,6 +73,11 @@ class SettingsStore(context: Context) {
         putString(KEY_EMULATORS, encodeMap(s.emulatorChoice))
         putBoolean(KEY_WAVE, s.waveEnabled)
         putFloat(KEY_WAVE_SPEED, s.waveSpeed)
+        putString(KEY_THEME, s.theme)
+        putBoolean(KEY_SFX, s.soundEffects)
+        putFloat(KEY_SFX_VOLUME, s.soundVolume)
+        putBoolean(KEY_BOOT_SOUND, s.bootSound)
+        putBoolean(KEY_GAMEBOOT_SOUND, s.gameBootSound)
     }
 
     private companion object {
@@ -73,6 +89,11 @@ class SettingsStore(context: Context) {
         const val KEY_EMULATORS = "emulator_choice"
         const val KEY_WAVE = "wave_enabled"
         const val KEY_WAVE_SPEED = "wave_speed"
+        const val KEY_THEME = "theme"
+        const val KEY_SFX = "sound_effects"
+        const val KEY_SFX_VOLUME = "sound_volume"
+        const val KEY_BOOT_SOUND = "boot_sound"
+        const val KEY_GAMEBOOT_SOUND = "gameboot_sound"
 
         // Keys and values here never contain '=' or newlines (ints, enum names, ids).
         fun encodeMap(map: Map<String, String>) = map.entries.joinToString("\n") { "${it.key}=${it.value}" }

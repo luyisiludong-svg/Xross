@@ -3,39 +3,54 @@ package dev.wave.launcher.ui
 import android.opengl.GLES30
 import android.opengl.GLSurfaceView
 import android.os.SystemClock
+import dev.wave.launcher.theme.WaveTheme
+import dev.wave.launcher.theme.rgb
 import java.util.Calendar
 import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
-import kotlin.math.cos
 import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.max
+import kotlin.math.roundToLong
 
-/** Tunables for the ribbon background; read every frame so changes apply live. */
+/** Tunables for the background; read every frame so changes apply live. */
 data class WaveParams(
     val speed: Float = 1f,
-    val lines: Int = 14,
-    val amplitude: Float = 1f,
+    val theme: WaveTheme = WaveTheme.LAVENDER,
 )
 
 /**
- * Full-screen GLSL ES 3.0 ribbon background. One oversized triangle, all work in the fragment
- * shader. Colors shift with the time of day (deep blue at night, lighter teal-blue at midday).
+ * Full-screen GLSL ES 3.0 background: a theme gradient with broad, glossy light sheets and a few
+ * fine strands. One oversized triangle; all work happens in the fragment shader.
+ *
+ * Smoothness:
+ *  - Animation time advances in whole display-refresh periods, so sampling jitter in when the
+ *    GL thread wakes up never shows up as uneven motion.
+ *  - Crests are anti-aliased with screen-space derivatives and the output is dithered, so the
+ *    soft gradients don't band.
+ *  - The surface is rendered below native resolution (see [WaveBackground]); the content is soft
+ *    enough that the upscale is invisible and the GPU cost drops ~4x.
  */
-class WaveRenderer(@Volatile var params: WaveParams = WaveParams()) : GLSurfaceView.Renderer {
+class WaveRenderer(
+    @Volatile var params: WaveParams = WaveParams(),
+    refreshRateHz: Float = 60f,
+) : GLSurfaceView.Renderer {
+    private val framePeriodNs = (1e9 / refreshRateHz.coerceIn(30f, 240f)).roundToLong()
+
     private var program = 0
     private var uRes = 0
     private var uTime = 0
     private var uTop = 0
     private var uBottom = 0
     private var uWave = 0
-    private var uLines = 0
-    private var uAmp = 0
+    private var uBright = 0
     private var width = 1
     private var height = 1
 
-    private var time = 0f
+    private var time = 0.0
     private var lastFrameNs = 0L
-    private var palette = paletteFor(Calendar.getInstance())
-    private var paletteCheckedAt = 0L
+    private var daylight = daylight(Calendar.getInstance())
+    private var daylightCheckedAt = 0L
 
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
         program = link(VERTEX, FRAGMENT)
@@ -44,8 +59,7 @@ class WaveRenderer(@Volatile var params: WaveParams = WaveParams()) : GLSurfaceV
         uTop = GLES30.glGetUniformLocation(program, "uTop")
         uBottom = GLES30.glGetUniformLocation(program, "uBottom")
         uWave = GLES30.glGetUniformLocation(program, "uWave")
-        uLines = GLES30.glGetUniformLocation(program, "uLines")
-        uAmp = GLES30.glGetUniformLocation(program, "uAmp")
+        uBright = GLES30.glGetUniformLocation(program, "uBright")
         lastFrameNs = 0L
     }
 
@@ -58,38 +72,33 @@ class WaveRenderer(@Volatile var params: WaveParams = WaveParams()) : GLSurfaceV
     override fun onDrawFrame(gl: GL10?) {
         val now = SystemClock.elapsedRealtimeNanos()
         val p = params
-        // Integrate time so changing speed never makes the waves jump.
-        if (lastFrameNs != 0L) time += ((now - lastFrameNs) / 1e9f).coerceAtMost(0.1f) * p.speed
+        if (lastFrameNs != 0L) {
+            // Snap to whole vsync periods; cap long gaps (resume, hitch) to a few frames.
+            val frames = ((now - lastFrameNs).toDouble() / framePeriodNs).roundToLong().coerceIn(1, 4)
+            time += frames * framePeriodNs / 1e9 * p.speed
+        }
         lastFrameNs = now
 
-        if (now - paletteCheckedAt > 60_000_000_000L) {
-            palette = paletteFor(Calendar.getInstance())
-            paletteCheckedAt = now
+        if (now - daylightCheckedAt > 60_000_000_000L) {
+            daylight = daylight(Calendar.getInstance())
+            daylightCheckedAt = now
         }
 
         GLES30.glUseProgram(program)
         GLES30.glUniform2f(uRes, width.toFloat(), height.toFloat())
-        GLES30.glUniform1f(uTime, time)
-        GLES30.glUniform3fv(uTop, 1, palette.top, 0)
-        GLES30.glUniform3fv(uBottom, 1, palette.bottom, 0)
-        GLES30.glUniform3fv(uWave, 1, palette.wave, 0)
-        GLES30.glUniform1f(uLines, p.lines.toFloat())
-        GLES30.glUniform1f(uAmp, p.amplitude)
+        // Wrap time so float precision never degrades on a launcher that runs for weeks.
+        GLES30.glUniform1f(uTime, (time % 10_000.0).toFloat())
+        GLES30.glUniform3fv(uTop, 1, p.theme.top.rgb(), 0)
+        GLES30.glUniform3fv(uBottom, 1, p.theme.bottom.rgb(), 0)
+        GLES30.glUniform3fv(uWave, 1, p.theme.wave.rgb(), 0)
+        GLES30.glUniform1f(uBright, 0.8f + 0.2f * daylight)
         GLES30.glDrawArrays(GLES30.GL_TRIANGLES, 0, 3)
     }
 
-    private class Palette(val top: FloatArray, val bottom: FloatArray, val wave: FloatArray)
-
-    private fun paletteFor(cal: Calendar): Palette {
+    /** 0 at midnight → 1 at noon. */
+    private fun daylight(cal: Calendar): Float {
         val hour = cal.get(Calendar.HOUR_OF_DAY) + cal.get(Calendar.MINUTE) / 60f
-        // 0 at midnight, 1 at noon.
-        val day = ((1 - cos(hour / 24f * 2 * PI)) / 2).toFloat()
-        fun mix(a: FloatArray, b: FloatArray) = FloatArray(3) { a[it] + (b[it] - a[it]) * day }
-        return Palette(
-            top = mix(floatArrayOf(0.02f, 0.03f, 0.12f), floatArrayOf(0.10f, 0.28f, 0.62f)),
-            bottom = mix(floatArrayOf(0.05f, 0.02f, 0.10f), floatArrayOf(0.02f, 0.08f, 0.24f)),
-            wave = mix(floatArrayOf(0.55f, 0.60f, 1.00f), floatArrayOf(0.80f, 0.95f, 1.00f)),
-        )
+        return ((1 - cos(hour / 24f * 2 * PI)) / 2).toFloat()
     }
 
     private fun link(vs: String, fs: String): Int {
@@ -113,57 +122,85 @@ class WaveRenderer(@Volatile var params: WaveParams = WaveParams()) : GLSurfaceV
         check(status[0] != 0) { "Wave shader compile failed: ${GLES30.glGetShaderInfoLog(it)}" }
     }
 
-    private companion object {
+    companion object {
+        /** Render-target scale: keep the long side near 1280 px. */
+        fun renderScale(widthPx: Int, heightPx: Int): Float =
+            (1280f / max(widthPx, heightPx)).coerceIn(0.4f, 1f)
+
         // Full-screen triangle generated from gl_VertexID: no vertex buffers needed.
-        const val VERTEX = """#version 300 es
+        private const val VERTEX = """#version 300 es
 void main() {
     vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2));
     gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
 }
 """
 
-        const val FRAGMENT = """#version 300 es
+        private const val FRAGMENT = """#version 300 es
 precision highp float;
 uniform vec2 uRes;
 uniform float uTime;
 uniform vec3 uTop;
 uniform vec3 uBottom;
 uniform vec3 uWave;
-uniform float uLines;
-uniform float uAmp;
+uniform float uBright;
 out vec4 fragColor;
 
-float ribbon(float x, float t, float seed) {
-    return 0.10 * sin(x * 1.25 + t * 0.30 + seed)
-         + 0.045 * sin(x * 2.60 - t * 0.47 + seed * 1.7)
-         + 0.020 * sin(x * 5.10 + t * 0.81 + seed * 0.3);
+// Low-frequency curve: two long swells plus a slow ripple. All speeds are small so motion
+// reads as drifting light rather than oscillation.
+float curve(float x, float t, float base, float amp, float phase) {
+    return base
+        + amp * 0.62 * sin(x * 0.85 + t * 0.21 + phase)
+        + amp * 0.28 * sin(x * 1.70 - t * 0.33 + phase * 1.9)
+        + amp * 0.10 * sin(x * 3.10 + t * 0.47 + phase * 0.7);
+}
+
+// One glossy sheet: a bright anti-aliased crest, a soft halo, and a translucent body below the
+// crest that fades downward.
+vec3 sheet(vec2 uv, float x, float t, float base, float amp, float phase, float strength) {
+    float c = curve(x, t, base, amp, phase);
+    float d = uv.y - c;                         // > 0 above the crest
+    float aa = max(fwidth(d), 1e-4);
+    float crest = 1.0 - smoothstep(0.0, aa * 2.5 + 0.0025, abs(d));
+    float halo = exp(-(d * d) / 0.0022);
+    float body = smoothstep(aa, -0.03, d) * exp(d / 0.16);
+    return uWave * strength * (crest * 0.32 + halo * 0.10 + body * 0.075);
+}
+
+float hash(vec2 p) {
+    return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
 }
 
 void main() {
-    vec2 uv = gl_FragCoord.xy / uRes;
+    vec2 uv = gl_FragCoord.xy / uRes;           // y = 0 at the bottom
     float x = uv.x * (uRes.x / uRes.y);
-    vec3 col = mix(uBottom, uTop, smoothstep(0.0, 1.0, uv.y));
+    float t = uTime;
 
-    // Broad soft sheet under the lines.
-    float sheet = 0.48 + uAmp * ribbon(x, uTime, 0.0);
-    col += uWave * 0.10 * exp(-pow((uv.y - sheet) * 5.0, 2.0));
+    // Base: dark at the top, brightest toward the lower middle, as in the reference themes.
+    float g = smoothstep(0.0, 1.0, uv.y);
+    vec3 col = mix(uBottom, uTop, g);
+    col += uBottom * 0.18 * exp(-pow((uv.y - 0.32) * 2.6, 2.0));
 
-    // Thin glowing strands fanning out of the sheet.
-    for (int i = 0; i < 24; i++) {
+    // Broad glossy sheets.
+    col += sheet(uv, x, t,        0.50, 0.10, 0.0, 1.00);
+    col += sheet(uv, x, t * 0.8,  0.44, 0.08, 2.1, 0.70);
+    col += sheet(uv, x, t * 1.15, 0.36, 0.12, 4.3, 0.55);
+    col += sheet(uv, x, t * 0.6,  0.58, 0.06, 5.7, 0.35);
+
+    // A handful of fine strands riding the main sheet.
+    for (int i = 0; i < 5; i++) {
         float fi = float(i);
-        if (fi >= uLines) break;
-        float spread = (fi / max(uLines - 1.0, 1.0) - 0.5);
-        float y = sheet + uAmp * ribbon(x, uTime * (0.9 + 0.02 * fi), fi * 0.21) * 0.35
-                + spread * 0.09 * (1.0 + 0.6 * sin(x * 0.9 + uTime * 0.2));
-        float d = abs(uv.y - y) * uRes.y;          // distance in pixels
-        float core = smoothstep(1.6, 0.0, d);       // crisp 1-2px line
-        float glow = 0.9 / (1.0 + d * d * 0.08);    // soft halo
-        col += uWave * (core * 0.20 + glow * 0.035);
+        float c = curve(x, t * (0.95 + fi * 0.03), 0.50 + (fi - 2.0) * 0.012, 0.10, fi * 0.18);
+        float d = abs(uv.y - c);
+        float aa = max(fwidth(uv.y - c), 1e-4);
+        col += uWave * 0.10 * (1.0 - smoothstep(0.0, aa * 1.5, d));
     }
 
-    // Vignette.
-    vec2 c = uv - 0.5;
-    col *= 1.0 - dot(c, c) * 0.55;
+    col *= uBright;
+    // Gentle vignette.
+    vec2 v = uv - vec2(0.5, 0.45);
+    col *= 1.0 - dot(v, v) * 0.45;
+    // Dither to hide 8-bit banding in the long gradients.
+    col += (hash(gl_FragCoord.xy + fract(t)) - 0.5) / 255.0;
     fragColor = vec4(col, 1.0);
 }
 """

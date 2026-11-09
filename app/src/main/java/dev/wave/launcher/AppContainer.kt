@@ -1,6 +1,7 @@
 package dev.wave.launcher
 
 import android.content.Context
+import dev.wave.launcher.audio.UiSounds
 import dev.wave.launcher.data.AppRepository
 import dev.wave.launcher.data.GameRepository
 import dev.wave.launcher.data.SettingsStore
@@ -18,4 +19,5 @@ class AppContainer(context: Context) {
     val settings: SettingsStore by lazy { SettingsStore(appContext) }
     val volumes: StorageVolumes by lazy { StorageVolumes(appContext) }
     val launcher: GameLauncher by lazy { GameLauncher(appContext) }
+    val sounds: UiSounds by lazy { UiSounds(appContext) }
 }

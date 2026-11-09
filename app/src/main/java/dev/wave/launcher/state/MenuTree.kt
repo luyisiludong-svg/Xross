@@ -7,6 +7,7 @@ import dev.wave.launcher.input.ConfirmLayout
 import dev.wave.launcher.launch.EmulatorRegistry
 import dev.wave.launcher.launch.GameLauncher
 import dev.wave.launcher.storage.PlatformRegistry
+import dev.wave.launcher.theme.WaveTheme
 import java.util.Locale
 
 data class FolderEntry(val path: String, val autoDetected: Boolean)
@@ -48,16 +49,17 @@ class MenuTree(private val s: MenuSnapshot) {
         key == CONTROLS -> controlSettings()
         key == EMULATORS -> emulatorSettings()
         key == DISPLAY -> displaySettings()
+        key == SOUND -> soundSettings()
         key == SYSTEM -> systemSettings()
         else -> emptyList()
     }
 
     private fun gamesRoot(): List<XmbNode> = buildList {
         if (s.games.any { it.lastPlayed != null }) {
-            add(folder(RECENT, "Recently Played", GlyphKey.HISTORY, null))
+            add(folder(RECENT, "Recently Played", GlyphKey.RECENT, null))
         }
         val favorites = s.games.count { it.favorite }
-        if (favorites > 0) add(folder(FAVORITES, "Favorites", GlyphKey.STAR, countLabel(favorites)))
+        if (favorites > 0) add(folder(FAVORITES, "Favorites", GlyphKey.FAVORITES, countLabel(favorites)))
         for (platform in PlatformRegistry.all) {
             val count = gamesByPlatform[platform.id]?.size ?: 0
             if (count > 0) {
@@ -65,7 +67,7 @@ class MenuTree(private val s: MenuSnapshot) {
             }
         }
         if (androidGames.isNotEmpty()) {
-            add(folder(ANDROID_GAMES, "Android Games", GlyphKey.ANDROID, countLabel(androidGames.size)))
+            add(folder(ANDROID_GAMES, "Android Games", GlyphKey.HANDHELD, countLabel(androidGames.size)))
         }
         if (s.games.isEmpty()) {
             add(
@@ -73,7 +75,7 @@ class MenuTree(private val s: MenuSnapshot) {
                     id = "games:empty",
                     title = if (s.storageGranted) "No games found" else "Storage access needed",
                     subtitle = "Open Settings ▸ Library to add ROM folders",
-                    icon = NodeIcon.Glyph(GlyphKey.WARNING),
+                    icon = NodeIcon.Glyph(GlyphKey.INFO),
                     action = NodeAction.Run(Command.OpenLibrarySettings),
                 ),
             )
@@ -92,7 +94,7 @@ class MenuTree(private val s: MenuSnapshot) {
             id = "game:${game.id}",
             title = game.title,
             subtitle = parts.filter { it.isNotEmpty() }.joinToString(" · "),
-            icon = NodeIcon.Glyph(GlyphKey.GAME),
+            icon = NodeIcon.Glyph(if (platform?.isDiscBased == true || game.isDiscImage()) GlyphKey.GAME_DISC else GlyphKey.GAME_CART),
             action = NodeAction.LaunchGame(game.id),
             options = Command.ToggleFavorite(game.id),
             optionsLabel = if (game.favorite) "Unfavorite" else "Favorite",
@@ -109,10 +111,11 @@ class MenuTree(private val s: MenuSnapshot) {
 
     private fun settingsRoot() = listOf(
         folder(LIBRARY, "Library", GlyphKey.STORAGE, "ROM folders and scanning"),
-        folder(CONTROLS, "Controls", GlyphKey.CONTROLLER, "Buttons, layout and stick"),
-        folder(EMULATORS, "Emulators", GlyphKey.EMULATOR, "${s.installedEmulators.size} detected"),
-        folder(DISPLAY, "Display", GlyphKey.DISPLAY, "Wave background"),
-        folder(SYSTEM, "System", GlyphKey.INFO, "Version ${s.versionName}"),
+        folder(CONTROLS, "Controls", GlyphKey.CONTROLS, "Buttons, layout and stick"),
+        folder(EMULATORS, "Emulators", GlyphKey.EMULATORS, "${s.installedEmulators.size} detected"),
+        folder(DISPLAY, "Theme", GlyphKey.DISPLAY, "${WaveTheme.byName(s.settings.theme).label} · wave background"),
+        folder(SOUND, "Sound", GlyphKey.SOUND, if (s.settings.soundEffects) "Effects on" else "Effects off"),
+        folder(SYSTEM, "System", GlyphKey.SYSTEM, "Version ${s.versionName}"),
     )
 
     private fun librarySettings(): List<XmbNode> = buildList {
@@ -121,7 +124,7 @@ class MenuTree(private val s: MenuSnapshot) {
                 "lib:access",
                 "All files access",
                 if (s.storageGranted) "Granted" else "Required to scan ROM folders — press to grant",
-                if (s.storageGranted) GlyphKey.TOGGLE_ON else GlyphKey.WARNING,
+                if (s.storageGranted) GlyphKey.STORAGE else GlyphKey.INFO,
                 Command.RequestStorageAccess,
             ),
         )
@@ -132,7 +135,7 @@ class MenuTree(private val s: MenuSnapshot) {
                 "lib:auto",
                 "Auto-detect ROM folders",
                 if (s.settings.autoDetectFolders) "On — finds ROMs/, Games/, Emulation/ on every drive" else "Off",
-                toggleGlyph(s.settings.autoDetectFolders),
+                GlyphKey.FOLDER,
                 Command.ToggleAutoDetect,
             ),
         )
@@ -159,17 +162,17 @@ class MenuTree(private val s: MenuSnapshot) {
                 ConfirmLayout.SOUTH -> "South (✕ / A on Xbox)"
                 ConfirmLayout.EAST -> "East (○ / A on Nintendo)"
             },
-            GlyphKey.CONTROLLER,
+            GlyphKey.CONTROLS,
             Command.CycleConfirmLayout,
         ),
         setting(
             "ctl:deadzone",
             "Analog stick deadzone",
             "${(s.settings.deadzone * 100).toInt()}%",
-            GlyphKey.CONTROLLER,
+            GlyphKey.CONTROLS,
             Command.CycleDeadzone,
         ),
-        setting("ctl:remap", "Remap buttons…", "Press each button when asked", GlyphKey.CONTROLLER, Command.StartRemap),
+        setting("ctl:remap", "Remap buttons…", "Press each button when asked", GlyphKey.CONTROLS, Command.StartRemap),
         setting(
             "ctl:reset",
             "Reset button mapping",
@@ -190,14 +193,22 @@ class MenuTree(private val s: MenuSnapshot) {
             "emu:${platform.id}",
             platform.name,
             label + status,
-            GlyphKey.EMULATOR,
+            GlyphKey.EMULATORS,
             Command.CycleEmulator(platform.id),
         )
     }
 
     private fun displaySettings() = listOf(
-        setting("disp:wave", "Wave background", if (s.settings.waveEnabled) "On" else "Off", toggleGlyph(s.settings.waveEnabled), Command.ToggleWave),
-        setting("disp:speed", "Wave speed", "${s.settings.waveSpeed}x", GlyphKey.WAVE, Command.CycleWaveSpeed),
+        setting("disp:theme", "Theme color", WaveTheme.byName(s.settings.theme).label, GlyphKey.DISPLAY, Command.CycleTheme),
+        setting("disp:wave", "Wave background", onOff(s.settings.waveEnabled), GlyphKey.DISPLAY, Command.ToggleWave),
+        setting("disp:speed", "Wave speed", "${s.settings.waveSpeed}x", GlyphKey.DISPLAY, Command.CycleWaveSpeed),
+    )
+
+    private fun soundSettings() = listOf(
+        setting("snd:fx", "Sound effects", onOff(s.settings.soundEffects), GlyphKey.SOUND, Command.ToggleSoundEffects),
+        setting("snd:vol", "Effects volume", "${(s.settings.soundVolume * 100).toInt()}%", GlyphKey.SOUND, Command.CycleSoundVolume),
+        setting("snd:boot", "Startup sound", onOff(s.settings.bootSound), GlyphKey.SOUND, Command.ToggleBootSound),
+        setting("snd:gameboot", "Game start sound", onOff(s.settings.gameBootSound), GlyphKey.SOUND, Command.ToggleGameBootSound),
     )
 
     private fun systemSettings() = listOf(
@@ -212,7 +223,10 @@ class MenuTree(private val s: MenuSnapshot) {
     private fun setting(id: String, title: String, subtitle: String?, glyph: GlyphKey, command: Command) =
         XmbNode(id, title, subtitle, NodeIcon.Glyph(glyph), NodeAction.Run(command))
 
-    private fun toggleGlyph(on: Boolean) = if (on) GlyphKey.TOGGLE_ON else GlyphKey.TOGGLE_OFF
+    private fun onOff(on: Boolean) = if (on) "On" else "Off"
+
+    private fun GameEntity.isDiscImage(): Boolean =
+        fileName.substringAfterLast('.').lowercase() in DISC_EXTENSIONS
 
     companion object {
         const val RECENT = "collection:recent"
@@ -223,6 +237,8 @@ class MenuTree(private val s: MenuSnapshot) {
         const val CONTROLS = "settings:controls"
         const val EMULATORS = "settings:emulators"
         const val DISPLAY = "settings:display"
+        const val SOUND = "settings:sound"
+        private val DISC_EXTENSIONS = setOf("iso", "cue", "chd", "cso", "rvz", "gcz", "wbfs", "cdi", "gdi", "pbp", "m3u")
         const val SYSTEM = "settings:system"
 
         private fun countLabel(n: Int) = if (n == 1) "1 title" else "$n titles"

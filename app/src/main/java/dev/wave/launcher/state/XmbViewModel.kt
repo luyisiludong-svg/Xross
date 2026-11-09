@@ -12,6 +12,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dev.wave.launcher.AppContainer
 import dev.wave.launcher.BuildConfig
+import dev.wave.launcher.audio.UiCue
+import dev.wave.launcher.audio.UiSound
 import dev.wave.launcher.input.ConfirmLayout
 import dev.wave.launcher.input.ControllerFamily
 import dev.wave.launcher.input.InputConfig
@@ -21,6 +23,7 @@ import dev.wave.launcher.input.resolve
 import dev.wave.launcher.launch.GameLauncher
 import dev.wave.launcher.launch.LaunchPlan
 import dev.wave.launcher.storage.PlatformRegistry
+import dev.wave.launcher.theme.WaveTheme
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
@@ -56,6 +59,11 @@ data class XmbUiState(
     val confirm: ConfirmLayout = ConfirmLayout.SOUTH,
     val waveEnabled: Boolean = true,
     val waveSpeed: Float = 1f,
+    val theme: String = WaveTheme.LAVENDER.name,
+    /** Title of the game being started while the start transition plays. */
+    val booting: String? = null,
+    /** True on the first screen after process start: the UI fades in with the startup cue. */
+    val coldBoot: Boolean = false,
 ) {
     val focused: XmbNode? get() = items.getOrNull(focusedIndex)
     val depth: Int get() = breadcrumb.size
@@ -65,12 +73,16 @@ private data class Transient(
     val toast: String? = null,
     val remap: RemapSession? = null,
     val family: ControllerFamily = ControllerFamily.KEYBOARD,
+    val booting: String? = null,
 )
 
 class XmbViewModel(
     private val context: Context,
     private val container: AppContainer,
+    private val coldBoot: Boolean = false,
 ) : ViewModel(), InputSink {
+
+    private val sounds = container.sounds
 
     private val settingsStore = container.settings
     private val categories = Categories.all
@@ -107,8 +119,11 @@ class XmbViewModel(
             confirm = settings.confirmLayout.resolve(tr.family),
             waveEnabled = settings.waveEnabled,
             waveSpeed = settings.waveSpeed,
+            theme = settings.theme,
+            booting = tr.booting,
+            coldBoot = coldBoot,
         )
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, XmbUiState())
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, XmbUiState(coldBoot = coldBoot))
 
     private data class ListView(
         val breadcrumb: List<String>,
@@ -144,13 +159,20 @@ class XmbViewModel(
     private var environmentLoaded = false
 
     init {
+        viewModelScope.launch {
+            settingsStore.settings.collect {
+                sounds.enabled = it.soundEffects
+                sounds.volume = it.soundVolume
+            }
+        }
+        if (coldBoot && settingsStore.current.bootSound) sounds.playCue(UiCue.COLDBOOT, settingsStore.current.soundVolume)
         refreshEnvironment()
     }
 
     // region Input
 
     override fun onAction(action: NavAction) {
-        if (transient.value.remap != null) return
+        if (transient.value.remap != null || transient.value.booting != null) return
         val ui = current()
         when (action) {
             NavAction.UP -> moveCursor(-1)
@@ -164,7 +186,10 @@ class XmbViewModel(
             NavAction.NEXT_CATEGORY -> moveCategory(+1)
             NavAction.CONFIRM, NavAction.START -> ui.focused?.let(::activate)
             NavAction.BACK -> back()
-            NavAction.OPTIONS -> ui.focused?.options?.let(::run)
+            NavAction.OPTIONS -> ui.focused?.options?.let {
+                sounds.play(UiSound.OPTION)
+                run(it)
+            }
         }
     }
 
@@ -174,8 +199,10 @@ class XmbViewModel(
         if (next.isDone) {
             settingsStore.update { it.copy(keyRemap = next.captured) }
             transient.update { it.copy(remap = null) }
+            sounds.play(UiSound.OK)
             toast("Buttons remapped")
         } else {
+            if (next.step != session.step) sounds.play(UiSound.MOVE)
             transient.update { it.copy(remap = next) }
         }
         return true
@@ -188,6 +215,7 @@ class XmbViewModel(
     fun cancelRemap() {
         if (transient.value.remap != null) {
             transient.update { it.copy(remap = null) }
+            sounds.play(UiSound.BACK)
             toast("Remapping cancelled")
         }
     }
@@ -195,9 +223,10 @@ class XmbViewModel(
     fun onCategoryTapped(index: Int) {
         if (index == nav.value.categoryIndex) {
             val category = categories[index]
+            if (nav.value.stack(category.id, category.title).size > 1) sounds.play(UiSound.BACK)
             nav.value = nav.value.jumpTo(index, category.id, category.title, frame = null)
         } else {
-            nav.update { it.moveCategory(index - it.categoryIndex, categories.size) }
+            moveCategory(index - nav.value.categoryIndex)
         }
     }
 
@@ -292,14 +321,29 @@ class XmbViewModel(
     private fun moveCursor(delta: Int) {
         val size = current().items.size
         val category = categories[nav.value.categoryIndex]
-        nav.update { it.moveCursor(category.id, category.title, delta, size) }
+        val before = nav.value
+        val after = before.moveCursor(category.id, category.title, delta, size)
+        if (after != before) {
+            nav.value = after
+            sounds.play(UiSound.MOVE)
+        }
     }
 
-    private fun moveCategory(delta: Int) = nav.update { it.moveCategory(delta, categories.size) }
+    private fun moveCategory(delta: Int) {
+        val before = nav.value
+        val after = before.moveCategory(delta, categories.size)
+        if (after.categoryIndex != before.categoryIndex) {
+            nav.value = after
+            sounds.play(UiSound.MOVE)
+        }
+    }
 
     private fun back() {
         val category = categories[nav.value.categoryIndex]
-        nav.value.pop(category.id, category.title)?.let { nav.value = it }
+        nav.value.pop(category.id, category.title)?.let {
+            nav.value = it
+            sounds.play(UiSound.BACK)
+        }
     }
 
     private fun activate(node: XmbNode) {
@@ -307,15 +351,20 @@ class XmbViewModel(
             is NodeAction.OpenList -> {
                 val category = categories[nav.value.categoryIndex]
                 nav.update { it.push(category.id, category.title, Frame(action.key, node.title)) }
+                sounds.play(UiSound.ENTER)
             }
             is NodeAction.LaunchGame -> launchGame(action.gameId)
             is NodeAction.LaunchApp -> {
                 val app = container.apps.apps.value.firstOrNull {
                     it.packageName == action.packageName && it.activityName == action.activityName
                 } ?: return
+                sounds.play(UiSound.ENTER)
                 emit(UiEffect.StartActivity(container.apps.launchIntent(app)))
             }
-            is NodeAction.Run -> run(action.command)
+            is NodeAction.Run -> {
+                sounds.play(UiSound.ENTER)
+                run(action.command)
+            }
             NodeAction.None -> Unit
         }
     }
@@ -325,10 +374,22 @@ class XmbViewModel(
         when (val plan = container.launcher.plan(game, settingsStore.current.emulatorChoice[game.platformId])) {
             is LaunchPlan.Ready -> {
                 container.games.markPlayed(game.id)
-                toast("Starting ${game.title} — ${plan.emulatorName}")
+                // Start transition: bloom + start cue, then hand off to the emulator.
+                transient.update { it.copy(booting = game.title) }
+                if (settingsStore.current.gameBootSound) {
+                    sounds.playCue(UiCue.GAMEBOOT, settingsStore.current.soundVolume)
+                } else {
+                    sounds.play(UiSound.OK)
+                }
+                delay(GAMEBOOT_HANDOFF_MS)
                 emit(UiEffect.StartActivity(plan.intent))
+                delay(600)
+                transient.update { it.copy(booting = null) }
             }
-            is LaunchPlan.Failed -> toast(plan.message)
+            is LaunchPlan.Failed -> {
+                sounds.play(UiSound.ERROR)
+                toast(plan.message)
+            }
         }
     }
 
@@ -362,6 +423,18 @@ class XmbViewModel(
             is Command.CycleEmulator -> cycleEmulator(command.platformId)
             Command.ToggleWave -> settingsStore.update { it.copy(waveEnabled = !it.waveEnabled) }
             Command.CycleWaveSpeed -> settingsStore.update { it.copy(waveSpeed = WAVE_SPEEDS.nextAfter(it.waveSpeed)) }
+            Command.CycleTheme -> settingsStore.update {
+                val next = WaveTheme.entries[(WaveTheme.byName(it.theme).ordinal + 1) % WaveTheme.entries.size]
+                it.copy(theme = next.name)
+            }
+            Command.ToggleSoundEffects -> settingsStore.update { it.copy(soundEffects = !it.soundEffects) }
+            Command.CycleSoundVolume -> {
+                settingsStore.update { it.copy(soundVolume = VOLUMES.nextAfter(it.soundVolume)) }
+                sounds.volume = settingsStore.current.soundVolume
+                sounds.play(UiSound.OK) // preview the new level
+            }
+            Command.ToggleBootSound -> settingsStore.update { it.copy(bootSound = !it.bootSound) }
+            Command.ToggleGameBootSound -> settingsStore.update { it.copy(gameBootSound = !it.gameBootSound) }
             Command.OpenHomeSettings -> emit(UiEffect.StartActivity(Intent(Settings.ACTION_HOME_SETTINGS)))
             Command.OpenAndroidSettings -> emit(UiEffect.StartActivity(Intent(Settings.ACTION_SETTINGS)))
             Command.OpenLibrarySettings -> {
@@ -369,7 +442,10 @@ class XmbViewModel(
                 val category = categories[index]
                 nav.update { it.jumpTo(index, category.id, category.title, Frame(MenuTree.LIBRARY, "Library")) }
             }
-            is Command.ToggleFavorite -> viewModelScope.launch { container.games.toggleFavorite(command.gameId) }
+            is Command.ToggleFavorite -> viewModelScope.launch {
+                container.games.toggleFavorite(command.gameId)
+                sounds.play(UiSound.OK)
+            }
         }
     }
 
@@ -401,6 +477,8 @@ class XmbViewModel(
     companion object {
         private val DEADZONES = listOf(0.15f, 0.25f, 0.35f, 0.45f, 0.55f)
         private val WAVE_SPEEDS = listOf(0.5f, 1f, 1.5f, 2f)
+        private val VOLUMES = listOf(0.25f, 0.5f, 0.75f, 1f)
+        private const val GAMEBOOT_HANDOFF_MS = 1100L
 
         private fun List<Float>.nextAfter(value: Float): Float {
             val i = indexOfFirst { kotlin.math.abs(it - value) < 0.001f }
