@@ -34,6 +34,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import dev.wave.launcher.input.GamepadHandler
 import dev.wave.launcher.input.NavAction
+import dev.wave.launcher.state.MediaOverlay
 import dev.wave.launcher.state.UiEffect
 import dev.wave.launcher.state.XmbViewModel
 import dev.wave.launcher.theme.WaveTheme
@@ -74,10 +75,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
-        WindowInsetsControllerCompat(window, window.decorView).apply {
-            hide(WindowInsetsCompat.Type.systemBars())
-            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-        }
+        hideSystemBars()
 
         gamepad = GamepadHandler(lifecycleScope, viewModel) { viewModel.inputConfig }
 
@@ -107,14 +105,19 @@ class MainActivity : ComponentActivity() {
         setContent {
             val state by viewModel.state.collectAsStateWithLifecycle()
             Box(Modifier.fillMaxSize()) {
+                // The wave is hidden (and its GL loop stopped) under full-screen photos and video.
+                val fullscreenMedia = state.overlay is MediaOverlay.Photos || state.overlay is MediaOverlay.VideoPlayback
                 WaveBackground(
-                    enabled = state.waveEnabled,
+                    enabled = state.waveEnabled && !fullscreenMedia,
                     speed = state.waveSpeed,
                     theme = WaveTheme.byName(state.theme),
                 )
                 XmbScreen(
                     state = state,
                     loadAppIcon = { pkg -> container.apps.icon(pkg, ICON_PX) },
+                    loadThumb = { kind, id, px -> container.media.thumbnail(kind, id, px) },
+                    media = viewModel.media,
+                    music = container.music,
                     onAction = viewModel::onAction,
                     onCategoryTap = viewModel::onCategoryTapped,
                     onItemTap = viewModel::onItemTapped,
@@ -134,6 +137,19 @@ class MainActivity : ComponentActivity() {
         // Picks up permission grants, installed emulators, and newly mounted drives, and resumes
         // background fingerprinting.
         viewModel.onForeground()
+    }
+
+    /** Other apps (emulators, the wallpaper cropper) can bring the system bars back; hide them again. */
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) hideSystemBars()
+    }
+
+    private fun hideSystemBars() {
+        WindowInsetsControllerCompat(window, window.decorView).apply {
+            hide(WindowInsetsCompat.Type.systemBars())
+            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        }
     }
 
     override fun onPause() {
@@ -158,7 +174,21 @@ class MainActivity : ComponentActivity() {
             is UiEffect.StartActivity -> safeStart(effect.intent)
             UiEffect.PickFolder -> runCatching { pickFolder.launch(null) }
             UiEffect.RequestStorageAccess -> requestStorageAccess()
+            is UiEffect.SetWallpaper -> setWallpaper(effect.uri)
         }
+    }
+
+    /** System crop-and-set screen (it doubles as confirmation); falls back to "Set picture as". */
+    private fun setWallpaper(uri: Uri) {
+        val crop = runCatching {
+            android.app.WallpaperManager.getInstance(this).getCropAndSetWallpaperIntent(uri)
+        }.getOrNull()
+        if (crop != null && safeStart(crop.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))) return
+        val attach = Intent(Intent.ACTION_ATTACH_DATA)
+            .setDataAndType(uri, "image/*")
+            .putExtra("mimeType", "image/*")
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        safeStart(Intent.createChooser(attach, "Set as wallpaper"))
     }
 
     private fun requestStorageAccess() {

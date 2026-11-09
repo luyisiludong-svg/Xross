@@ -1,16 +1,21 @@
 package dev.wave.launcher.state
 
 import androidx.compose.runtime.Immutable
+import dev.wave.launcher.media.ThumbKind
 
 /** Icon identifiers; the UI layer maps these to vectors or loads app icons. */
 sealed interface NodeIcon {
     data class Glyph(val key: GlyphKey) : NodeIcon
     data class App(val packageName: String) : NodeIcon
+    /** Photo/video thumbnail or embedded album art, with a glyph to show until it loads. */
+    data class Thumb(val kind: ThumbKind, val id: Long, val fallback: GlyphKey) : NodeIcon
 }
+
+enum class MediaKind { PHOTO, SONG, VIDEO }
 
 /** Icon roles; each maps to an `xmb_*` vector drawable generated from assets/icons. */
 enum class GlyphKey {
-    SETTINGS, GAMES, APPS,
+    SETTINGS, GAMES, APPS, PHOTO, MUSIC, VIDEO, ALBUM, ARTIST, SHUFFLE,
     PLATFORM, GAME_CART, GAME_DISC, FAVORITES, RECENT, HANDHELD, FOLDER, STORAGE,
     CONTROLS, EMULATORS, DISPLAY, SOUND, SYSTEM,
     ADD, REFRESH, HOME, INFO,
@@ -40,6 +45,12 @@ sealed interface Command {
     data object OpenAndroidSettings : Command
     data object OpenLibrarySettings : Command
     data class ToggleFavorite(val gameId: Long) : Command
+    data object OpenNowPlaying : Command
+    data object ShuffleAllSongs : Command
+    data class SetWallpaper(val photoId: Long) : Command
+    data object CycleSlideshowInterval : Command
+    data object ToggleResumeMusicAfterGames : Command
+    data object ToggleVideoLoop : Command
 }
 
 sealed interface NodeAction {
@@ -47,6 +58,8 @@ sealed interface NodeAction {
     data class LaunchGame(val gameId: Long) : NodeAction
     data class LaunchApp(val packageName: String, val activityName: String) : NodeAction
     data class Run(val command: Command) : NodeAction
+    /** Open item [index] of the photo/song/video collection behind list [collection]. */
+    data class OpenMedia(val kind: MediaKind, val collection: String, val index: Int) : NodeAction
     data object None : NodeAction
 }
 
@@ -72,11 +85,17 @@ data class XmbCategory(
 
 object Categories {
     const val SETTINGS = "settings"
+    const val PHOTO = "photo"
+    const val MUSIC = "music"
+    const val VIDEO = "video"
     const val GAMES = "games"
     const val APPS = "apps"
 
     val all = listOf(
         XmbCategory(SETTINGS, "Settings", GlyphKey.SETTINGS),
+        XmbCategory(PHOTO, "Photo", GlyphKey.PHOTO),
+        XmbCategory(MUSIC, "Music", GlyphKey.MUSIC),
+        XmbCategory(VIDEO, "Video", GlyphKey.VIDEO),
         XmbCategory(GAMES, "Games", GlyphKey.GAMES),
         XmbCategory(APPS, "Apps", GlyphKey.APPS),
     )

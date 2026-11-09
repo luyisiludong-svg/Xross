@@ -27,6 +27,10 @@ data class WaveSettings(
     val gameBootSound: Boolean = true,
     /** Fully hash disc images over the size limit (slow on SD cards). */
     val hashLargeImages: Boolean = false,
+    val slideshowSeconds: Int = 5,
+    /** Pause music when a game starts and pick it up again on return. */
+    val resumeMusicAfterGames: Boolean = true,
+    val videoLoop: Boolean = false,
 )
 
 /** SharedPreferences-backed settings exposed as a StateFlow. */
@@ -65,6 +69,9 @@ class SettingsStore(context: Context) {
         bootSound = prefs.getBoolean(KEY_BOOT_SOUND, true),
         gameBootSound = prefs.getBoolean(KEY_GAMEBOOT_SOUND, true),
         hashLargeImages = prefs.getBoolean(KEY_HASH_LARGE, false),
+        slideshowSeconds = prefs.getInt(KEY_SLIDESHOW, 5),
+        resumeMusicAfterGames = prefs.getBoolean(KEY_RESUME_MUSIC, true),
+        videoLoop = prefs.getBoolean(KEY_VIDEO_LOOP, false),
     )
 
     private fun save(s: WaveSettings) = prefs.edit {
@@ -82,6 +89,9 @@ class SettingsStore(context: Context) {
         putBoolean(KEY_BOOT_SOUND, s.bootSound)
         putBoolean(KEY_GAMEBOOT_SOUND, s.gameBootSound)
         putBoolean(KEY_HASH_LARGE, s.hashLargeImages)
+        putInt(KEY_SLIDESHOW, s.slideshowSeconds)
+        putBoolean(KEY_RESUME_MUSIC, s.resumeMusicAfterGames)
+        putBoolean(KEY_VIDEO_LOOP, s.videoLoop)
     }
 
     private companion object {
@@ -99,6 +109,9 @@ class SettingsStore(context: Context) {
         const val KEY_BOOT_SOUND = "boot_sound"
         const val KEY_GAMEBOOT_SOUND = "gameboot_sound"
         const val KEY_HASH_LARGE = "hash_large_images"
+        const val KEY_SLIDESHOW = "slideshow_seconds"
+        const val KEY_RESUME_MUSIC = "resume_music_after_games"
+        const val KEY_VIDEO_LOOP = "video_loop"
 
         // Keys and values here never contain '=' or newlines (ints, enum names, ids).
         fun encodeMap(map: Map<String, String>) = map.entries.joinToString("\n") { "${it.key}=${it.value}" }

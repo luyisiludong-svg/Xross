@@ -70,7 +70,7 @@ adb shell appops set --uid dev.wave.launcher MANAGE_EXTERNAL_STORAGE allow
 
 **Pass/fail for each emulator:** pick a game and press Confirm. The game must start directly. If
 the emulator opens to its own menu instead, the launch format doesn't match that emulator
-version; capture a log (§8).
+version; capture a log (§9).
 
 | Emulator | Platforms to try |
 | --- | --- |
@@ -158,12 +158,23 @@ Check by eye and ear:
 - [ ] Optional: turn on **Fingerprint large disc images** and note how long one ISO takes; the
       timing appears in `adb logcat -s WaveScan` with the `profiling` or `debug` build
 
-## 7. Home screen
+## 7. Photo, Music and Video
+
+- [ ] Photo, Music and Video show your device's pictures, songs (with album art) and videos
+- [ ] Photo viewer: L1/R1 zoom, D-pad pans without showing black edges, Start runs a
+      slideshow, Options opens the system "Set wallpaper" screen
+- [ ] Music keeps playing while you browse and shows a media notification; headset buttons work
+- [ ] Starting a game pauses music; it resumes when you come back
+      (Settings ▸ Media ▸ Music while playing games)
+- [ ] Video: smooth playback at the file's aspect ratio; ←/→ and L1/R1 seek; music pauses during
+      the video and resumes after
+
+## 8. Home screen
 
 **Settings ▸ System ▸ Set as home app** makes Wave the launcher. To undo it, use Android's
 **Settings ▸ Apps ▸ Default apps ▸ Home app**.
 
-## 8. What to send back
+## 9. What to send back
 
 The device model and Android version, plus a log, a screenshot, and the `gfxinfo` output:
 

@@ -73,6 +73,11 @@ dependencies {
     implementation(libs.commons.compress)
     implementation(libs.xz)
 
+    // Media hub: audio/video playback, background music session, Compose video surface.
+    implementation(libs.media3.exoplayer)
+    implementation(libs.media3.session)
+    implementation(libs.media3.ui.compose)
+
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)
     ksp(libs.room.compiler)

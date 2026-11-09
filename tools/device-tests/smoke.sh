@@ -44,9 +44,16 @@ expect_not() {
   if grep -qF -- "$1" <<<"$s"; then bad "$2 — '$1' unexpectedly on screen"; else ok "$2"; fi
 }
 top() { key $(for _ in $(seq 25); do printf 'KEYCODE_DPAD_UP '; done); }
-home() { # Games category root, cursor on the first entry
+# Categories: Settings, Photo, Music, Video, Games, Apps.
+category() { # category <index>: go to that category's root, cursor on the first entry
   key KEYCODE_BACK KEYCODE_BACK KEYCODE_BACK
-  key KEYCODE_BUTTON_L1 KEYCODE_BUTTON_L1 KEYCODE_BUTTON_L1 KEYCODE_BUTTON_R1
+  key $(for _ in $(seq 6); do printf 'KEYCODE_BUTTON_L1 '; done)
+  [ "$1" -gt 0 ] && key $(for _ in $(seq "$1"); do printf 'KEYCODE_BUTTON_R1 '; done)
+  top
+}
+music_state() { adb shell dumpsys media_session | grep -o "state=PlaybackState {state=[A-Z]*" | head -1 | sed 's/.*state=//'; }
+home() { # Games category root, cursor on the first entry
+  category 4
   top
 }
 
@@ -58,6 +65,25 @@ adb shell 'rm -rf /sdcard/ROMs; mkdir -p /sdcard/ROMs/snes /sdcard/ROMs/gba /sdc
   echo x > "/sdcard/ROMs/gba/Golden Sun (USA).gba"
   printf "FILE \"Vagrant Story (USA).bin\" BINARY\n" > "/sdcard/ROMs/psx/Vagrant Story (USA).cue"
   echo x > "/sdcard/ROMs/psx/Vagrant Story (USA).bin"'
+# Media fixtures (needs ffmpeg on the host): 2 photos, 2 tagged songs, 1 video.
+MEDIA=0
+if command -v ffmpeg >/dev/null; then
+  tmp=$(mktemp -d)
+  ffmpeg -loglevel error -y -f lavfi -i color=c=teal:s=1600x1200 -frames:v 1 "$tmp/Smoke Photo A.png"
+  ffmpeg -loglevel error -y -f lavfi -i color=c=orange:s=1600x1200 -frames:v 1 "$tmp/Smoke Photo B.png"
+  for n in 1 2; do
+    ffmpeg -loglevel error -y -f lavfi -i "sine=frequency=$((300 + n * 60)):duration=30" -c:a libmp3lame \
+      -metadata title="Smoke Song $n" -metadata artist="Smoke Artist" -metadata album="Smoke Album" -metadata track=$n "$tmp/Smoke Song $n.mp3"
+  done
+  ffmpeg -loglevel error -y -f lavfi -i testsrc2=size=640x360:rate=30:duration=8 -c:v libx264 -pix_fmt yuv420p "$tmp/Smoke Clip.mp4"
+  adb shell 'rm -rf /sdcard/Pictures/WaveSmoke /sdcard/Music/WaveSmoke /sdcard/Movies/WaveSmoke; mkdir -p /sdcard/Pictures/WaveSmoke /sdcard/Music/WaveSmoke /sdcard/Movies/WaveSmoke'
+  adb push "$tmp"/*.png /sdcard/Pictures/WaveSmoke/ >/dev/null
+  adb push "$tmp"/*.mp3 /sdcard/Music/WaveSmoke/ >/dev/null
+  adb push "$tmp"/*.mp4 /sdcard/Movies/WaveSmoke/ >/dev/null
+  adb shell content call --method scan_volume --uri content://media --arg external_primary >/dev/null 2>&1
+  rm -rf "$tmp"
+  MEDIA=1
+fi
 adb shell am start -n "$PKG/.MainActivity" >/dev/null
 pause 4
 
@@ -89,7 +115,7 @@ echo "== Categories"
 home
 key KEYCODE_BUTTON_R1
 expect_not "Super Nintendo" "R1 moves to the Apps category"
-key KEYCODE_BUTTON_L1 KEYCODE_BUTTON_L1
+key $(for _ in $(seq 5); do printf 'KEYCODE_BUTTON_L1 '; done)
 expect "Library" "L1 moves to Settings"
 key $(for _ in $(seq 4); do printf 'KEYCODE_DPAD_DOWN '; done)
 expect "Sound" "Settings lists the Sound section"
@@ -142,15 +168,69 @@ key KEYCODE_DPAD_DOWN
 pause 3
 expect "identified by content" "background fingerprinting reports identified games"
 
+if [ "$MEDIA" -eq 1 ]; then
+  echo "== Photo"
+  category 1
+  expect "WaveSmoke" "photo folders listed"
+  key $(for _ in $(seq 6); do printf 'KEYCODE_DPAD_DOWN '; done)
+  top
+  # Folders are sorted by name; find WaveSmoke by stepping down until it is focused.
+  for _ in $(seq 8); do screen | grep -q '"WaveSmoke"' && screen | grep -q "2 photos" && break; key KEYCODE_DPAD_DOWN; done
+  key KEYCODE_DPAD_CENTER
+  key KEYCODE_DPAD_CENTER
+  pause 1
+  expect "1 / 2" "photo viewer opens at the first photo"
+  key KEYCODE_DPAD_RIGHT
+  expect "2 / 2" "right shows the next photo"
+  key KEYCODE_BUTTON_R1
+  expect "1.5×" "R1 zooms in"
+  key KEYCODE_BACK KEYCODE_BACK
+  expect "Smoke Photo A" "Back un-zooms, then closes the viewer"
+
+  echo "== Music"
+  category 2
+  expect "Shuffle all" "music root lists Shuffle all"
+  key KEYCODE_DPAD_DOWN KEYCODE_DPAD_DOWN KEYCODE_DPAD_CENTER
+  expect "Smoke Album" "albums listed from tags"
+  for _ in $(seq 8); do screen | grep -q "Smoke Artist · 2 songs" && break; key KEYCODE_DPAD_DOWN; done
+  key KEYCODE_DPAD_CENTER
+  expect "Smoke Song 1" "album lists its songs in track order"
+  key KEYCODE_DPAD_CENTER
+  pause 1.5
+  [ "$(music_state)" = "PLAYING" ] && ok "song plays through the media session" || bad "song plays (state $(music_state))"
+  category 2
+  expect "Now playing" "Now playing row appears"
+  key KEYCODE_DPAD_CENTER
+  expect "Track 1 of 2" "Now Playing screen opens"
+  key KEYCODE_DPAD_RIGHT
+  expect "Smoke Song 2" "right skips to the next track"
+  key KEYCODE_BACK
+
+  echo "== Video"
+  category 3
+  key KEYCODE_DPAD_CENTER
+  for _ in $(seq 8); do screen | grep -q "Smoke Clip" && break; key KEYCODE_DPAD_DOWN; done
+  key KEYCODE_DPAD_CENTER
+  pause 1.5
+  expect "Smoke Clip" "video player opens with its title"
+  [ "$(music_state)" = "PAUSED" ] && ok "music pauses while a video plays" || bad "music during video (state $(music_state))"
+  key KEYCODE_BACK
+  pause 1
+  [ "$(music_state)" = "PLAYING" ] && ok "music resumes after the video" || bad "music after video (state $(music_state))"
+fi
+
 echo "== Touch"
 home
-adb shell input swipe 1400 600 700 600 200
+# Swipes are placed relative to the screen (root node bounds from the accessibility dump).
+read -r SW SH < <(adb shell cat /sdcard/wave-ui.xml | grep -o 'bounds="\[0,0\]\[[0-9]*,[0-9]*\]"' | head -1 | sed 's/.*\]\[\([0-9]*\),\([0-9]*\)\]"/\1 \2/')
+SW=${SW:-2400}; SH=${SH:-1080}
+adb shell input swipe $((SW * 58 / 100)) $((SH * 55 / 100)) $((SW * 30 / 100)) $((SH * 55 / 100)) 200
 pause 0.6
 expect_not "Super Nintendo" "swipe left moves to the next category"
-adb shell input swipe 700 600 1400 600 200
+adb shell input swipe $((SW * 30 / 100)) $((SH * 55 / 100)) $((SW * 58 / 100)) $((SH * 55 / 100)) 200
 pause 0.6
 expect "Super Nintendo" "swipe right comes back (one category per swipe)"
-adb shell input swipe 1000 700 1000 300 250
+adb shell input swipe $((SW * 42 / 100)) $((SH * 65 / 100)) $((SW * 42 / 100)) $((SH * 28 / 100)) 250
 pause 0.6
 expect "Game Boy Advance" "vertical drag scrolls the list"
 
@@ -165,10 +245,16 @@ if adb shell pm list packages | grep -q com.retroarch.aarch64; then
   grep -q "extra.LIBRETRO=/data/data/com.retroarch.aarch64/cores/snes9x_libretro_android.so" <<<"$log" \
     && ok "RetroArch receives the snes9x core" || bad "RetroArch core extra"
   grep -q "uriRead=ok" <<<"$log" && ok "emulator can read the ROM through the granted URI" || bad "URI read grant"
+  if [ "$MEDIA" -eq 1 ]; then
+    [ "$(music_state)" = "PAUSED" ] && ok "music pauses while a game runs" || bad "music during game (state $(music_state))"
+  fi
   adb shell am start -n "$PKG/.MainActivity" >/dev/null
   pause 1
   home
   expect "Recently Played" "launched game appears in Recently Played"
+  if [ "$MEDIA" -eq 1 ]; then
+    [ "$(music_state)" = "PLAYING" ] && ok "music resumes after the game" || bad "music after game (state $(music_state))"
+  fi
 fi
 
 echo
