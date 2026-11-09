@@ -3,6 +3,8 @@ package dev.wave.launcher.ui
 import android.opengl.GLES30
 import android.opengl.GLSurfaceView
 import android.os.SystemClock
+import android.util.Log
+import dev.wave.launcher.BuildConfig
 import dev.wave.launcher.theme.WaveTheme
 import dev.wave.launcher.theme.rgb
 import java.util.Calendar
@@ -51,6 +53,7 @@ class WaveRenderer(
     private var lastFrameNs = 0L
     private var daylight = daylight(Calendar.getInstance())
     private var daylightCheckedAt = 0L
+    private val stats = if (BuildConfig.PERF_LOG) FrameStats(framePeriodNs) else null
 
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
         program = link(VERTEX, FRAGMENT)
@@ -73,6 +76,7 @@ class WaveRenderer(
         val now = SystemClock.elapsedRealtimeNanos()
         val p = params
         if (lastFrameNs != 0L) {
+            stats?.record(now - lastFrameNs)
             // Snap to whole vsync periods; cap long gaps (resume, hitch) to a few frames.
             val frames = ((now - lastFrameNs).toDouble() / framePeriodNs).roundToLong().coerceIn(1, 4)
             time += frames * framePeriodNs / 1e9 * p.speed
@@ -93,6 +97,31 @@ class WaveRenderer(
         GLES30.glUniform3fv(uWave, 1, p.theme.wave.rgb(), 0)
         GLES30.glUniform1f(uBright, 0.8f + 0.2f * daylight)
         GLES30.glDrawArrays(GLES30.GL_TRIANGLES, 0, 3)
+    }
+
+    /**
+     * Debug-only frame pacing probe for the GL thread (gfxinfo only covers the UI thread).
+     * Logs every ~5 s under the "WaveFrames" tag.
+     */
+    private class FrameStats(private val periodNs: Long) {
+        private val intervals = LongArray(300)
+        private var n = 0
+
+        fun record(intervalNs: Long) {
+            intervals[n++] = intervalNs
+            if (n < intervals.size) return
+            n = 0
+            val sorted = intervals.sorted()
+            val p50 = sorted[sorted.size / 2] / 1e6
+            val p95 = sorted[sorted.size * 95 / 100] / 1e6
+            val max = sorted.last() / 1e6
+            val hitches = sorted.count { it > periodNs * 3 / 2 }
+            Log.i(
+                "WaveFrames",
+                "gl frames=${sorted.size} p50=%.1fms p95=%.1fms max=%.1fms missed=$hitches (period %.1fms)"
+                    .format(p50, p95, max, periodNs / 1e6),
+            )
+        }
     }
 
     /** 0 at midnight → 1 at noon. */

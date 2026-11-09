@@ -1,5 +1,7 @@
 package dev.wave.launcher.state
 
+import androidx.compose.runtime.Immutable
+
 /** Icon identifiers; the UI layer maps these to vectors or loads app icons. */
 sealed interface NodeIcon {
     data class Glyph(val key: GlyphKey) : NodeIcon
@@ -46,6 +48,8 @@ sealed interface NodeAction {
     data object None : NodeAction
 }
 
+/** Immutable so Compose can skip unchanged rows when the cursor moves. */
+@Immutable
 data class XmbNode(
     val id: String,
     val title: String,
@@ -57,6 +61,7 @@ data class XmbNode(
     val optionsLabel: String? = null,
 )
 
+@Immutable
 data class XmbCategory(
     val id: String,
     val title: String,

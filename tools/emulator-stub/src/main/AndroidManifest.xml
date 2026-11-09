@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application android:label="Emulator stub" android:theme="@android:style/Theme.Material.NoActionBar">
+        <activity android:name=".StubActivity" android:exported="false" />
+        <!-- Same component name the real emulator exposes, so Wave's explicit intent resolves. -->
+        <activity-alias
+            android:name="${entryActivity}"
+            android:exported="true"
+            android:targetActivity=".StubActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+    </application>
+</manifest>
