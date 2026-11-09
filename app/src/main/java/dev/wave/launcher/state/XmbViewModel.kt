@@ -45,6 +45,7 @@ sealed interface UiEffect {
     data class StartActivity(val intent: Intent) : UiEffect
     data object PickFolder : UiEffect
     data object RequestStorageAccess : UiEffect
+    data class SetWallpaper(val uri: Uri) : UiEffect
 }
 
 data class XmbUiState(
@@ -66,6 +67,10 @@ data class XmbUiState(
     val booting: String? = null,
     /** True on the first screen after process start: the UI fades in with the startup cue. */
     val coldBoot: Boolean = false,
+    /** Full-screen photo viewer / video player / Now Playing, if open. */
+    val overlay: MediaOverlay? = null,
+    /** Music state for the mini indicator and Now Playing. */
+    val nowPlaying: dev.wave.launcher.media.NowPlaying = dev.wave.launcher.media.NowPlaying(),
 ) {
     val focused: XmbNode? get() = items.getOrNull(focusedIndex)
     val depth: Int get() = breadcrumb.size
@@ -85,6 +90,17 @@ class XmbViewModel(
 ) : ViewModel(), InputSink {
 
     private val sounds = container.sounds
+    private val music = container.music
+
+    val media = MediaOverlayController(
+        context = context,
+        scope = viewModelScope,
+        music = music,
+        settings = container.settings,
+        sounds = container.sounds,
+        setWallpaper = { photo -> emit(UiEffect.SetWallpaper(photo.uri)) },
+        toast = { toast(it) },
+    )
 
     private val settingsStore = container.settings
     private val categories = Categories.all
@@ -103,7 +119,10 @@ class XmbViewModel(
         container.games.games,
         container.apps.apps,
         settingsStore.settings,
-    ) { e, games, apps, settings -> MenuTree(e.copy(games = games, apps = apps, settings = settings)) }
+        container.media.library,
+    ) { e, games, apps, settings, mediaLib ->
+        MenuTree(e.copy(games = games, apps = apps, settings = settings, media = mediaLib))
+    }
         .stateIn(viewModelScope, SharingStarted.Eagerly, MenuTree(env.value))
 
     private val fingerprints = container.fingerprints
@@ -117,10 +136,20 @@ class XmbViewModel(
 
     private var foreground = false
 
-    val state: StateFlow<XmbUiState> = combine(
-        tree, nav, transient, settingsStore.settings, fingerprintStatus,
-    ) { t, n, tr, settings, fp ->
-        val view = resolve(t, n, fp)
+    /** Inputs that only some lists read live (fingerprint progress, Now Playing). */
+    private data class Live(val fingerprints: FingerprintStatus, val nowPlaying: dev.wave.launcher.media.NowPlaying)
+
+    private val live: StateFlow<Live> = combine(fingerprintStatus, music.state) { fp, np -> Live(fp, np) }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, Live(FingerprintStatus(), music.state.value))
+
+    private data class Settled(val transient: Transient, val settings: dev.wave.launcher.data.WaveSettings, val overlay: MediaOverlay?)
+
+    private val settled = combine(transient, settingsStore.settings, media.overlay) { tr, st, ov -> Settled(tr, st, ov) }
+
+    val state: StateFlow<XmbUiState> = combine(tree, nav, settled, live) { t, n, sd, lv ->
+        val tr = sd.transient
+        val settings = sd.settings
+        val view = resolve(t, n, lv)
         XmbUiState(
             categories = categories,
             categoryIndex = n.categoryIndex,
@@ -137,6 +166,8 @@ class XmbViewModel(
             theme = settings.theme,
             booting = tr.booting,
             coldBoot = coldBoot,
+            overlay = sd.overlay,
+            nowPlaying = lv.nowPlaying,
         )
     }.stateIn(viewModelScope, SharingStarted.Eagerly, XmbUiState(coldBoot = coldBoot))
 
@@ -150,11 +181,15 @@ class XmbViewModel(
         val depth: Int get() = breadcrumb.size
     }
 
-    private fun resolve(t: MenuTree, n: NavState, fp: FingerprintStatus): ListView {
+    private fun resolve(t: MenuTree, n: NavState, lv: Live): ListView {
         val category = categories[n.categoryIndex]
         val stack = n.stack(category.id, category.title)
         val key = stack.last().key
-        val items = if (key == MenuTree.LIBRARY) t.library(fp) else t.list(key)
+        val items = when (key) {
+            MenuTree.LIBRARY -> t.library(lv.fingerprints)
+            Categories.rootKey(Categories.MUSIC) -> t.musicRoot(lv.nowPlaying)
+            else -> t.list(key)
+        }
         return ListView(
             breadcrumb = stack.drop(1).map { it.title },
             listKey = stack.last().key,
@@ -164,7 +199,7 @@ class XmbViewModel(
     }
 
     /** Read synchronously from the source flows so rapid inputs never act on a stale frame. */
-    private fun current(): ListView = resolve(tree.value, nav.value, fingerprintStatus.value)
+    private fun current(): ListView = resolve(tree.value, nav.value, live.value)
 
     val inputConfig: InputConfig
         get() = settingsStore.current.let { InputConfig(it.confirmLayout, it.deadzone, it.keyRemap) }
@@ -174,7 +209,13 @@ class XmbViewModel(
 
     private var environmentLoaded = false
 
+    override fun onCleared() {
+        media.close()
+        super.onCleared()
+    }
+
     init {
+        container.media.watch(viewModelScope)
         viewModelScope.launch {
             settingsStore.settings.collect {
                 sounds.enabled = it.soundEffects
@@ -189,6 +230,7 @@ class XmbViewModel(
 
     override fun onAction(action: NavAction) {
         if (transient.value.remap != null || transient.value.booting != null) return
+        if (media.onAction(action)) return
         val ui = current()
         when (action) {
             NavAction.UP -> moveCursor(-1)
@@ -263,6 +305,8 @@ class XmbViewModel(
     fun onForeground() {
         foreground = true
         refreshEnvironment()
+        music.resumeAfterGame()
+        viewModelScope.launch { container.media.refresh() }
         if (env.value.storageGranted && scanJob?.isActive != true) fingerprints.start(viewModelScope)
     }
 
@@ -270,6 +314,7 @@ class XmbViewModel(
     fun onBackground() {
         foreground = false
         fingerprints.stop()
+        media.onBackground()
     }
 
     fun refreshEnvironment() {
@@ -403,7 +448,22 @@ class XmbViewModel(
                 sounds.play(UiSound.ENTER)
                 run(action.command)
             }
+            is NodeAction.OpenMedia -> openMedia(action)
             NodeAction.None -> Unit
+        }
+    }
+
+    private fun openMedia(action: NodeAction.OpenMedia) {
+        val menus = tree.value.media
+        sounds.play(UiSound.ENTER)
+        when (action.kind) {
+            MediaKind.PHOTO -> media.openPhotos(menus.photos(action.collection), action.index)
+            MediaKind.VIDEO -> media.openVideo(menus.videos(action.collection), action.index)
+            MediaKind.SONG -> {
+                val songs = menus.songs(action.collection)
+                music.play(songs, action.index)
+                songs.getOrNull(action.index)?.let { toast("Playing ${it.title}") }
+            }
         }
     }
 
@@ -414,6 +474,8 @@ class XmbViewModel(
                 container.games.markPlayed(game.id)
                 // Start transition: bloom + start cue, then hand off to the emulator.
                 transient.update { it.copy(booting = game.title) }
+                // Background music: pause for the game (and resume on return) or stop.
+                if (settingsStore.current.resumeMusicAfterGames) music.pauseForGame() else music.player.pause()
                 if (settingsStore.current.gameBootSound) {
                     sounds.playCue(UiCue.GAMEBOOT, settingsStore.current.soundVolume)
                 } else {
@@ -492,6 +554,21 @@ class XmbViewModel(
                 val category = categories[index]
                 nav.update { it.jumpTo(index, category.id, category.title, Frame(MenuTree.LIBRARY, "Library")) }
             }
+            Command.OpenNowPlaying -> media.openNowPlaying()
+            Command.ShuffleAllSongs -> {
+                val songs = tree.value.media.allSongs
+                if (songs.isNotEmpty()) {
+                    music.play(songs, songs.indices.random(), shuffle = true)
+                    toast("Shuffling ${MediaMenus.count(songs.size, "song")}")
+                }
+            }
+            is Command.SetWallpaper -> container.media.library.value.photos.firstOrNull { it.id == command.photoId }
+                ?.let { emit(UiEffect.SetWallpaper(it.uri)) }
+            Command.CycleSlideshowInterval -> settingsStore.update {
+                it.copy(slideshowSeconds = SLIDESHOW_SECONDS[(SLIDESHOW_SECONDS.indexOf(it.slideshowSeconds) + 1) % SLIDESHOW_SECONDS.size])
+            }
+            Command.ToggleResumeMusicAfterGames -> settingsStore.update { it.copy(resumeMusicAfterGames = !it.resumeMusicAfterGames) }
+            Command.ToggleVideoLoop -> settingsStore.update { it.copy(videoLoop = !it.videoLoop) }
             is Command.ToggleFavorite -> viewModelScope.launch {
                 container.games.toggleFavorite(command.gameId)
                 sounds.play(UiSound.OK)
@@ -528,6 +605,7 @@ class XmbViewModel(
         private val DEADZONES = listOf(0.15f, 0.25f, 0.35f, 0.45f, 0.55f)
         private val WAVE_SPEEDS = listOf(0.5f, 1f, 1.5f, 2f)
         private val VOLUMES = listOf(0.25f, 0.5f, 0.75f, 1f)
+        private val SLIDESHOW_SECONDS = listOf(3, 5, 10, 20)
         private const val GAMEBOOT_HANDOFF_MS = 1100L
 
         private fun List<Float>.nextAfter(value: Float): Float {

@@ -13,11 +13,11 @@ Legend: ✅ done and verified · ◐ partial · ❌ not started · 🧪 verified
 | --- | --- |
 | Phase 1 (Alpha): XMB navigation, gamepad layer, library, emulator dispatch, wave shader | ✅ complete, with a few small gaps listed in §6 Phase 1b |
 | Visual front end from `assets/examples` (icons, themes, glow, status bar, sounds) | ✅ |
-| Phase 2 (metadata, media hub, theme packs, on-screen controller and keyboard) | ◐ step 1 done: archive-aware fingerprinting (§2, §3.4) |
+| Phase 2 (metadata, media hub, theme packs, on-screen controller and keyboard) | ◐ fingerprinting and the media hub (Photo, Music, Video) done (§2, §3.4, §3.5) |
 | Phase 3 (dual screen, hot-swap, RetroAchievements, Web Portal, FTPS) | ❌ (two prerequisites done; see §6) |
 | Phase 4 (onboarding, triage, profiling, plugin API) | ◐ app triage and performance work started |
 
-**Verification:** 53 JVM/Robolectric unit tests, a 31-check on-device smoke test,
+**Verification:** 61 JVM/Robolectric unit tests, a 48-check on-device smoke test,
 end-to-end launch tests against stub builds of five emulators, and frame-pacing measurements
 across 12 display configurations. Everything passes. All device testing used the Android
 emulator (API 37, host GPU). No physical handheld or controller has been tested yet.
@@ -79,7 +79,12 @@ scraper, the review tool, and the asset cache. Google Play and web-search scrapi
 
 | Feature | State | Notes |
 | --- | --- | --- |
-| Photo viewer, music player (background service), video snaps | ❌ | Phase 2 |
+| Photo, Music and Video categories in the XMB | ✅ | From MediaStore (tags, EXIF, folders); live thumbnails and album art |
+| Photo viewer: pan/zoom, slideshow, Set as wallpaper | ✅ | Animated zoom up to 5×, pan clamped to the photo's edges, crossfade slideshow (3–20 s), pinch/swipe/tap |
+| Music player as a background service | ✅ | Media3 ExoPlayer + MediaSession: notification, headset and lock-screen controls; albums, artists, shuffle, repeat |
+| BGM mode: music pauses for games and resumes after | ✅ | Settings ▸ Media; also pauses for videos |
+| Video player with controller playback and scrubbing | ✅ | Seek 10 s / 60 s, previous/next, loop toggle, auto-hiding on-screen display |
+| Video snap previews on focused games | ❌ | Needs snaps from the scraper (Phase 2) |
 | Wave background (GLSL ES 3.0) | ✅ | Glossy sheets plus strands, AA crests, dithering, vsync-snapped time, reduced-res target |
 | Wave parameters: speed | ✅ | 0.5×–2× |
 | Wave parameters: line count, turbulence, thickness, custom gradients | ❌ | Shader is ready for uniforms; no UI yet |
@@ -89,7 +94,7 @@ scraper, the review tool, and the asset cache. Google Play and web-search scrapi
 | Coldboot: fade-in + startup sound | ✅ | Once per process start; can be turned off |
 | Custom boot animations | ❌ | |
 | UI sound effects + volume, game-start cue | ✅ | SoundPool for short effects, MediaPlayer for long cues |
-| BGM and video-snap volume sliders | ❌ | Needs the media engine |
+| BGM and video-snap volume sliders | ◐ | Music uses system media volume; separate sliders not yet |
 | Loadable sound packs / theme packs | ❌ | The sounds and icons are built in for now |
 | Icons from the design SVGs | ✅ | `tools/icons/svg_icons.py` → 28 VectorDrawables |
 | Custom fonts, UI scale slider (50–150%) | ❌ | Layout already scales automatically (§4) |
@@ -114,7 +119,7 @@ HTTPS Wave Portal (Ktor CIO), FTPS (Apache FtpServer), auth, uploads, library ed
 
 ## 3. Test results
 
-### 3.1 Unit tests — 53/53 pass
+### 3.1 Unit tests — 61/61 pass
 `./gradlew :app:testDebugUnitTest` (JVM + Robolectric on SDK 35)
 
 | Suite | Tests | Covers |
@@ -129,8 +134,9 @@ HTTPS Wave Portal (Ktor CIO), FTPS (Apache FtpServer), auth, uploads, library ed
 | `SettingsStoreTest` | 2 | Every setting survives a restart; defaults |
 | `FingerprinterTest` | 12 | Known CRC/MD5/SHA-1 vectors; iNES and SNES header stripping; ZIP member choice and header-only mode; 7z; CHD v5; arcade sets; skip rules; missing files |
 | `FingerprintQueueTest` | 3 | Staleness and paging queries, stats, cascade delete, real queue run (Room in memory) |
+| `MediaMenusTest` | 8 | Photo folders and thumbnails, album track order, artists, Now Playing row, video subtitles, empty states, six categories, EXIF rotation, pan limits |
 
-### 3.2 Device smoke test — 31/31 pass
+### 3.2 Device smoke test — 48/48 pass
 `tools/device-tests/smoke.sh` resets the app, seeds ROMs, and drives the UI with key events.
 It checks screen content through the accessibility tree.
 
@@ -144,7 +150,10 @@ It checks screen content through the accessibility tree.
 | Rescan | New file picked up (+1), deleted file dropped (−1) |
 | Touch | Swipe left/right moves exactly one category; vertical drag scrolls |
 | Fingerprints | Library settings report games identified by content after a rescan |
-| Launch | RetroArch stub receives the right core; ROM readable via granted URI; Recently Played updated |
+| Photo | Folders listed; viewer opens at the right photo; next photo; R1 zoom; Back un-zooms then closes |
+| Music | Albums from tags; track order; playback through the media session; Now Playing row and screen; next track |
+| Video | Player opens; music pauses during the video and resumes after |
+| Launch | RetroArch stub receives the right core; ROM readable via granted URI; Recently Played updated; music pauses during the game and resumes after |
 
 ### 3.3 Emulator dispatch — 5/5 recipes verified with stubs
 `tools/emulator-stub` builds a test-only APK per emulator, each installed under the real package
@@ -194,6 +203,29 @@ Measured on the emulator (optimized build, upgraded in place from DB v1 without 
 Observed: a rescan right after bulk-copying files reported 22 files as "updated" (their
 modification times settled after the first scan), so those were re-hashed once. Harmless, but
 worth watching on real SD cards.
+
+### 3.5 Media hub (Phase 2)
+
+| Section | What's there | Controls |
+| --- | --- | --- |
+| Photo | All photos + one entry per folder, newest first, with thumbnails | ←/→ photo · L1/R1 zoom · ↑↓←→ pan when zoomed · Confirm info · Start slideshow · Options set as wallpaper · Back |
+| Music | Now playing, Shuffle all, All songs, Albums, Artists, with embedded album art | Confirm plays from that song · Now Playing: Confirm play/pause, ←/→ track, L1/R1 seek, Options shuffle, ↑ repeat |
+| Video | All videos + folders, with thumbnails, duration and resolution | Confirm/Start play/pause · ←/→ 10 s · L1/R1 60 s · ↑/↓ previous/next · Options loop · Back |
+
+Measured on the emulator (optimized build):
+
+| Check | Result |
+| --- | --- |
+| Music service | Foreground `mediaPlayback` service with a media notification; MediaSession reports PLAYING/PAUSED correctly |
+| Music during a game / video | Paused when the game or video starts, resumed when Wave is back in front |
+| Scrolling 300 photo thumbnails | 0 slow UI-thread frames, 0 slow bitmap uploads, p99 17 ms |
+| Memory | 58 MB PSS browsing photos; 60 MB with the music service while a game runs |
+| Wave background | Hidden (GL loop stopped) under the full-screen photo viewer and video player |
+
+Fixed during this pass: panning could expose the black border of pillarboxed photos (limits now
+follow the fitted photo size and EXIF rotation); the XMB showed through Now Playing (the menu
+now fades out under media screens); the Android status bar stayed visible after returning from
+another app (immersive mode is re-applied on focus).
 
 ---
 
@@ -309,7 +341,10 @@ Unisoc T618) before calling it final.**
       priority list; throttled batch scraper; disk asset cache keyed by UUID
 - [ ] Game detail view (box art, description, release info) and manual match/override tool
 - [ ] Gamepad virtual keyboard, then search UI on the existing FTS4 index
-- [ ] Media hub: photo viewer, music player as a background service with BGM mode, video snaps
+- [x] Media hub: photo viewer (zoom/pan, slideshow, wallpaper), music player as a background
+      service with BGM mode, video player
+- [ ] Video snap previews on focused games (after the scraper provides snaps)
+- [ ] Separate BGM / UI / video-snap volume sliders
 - [ ] Theme packs: loadable icons, sounds (cursor/confirm/back/error/boot), fonts, palettes and
       wave parameters (line count, turbulence, thickness); move bundled assets into a pack
 - [ ] UI scale slider, custom fonts, status-bar mode options

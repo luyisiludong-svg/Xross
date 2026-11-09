@@ -8,6 +8,8 @@ import dev.wave.launcher.data.GameRepository
 import dev.wave.launcher.data.SettingsStore
 import dev.wave.launcher.data.WaveDatabase
 import dev.wave.launcher.launch.GameLauncher
+import dev.wave.launcher.media.MediaRepository
+import dev.wave.launcher.media.MusicPlayer
 import dev.wave.launcher.storage.FingerprintPolicy
 import dev.wave.launcher.storage.StorageVolumes
 
@@ -22,6 +24,8 @@ class AppContainer(context: Context) {
     val volumes: StorageVolumes by lazy { StorageVolumes(appContext) }
     val launcher: GameLauncher by lazy { GameLauncher(appContext) }
     val sounds: UiSounds by lazy { UiSounds(appContext) }
+    val media: MediaRepository by lazy { MediaRepository(appContext) }
+    val music: MusicPlayer by lazy { MusicPlayer(appContext) }
     val fingerprints: FingerprintQueue by lazy {
         FingerprintQueue(database.games(), database.hashes()) {
             FingerprintPolicy(hashLargeImages = settings.current.hashLargeImages)

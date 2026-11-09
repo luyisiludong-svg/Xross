@@ -29,6 +29,7 @@ data class MenuSnapshot(
     val folders: List<FolderEntry> = emptyList(),
     val scanStatus: String? = null,
     val versionName: String = "",
+    val media: dev.wave.launcher.media.MediaLibrary = dev.wave.launcher.media.MediaLibrary(),
 )
 
 /** Pure builder from a [MenuSnapshot] to XMB lists. */
@@ -39,6 +40,12 @@ class MenuTree(private val s: MenuSnapshot) {
 
     private val cache = HashMap<String, List<XmbNode>>()
 
+    /** Photo/Music/Video lists and the collections behind the media viewers. */
+    val media by lazy { MediaMenus(s.media) }
+
+    /** Music root with the live Now Playing row. Not cached. */
+    fun musicRoot(now: dev.wave.launcher.media.NowPlaying): List<XmbNode> = media.musicRoot(now)
+
     /** Lists are memoized: a tree is rebuilt only when the snapshot changes, not per keypress. */
     fun list(key: String): List<XmbNode> = cache.getOrPut(key) { build(key) }
 
@@ -46,6 +53,10 @@ class MenuTree(private val s: MenuSnapshot) {
         key == Categories.rootKey(Categories.GAMES) -> gamesRoot()
         key == Categories.rootKey(Categories.APPS) -> s.apps.filterNot { it.isGame }.map(::appNode)
         key == Categories.rootKey(Categories.SETTINGS) -> settingsRoot()
+        key == Categories.rootKey(Categories.PHOTO) -> media.photoRoot()
+        key == Categories.rootKey(Categories.VIDEO) -> media.videoRoot()
+        key == Categories.rootKey(Categories.MUSIC) -> media.musicRoot(dev.wave.launcher.media.NowPlaying())
+        media.handles(key) -> media.list(key)
         key == RECENT -> s.games.filter { it.lastPlayed != null }
             .sortedByDescending { it.lastPlayed }.take(30).map { gameNode(it, showPlatform = true) }
         key == FAVORITES -> s.games.filter { it.favorite }.map { gameNode(it, showPlatform = true) }
@@ -57,6 +68,7 @@ class MenuTree(private val s: MenuSnapshot) {
         key == EMULATORS -> emulatorSettings()
         key == DISPLAY -> displaySettings()
         key == SOUND -> soundSettings()
+        key == MEDIA_SETTINGS -> mediaSettings()
         key == SYSTEM -> systemSettings()
         else -> emptyList()
     }
@@ -122,6 +134,7 @@ class MenuTree(private val s: MenuSnapshot) {
         folder(EMULATORS, "Emulators", GlyphKey.EMULATORS, "${s.installedEmulators.size} detected"),
         folder(DISPLAY, "Theme", GlyphKey.DISPLAY, "${WaveTheme.byName(s.settings.theme).label} · wave background"),
         folder(SOUND, "Sound", GlyphKey.SOUND, if (s.settings.soundEffects) "Effects on" else "Effects off"),
+        folder(MEDIA_SETTINGS, "Media", GlyphKey.MUSIC, "Slideshow, music and video playback"),
         folder(SYSTEM, "System", GlyphKey.SYSTEM, "Version ${s.versionName}"),
     )
 
@@ -247,6 +260,18 @@ class MenuTree(private val s: MenuSnapshot) {
     private fun setting(id: String, title: String, subtitle: String?, glyph: GlyphKey, command: Command) =
         XmbNode(id, title, subtitle, NodeIcon.Glyph(glyph), NodeAction.Run(command))
 
+    private fun mediaSettings() = listOf(
+        setting("med:slideshow", "Slideshow interval", "${s.settings.slideshowSeconds} seconds", GlyphKey.PHOTO, Command.CycleSlideshowInterval),
+        setting(
+            "med:music",
+            "Music while playing games",
+            if (s.settings.resumeMusicAfterGames) "Pause, then resume when you return" else "Stop when a game starts",
+            GlyphKey.MUSIC,
+            Command.ToggleResumeMusicAfterGames,
+        ),
+        setting("med:loop", "Loop videos", onOff(s.settings.videoLoop), GlyphKey.VIDEO, Command.ToggleVideoLoop),
+    )
+
     private fun onOff(on: Boolean) = if (on) "On" else "Off"
 
     private fun fingerprintSummary(status: FingerprintStatus): String {
@@ -276,6 +301,7 @@ class MenuTree(private val s: MenuSnapshot) {
         const val EMULATORS = "settings:emulators"
         const val DISPLAY = "settings:display"
         const val SOUND = "settings:sound"
+        const val MEDIA_SETTINGS = "settings:media"
         private val DISC_EXTENSIONS = setOf("iso", "cue", "chd", "cso", "rvz", "gcz", "wbfs", "cdi", "gdi", "pbp", "m3u")
         const val SYSTEM = "settings:system"
 

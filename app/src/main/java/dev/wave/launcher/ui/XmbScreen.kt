@@ -31,7 +31,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.foundation.border
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -75,6 +79,9 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import dev.wave.launcher.input.ConfirmLayout
+import dev.wave.launcher.media.MusicPlayer
+import dev.wave.launcher.media.ThumbKind
+import dev.wave.launcher.state.MediaOverlayController
 import dev.wave.launcher.input.NavAction
 import dev.wave.launcher.state.NodeAction
 import dev.wave.launcher.state.NodeIcon
@@ -136,6 +143,9 @@ private class XmbMetrics(val width: Float, val height: Float) {
 fun XmbScreen(
     state: XmbUiState,
     loadAppIcon: suspend (String) -> ImageBitmap?,
+    loadThumb: suspend (ThumbKind, Long, Int) -> ImageBitmap?,
+    media: MediaOverlayController,
+    music: MusicPlayer,
     onAction: (NavAction) -> Unit,
     onCategoryTap: (Int) -> Unit,
     onItemTap: (Int) -> Unit,
@@ -171,6 +181,9 @@ fun XmbScreen(
         val catPos by animateFloatAsState(state.categoryIndex.toFloat(), NavSpring, label = "category")
         val depth by animateFloatAsState(state.depth.coerceAtMost(1).toFloat(), NavSpring, label = "depth")
 
+        // The menu fades out under media screens so only one set of text and hints is visible.
+        val menuAlpha by animateFloatAsState(if (state.overlay == null) 1f else 0f, tween(220), label = "menu")
+        Box(Modifier.fillMaxSize().graphicsLayer { alpha = menuAlpha }) {
         CategoryBar(
             categories = state.categories,
             categoryIndex = state.categoryIndex,
@@ -181,7 +194,26 @@ fun XmbScreen(
             pulse = { pulse },
             onCategoryTap = onCategoryTap,
         )
-        ItemColumn(state, m, { pulse }, loadAppIcon, onItemTap)
+        ItemColumn(state, m, { pulse }, loadAppIcon, loadThumb, onItemTap)
+
+        // Mini "now playing" indicator while browsing.
+        AnimatedVisibility(
+            visible = state.nowPlaying.song != null && state.overlay == null,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier.align(Alignment.TopStart).padding(top = (m.s * 0.04f).dp(), start = (m.width * 0.025f).dp()),
+        ) {
+            val np = state.nowPlaying
+            var last by remember { mutableStateOf("") }
+            np.song?.let { last = "${if (np.isPlaying) "♪" else "❚❚"}  ${it.title} — ${it.artist}" }
+            Text(
+                last,
+                style = shadowed(m.subtitleSize.sp(), color = TextDim),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.widthIn(max = (m.width * 0.45f).dp()),
+            )
+        }
 
         StatusBar(
             textSize = m.statusSize.sp(),
@@ -194,6 +226,7 @@ fun XmbScreen(
             m.subtitleSize.sp(),
             Modifier.align(Alignment.BottomEnd).padding((m.s * 0.04f).dp()),
         )
+        }
 
         AnimatedVisibility(
             visible = state.toast != null,
@@ -210,6 +243,17 @@ fun XmbScreen(
                     .clip(RoundedCornerShape(50))
                     .background(Pill)
                     .padding(horizontal = (m.s * 0.04f).dp(), vertical = (m.s * 0.018f).dp()),
+            )
+        }
+
+        state.overlay?.let { overlay ->
+            MediaOverlayLayer(
+                overlay = overlay,
+                controller = media,
+                music = music,
+                nowPlaying = state.nowPlaying,
+                loadThumb = loadThumb,
+                hints = { pairs -> OverlayHints(pairs, state, m.subtitleSize.sp()) },
             )
         }
 
@@ -303,6 +347,7 @@ private fun ItemColumn(
     m: XmbMetrics,
     pulse: () -> Float,
     loadAppIcon: suspend (String) -> ImageBitmap?,
+    loadThumb: suspend (ThumbKind, Long, Int) -> ImageBitmap?,
     onItemTap: (Int) -> Unit,
 ) {
     // Scroll snaps when the list itself changes and glides when the cursor moves.
@@ -342,6 +387,7 @@ private fun ItemColumn(
                 focus = focus,
                 pulse = pulse,
                 loadAppIcon = loadAppIcon,
+                loadThumb = loadThumb,
                 modifier = Modifier
                     .offset {
                         val y = itemY(i - scroll.value, m)
@@ -378,6 +424,7 @@ private fun ItemRow(
     focus: () -> Float,
     pulse: () -> Float,
     loadAppIcon: suspend (String) -> ImageBitmap?,
+    loadThumb: suspend (ThumbKind, Long, Int) -> ImageBitmap?,
     modifier: Modifier,
 ) {
     val density = LocalDensity.current
@@ -394,6 +441,7 @@ private fun ItemRow(
                     glow = { if (isFocused) pulse() * focus() else 0f },
                 )
                 is NodeIcon.App -> AppIcon(icon.packageName, iconSize, focus, m.itemFocusScale, loadAppIcon)
+                is NodeIcon.Thumb -> ThumbIcon(icon, iconSize, focus, m.itemFocusScale, glow = { if (isFocused) pulse() * focus() else 0f }, loadThumb)
             }
         }
         Spacer(Modifier.width(with(density) { (m.textGap + m.itemIcon * (m.itemFocusScale - 1f) / 2).toDp() }))
@@ -532,6 +580,82 @@ private fun BlurredCopy(
         contentAlignment = Alignment.Center,
     ) {
         Image(painter, contentDescription = null, colorFilter = ColorFilter.tint(tint), modifier = Modifier.size(size))
+    }
+}
+
+/**
+ * Photo/video thumbnail or album art: a rounded, bordered tile like the reference themes' game
+ * icons. Shows the glyph until the image loads (or if there is none).
+ */
+@Composable
+private fun ThumbIcon(
+    icon: NodeIcon.Thumb,
+    size: Dp,
+    focus: () -> Float,
+    focusScale: Float,
+    glow: () -> Float,
+    loadThumb: suspend (ThumbKind, Long, Int) -> ImageBitmap?,
+) {
+    val px = with(LocalDensity.current) { (size * focusScale).roundToPx() }
+    val bitmap by produceState<ImageBitmap?>(null, icon) { value = loadThumb(icon.kind, icon.id, px) }
+    val image = bitmap
+    if (image == null) {
+        XmbIcon(painterResource(icon.fallback.drawable()), size, focus, focusScale, glow)
+        return
+    }
+    // Wider than tall for photos/videos, square for album art.
+    val wide = icon.kind != ThumbKind.ALBUM_ART
+    Box(
+        Modifier
+            .size(size)
+            .graphicsLayer {
+                val s = 1f + (focusScale - 1f) * focus()
+                scaleX = s
+                scaleY = s
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .graphicsLayer { alpha = glow(); scaleX = 1.7f; scaleY = 1.7f }
+                .drawBehind {
+                    drawCircle(Brush.radialGradient(0f to Color.White.copy(alpha = 0.35f), 1f to Color.Transparent))
+                },
+        )
+        Image(
+            image,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .size(width = if (wide) size * 1.3f else size, height = size)
+                .wrapContentSize(unbounded = true)
+                .shadow(4.dp, RoundedCornerShape(4.dp))
+                .clip(RoundedCornerShape(4.dp))
+                .border(1.dp, Color.White.copy(alpha = 0.85f), RoundedCornerShape(4.dp)),
+        )
+    }
+}
+
+/** Button hints for media screens; @confirm/@back/@options become the controller's symbols. */
+@Composable
+private fun OverlayHints(pairs: List<Pair<String, String>>, state: XmbUiState, size: TextUnit) {
+    val confirm = if (state.confirm == ConfirmLayout.EAST) state.family.east else state.family.south
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(Color(0x40000000))
+            .padding(horizontal = 10.dp, vertical = 4.dp),
+    ) {
+        for ((glyph, label) in pairs) {
+            val g = when (glyph) {
+                "@confirm" -> confirm
+                "@options" -> state.family.north
+                else -> glyph
+            }
+            Hint(g, label, size)
+        }
     }
 }
 

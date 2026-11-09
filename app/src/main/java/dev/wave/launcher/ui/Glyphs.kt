@@ -10,6 +10,12 @@ fun GlyphKey.drawable(): Int = when (this) {
     GlyphKey.SETTINGS -> R.drawable.xmb_settings
     GlyphKey.GAMES -> R.drawable.xmb_games
     GlyphKey.APPS -> R.drawable.xmb_apps
+    GlyphKey.PHOTO -> R.drawable.xmb_photo
+    GlyphKey.MUSIC -> R.drawable.xmb_music
+    GlyphKey.VIDEO -> R.drawable.xmb_video
+    GlyphKey.ALBUM -> R.drawable.xmb_game_disc
+    GlyphKey.ARTIST -> R.drawable.xmb_users
+    GlyphKey.SHUFFLE -> R.drawable.xmb_refresh
     GlyphKey.PLATFORM -> R.drawable.xmb_platform
     GlyphKey.GAME_CART -> R.drawable.xmb_game_cart
     GlyphKey.GAME_DISC -> R.drawable.xmb_game_disc
