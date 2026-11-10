@@ -74,6 +74,7 @@
             android:exported="true"
             android:launchMode="singleTask"
             android:resizeableActivity="true"
+            android:screenOrientation="sensorLandscape"
             android:stateNotNeeded="true"
             android:windowSoftInputMode="adjustNothing">
             <intent-filter>
