@@ -331,9 +331,9 @@ private fun CategoryBar(
                     val x = m.anchorX + (i - catPos()) * m.categorySpacing - shift - m.categorySpacing / 2
                     IntOffset(x.roundToInt(), (m.barY - m.categoryIcon / 2).roundToInt())
                 }
-                .graphicsLayer {
+                .fadeAlpha {
                     val f = focus()
-                    alpha = (0.62f + 0.38f * f) * (1f - depth() * (1f - f))
+                    (0.62f + 0.38f * f) * (1f - depth() * (1f - f))
                 }
                 .clickable(remember { MutableInteractionSource() }, indication = null) { onCategoryTap(i) },
         ) {
@@ -349,7 +349,7 @@ private fun CategoryBar(
                 text = category.title,
                 fontSize = labelSp,
                 glow = { pulse() * focus() },
-                modifier = Modifier.graphicsLayer { alpha = focus() * (1f - depth()) },
+                modifier = Modifier.fadeAlpha { focus() * (1f - depth()) },
             )
         }
     }
@@ -367,7 +367,7 @@ private fun CategoryBar(
                         (m.barY - m.titleSize * 0.7f).roundToInt(),
                     )
                 }
-                .graphicsLayer { alpha = 0.92f },
+                .fadeAlpha { 0.92f },
         )
     }
 }
@@ -432,10 +432,10 @@ private fun ItemColumn(
                             (y - m.itemIcon / 2).roundToInt(),
                         )
                     }
-                    .graphicsLayer {
+                    .fadeAlpha {
                         // Items scrolled up past the top edge fade out instead of clipping.
                         val fade = (itemY(i - scroll.value, m) / m.itemSpacing).coerceIn(0f, 1f)
-                        alpha = enter.value * fade
+                        enter.value * fade
                     }
                     // Long-press opens the item's Options menu (touch equivalent of △ / Y).
                     .combinedClickable(
@@ -503,7 +503,7 @@ private fun ItemRow(
                 text = node.title,
                 fontSize = titleSp,
                 glow = { if (isFocused) pulse() * focus() else 0f },
-                modifier = Modifier.graphicsLayer { alpha = 0.72f + 0.28f * focus() },
+                modifier = Modifier.fadeAlpha { 0.72f + 0.28f * focus() },
             )
             // Hairline under the focused title, as in the reference themes.
             Box(
@@ -530,7 +530,7 @@ private fun ItemRow(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier
                         .padding(top = with(density) { (m.s * 0.01f).toDp() })
-                        .graphicsLayer { alpha = focus() },
+                        .fadeAlpha { focus() },
                 )
             }
         }
@@ -734,6 +734,19 @@ private fun AppIcon(
                 },
         )
     }
+}
+
+/**
+ * Partial opacity for content whose glow, halo or text shadow spills past its own bounds.
+ *
+ * A plain `graphicsLayer { alpha = … }` below 1 renders into an offscreen buffer the size of
+ * the layer, which cuts the spill off at the layer's edges. On a category cell or row that is
+ * fading in, that shows up as a lighter box around the icon until the alpha reaches exactly 1.
+ * Modulating each draw call's alpha instead never clips.
+ */
+internal fun Modifier.fadeAlpha(alpha: () -> Float): Modifier = graphicsLayer {
+    this.alpha = alpha()
+    compositingStrategy = CompositingStrategy.ModulateAlpha
 }
 
 internal fun shadowed(size: TextUnit, color: Color = TextBright, weight: FontWeight = FontWeight.Normal) = TextStyle(
