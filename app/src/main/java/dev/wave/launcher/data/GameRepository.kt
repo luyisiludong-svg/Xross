@@ -31,6 +31,13 @@ class GameRepository(
 
     suspend fun markPlayed(id: Long) = dao.markPlayed(id, System.currentTimeMillis())
 
+    suspend fun addPlayTime(id: Long, durationMs: Long) = dao.addPlayTime(id, durationMs)
+
+    suspend fun setEmulatorOverride(id: Long, key: String?) = dao.setEmulatorOverride(id, key)
+
+    /** Title search on the FTS4 index; [ftsQuery] comes from SearchQuery.toFts. */
+    suspend fun search(ftsQuery: String, limit: Int = 60): List<GameEntity> = dao.search(ftsQuery, limit)
+
     /**
      * Incremental rescan. Games on a configured root that isn't mounted right now are kept,
      * so pulling an SD card doesn't wipe favorites and playtime.

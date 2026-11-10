@@ -18,6 +18,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -96,12 +97,12 @@ import kotlin.math.floor
 import kotlin.math.min
 import kotlin.math.roundToInt
 
-private val TextBright = Color(0xFFFFFFFF)
-private val TextDim = Color(0xD9FFFFFF)
+internal val TextBright = Color(0xFFFFFFFF)
+internal val TextDim = Color(0xD9FFFFFF)
 private val DropShadow = Color(0x99000000)
 private val IconTop = Color(0xFFFFFFFF)
 private val IconBottom = Color(0xFFC9C9D3)
-private val Pill = Color(0x59000000)
+internal val Pill = Color(0x59000000)
 
 /**
  * Layout measured from the reference screenshots (16:9): focused category column at ~22% of the
@@ -113,7 +114,7 @@ private val Pill = Color(0x59000000)
  *  - vertical positions follow [s], not the raw height, so tall portrait screens don't open a
  *    gap between the bar and the list.
  */
-private class XmbMetrics(val width: Float, val height: Float) {
+internal class XmbMetrics(val width: Float, val height: Float) {
     val s = min(height, width * 0.9f)
 
     val categorySpacing = s * 0.34f
@@ -150,6 +151,11 @@ fun XmbScreen(
     onCategoryTap: (Int) -> Unit,
     onItemTap: (Int) -> Unit,
     onCancelRemap: () -> Unit,
+    onItemLongPress: (Int) -> Unit = {},
+    onOptionTap: (Int) -> Unit = {},
+    onCloseOptions: () -> Unit = {},
+    onSearchKeyTap: (Int, Int) -> Unit = { _, _ -> },
+    onSearchResultTap: (Int) -> Unit = {},
 ) {
     val theme = WaveTheme.byName(state.theme)
 
@@ -182,7 +188,11 @@ fun XmbScreen(
         val depth by animateFloatAsState(state.depth.coerceAtMost(1).toFloat(), NavSpring, label = "depth")
 
         // The menu fades out under media screens so only one set of text and hints is visible.
-        val menuAlpha by animateFloatAsState(if (state.overlay == null) 1f else 0f, tween(220), label = "menu")
+        val menuAlpha by animateFloatAsState(
+            if (state.overlay == null && state.search == null) 1f else 0f,
+            tween(220),
+            label = "menu",
+        )
         Box(Modifier.fillMaxSize().graphicsLayer { alpha = menuAlpha }) {
         CategoryBar(
             categories = state.categories,
@@ -194,7 +204,7 @@ fun XmbScreen(
             pulse = { pulse },
             onCategoryTap = onCategoryTap,
         )
-        ItemColumn(state, m, { pulse }, loadAppIcon, loadThumb, onItemTap)
+        ItemColumn(state, m, { pulse }, loadAppIcon, loadThumb, onItemTap, onItemLongPress)
 
         // Mini "now playing" indicator while browsing.
         AnimatedVisibility(
@@ -228,6 +238,43 @@ fun XmbScreen(
         )
         }
 
+        state.overlay?.let { overlay ->
+            MediaOverlayLayer(
+                overlay = overlay,
+                controller = media,
+                music = music,
+                nowPlaying = state.nowPlaying,
+                loadThumb = loadThumb,
+                hints = { pairs -> OverlayHints(pairs, state, m.subtitleSize.sp()) },
+            )
+        }
+
+        state.search?.let { search ->
+            SearchOverlay(
+                search = search,
+                m = m,
+                pulse = { pulse },
+                family = state.family,
+                confirm = state.confirm,
+                onKeyTap = onSearchKeyTap,
+                onResultTap = onSearchResultTap,
+            )
+        }
+
+        OptionsPanel(
+            menu = state.optionsMenu,
+            m = m,
+            pulse = { pulse },
+            confirmGlyph = if (state.confirm == ConfirmLayout.EAST) state.family.east else state.family.south,
+            backGlyph = if (state.confirm == ConfirmLayout.EAST) state.family.south else state.family.east,
+            onTap = onOptionTap,
+            onDismiss = onCloseOptions,
+        )
+
+        state.remap?.let { RemapOverlay(it, m, onCancelRemap) }
+        state.booting?.let { GameBootOverlay(it, theme, m) }
+
+        // Toasts sit above every overlay (search, Options, media) so feedback is never hidden.
         AnimatedVisibility(
             visible = state.toast != null,
             enter = fadeIn(tween(180)),
@@ -241,24 +288,11 @@ fun XmbScreen(
                 style = shadowed(m.subtitleSize.sp()),
                 modifier = Modifier
                     .clip(RoundedCornerShape(50))
-                    .background(Pill)
+                    // Nearly opaque: toasts can land on top of overlay text.
+                    .background(Color(0xE6101018))
                     .padding(horizontal = (m.s * 0.04f).dp(), vertical = (m.s * 0.018f).dp()),
             )
         }
-
-        state.overlay?.let { overlay ->
-            MediaOverlayLayer(
-                overlay = overlay,
-                controller = media,
-                music = music,
-                nowPlaying = state.nowPlaying,
-                loadThumb = loadThumb,
-                hints = { pairs -> OverlayHints(pairs, state, m.subtitleSize.sp()) },
-            )
-        }
-
-        state.remap?.let { RemapOverlay(it, m, onCancelRemap) }
-        state.booting?.let { GameBootOverlay(it, theme, m) }
     }
 }
 
@@ -349,6 +383,7 @@ private fun ItemColumn(
     loadAppIcon: suspend (String) -> ImageBitmap?,
     loadThumb: suspend (ThumbKind, Long, Int) -> ImageBitmap?,
     onItemTap: (Int) -> Unit,
+    onItemLongPress: (Int) -> Unit,
 ) {
     // Scroll snaps when the list itself changes and glides when the cursor moves.
     val scroll = remember { Animatable(state.focusedIndex.toFloat()) }
@@ -402,7 +437,13 @@ private fun ItemColumn(
                         val fade = (itemY(i - scroll.value, m) / m.itemSpacing).coerceIn(0f, 1f)
                         alpha = enter.value * fade
                     }
-                    .clickable(remember { MutableInteractionSource() }, indication = null) { onItemTap(i) },
+                    // Long-press opens the item's Options menu (touch equivalent of △ / Y).
+                    .combinedClickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onLongClick = { onItemLongPress(i) },
+                        onClick = { onItemTap(i) },
+                    ),
             )
         }
     }
@@ -683,7 +724,7 @@ private fun AppIcon(
     }
 }
 
-private fun shadowed(size: TextUnit, color: Color = TextBright, weight: FontWeight = FontWeight.Normal) = TextStyle(
+internal fun shadowed(size: TextUnit, color: Color = TextBright, weight: FontWeight = FontWeight.Normal) = TextStyle(
     color = color,
     fontSize = size,
     fontWeight = weight,
@@ -696,7 +737,7 @@ private fun shadowed(size: TextUnit, color: Color = TextBright, weight: FontWeig
  * text.
  */
 @Composable
-private fun GlowText(
+internal fun GlowText(
     text: String,
     fontSize: TextUnit,
     glow: () -> Float,
@@ -737,7 +778,7 @@ private fun ButtonHints(state: XmbUiState, size: TextUnit, modifier: Modifier) {
     val confirmGlyph = if (state.confirm == ConfirmLayout.EAST) state.family.east else state.family.south
     val backGlyph = if (state.confirm == ConfirmLayout.EAST) state.family.south else state.family.east
     val focused = state.focused
-    if (focused == null || (focused.action == NodeAction.None && state.depth == 0 && focused.optionsLabel == null)) return
+    if (focused == null || (focused.action == NodeAction.None && state.depth == 0 && focused.menu.isEmpty())) return
     // Backed so it stays legible where long titles run underneath on narrow (4:3, 1:1) screens.
     Row(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -749,12 +790,12 @@ private fun ButtonHints(state: XmbUiState, size: TextUnit, modifier: Modifier) {
     ) {
         if (focused.action != NodeAction.None) Hint(confirmGlyph, "Select", size)
         if (state.depth > 0) Hint(backGlyph, "Back", size)
-        focused.optionsLabel?.let { Hint(state.family.north, it, size) }
+        if (focused.menu.isNotEmpty()) Hint(state.family.north, "Options", size)
     }
 }
 
 @Composable
-private fun Hint(glyph: String, label: String, size: TextUnit) {
+internal fun Hint(glyph: String, label: String, size: TextUnit) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(
             glyph,

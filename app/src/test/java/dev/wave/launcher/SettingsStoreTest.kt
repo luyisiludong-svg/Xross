@@ -21,6 +21,7 @@ class SettingsStoreTest {
             it.copy(
                 romFolders = listOf("/storage/emulated/0/ROMs", "/storage/1A2B-3C4D/Games"),
                 autoDetectFolders = false,
+                knownAutoFolders = listOf("/storage/1A2B-3C4D/ROMs"),
                 confirmLayout = ConfirmLayout.EAST,
                 deadzone = 0.45f,
                 keyRemap = mapOf(KeyEvent.KEYCODE_BUTTON_X to NavAction.CONFIRM),

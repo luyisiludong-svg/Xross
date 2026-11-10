@@ -35,7 +35,7 @@ class GameLauncher(private val context: Context) {
         val knownMime = MimeTypeMap.getSingleton().getMimeTypeFromExtension(file.extension.lowercase())
         val mime = knownMime ?: "application/octet-stream"
 
-        val option = resolveOption(platform, choiceKey, installedEmulatorIds())
+        val option = resolveOption(platform, choiceKey, installedEmulatorIds(), game.emulatorOverride)
         if (option == null) {
             // Only fall back to "open with" for real MIME types: catch-all */* handlers (wallets,
             // file managers) would otherwise claim every ROM as application/octet-stream.
@@ -63,16 +63,20 @@ class GameLauncher(private val context: Context) {
 
     companion object {
         /**
-         * The user's explicit choice wins if that emulator is installed; otherwise the first
-         * installed option in the platform's preference list. Null means nothing usable.
+         * Precedence: the game's own override, then the user's choice for the platform, then the
+         * first installed option in the platform's preference list. A choice whose emulator isn't
+         * installed is skipped. Null means nothing usable.
          */
         fun resolveOption(
             platform: Platform,
             choiceKey: String?,
             installed: Set<String>,
+            overrideKey: String? = null,
         ): EmulatorOption? {
-            val chosen = platform.emulators.firstOrNull { it.key == choiceKey }
-            if (chosen != null && chosen.emulatorId in installed) return chosen
+            for (key in listOf(overrideKey, choiceKey)) {
+                val option = platform.emulators.firstOrNull { it.key == key } ?: continue
+                if (option.emulatorId in installed) return option
+            }
             return platform.emulators.firstOrNull { it.emulatorId in installed }
         }
     }

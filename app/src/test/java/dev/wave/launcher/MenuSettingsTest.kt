@@ -60,7 +60,8 @@ class MenuSettingsTest {
             ),
         )
         val folders = MenuTree(snapshot).list(MenuTree.LIBRARY).filter { it.id.startsWith("lib:folder:") }
-        assertEquals(null, folders[0].options)
-        assertEquals(Command.RemoveFolder("/sdcard/Custom"), folders[1].options)
+        assertTrue(folders[0].menu.isEmpty())
+        assertEquals(listOf(Command.RemoveFolder("/sdcard/Custom")), folders[1].menu.map { it.command })
+        assertEquals("Remove from library", folders[1].menu.single().label)
     }
 }

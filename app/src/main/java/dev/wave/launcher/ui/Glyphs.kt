@@ -16,6 +16,7 @@ fun GlyphKey.drawable(): Int = when (this) {
     GlyphKey.ALBUM -> R.drawable.xmb_game_disc
     GlyphKey.ARTIST -> R.drawable.xmb_users
     GlyphKey.SHUFFLE -> R.drawable.xmb_refresh
+    GlyphKey.SEARCH -> R.drawable.xmb_search
     GlyphKey.PLATFORM -> R.drawable.xmb_platform
     GlyphKey.GAME_CART -> R.drawable.xmb_game_cart
     GlyphKey.GAME_DISC -> R.drawable.xmb_game_disc

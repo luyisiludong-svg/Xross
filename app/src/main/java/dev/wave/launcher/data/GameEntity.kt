@@ -1,5 +1,6 @@
 package dev.wave.launcher.data
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Fts4
 import androidx.room.Index
@@ -20,6 +21,10 @@ data class GameEntity(
     val favorite: Boolean = false,
     val lastPlayed: Long? = null,
     val playCount: Int = 0,
+    /** Total time played, accumulated from launcher-measured sessions. */
+    @ColumnInfo(defaultValue = "0") val playTimeMs: Long = 0,
+    /** Per-game emulator ([dev.wave.launcher.storage.EmulatorOption.key]); null = platform default. */
+    val emulatorOverride: String? = null,
 )
 
 /** External-content FTS4 index over game titles; Room keeps it in sync with triggers. */

@@ -126,8 +126,7 @@ class MediaMenus(private val media: MediaLibrary) {
         ).joinToString(" · "),
         icon = thumb(ThumbKind.PHOTO, p.id, GlyphKey.PHOTO),
         action = NodeAction.OpenMedia(MediaKind.PHOTO, key, i),
-        options = Command.SetWallpaper(p.id),
-        optionsLabel = "Set as wallpaper",
+        menu = listOf(MenuOption("Set as wallpaper", command = Command.SetWallpaper(p.id))),
     )
 
     private fun videoNode(v: Video, key: String, i: Int) = XmbNode(

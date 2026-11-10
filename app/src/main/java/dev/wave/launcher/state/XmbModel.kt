@@ -15,7 +15,7 @@ enum class MediaKind { PHOTO, SONG, VIDEO }
 
 /** Icon roles; each maps to an `xmb_*` vector drawable generated from assets/icons. */
 enum class GlyphKey {
-    SETTINGS, GAMES, APPS, PHOTO, MUSIC, VIDEO, ALBUM, ARTIST, SHUFFLE,
+    SETTINGS, GAMES, APPS, PHOTO, MUSIC, VIDEO, ALBUM, ARTIST, SHUFFLE, SEARCH,
     PLATFORM, GAME_CART, GAME_DISC, FAVORITES, RECENT, HANDHELD, FOLDER, STORAGE,
     CONTROLS, EMULATORS, DISPLAY, SOUND, SYSTEM,
     ADD, REFRESH, HOME, INFO,
@@ -45,6 +45,10 @@ sealed interface Command {
     data object OpenAndroidSettings : Command
     data object OpenLibrarySettings : Command
     data class ToggleFavorite(val gameId: Long) : Command
+    data class LaunchGame(val gameId: Long) : Command
+    data object OpenSearch : Command
+    /** [key] is an [dev.wave.launcher.storage.EmulatorOption.key]; null returns to the platform default. */
+    data class SetGameEmulator(val gameId: Long, val key: String?) : Command
     data object OpenNowPlaying : Command
     data object ShuffleAllSongs : Command
     data class SetWallpaper(val photoId: Long) : Command
@@ -71,9 +75,8 @@ data class XmbNode(
     val subtitle: String? = null,
     val icon: NodeIcon = NodeIcon.Glyph(GlyphKey.INFO),
     val action: NodeAction = NodeAction.None,
-    /** Secondary action bound to the Options button (△ / Y). */
-    val options: Command? = null,
-    val optionsLabel: String? = null,
+    /** Options (△ / Y) menu for this item; empty when it has none. */
+    val menu: List<MenuOption> = emptyList(),
 )
 
 @Immutable

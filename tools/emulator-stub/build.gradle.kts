@@ -28,6 +28,12 @@ android {
         emulator("nethersx2", "xyz.aethersx2.android", "xyz.aethersx2.android.EmulationActivity")
         emulator("dolphin", "org.dolphinemu.dolphinemu", "org.dolphinemu.dolphinemu.ui.main.MainActivity")
         emulator("ppsspp", "org.ppsspp.ppsspp", "org.ppsspp.ppsspp.PpssppActivity")
+        emulator("azahar", "org.azahar_emu.azahar", "org.citra.citra_emu.activities.EmulationActivity")
+        emulator("eden", "dev.eden.eden_emulator", "org.yuzu.yuzu_emu.activities.EmulationActivity")
+        emulator("flycast", "com.flycast.emulator", "com.flycast.emulator.MainActivity")
+        emulator("m64plusfz", "org.mupen64plusae.v3.fzurita", "paulscode.android.mupen64plusae.SplashActivity")
+        emulator("melonds", "me.magnum.melonds", "me.magnum.melonds.ui.emulator.EmulatorActivity")
+        emulator("scummvm", "org.scummvm.scummvm", "org.scummvm.scummvm.SplashActivity")
     }
 
     compileOptions {

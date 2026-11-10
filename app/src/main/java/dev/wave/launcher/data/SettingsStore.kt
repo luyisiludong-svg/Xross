@@ -12,6 +12,8 @@ import kotlinx.coroutines.flow.asStateFlow
 data class WaveSettings(
     val romFolders: List<String> = emptyList(),
     val autoDetectFolders: Boolean = true,
+    /** Auto-detected folders seen so far, kept so games survive their volume being unplugged. */
+    val knownAutoFolders: List<String> = emptyList(),
     val confirmLayout: ConfirmLayout = ConfirmLayout.AUTO,
     val deadzone: Float = 0.35f,
     val keyRemap: Map<Int, NavAction> = emptyMap(),
@@ -53,6 +55,8 @@ class SettingsStore(context: Context) {
         romFolders = prefs.getString(KEY_FOLDERS, null)
             ?.split('\n')?.filter { it.isNotBlank() }.orEmpty(),
         autoDetectFolders = prefs.getBoolean(KEY_AUTO_DETECT, true),
+        knownAutoFolders = prefs.getString(KEY_KNOWN_AUTO, null)
+            ?.split('\n')?.filter { it.isNotBlank() }.orEmpty(),
         confirmLayout = enumOrDefault(prefs.getString(KEY_CONFIRM, null), ConfirmLayout.AUTO),
         deadzone = prefs.getFloat(KEY_DEADZONE, 0.35f),
         keyRemap = decodeMap(prefs.getString(KEY_REMAP, null)).mapNotNull { (k, v) ->
@@ -77,6 +81,7 @@ class SettingsStore(context: Context) {
     private fun save(s: WaveSettings) = prefs.edit {
         putString(KEY_FOLDERS, s.romFolders.joinToString("\n"))
         putBoolean(KEY_AUTO_DETECT, s.autoDetectFolders)
+        putString(KEY_KNOWN_AUTO, s.knownAutoFolders.joinToString("\n"))
         putString(KEY_CONFIRM, s.confirmLayout.name)
         putFloat(KEY_DEADZONE, s.deadzone)
         putString(KEY_REMAP, encodeMap(s.keyRemap.map { (k, v) -> k.toString() to v.name }.toMap()))
@@ -97,6 +102,7 @@ class SettingsStore(context: Context) {
     private companion object {
         const val KEY_FOLDERS = "rom_folders"
         const val KEY_AUTO_DETECT = "auto_detect_folders"
+        const val KEY_KNOWN_AUTO = "known_auto_folders"
         const val KEY_CONFIRM = "confirm_layout"
         const val KEY_DEADZONE = "deadzone"
         const val KEY_REMAP = "key_remap"

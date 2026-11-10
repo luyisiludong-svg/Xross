@@ -52,9 +52,9 @@ category() { # category <index>: go to that category's root, cursor on the first
   top
 }
 music_state() { adb shell dumpsys media_session | grep -o "state=PlaybackState {state=[A-Z]*" | head -1 | sed 's/.*state=//'; }
-home() { # Games category root, cursor on the first entry
+home() { # Games category root, cursor on the first collection (just below Search)
   category 4
-  top
+  key KEYCODE_DPAD_DOWN
 }
 
 echo "== Setup"
@@ -103,13 +103,37 @@ key KEYCODE_BACK
 echo "== Favorites"
 home
 key KEYCODE_DPAD_CENTER
-expect "Favorite" "Options hint offers Favorite"
+expect "Options" "Options hint is shown for a game"
 key KEYCODE_BUTTON_Y
+expect "Add to favorites" "Options button opens the game's menu"
+key KEYCODE_DPAD_DOWN KEYCODE_DPAD_CENTER
 pause 0.6
-expect "Unfavorite" "Options button toggles favorite"
+key KEYCODE_BUTTON_Y
+expect "Remove from favorites" "menu toggles favorite"
+
+echo "== Per-game emulator"
+key KEYCODE_DPAD_DOWN KEYCODE_DPAD_DOWN KEYCODE_DPAD_CENTER
+expect "Platform default" "Emulator submenu lists the platform default"
+key KEYCODE_DPAD_DOWN KEYCODE_DPAD_CENTER
+pause 0.6
+key KEYCODE_BUTTON_Y
+expect "this game only" "per-game emulator override is saved and shown"
+key KEYCODE_BACK
 key KEYCODE_BACK
 top
 expect "Favorites" "Favorites collection appears in Games"
+
+echo "== Search"
+key KEYCODE_DPAD_CENTER
+expect "Type to search your library" "Search opens from the top of Games"
+adb shell input keyevent KEYCODE_M KEYCODE_E KEYCODE_T
+pause 1
+expect "Super Metroid" "typing finds games by title prefix"
+expect "1 game" "result count is shown"
+key KEYCODE_BUTTON_R1
+expect "Keyboard" "R1 moves focus to the results"
+key KEYCODE_BACK KEYCODE_BACK
+expect "Find a game by name" "Back returns to the keys, then closes search"
 
 echo "== Categories"
 home
@@ -171,11 +195,11 @@ expect "identified by content" "background fingerprinting reports identified gam
 if [ "$MEDIA" -eq 1 ]; then
   echo "== Photo"
   category 1
+  # Folders are sorted by name and the device may hold others; step down until WaveSmoke is
+  # focused (its "2 photos" subtitle only shows on the focused row).
+  for _ in $(seq 12); do screen | grep -q "WaveSmoke" && screen | grep -q "2 photos" && break; key KEYCODE_DPAD_DOWN; done
   expect "WaveSmoke" "photo folders listed"
-  key $(for _ in $(seq 6); do printf 'KEYCODE_DPAD_DOWN '; done)
-  top
-  # Folders are sorted by name; find WaveSmoke by stepping down until it is focused.
-  for _ in $(seq 8); do screen | grep -q '"WaveSmoke"' && screen | grep -q "2 photos" && break; key KEYCODE_DPAD_DOWN; done
+  expect "2 photos" "the folder shows its photo count"
   key KEYCODE_DPAD_CENTER
   key KEYCODE_DPAD_CENTER
   pause 1
