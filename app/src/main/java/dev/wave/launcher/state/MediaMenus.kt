@@ -14,8 +14,12 @@ import java.util.Locale
  * Photo, Music and Video categories. Collections ([photos], [songs], [videos]) back both the
  * XMB lists and the full-screen viewers, so a viewer opened from a list steps through exactly
  * what the list shows.
+ *
+ * [storageGranted] tells an empty library apart from one Wave isn't allowed to read: media is
+ * read through All files access (the same grant as the ROM library), and without it MediaStore
+ * returns nothing, which must not be presented as "no photos".
  */
-class MediaMenus(private val media: MediaLibrary) {
+class MediaMenus(private val media: MediaLibrary, private val storageGranted: Boolean = true) {
 
     private val photosByFolder by lazy { media.photos.groupBy { it.folder } }
     private val videosByFolder by lazy { media.videos.groupBy { it.folder } }
@@ -71,7 +75,7 @@ class MediaMenus(private val media: MediaLibrary) {
     // region Category roots
 
     fun photoRoot(): List<XmbNode> {
-        if (media.photos.isEmpty()) return listOf(empty("photo", "No photos found", "Pictures in DCIM, Pictures and other folders appear here"))
+        if (media.photos.isEmpty()) return listOf(empty("photo", "photos", "No photos found", "Pictures in DCIM, Pictures and other folders appear here"))
         return buildList {
             add(folder(PHOTOS_ALL, "All photos", count(media.photos.size, "photo"), thumb(ThumbKind.PHOTO, media.photos.first().id, GlyphKey.PHOTO)))
             for ((name, photos) in photosByFolder.toSortedMap(String.CASE_INSENSITIVE_ORDER)) {
@@ -81,7 +85,7 @@ class MediaMenus(private val media: MediaLibrary) {
     }
 
     fun videoRoot(): List<XmbNode> {
-        if (media.videos.isEmpty()) return listOf(empty("video", "No videos found", "Videos in Movies, DCIM and other folders appear here"))
+        if (media.videos.isEmpty()) return listOf(empty("video", "videos", "No videos found", "Videos in Movies, DCIM and other folders appear here"))
         return buildList {
             add(folder(VIDEOS_ALL, "All videos", count(media.videos.size, "video"), thumb(ThumbKind.VIDEO, media.videos.first().id, GlyphKey.VIDEO)))
             for ((name, videos) in videosByFolder.toSortedMap(String.CASE_INSENSITIVE_ORDER)) {
@@ -104,7 +108,7 @@ class MediaMenus(private val media: MediaLibrary) {
             )
         }
         if (media.songs.isEmpty()) {
-            add(empty("music", "No music found", "MP3, FLAC, OGG, WAV and AAC files in Music and other folders appear here"))
+            add(empty("music", "music", "No music found", "MP3, FLAC, OGG, WAV and AAC files in Music and other folders appear here"))
             return@buildList
         }
         add(XmbNode("music:shuffle", "Shuffle all", count(media.songs.size, "song"), NodeIcon.Glyph(GlyphKey.SHUFFLE), NodeAction.Run(Command.ShuffleAllSongs)))
@@ -162,8 +166,19 @@ class MediaMenus(private val media: MediaLibrary) {
     private fun folder(key: String, title: String, subtitle: String, icon: NodeIcon) =
         XmbNode(key, title, subtitle, icon, NodeAction.OpenList(key))
 
-    private fun empty(id: String, title: String, subtitle: String) =
-        XmbNode("$id:empty", title, subtitle, NodeIcon.Glyph(GlyphKey.INFO))
+    /** Empty-category row; without storage access it asks for it instead, and opens the grant. */
+    private fun empty(id: String, noun: String, title: String, subtitle: String) =
+        if (storageGranted) {
+            XmbNode("$id:empty", title, subtitle, NodeIcon.Glyph(GlyphKey.INFO))
+        } else {
+            XmbNode(
+                "$id:access",
+                "Storage access needed",
+                "Press to allow Wave to show your $noun",
+                NodeIcon.Glyph(GlyphKey.INFO),
+                NodeAction.Run(Command.RequestStorageAccess),
+            )
+        }
 
     private fun thumb(kind: ThumbKind, id: Long, fallback: GlyphKey) = NodeIcon.Thumb(kind, id, fallback)
 

@@ -51,7 +51,7 @@ class MenuTree(private val s: MenuSnapshot) {
     private val cache = HashMap<String, List<XmbNode>>()
 
     /** Photo/Music/Video lists and the collections behind the media viewers. */
-    val media by lazy { MediaMenus(s.media) }
+    val media by lazy { MediaMenus(s.media, s.storageGranted) }
 
     /** Music root with the live Now Playing row. Not cached. */
     fun musicRoot(now: dev.wave.launcher.media.NowPlaying): List<XmbNode> = media.musicRoot(now)

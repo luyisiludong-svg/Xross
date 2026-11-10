@@ -86,6 +86,28 @@ class MediaMenusTest {
         assertEquals("No music found", empty.musicRoot(NowPlaying()).single().title)
     }
 
+    @Test fun withoutStorageAccessMediaAsksForItInsteadOfLookingEmpty() {
+        val noAccess = MediaMenus(MediaLibrary(), storageGranted = false)
+        val rows = listOf(noAccess.photoRoot(), noAccess.videoRoot(), noAccess.musicRoot(NowPlaying())).map { it.single() }
+        for (row in rows) {
+            assertEquals("Storage access needed", row.title)
+            assertEquals(NodeAction.Run(Command.RequestStorageAccess), row.action)
+        }
+        assertEquals(
+            listOf("Press to allow Wave to show your photos", "Press to allow Wave to show your videos", "Press to allow Wave to show your music"),
+            rows.map { it.subtitle },
+        )
+        // Distinct ids from the empty-library rows, so the list re-enters once access is granted.
+        assertEquals(listOf("photo:access", "video:access", "music:access"), rows.map { it.id })
+    }
+
+    @Test fun menuTreePassesStorageAccessToTheMediaRoots() {
+        fun photoRoot(granted: Boolean) =
+            MenuTree(MenuSnapshot(storageGranted = granted)).list(Categories.rootKey(Categories.PHOTO)).single().title
+        assertEquals("Storage access needed", photoRoot(granted = false))
+        assertEquals("No photos found", photoRoot(granted = true))
+    }
+
     @Test fun categoriesIncludeTheMediaHub() {
         assertEquals(listOf("Settings", "Photo", "Music", "Video", "Games", "Apps"), Categories.all.map { it.title })
         val tree = MenuTree(MenuSnapshot(media = library))
