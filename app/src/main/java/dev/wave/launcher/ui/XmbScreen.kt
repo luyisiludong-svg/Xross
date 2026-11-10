@@ -50,6 +50,7 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -197,7 +198,7 @@ fun XmbScreen(
         CategoryBar(
             categories = state.categories,
             categoryIndex = state.categoryIndex,
-            breadcrumb = state.breadcrumb,
+            breadcrumb = state.breadcrumb.joinToString("  ›  "),
             m = m,
             catPos = { catPos },
             depth = { depth },
@@ -306,7 +307,7 @@ private val NavSpring = spring<Float>(dampingRatio = Spring.DampingRatioNoBouncy
 private fun CategoryBar(
     categories: List<XmbCategory>,
     categoryIndex: Int,
-    breadcrumb: List<String>,
+    breadcrumb: String,
     m: XmbMetrics,
     catPos: () -> Float,
     depth: () -> Float,
@@ -356,7 +357,7 @@ private fun CategoryBar(
     // Breadcrumb beside the open category while drilled in.
     if (breadcrumb.isNotEmpty()) {
         GlowText(
-            text = breadcrumb.joinToString("  ›  "),
+            text = breadcrumb,
             fontSize = with(density) { m.titleSize.toSp() },
             glow = { 0f },
             modifier = Modifier
@@ -409,21 +410,20 @@ private fun ItemColumn(
     val textX = m.anchorX + m.itemIcon * m.itemFocusScale / 2 + m.textGap
     val textWidth = with(density) { (m.width - textX - m.width * 0.03f).coerceAtLeast(m.s * 0.3f).toDp() }
 
+    // Read through State so the remembered row modifiers below never hold a stale callback.
+    val tap by rememberUpdatedState(onItemTap)
+    val longPress by rememberUpdatedState(onItemLongPress)
+
     for (i in range) {
         val node = state.items[i]
-        val focus = { 1f - abs(i - scroll.value).coerceAtMost(1f) }
         key(state.listKey, node.id) {
-            ItemRow(
-                node = node,
-                m = m,
-                iconSize = iconDp,
-                textWidth = textWidth,
-                isFocused = i == state.focusedIndex,
-                focus = focus,
-                pulse = pulse,
-                loadAppIcon = loadAppIcon,
-                loadThumb = loadThumb,
-                modifier = Modifier
+            // Remembered per row so every argument is identical across cursor moves, and rows
+            // whose focus didn't change skip recomposition. Position and fade are read in the
+            // layout/draw lambdas, so scrolling itself never recomposes a row.
+            val focus = remember(i) { { 1f - abs(i - scroll.value).coerceAtMost(1f) } }
+            val interaction = remember { MutableInteractionSource() }
+            val rowModifier = remember(i, m, enter) {
+                Modifier
                     .offset {
                         val y = itemY(i - scroll.value, m)
                         val slide = (1f - enter.value) * m.s * 0.08f
@@ -439,11 +439,23 @@ private fun ItemColumn(
                     }
                     // Long-press opens the item's Options menu (touch equivalent of △ / Y).
                     .combinedClickable(
-                        interactionSource = remember { MutableInteractionSource() },
+                        interactionSource = interaction,
                         indication = null,
-                        onLongClick = { onItemLongPress(i) },
-                        onClick = { onItemTap(i) },
-                    ),
+                        onLongClick = { longPress(i) },
+                        onClick = { tap(i) },
+                    )
+            }
+            ItemRow(
+                node = node,
+                m = m,
+                iconSize = iconDp,
+                textWidth = textWidth,
+                isFocused = i == state.focusedIndex,
+                focus = focus,
+                pulse = pulse,
+                loadAppIcon = loadAppIcon,
+                loadThumb = loadThumb,
+                modifier = rowModifier,
             )
         }
     }
