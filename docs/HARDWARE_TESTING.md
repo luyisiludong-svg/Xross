@@ -158,6 +158,15 @@ Check by eye and ear:
 - [ ] Optional: turn on **Fingerprint large disc images** and note how long one ISO takes; the
       timing appears in `adb logcat -s WaveScan` with the `profiling` or `debug` build
 
+- [ ] **Hot-swap:** with Wave open, pull the SD card (or USB drive). A toast names the drive, its
+      games stay listed as "Not connected", and re-inserting it brings them back without
+      restarting. Favorites and playtime on those games must survive.
+- [ ] **Playtime:** play a game for a couple of minutes, return, and check the row shows
+      "Played N min"
+- [ ] **Options menu:** △ / Y (or long-press) on a game opens Play / Favorite / Emulator; setting
+      an emulator there applies to that game only
+- [ ] **Search:** Games ▸ Search; type with the D-pad (△ / Y = space, L1 = delete, R1 = results)
+
 ## 7. Photo, Music and Video
 
 - [ ] Photo, Music and Video show your device's pictures, songs (with album art) and videos

@@ -45,6 +45,9 @@ android {
         unitTests.isIncludeAndroidResources = true
     }
 
+    // Exported Room schemas, readable by MigrationTestHelper in Robolectric migration tests.
+    sourceSets.getByName("debug").assets.srcDir("$projectDir/schemas")
+
     buildFeatures {
         compose = true
         buildConfig = true
@@ -86,4 +89,11 @@ dependencies {
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.robolectric)
     testImplementation(libs.androidx.test.core)
+    testImplementation(libs.room.testing)
+}
+
+// Room writes the exported schema during KSP; the debug assets (used by migration tests) must be
+// merged after it, or a version bump's first build can't find the new schema file.
+tasks.configureEach {
+    if (name == "mergeDebugAssets") dependsOn("kspDebugKotlin")
 }

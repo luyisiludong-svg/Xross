@@ -42,6 +42,12 @@ interface GameDao {
     @Query("UPDATE games SET lastPlayed = :at, playCount = playCount + 1 WHERE id = :id")
     suspend fun markPlayed(id: Long, at: Long)
 
+    @Query("UPDATE games SET emulatorOverride = :key WHERE id = :id")
+    suspend fun setEmulatorOverride(id: Long, key: String?)
+
+    @Query("UPDATE games SET playTimeMs = playTimeMs + :durationMs WHERE id = :id")
+    suspend fun addPlayTime(id: Long, durationMs: Long)
+
     @Query(
         "SELECT games.* FROM games JOIN games_fts ON games.rowid = games_fts.rowid " +
             "WHERE games_fts MATCH :query ORDER BY games.title COLLATE NOCASE LIMIT :limit",

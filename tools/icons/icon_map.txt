@@ -21,6 +21,7 @@ handheld      = group2_00   # Android games (handheld device)
 folder        = group2_02
 storage       = aa6e2c3a
 trophy        = group2_05
+search        = e447543c    # magnifier (network search)
 
 # Settings
 controls      = group1_06   # wrench + controller

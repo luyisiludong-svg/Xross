@@ -36,6 +36,7 @@ import dev.wave.launcher.input.GamepadHandler
 import dev.wave.launcher.input.NavAction
 import dev.wave.launcher.state.MediaOverlay
 import dev.wave.launcher.state.UiEffect
+import dev.wave.launcher.storage.VolumeMonitor
 import dev.wave.launcher.state.XmbViewModel
 import dev.wave.launcher.theme.WaveTheme
 import dev.wave.launcher.ui.WaveBackground
@@ -72,6 +73,9 @@ class MainActivity : ComponentActivity() {
         override fun onReceive(context: Context, intent: Intent) = viewModel.onAppsChanged()
     }
 
+    /** Storage hot-swap: microSD and USB-OTG mounts/removals. */
+    private val volumeMonitor = VolumeMonitor { viewModel.onVolumeEvent(it) }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
@@ -95,6 +99,8 @@ class MainActivity : ComponentActivity() {
             },
             ContextCompat.RECEIVER_NOT_EXPORTED,
         )
+
+        volumeMonitor.register(this)
 
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -122,6 +128,11 @@ class MainActivity : ComponentActivity() {
                     onCategoryTap = viewModel::onCategoryTapped,
                     onItemTap = viewModel::onItemTapped,
                     onCancelRemap = viewModel::cancelRemap,
+                    onItemLongPress = viewModel::onItemLongPressed,
+                    onOptionTap = viewModel::onOptionTapped,
+                    onCloseOptions = viewModel::closeOptions,
+                    onSearchKeyTap = viewModel::onSearchKeyTapped,
+                    onSearchResultTap = viewModel::onSearchResultTapped,
                 )
             }
         }
@@ -160,6 +171,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         unregisterReceiver(packageReceiver)
+        volumeMonitor.unregister(this)
         super.onDestroy()
     }
 

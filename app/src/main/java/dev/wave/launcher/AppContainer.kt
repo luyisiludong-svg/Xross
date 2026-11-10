@@ -5,6 +5,8 @@ import dev.wave.launcher.audio.UiSounds
 import dev.wave.launcher.data.AppRepository
 import dev.wave.launcher.data.FingerprintQueue
 import dev.wave.launcher.data.GameRepository
+import dev.wave.launcher.data.PlaySessionTracker
+import dev.wave.launcher.data.PrefsSessionStore
 import dev.wave.launcher.data.SettingsStore
 import dev.wave.launcher.data.WaveDatabase
 import dev.wave.launcher.launch.GameLauncher
@@ -24,6 +26,7 @@ class AppContainer(context: Context) {
     val volumes: StorageVolumes by lazy { StorageVolumes(appContext) }
     val launcher: GameLauncher by lazy { GameLauncher(appContext) }
     val sounds: UiSounds by lazy { UiSounds(appContext) }
+    val sessions: PlaySessionTracker by lazy { PlaySessionTracker(PrefsSessionStore(appContext)) }
     val media: MediaRepository by lazy { MediaRepository(appContext) }
     val music: MusicPlayer by lazy { MusicPlayer(appContext) }
     val fingerprints: FingerprintQueue by lazy {

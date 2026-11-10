@@ -6,11 +6,19 @@ import dev.wave.launcher.data.WaveSettings
 import dev.wave.launcher.input.ConfirmLayout
 import dev.wave.launcher.launch.EmulatorRegistry
 import dev.wave.launcher.launch.GameLauncher
+import dev.wave.launcher.storage.EmulatorOption
+import dev.wave.launcher.storage.Platform
 import dev.wave.launcher.storage.PlatformRegistry
+import dev.wave.launcher.storage.StorageVolumes
 import dev.wave.launcher.theme.WaveTheme
 import java.util.Locale
 
-data class FolderEntry(val path: String, val autoDetected: Boolean)
+data class FolderEntry(
+    val path: String,
+    val autoDetected: Boolean,
+    /** False while the folder's volume (SD card, USB drive) is unplugged. */
+    val connected: Boolean = true,
+)
 
 /** Live fingerprinting status; kept out of [MenuSnapshot] so progress never rebuilds game lists. */
 data class FingerprintStatus(
@@ -30,6 +38,8 @@ data class MenuSnapshot(
     val scanStatus: String? = null,
     val versionName: String = "",
     val media: dev.wave.launcher.media.MediaLibrary = dev.wave.launcher.media.MediaLibrary(),
+    /** Roots of mounted volumes; empty means "unknown", in which case nothing is marked offline. */
+    val mountedRoots: List<String> = emptyList(),
 )
 
 /** Pure builder from a [MenuSnapshot] to XMB lists. */
@@ -73,7 +83,13 @@ class MenuTree(private val s: MenuSnapshot) {
         else -> emptyList()
     }
 
+    /** Rows for search results: the same game rows (action, Options menu) as the library lists. */
+    fun gameNodes(games: List<GameEntity>): List<XmbNode> = games.map { gameNode(it, showPlatform = true) }
+
     private fun gamesRoot(): List<XmbNode> = buildList {
+        if (s.games.isNotEmpty()) {
+            add(XmbNode("games:search", "Search", "Find a game by name", NodeIcon.Glyph(GlyphKey.SEARCH), NodeAction.Run(Command.OpenSearch)))
+        }
         if (s.games.any { it.lastPlayed != null }) {
             add(folder(RECENT, "Recently Played", GlyphKey.RECENT, null))
         }
@@ -104,10 +120,14 @@ class MenuTree(private val s: MenuSnapshot) {
     private fun gameNode(game: GameEntity, showPlatform: Boolean): XmbNode {
         val platform = PlatformRegistry.byId(game.platformId)
         val parts = buildList {
+            if (isOffline(game.path)) add("Not connected")
             if (game.favorite) add("★")
             if (showPlatform && platform != null) add(platform.shortName)
-            add(game.fileName.substringAfterLast('.', "").uppercase(Locale.ROOT))
+            // Skip the extension when it only repeats the platform ("GBA · GBA").
+            val ext = game.fileName.substringAfterLast('.', "").uppercase(Locale.ROOT)
+            if (!(showPlatform && ext == platform?.shortName?.uppercase(Locale.ROOT))) add(ext)
             add(formatSize(game.sizeBytes))
+            formatPlaytime(game.playTimeMs)?.let { add("Played $it") }
         }
         return XmbNode(
             id = "game:${game.id}",
@@ -115,10 +135,60 @@ class MenuTree(private val s: MenuSnapshot) {
             subtitle = parts.filter { it.isNotEmpty() }.joinToString(" · "),
             icon = NodeIcon.Glyph(if (platform?.isDiscBased == true || game.isDiscImage()) GlyphKey.GAME_DISC else GlyphKey.GAME_CART),
             action = NodeAction.LaunchGame(game.id),
-            options = Command.ToggleFavorite(game.id),
-            optionsLabel = if (game.favorite) "Unfavorite" else "Favorite",
+            menu = gameMenu(game, platform),
         )
     }
+
+    /** Options menu for a game: play, favorite, per-game emulator, and its play history. */
+    private fun gameMenu(game: GameEntity, platform: Platform?): List<MenuOption> = buildList {
+        add(MenuOption("Play", command = Command.LaunchGame(game.id)))
+        add(
+            MenuOption(
+                if (game.favorite) "Remove from favorites" else "Add to favorites",
+                command = Command.ToggleFavorite(game.id),
+            ),
+        )
+        if (platform != null && platform.emulators.isNotEmpty()) {
+            val choice = s.settings.emulatorChoice[platform.id]
+            val platformDefault = GameLauncher.resolveOption(platform, choice, s.installedEmulators)
+                ?: platform.emulators.firstOrNull { it.key == choice }
+                ?: platform.emulators.first()
+            val override = platform.emulators.firstOrNull { it.key == game.emulatorOverride }
+            add(
+                MenuOption(
+                    "Emulator",
+                    detail = if (override != null) "${emulatorLabel(override)} · this game only" else emulatorLabel(platformDefault),
+                    submenu = buildList {
+                        add(
+                            MenuOption(
+                                "Platform default",
+                                detail = emulatorLabel(platformDefault),
+                                command = Command.SetGameEmulator(game.id, null),
+                                selected = override == null,
+                            ),
+                        )
+                        for (option in platform.emulators) {
+                            add(
+                                MenuOption(
+                                    emulatorLabel(option),
+                                    detail = if (option.emulatorId in s.installedEmulators) null else "Not installed",
+                                    command = Command.SetGameEmulator(game.id, option.key),
+                                    selected = override == option,
+                                ),
+                            )
+                        }
+                    },
+                ),
+            )
+        }
+        formatPlaytime(game.playTimeMs)?.let { played ->
+            val launches = if (game.playCount == 1) "1 time" else "${game.playCount} times"
+            add(MenuOption("Played", detail = "$played · $launches"))
+        }
+    }
+
+    private fun emulatorLabel(option: EmulatorOption): String =
+        (EmulatorRegistry.byId(option.emulatorId)?.name ?: option.emulatorId) + (option.core?.let { " · $it" } ?: "")
 
     private fun appNode(app: AppEntry) = XmbNode(
         id = "app:${app.packageName}/${app.activityName}",
@@ -181,10 +251,14 @@ class MenuTree(private val s: MenuSnapshot) {
                 XmbNode(
                     id = "lib:folder:${folder.path}",
                     title = folder.path,
-                    subtitle = if (folder.autoDetected) "Auto-detected" else "Added by you",
+                    subtitle = (if (folder.autoDetected) "Auto-detected" else "Added by you") +
+                        if (folder.connected) "" else " · not connected",
                     icon = NodeIcon.Glyph(GlyphKey.FOLDER),
-                    options = if (folder.autoDetected) null else Command.RemoveFolder(folder.path),
-                    optionsLabel = if (folder.autoDetected) null else "Remove",
+                    menu = if (folder.autoDetected) {
+                        emptyList()
+                    } else {
+                        listOf(MenuOption("Remove from library", command = Command.RemoveFolder(folder.path)))
+                    },
                 ),
             )
         }
@@ -272,6 +346,12 @@ class MenuTree(private val s: MenuSnapshot) {
         setting("med:loop", "Loop videos", onOff(s.settings.videoLoop), GlyphKey.VIDEO, Command.ToggleVideoLoop),
     )
 
+    private val mountedRoots by lazy { s.mountedRoots.mapTo(HashSet()) { it.trimEnd('/') } }
+
+    /** True when the file's volume (SD card, USB drive) is currently unplugged. */
+    private fun isOffline(path: String): Boolean =
+        mountedRoots.isNotEmpty() && StorageVolumes.volumeRootOf(path)?.let { it !in mountedRoots } ?: false
+
     private fun onOff(on: Boolean) = if (on) "On" else "Off"
 
     private fun fingerprintSummary(status: FingerprintStatus): String {
@@ -306,6 +386,17 @@ class MenuTree(private val s: MenuSnapshot) {
         const val SYSTEM = "settings:system"
 
         private fun countLabel(n: Int) = if (n == 1) "1 title" else "$n titles"
+
+        /** "45 min", "2 h 15 min", "120 h"; null under a minute (nothing worth showing). */
+        fun formatPlaytime(ms: Long): String? {
+            val minutes = ms / 60_000
+            return when {
+                minutes < 1 -> null
+                minutes < 60 -> "$minutes min"
+                minutes >= 100 * 60 || minutes % 60 == 0L -> "${minutes / 60} h"
+                else -> "${minutes / 60} h ${minutes % 60} min"
+            }
+        }
 
         fun formatSize(bytes: Long): String = when {
             bytes >= 1L shl 30 -> String.format(Locale.ROOT, "%.1f GB", bytes / (1L shl 30).toDouble())

@@ -46,7 +46,7 @@ object PlatformRegistry {
             "n64", "Nintendo 64", "N64",
             setOf("n64", "nintendo64"),
             setOf("n64", "z64", "v64") + archives,
-            ra("mupen64plus_next_gles3", "parallel_n64"),
+            listOf(EmulatorOption("m64plusfz")) + ra("mupen64plus_next_gles3", "parallel_n64"),
         ),
         Platform(
             "gb", "Game Boy", "GB",
@@ -70,7 +70,7 @@ object PlatformRegistry {
             "nds", "Nintendo DS", "NDS",
             setOf("nds", "ds", "nintendods"),
             setOf("nds", "dsi") + archives,
-            ra("melondsds", "desmume"),
+            listOf(EmulatorOption("melonds")) + ra("melondsds", "desmume"),
         ),
         Platform(
             "megadrive", "Sega Genesis / Mega Drive", "MD",
@@ -133,7 +133,7 @@ object PlatformRegistry {
             "dreamcast", "Sega Dreamcast", "DC",
             setOf("dreamcast", "dc", "segadreamcast"),
             setOf("cdi", "gdi", "chd", "m3u"),
-            ra("flycast"),
+            listOf(EmulatorOption("flycast")) + ra("flycast"),
             isDiscBased = true,
         ),
         Platform(
@@ -142,6 +142,25 @@ object PlatformRegistry {
             setOf("cue", "chd", "m3u", "ccd"),
             ra("mednafen_saturn", "yabasanshiro"),
             isDiscBased = true,
+        ),
+        Platform(
+            "n3ds", "Nintendo 3DS", "3DS",
+            setOf("n3ds", "3ds", "nintendo3ds"),
+            setOf("3ds", "3dsx", "app", "axf", "cci", "cxi", "elf", "z3dsx", "zcci", "zcxi"),
+            listOf(EmulatorOption("azahar")) + ra("citra"),
+        ),
+        Platform(
+            "switch", "Nintendo Switch", "NSW",
+            setOf("switch", "nintendoswitch", "nsw"),
+            setOf("nca", "nro", "nso", "nsp", "xci"),
+            listOf(EmulatorOption("eden")),
+        ),
+        Platform(
+            "scummvm", "ScummVM", "SVM",
+            setOf("scummvm"),
+            // Launcher files that contain the game's ScummVM target id.
+            setOf("scummvm", "svm"),
+            listOf(EmulatorOption("scummvm")) + ra("scummvm"),
         ),
         Platform(
             "arcade", "Arcade", "ARC",

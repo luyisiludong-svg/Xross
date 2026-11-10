@@ -1,6 +1,6 @@
 # Project Wave — Implementation Status
 
-Status of the codebase against [`project_scope.md`](../project_scope.md), as of **2026-11-09**. It covers what has been built, how it was verified, measured
+Status of the codebase against [`project_scope.md`](../project_scope.md), as of **2026-11-10**. It covers what has been built, how it was verified, measured
 performance across device classes, known limitations, and the remaining work split into phases.
 
 Legend: ✅ done and verified · ◐ partial · ❌ not started · 🧪 verified only on the emulator / with stubs
@@ -11,14 +11,16 @@ Legend: ✅ done and verified · ◐ partial · ❌ not started · 🧪 verified
 
 | Area | State |
 | --- | --- |
-| Phase 1 (Alpha): XMB navigation, gamepad layer, library, emulator dispatch, wave shader | ✅ complete, with a few small gaps listed in §6 Phase 1b |
+| Phase 1 (Alpha): XMB navigation, gamepad layer, library, emulator dispatch, wave shader | ✅ complete |
+| Phase 1b (hardening): hot-swap, USB-OTG, playtime, Options menu, per-game emulator, 6 more emulators | ✅ done; real-hardware testing, per-controller mappings and a Baseline Profile remain (§6) |
 | Visual front end from `assets/examples` (icons, themes, glow, status bar, sounds) | ✅ |
-| Phase 2 (metadata, media hub, theme packs, on-screen controller and keyboard) | ◐ fingerprinting and the media hub (Photo, Music, Video) done (§2, §3.4, §3.5) |
+| Phase 2 (metadata, media hub, theme packs, on-screen controller and keyboard) | ◐ fingerprinting, the media hub and gamepad search done (§2, §3.4–§3.6) |
 | Phase 3 (dual screen, hot-swap, RetroAchievements, Web Portal, FTPS) | ❌ (two prerequisites done; see §6) |
 | Phase 4 (onboarding, triage, profiling, plugin API) | ◐ app triage and performance work started |
 
-**Verification:** 61 JVM/Robolectric unit tests, a 48-check on-device smoke test,
-end-to-end launch tests against stub builds of five emulators, and frame-pacing measurements
+**Verification:** 113 JVM/Robolectric unit tests (61 before this round), a 57-check on-device
+smoke test, end-to-end launch tests against stub builds of eleven emulators, a hot-swap test with
+a real removable volume, and frame-pacing measurements
 across 12 display configurations. Everything passes. All device testing used the Android
 emulator (API 37, host GPU). No physical handheld or controller has been tested yet.
 
@@ -35,6 +37,7 @@ emulator (API 37, host GPU). No physical handheld or controller has been tested 
 | Vendor detection: PlayStation, Xbox, Nintendo, generic | ✅ | Picks the on-screen button glyphs (✕○△ / ABXY / Nintendo order) |
 | Confirm/cancel swap (Auto / South / East) | ✅ | Auto uses East on Nintendo pads |
 | Global button remapping (wizard) | ✅ | 9-step capture; verified on device |
+| Options (△ / Y) context menu | ✅ | Slide-in panel with submenus; long-press opens it on touch |
 | Per-game remapping | ❌ | |
 | Mapping wizard per generic HID device (saved per controller) | ◐ | The wizard is global, not stored per device |
 | Analog deadzone (radial) + anti-snapback + hold-to-repeat | ✅ 🧪 | Unit-tested; adb cannot inject real stick motion |
@@ -42,7 +45,7 @@ emulator (API 37, host GPU). No physical handheld or controller has been tested 
 | Touch parity (one category per horizontal swipe, continuous vertical drag, tap) | ✅ | |
 | First D-pad press after a touch is not lost | ✅ | Fixed ViewRootImpl "leave touch mode" swallowing |
 | On-screen controller overlay | ❌ | Phase 2 |
-| Gamepad virtual keyboard | ❌ | Phase 2; needed before search and metadata editing |
+| Gamepad virtual keyboard | ✅ | 10-column grid; Options = space, L1 = delete, R1 = results; hardware keyboards type directly |
 
 ### 3.2 Game libraries & storage
 
@@ -50,7 +53,7 @@ emulator (API 37, host GPU). No physical handheld or controller has been tested 
 | --- | --- | --- |
 | Platform categories (19 systems, folder-alias detection) | ✅ | NES … Saturn, Arcade |
 | Favorites, Recently Played (timestamp + play count) | ✅ | |
-| Total playtime counter | ❌ | Needs session tracking: launch time → return to launcher |
+| Total playtime counter | ✅ | Session = launcher paused after a launch → launcher resumed; survives process death; shown on game rows and in the Options menu |
 | Playlists / custom tags | ❌ | |
 | Extension filtering, `.cue`/`.gdi`/`.m3u` track de-duplication | ✅ | |
 | Look inside `.zip`/`.7z`; CRC32/MD5/SHA-1 fingerprints | ✅ | Background job; see §3.4 |
@@ -59,16 +62,17 @@ emulator (API 37, host GPU). No physical handheld or controller has been tested 
 | Per-track hashes for `.cue`/`.gdi` (Redump) | ❌ | Sheets are skipped for now |
 | Redump/No-Intro DAT import and matching | ❌ | Next Phase 2 step; `findByCrc` lookup is ready |
 | Room library, incremental rescan, unmount-safe deletion | ✅ | 5,000 ROMs: first scan 1.9 s, rescan 0.9–1.1 s (emulator) |
-| FTS4 title index + search query | ◐ | DAO query exists; no search UI yet (needs the virtual keyboard) |
+| Title search on the FTS4 index | ✅ | Games ▸ Search: live word-prefix results, launch and Options from results |
 | Multi-volume pooling (internal + microSD) with `ROMs`/`Games`/`Emulation` auto-detect | ✅ | |
-| USB-OTG volumes | ◐ | Only volumes exposed via `getExternalFilesDirs`; needs `StorageManager` |
-| Hot-swap receivers (`MEDIA_MOUNTED`/`UNMOUNTED`) | ❌ | Library refreshes on resume; games on a removed card are kept |
+| USB-OTG volumes | ✅ 🧪 | `StorageManager.getStorageVolumes()` merged with app-dir roots |
+| Hot-swap (`MEDIA_MOUNTED`/`UNMOUNTED`/`EJECT`/`REMOVED`/`BAD_REMOVAL`) | ✅ 🧪 | Debounced quiet rescan in front, deferred while a game runs; games on a removed volume are kept and marked "Not connected" |
 | Volume naming, drive icons, `autorun.inf` (parse-only) | ❌ | Phase 3 |
 | Emulator intent matrix: RetroArch (per-platform core), DuckStation, NetherSX2, Dolphin, PPSSPP | ✅ 🧪 | Verified end-to-end with stub apps (§3.3); not yet with real emulators |
 | Per-platform emulator choice | ✅ | Settings ▸ Emulators |
-| Per-game emulator override | ❌ | |
+| Per-game emulator override | ✅ | Options ▸ Emulator; precedence: game override → platform choice → first installed |
 | Permission bridge (`content://` + `FLAG_GRANT_READ_URI_PERMISSION`) | ✅ | Every recipe, RetroArch included |
-| More emulators (Azahar, Eden/Sudachi, Flycast, M64Plus FZ, melonDS, ScummVM, Vita3K…) | ❌ | |
+| Azahar, Eden, Flycast, M64Plus FZ, melonDS, ScummVM | ✅ 🧪 | Recipes from ES-DE's Android rules; new 3DS, Switch and ScummVM platforms |
+| Sudachi, Vita3K, others | ❌ | Sudachi is no longer in ES-DE's rules; no verified launch contract |
 
 ### 3.3 Metadata & achievements — ❌ not started
 ScreenScraper, SteamGridDB, Hasheous, RetroAchievements, the language priority list, the batch
@@ -119,7 +123,7 @@ HTTPS Wave Portal (Ktor CIO), FTPS (Apache FtpServer), auth, uploads, library ed
 
 ## 3. Test results
 
-### 3.1 Unit tests — 61/61 pass
+### 3.1 Unit tests — 113/113 pass
 `./gradlew :app:testDebugUnitTest` (JVM + Robolectric on SDK 35)
 
 | Suite | Tests | Covers |
@@ -135,15 +139,24 @@ HTTPS Wave Portal (Ktor CIO), FTPS (Apache FtpServer), auth, uploads, library ed
 | `FingerprinterTest` | 12 | Known CRC/MD5/SHA-1 vectors; iNES and SNES header stripping; ZIP member choice and header-only mode; 7z; CHD v5; arcade sets; skip rules; missing files |
 | `FingerprintQueueTest` | 3 | Staleness and paging queries, stats, cascade delete, real queue run (Room in memory) |
 | `MediaMenusTest` | 8 | Photo folders and thumbnails, album track order, artists, Now Playing row, video subtitles, empty states, six categories, EXIF rotation, pan limits |
+| `HotSwapTest` | 10 | Volume merging, USB-OTG via `StorageManager`, volume roots, folder planning (remember / forget / custom), broadcast mapping and a registered receiver, offline marking |
+| `PlaytimeTest` | 9 | Session rules (arm window, failed launch, process death, clock change, cap), accumulation, **migration 2→3**, formatting, row subtitles |
+| `OptionsMenuTest` | 9 | Menu state (move, select, submenu, back), game menu contents, override marking, launch precedence, DAO, **migration 2→4** |
+| `SearchTest` | 13 | FTS query building and sanitising, keyboard cursor across wide keys, typing and shortcuts, results focus, stale results, FTS index sync on insert/update/delete |
+| `XmbViewModelTest` | 4 | Constructs the real view model over the real container: startup with and without storage access, lifecycle and volume events, navigation |
 
-### 3.2 Device smoke test — 48/48 pass
+`EmulatorIntentTest` grew to 10 tests (six new recipes, platform registry) and `NavigationTest` to 7.
+
+### 3.2 Device smoke test — 57/57 pass
 `tools/device-tests/smoke.sh` resets the app, seeds ROMs, and drives the UI with key events.
 It checks screen content through the accessibility tree.
 
 | Group | Checks |
 | --- | --- |
 | Library & navigation | Auto-detect `/sdcard/ROMs`; platforms listed; drill-down; cleaned titles; `.bin` hidden behind `.cue` |
-| Favorites | Options hint, toggle, Favorites collection appears |
+| Favorites | Options hint, menu opens, favorite toggles through the menu, Favorites collection appears |
+| Per-game emulator | Emulator submenu lists the platform default; an override is saved and shown as "this game only" |
+| Search | Opens from the top of Games; typing finds a game by prefix; result count; R1 to results; Back returns to keys, then closes |
 | Categories | L1/R1 movement, Settings sections (incl. Sound) |
 | Settings | Theme cycles, wave toggle, Sound section, volume cycles |
 | Remapping | Wizard start, 9-button capture, bindings saved, remapped button works, reset |
@@ -155,7 +168,7 @@ It checks screen content through the accessibility tree.
 | Video | Player opens; music pauses during the video and resumes after |
 | Launch | RetroArch stub receives the right core; ROM readable via granted URI; Recently Played updated; music pauses during the game and resumes after |
 
-### 3.3 Emulator dispatch — 5/5 recipes verified with stubs
+### 3.3 Emulator dispatch — 11/11 recipes verified with stubs
 `tools/emulator-stub` builds a test-only APK per emulator, each installed under the real package
 and activity name. Each stub logs the intent it receives and reads the ROM through the URI.
 
@@ -166,6 +179,17 @@ and activity name. Each stub logs the intent it receives and reads the ROM throu
 | NetherSX2 | `xyz.aethersx2.android.EmulationActivity` | `bootPath` | ✅ |
 | Dolphin | `…ui.main.MainActivity` | `AutoStartFile` | ✅ |
 | PPSSPP | `…PpssppActivity` | `ACTION_VIEW` + data | ✅ |
+| Azahar | `org.azahar_emu.azahar/org.citra.citra_emu.activities.EmulationActivity` | `ACTION_VIEW` + data, clear task/top | ✅ |
+| Eden | `dev.eden.eden_emulator/org.yuzu.yuzu_emu.activities.EmulationActivity` | `android.nfc.action.TECH_DISCOVERED` + data | ✅ |
+| Flycast | `com.flycast.emulator/.MainActivity` | `ACTION_VIEW` + data | ✅ |
+| M64Plus FZ | `org.mupen64plusae.v3.fzurita/paulscode.android.mupen64plusae.SplashActivity` | `ACTION_VIEW` + data | ✅ |
+| melonDS | `me.magnum.melonds/.ui.emulator.EmulatorActivity` | `me.magnum.melonds.LAUNCH_ROM` + `uri` extra + data | ✅ |
+| ScummVM | `org.scummvm.scummvm/.SplashActivity` | `ACTION_MAIN`, data = game id from the `.scummvm` file | n/a (game id, not a file) |
+
+The six newer recipes come from ES-DE's published Android rules. ES-DE passes those emulators a
+storage-access-framework URI; Wave passes its FileProvider URI with a read grant. The stubs
+confirm the intents are well-formed and the URI is readable, **not** that each real emulator
+accepts a FileProvider URI. That needs real installs.
 
 Finding: no emulator could read the raw path without its own storage permission. Real
 emulators are normally granted storage access; if one isn't, it must use the URI.
@@ -226,6 +250,28 @@ Fixed during this pass: panning could expose the black border of pillarboxed pho
 follow the fitted photo size and EXIF rotation); the XMB showed through Now Playing (the menu
 now fades out under media screens); the Android status bar stayed visible after returning from
 another app (immersive mode is re-applied on focus).
+
+### 3.6 Phase 1b features verified on a device (emulator)
+
+| Feature | What was done | Result |
+| --- | --- | --- |
+| Hot-swap | Created a real public volume (`sm partition … public`), put a ROM on it, then unmounted / mounted / unmounted with Wave in front | Toasts "Virtual SD card removed — its games are kept" and "… connected"; rescans reported +1 then −0; the open search stayed open; the game stayed listed as "Not connected"; launching it says "File not found — is the storage mounted?" |
+| Playtime | Launched a game through the Flycast stub, stayed 66 s, returned | Row shows "Played 1 min"; Options menu shows "1 min · 2 times"; open search results refreshed by themselves |
+| Options menu | Opened on a game in landscape and portrait | Panel, submenu with ✓ on the active emulator, breadcrumb and hints render correctly |
+| Search | Typed with D-pad and hardware keys; moved to results | Word-prefix matches ("SU" → Golden **Su**n, **Su**per Metroid); correct hints per pane |
+| Upgrade | Installed over a database from the previous schema (v2) | Opened and ran without error; that the data survives is asserted by the migration unit tests (2→3, 2→4), not checked by hand on the device |
+
+Bugs found by this device pass and fixed:
+- **Startup crash.** A property used during construction was declared below the `init` block,
+  so it was still null (Kotlin initializes in textual order). `init` now sits at the end of
+  the class, and `XmbViewModelTest` constructs the real view model so this can't regress
+  unnoticed.
+- Toasts were drawn under the search and Options overlays; they are now on top and opaque.
+- "GBA · GBA · 1 KB": the extension repeated the platform name in cross-platform lists.
+- A smoke-test check assumed the test photo folder was on screen without scrolling.
+
+Not covered: a physical USB-OTG drive (the removable volume was the emulator's virtual disk),
+and the "deferred while a game runs" hot-swap path (unit-level only).
 
 ---
 
@@ -314,6 +360,10 @@ Unisoc T618) before calling it final.**
 5. **`snd_error.wav` is silent** (all zero samples). Errors use `snd_system_ng`. There is no
    dedicated cursor sound; moves reuse `snd_option`.
 6. Robolectric tests run on SDK 35 because SDK 36 sandboxes need Java 21.
+7. **Playtime is wall-clock time away from the launcher** after a launch, capped at 24 h per
+   session. Time in another app reached from the emulator, or with the device asleep, counts.
+8. **Search matches word prefixes only** ("tri" finds "Chrono Trigger", "rono" does not), and
+   the on-screen keyboard is Latin letters and digits.
 
 ---
 
@@ -322,15 +372,20 @@ Unisoc T618) before calling it final.**
 ### Phase 1b — Alpha hardening (next)
 - [ ] Test on 2–3 real handhelds (e.g. Retroid Pocket, AYN Odin, a 4:3 Anbernic): controllers,
       sticks, frame pacing, audio, and real RetroArch/DuckStation/Dolphin/PPSSPP/NetherSX2 launches
-- [ ] Hot-swap: `ACTION_MEDIA_MOUNTED`/`UNMOUNTED` receivers → automatic rescan, keep UI state
-- [ ] USB-OTG volumes via `StorageManager.getStorageVolumes()`
-- [ ] Playtime tracking (session start on launch, end on return) and display
-- [ ] Per-game emulator override (Options menu on a game)
-- [ ] Options (△/Y) context menu instead of a single action
+- [x] Hot-swap: `VolumeMonitor` receivers → debounced quiet rescan (deferred while a game runs);
+      auto-detected folders are remembered so games on an unplugged volume are kept and marked
+      "Not connected"
+- [x] USB-OTG volumes via `StorageManager.getStorageVolumes()`
+- [x] Playtime tracking (`PlaySessionTracker`, survives process death; DB v3) and display
+- [x] Per-game emulator override (DB v4; override → platform choice → first installed)
+- [x] Options (△/Y) context menu with submenus; long-press opens it on touch
 - [ ] Per-controller saved mappings; axial deadzone option
 - [ ] Baseline Profile for faster startup and less early-scroll JIT jank
-- [ ] Add maintained emulators: Azahar (3DS), Eden/Sudachi (Switch), Flycast, M64Plus FZ,
-      melonDS, ScummVM, verified with the stub harness
+- [x] Emulators added from ES-DE's published Android rules: Azahar (3DS), Eden (Switch),
+      Flycast, M64Plus FZ, melonDS, ScummVM, with stub flavors and unit tests. Sudachi is not
+      added: ES-DE no longer lists it and no verified launch contract was available
+- [x] Six new stubs and the updated smoke test run on the emulator (§3.3, §3.6)
+- [ ] Confirm the six newer recipes against real emulator installs (FileProvider URI acceptance)
 
 ### Phase 2 — Metadata, customization & media (Beta)
 - [x] Archive-aware fingerprinting (zip/7z/CHD headers) and CRC32/MD5/SHA-1 hashing in a
@@ -340,7 +395,7 @@ Unisoc T618) before calling it final.**
 - [ ] Scrapers: ScreenScraper (dev credentials), SteamGridDB (user key), Hasheous; language
       priority list; throttled batch scraper; disk asset cache keyed by UUID
 - [ ] Game detail view (box art, description, release info) and manual match/override tool
-- [ ] Gamepad virtual keyboard, then search UI on the existing FTS4 index
+- [x] Gamepad virtual keyboard and search overlay on the FTS4 index (Games ▸ Search)
 - [x] Media hub: photo viewer (zoom/pan, slideshow, wallpaper), music player as a background
       service with BGM mode, video player
 - [ ] Video snap previews on focused games (after the scraper provides snaps)

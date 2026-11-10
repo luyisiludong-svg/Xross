@@ -32,14 +32,15 @@ phased roadmap are in [`docs/STATUS.md`](docs/STATUS.md).
 ## Testing
 
 ```bash
-./gradlew :app:testDebugUnitTest                  # 38 JVM + Robolectric tests
+./gradlew :app:testDebugUnitTest                  # 113 JVM + Robolectric tests
 ./gradlew :app:installDebug :emulator-stub:installRetroarchDebug
 tools/device-tests/smoke.sh                       # on-device smoke test (clears Wave's data)
 ./gradlew :app:assembleProfiling                  # R8-optimized build for frame timing
 ```
 
-`tools/emulator-stub` builds test-only stand-ins for RetroArch, DuckStation, NetherSX2, Dolphin
-and PPSSPP that log the launch intent they receive. Never install them alongside real emulators.
+`tools/emulator-stub` builds test-only stand-ins for eleven emulators (RetroArch, DuckStation,
+NetherSX2, Dolphin, PPSSPP, Azahar, Eden, Flycast, M64Plus FZ, melonDS, ScummVM) that log the
+launch intent they receive. Never install them alongside real emulators.
 
 ## Look and sound
 

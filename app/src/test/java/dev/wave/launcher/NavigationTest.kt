@@ -39,10 +39,21 @@ class NavigationTest {
         )
         val tree = MenuTree(MenuSnapshot(games = games, storageGranted = true))
         val root = tree.list(Categories.rootKey(Categories.GAMES)).map { it.title }
-        assertEquals(listOf("Recently Played", "Favorites", "Super Nintendo", "Game Boy Advance"), root)
+        assertEquals(listOf("Search", "Recently Played", "Favorites", "Super Nintendo", "Game Boy Advance"), root)
         val snes = tree.list("platform:snes")
         assertEquals(listOf("A", "B"), snes.map { it.title })
         assertTrue(snes.first().action is NodeAction.LaunchGame)
+    }
+
+    @Test fun crossPlatformRowsDoNotRepeatThePlatformAsTheExtension() {
+        val games = listOf(
+            GameEntity(1, "/r/gba/a.gba", "gba", "Golden Sun", "a.gba", 2048, 0, favorite = true),
+            GameEntity(2, "/r/snes/b.sfc", "snes", "Super Metroid", "b.sfc", 2048, 0, favorite = true),
+        )
+        val favorites = MenuTree(MenuSnapshot(games = games)).list(MenuTree.FAVORITES)
+        assertEquals(listOf("★ · GBA · 2 KB", "★ · SNES · SFC · 2 KB"), favorites.map { it.subtitle })
+        // Inside the platform's own list the extension is the only format hint, so it stays.
+        assertEquals("★ · GBA · 2 KB", MenuTree(MenuSnapshot(games = games)).list("platform:gba").single().subtitle)
     }
 
     @Test fun emptyLibraryPointsToSettings() {
