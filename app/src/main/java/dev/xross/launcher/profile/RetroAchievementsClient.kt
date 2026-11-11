@@ -29,6 +29,8 @@ data class RaBadge(
     /** "2023-12-27 16:04:50", as RetroAchievements reports it (UTC). */
     val date: String = "",
     val hardcore: Boolean = false,
+    /** What the achievement asks for; empty in profiles cached before this was kept. */
+    val description: String = "",
 )
 
 /**
@@ -254,6 +256,7 @@ class RetroAchievementsClient(
                     badgeUrl = badge?.let(::absoluteMedia).orEmpty(),
                     date = o.str("Date").orEmpty(),
                     hardcore = (o.long("HardcoreMode") ?: 0) != 0L,
+                    description = o.str("Description").orEmpty(),
                 )
             }.sortedByDescending { it.date }
         }

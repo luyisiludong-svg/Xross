@@ -83,7 +83,7 @@ class ProfileCardTest {
         assertTrue(subtitle, subtitle.contains("4,616") || subtitle.contains("4616"))
     }
 
-    @Test fun upFromTheTopOfACategoryFocusesTheAvatarAndOpensTheUserCard() {
+    @Test fun upFromTheTopOfACategoryExpandsTheAvatarHudInPlace() {
         val vm = XmbViewModel(context, AppContainer(context), storageAccess = { false }).also { idle() }
         fun press(a: NavAction) {
             vm.onAction(a)
@@ -100,18 +100,29 @@ class ProfileCardTest {
         assertFalse("Down returns to the list", vm.state.value.avatarFocused)
         assertEquals(0, vm.state.value.focusedIndex)
 
+        // Back collapses the HUD too, and no full-screen card replaces the menu on the way.
         press(NavAction.UP)
-        press(NavAction.CONFIRM)
+        assertTrue(vm.state.value.avatarFocused)
+        assertNull(vm.state.value.profileCard)
+        press(NavAction.BACK)
+        assertFalse(vm.state.value.avatarFocused)
+        assertNull(vm.state.value.profileCard)
+
+        // Touch: a tap on the avatar expands the HUD, a tap outside it collapses it again.
+        vm.onAvatarTapped()
+        idle()
+        assertTrue(vm.state.value.avatarFocused)
+        assertNull(vm.state.value.profileCard)
+        vm.closeAvatarHud()
+        idle()
+        assertFalse(vm.state.value.avatarFocused)
+
+        // Account management stays one press away: Options on the HUD opens the full User Card.
+        press(NavAction.UP)
+        press(NavAction.OPTIONS)
         assertNotNull(vm.state.value.profileCard)
         assertFalse(vm.state.value.avatarFocused)
         assertFalse(vm.state.value.profile.linked)
-        press(NavAction.BACK)
-        assertNull(vm.state.value.profileCard)
-
-        // Touch: tapping the avatar opens it too, and its Close button shuts it.
-        vm.onAvatarTapped()
-        idle()
-        assertNotNull(vm.state.value.profileCard)
         vm.onProfileCardButtonTapped(1) // Close (unlinked: Link account…, Close)
         idle()
         assertNull(vm.state.value.profileCard)

@@ -58,6 +58,46 @@ data class RaGameProgress(
     }
 }
 
+/** A library game with every achievement unlocked, for the mastery showcase. */
+data class RaMasteredGame(val gameId: Long, val uuid: String, val title: String, val achievements: Int, val points: Int)
+
+/**
+ * RetroAchievements progress across the library, from what is already cached in the Xross folder
+ * (each game's progress is saved the first time its achievements are shown). No network.
+ */
+data class RaLibrarySummary(
+    /** Library games on systems RetroAchievements covers. */
+    val supportedGames: Int = 0,
+    /** Of those, the games whose progress is known (distinct RetroAchievements sets). */
+    val trackedGames: Int = 0,
+    val achievements: Int = 0,
+    val unlocked: Int = 0,
+    val points: Int = 0,
+    val earnedPoints: Int = 0,
+    val mastered: List<RaMasteredGame> = emptyList(),
+) {
+    /** 0–1 share of the known achievements that are unlocked. */
+    val completion: Float get() = if (achievements == 0) 0f else unlocked.toFloat() / achievements
+
+    companion object {
+        /** [known] pairs a library game with its cached progress; two dumps of one game count once. */
+        fun of(supportedGames: Int, known: List<Pair<dev.xross.launcher.data.GameEntity, RaGameProgress>>): RaLibrarySummary {
+            val sets = known.filter { it.second.total > 0 }.distinctBy { it.second.gameId }
+            return RaLibrarySummary(
+                supportedGames = supportedGames,
+                trackedGames = sets.size,
+                achievements = sets.sumOf { it.second.total },
+                unlocked = sets.sumOf { it.second.unlocked },
+                points = sets.sumOf { it.second.totalPoints },
+                earnedPoints = sets.sumOf { it.second.earnedPoints },
+                mastered = sets.filter { it.second.unlocked == it.second.total }
+                    .map { (game, p) -> RaMasteredGame(game.id, game.uuid, game.title, p.total, p.totalPoints) }
+                    .sortedBy { it.title.lowercase() },
+            )
+        }
+    }
+}
+
 /** A row of a console's game list: the RetroAchievements game and the ROM hashes it accepts. */
 @Serializable
 data class RaGameEntry(

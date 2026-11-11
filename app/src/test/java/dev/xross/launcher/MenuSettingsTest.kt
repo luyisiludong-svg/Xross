@@ -12,6 +12,7 @@ import dev.xross.launcher.state.NodeAction
 import dev.xross.launcher.state.NodeIcon
 import dev.xross.launcher.theme.XrossTheme
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -119,8 +120,13 @@ class MenuSettingsTest {
             GameEntity(2, "/r/snes/b.sfc", "snes", "B", "b.sfc", 1, 0),
         )
         val tree = MenuTree(MenuSnapshot(games = games))
-        assertEquals(NodeIcon.Glyph(GlyphKey.GAME_DISC), tree.list("platform:psx").single().icon)
-        assertEquals(NodeIcon.Glyph(GlyphKey.GAME_CART), tree.list("platform:snes").single().icon)
+        // Games draw as rectangular tiles; the disc / cartridge glyph backs a tile without art.
+        val disc = tree.list("platform:psx").single().icon as NodeIcon.Tile
+        val cart = tree.list("platform:snes").single().icon as NodeIcon.Tile
+        assertEquals(GlyphKey.GAME_DISC, disc.fallback)
+        assertEquals(GlyphKey.GAME_CART, cart.fallback)
+        assertEquals("A", disc.label)
+        assertFalse("Unscraped games have no art to load", disc.scraped)
     }
 
     @Test fun emulatorSettingFlagsMissingEmulator() {

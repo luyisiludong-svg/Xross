@@ -210,7 +210,12 @@ class MainActivity : ComponentActivity() {
                     onCloseWaveSettings = viewModel::closeWaveSettings,
                     onAchievementTap = viewModel::onAchievementTapped,
                     onCloseAchievements = viewModel::closeAchievements,
-                    onDetailsAchievements = { viewModel.onAction(NavAction.RIGHT) },
+                    onDetailsAchievements = viewModel::onDetailsAchievementsTapped,
+                    onCloseAvatarHud = viewModel::closeAvatarHud,
+                    onAvatarRowTap = viewModel::onAvatarRowTapped,
+                    onAvatarSlider = viewModel::onAvatarSliderChanged,
+                    onCloseAvatarStyle = viewModel::closeAvatarStyle,
+                    onCloseRaHub = viewModel::closeRaHub,
                 )
             }
             }

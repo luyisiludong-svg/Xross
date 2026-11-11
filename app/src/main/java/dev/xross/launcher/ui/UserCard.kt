@@ -62,6 +62,7 @@ internal fun UserCard(
     onButtonTap: (Int) -> Unit,
     onDismiss: () -> Unit,
     loadBadge: suspend (String, Int) -> androidx.compose.ui.graphics.ImageBitmap? = { _, _ -> null },
+    avatarStyle: dev.xross.launcher.theme.AvatarStyleConfig? = null,
 ) {
     var shown by remember { mutableStateOf(card) }
     if (card != null) shown = card
@@ -103,7 +104,7 @@ internal fun UserCard(
                 Spacer(Modifier.height((m.s * 0.02f).dp()))
 
                 Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
-                    Header(profile, m)
+                    Header(profile, m, avatarStyle)
                     val p = profile.profile
                     if (profile.linked && p != null) {
                         Spacer(Modifier.height((m.s * 0.03f).dp()))
@@ -157,7 +158,7 @@ internal fun UserCard(
 }
 
 @Composable
-private fun Header(profile: ProfileState, m: XmbMetrics) {
+private fun Header(profile: ProfileState, m: XmbMetrics, avatarStyle: dev.xross.launcher.theme.AvatarStyleConfig?) {
     val density = LocalDensity.current
     val number = remember { NumberFormat.getIntegerInstance() }
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -166,6 +167,7 @@ private fun Header(profile: ProfileState, m: XmbMetrics) {
             avatarVersion = profile.avatarVersion,
             size = with(density) { (m.s * 0.17f).toDp() },
             ringWidth = 3.dp,
+            style = avatarStyle,
         )
         Spacer(Modifier.width(with(density) { (m.s * 0.03f).toDp() }))
         Column {

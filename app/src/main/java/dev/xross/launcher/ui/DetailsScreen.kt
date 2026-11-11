@@ -1,10 +1,14 @@
 package dev.xross.launcher.ui
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -64,121 +68,151 @@ internal fun DetailsScreen(
 ) {
     var shown by remember { mutableStateOf(details) }
     if (details != null) shown = details
+
+    AnimatedVisibility(details != null, enter = fadeIn(tween(220)), exit = fadeOut(tween(220))) {
+        val current = shown ?: return@AnimatedVisibility
+        // Paging to a neighbouring game (L1/R1, ←/→) slides the whole page across and crossfades;
+        // updates to the same game (scrolling, achievements arriving) just redraw it.
+        AnimatedContent(
+            targetState = current,
+            contentKey = { it.gameId },
+            transitionSpec = {
+                val dir = targetState.pageDirection.coerceIn(-1, 1)
+                (slideInHorizontally(tween(300)) { dir * it / 5 } + fadeIn(tween(260)))
+                    .togetherWith(slideOutHorizontally(tween(300)) { -dir * it / 5 } + fadeOut(tween(220)))
+            },
+            label = "detailsPage",
+        ) { d ->
+            DetailsPage(d, m, snapPlaying, confirmGlyph, backGlyph, optionsGlyph, loadArt, loadBadge, onPlay, onAchievements, onDismiss)
+        }
+    }
+}
+
+/** One game's page of the Details screen. */
+@Composable
+private fun DetailsPage(
+    d: GameDetailsState,
+    m: XmbMetrics,
+    snapPlaying: Boolean,
+    confirmGlyph: String,
+    backGlyph: String,
+    optionsGlyph: String,
+    loadArt: suspend (String, List<ArtKind>, Int) -> ImageBitmap?,
+    loadBadge: suspend (String, Int) -> ImageBitmap?,
+    onPlay: () -> Unit,
+    onAchievements: () -> Unit,
+    onDismiss: () -> Unit,
+) {
     val density = LocalDensity.current
     fun Float.dp() = with(density) { this@dp.toDp() }
     fun Float.sp() = with(density) { this@sp.toSp() }
+    val bgPx = maxOf(m.width, m.height).toInt()
+    val background = rememberArt(loadArt, d.uuid, BACKGROUND, bgPx, d.artVersion)
+    val box = rememberArt(loadArt, d.uuid, BOX, (m.height * 0.7f).toInt(), d.artVersion)
+    val logo = rememberArt(loadArt, d.uuid, listOf(ArtKind.WHEEL), (m.width * 0.4f).toInt(), d.artVersion)
 
-    AnimatedVisibility(details != null, enter = fadeIn(tween(220)), exit = fadeOut(tween(220))) {
-        val d = shown ?: return@AnimatedVisibility
-        val bgPx = maxOf(m.width, m.height).toInt()
-        val background = rememberArt(loadArt, d.uuid, BACKGROUND, bgPx, d.artVersion)
-        val box = rememberArt(loadArt, d.uuid, BOX, (m.height * 0.7f).toInt(), d.artVersion)
-        val logo = rememberArt(loadArt, d.uuid, listOf(ArtKind.WHEEL), (m.width * 0.4f).toInt(), d.artVersion)
-
+    Box(
+        Modifier
+            .fillMaxSize()
+            .clickable(remember { MutableInteractionSource() }, indication = null, onClick = onDismiss),
+    ) {
+        // Background: art under a scrim; with a snap playing, only the scrim (the video is below).
+        val artAlpha by animateFloatAsState(if (background.value != null && !snapPlaying) 1f else 0f, tween(500), label = "bg")
+        Box(Modifier.fillMaxSize().background(Color(if (snapPlaying) 0x00000000 else 0xE60A0A12.toInt())))
+        background.value?.let {
+            Image(it, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize().graphicsLayer { alpha = artAlpha })
+        }
         Box(
+            Modifier.fillMaxSize().background(
+                Brush.horizontalGradient(0f to Color(0xD9000000), 0.55f to Color(0xB3000000), 1f to Color(0x80000000)),
+            ),
+        )
+
+        Row(
             Modifier
                 .fillMaxSize()
-                .clickable(remember { MutableInteractionSource() }, indication = null, onClick = onDismiss),
+                .clickable(remember { MutableInteractionSource() }, indication = null) {}
+                .padding(horizontal = (m.width * 0.05f).dp(), vertical = (m.s * 0.07f).dp()),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            // Background: art under a scrim; with a snap playing, only the scrim (the video is below).
-            val artAlpha by animateFloatAsState(if (background.value != null && !snapPlaying) 1f else 0f, tween(500), label = "bg")
-            Box(Modifier.fillMaxSize().background(Color(if (snapPlaying) 0x00000000 else 0xE60A0A12.toInt())))
-            background.value?.let {
-                Image(it, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize().graphicsLayer { alpha = artAlpha })
+            // Box art, crossfading in.
+            val boxAlpha by animateFloatAsState(if (box.value != null) 1f else 0f, tween(450), label = "box")
+            Box(Modifier.width((m.width * 0.28f).dp()).fillMaxHeight(), contentAlignment = Alignment.Center) {
+                box.value?.let {
+                    Image(
+                        it,
+                        contentDescription = "Box art",
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier
+                            .heightIn(max = (m.height * 0.72f).dp())
+                            .graphicsLayer { alpha = boxAlpha }
+                            .shadow(16.dp, clip = false),
+                    )
+                }
             }
-            Box(
-                Modifier.fillMaxSize().background(
-                    Brush.horizontalGradient(0f to Color(0xD9000000), 0.55f to Color(0xB3000000), 1f to Color(0x80000000)),
-                ),
-            )
+            Spacer(Modifier.width((m.width * 0.04f).dp()))
 
-            Row(
-                Modifier
-                    .fillMaxSize()
-                    .clickable(remember { MutableInteractionSource() }, indication = null) {}
-                    .padding(horizontal = (m.width * 0.05f).dp(), vertical = (m.s * 0.07f).dp()),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                // Box art, crossfading in.
-                val boxAlpha by animateFloatAsState(if (box.value != null) 1f else 0f, tween(450), label = "box")
-                Box(Modifier.width((m.width * 0.28f).dp()).fillMaxHeight(), contentAlignment = Alignment.Center) {
-                    box.value?.let {
-                        Image(
-                            it,
-                            contentDescription = "Box art",
-                            contentScale = ContentScale.Fit,
-                            modifier = Modifier
-                                .heightIn(max = (m.height * 0.72f).dp())
-                                .graphicsLayer { alpha = boxAlpha }
-                                .shadow(16.dp, clip = false),
-                        )
+            Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.Center) {
+                val logoBitmap = logo.value
+                if (logoBitmap != null) {
+                    Image(
+                        logoBitmap,
+                        contentDescription = d.title,
+                        contentScale = ContentScale.Fit,
+                        alignment = Alignment.CenterStart,
+                        modifier = Modifier.height((m.s * 0.17f).dp()).width((m.width * 0.4f).dp()),
+                    )
+                } else {
+                    GlowText(d.title, fontSize = (m.titleSize * 1.5f).sp(), glow = { 0.5f })
+                }
+                Spacer(Modifier.height((m.s * 0.015f).dp()))
+                Text(
+                    listOfNotNull(d.platform, d.playtime).joinToString("  ·  "),
+                    style = shadowed(m.subtitleSize.sp(), color = TextDim),
+                )
+                d.rating?.let { r ->
+                    val stars = (r * 5f).let { kotlin.math.round(it * 2f) / 2f }
+                    Text(
+                        "★".repeat(stars.toInt()) + (if (stars % 1f != 0f) "½" else "") + "  " +
+                            String.format(java.util.Locale.ROOT, "%.1f/5", r * 5f),
+                        style = shadowed(m.subtitleSize.sp(), color = Color(0xFFFFD970)),
+                    )
+                }
+                Spacer(Modifier.height((m.s * 0.03f).dp()))
+                for ((label, value) in d.facts) {
+                    Row {
+                        Text(label, style = shadowed(m.subtitleSize.sp(), color = TextDim), modifier = Modifier.width((m.width * 0.12f).dp()))
+                        Text(value, style = shadowed(m.subtitleSize.sp()), maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
-                Spacer(Modifier.width((m.width * 0.04f).dp()))
-
-                Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.Center) {
-                    val logoBitmap = logo.value
-                    if (logoBitmap != null) {
-                        Image(
-                            logoBitmap,
-                            contentDescription = d.title,
-                            contentScale = ContentScale.Fit,
-                            alignment = Alignment.CenterStart,
-                            modifier = Modifier.height((m.s * 0.17f).dp()).width((m.width * 0.4f).dp()),
-                        )
-                    } else {
-                        GlowText(d.title, fontSize = (m.titleSize * 1.5f).sp(), glow = { 0.5f })
-                    }
-                    Spacer(Modifier.height((m.s * 0.015f).dp()))
+                if (d.achievementsSupported) {
+                    Spacer(Modifier.height((m.s * 0.025f).dp()))
+                    AchievementsSummary(d.achievements, m, loadBadge, onAchievements)
+                }
+                Spacer(Modifier.height((m.s * 0.03f).dp()))
+                val synopsis = d.synopsis ?: if (d.scraped) {
+                    "No description available. ScreenScraper provides descriptions once it is set up."
+                } else {
+                    "No description yet. Settings ▸ Library ▸ Metadata & artwork scrapes one."
+                }
+                val scroll = rememberScrollState()
+                val lineStep = with(density) { (m.subtitleSize * 1.4f * 2f).toInt() }
+                LaunchedEffect(d.scroll) { scroll.animateScrollTo(d.scroll * lineStep) }
+                Box(Modifier.weight(1f, fill = false).heightIn(max = (m.height * 0.32f).dp())) {
                     Text(
-                        listOfNotNull(d.platform, d.playtime).joinToString("  ·  "),
-                        style = shadowed(m.subtitleSize.sp(), color = TextDim),
+                        synopsis,
+                        style = shadowed((m.subtitleSize * 1.05f).sp(), color = if (d.synopsis == null) TextDim else TextBright),
+                        modifier = Modifier.verticalScroll(scroll, enabled = true),
                     )
-                    d.rating?.let { r ->
-                        val stars = (r * 5f).let { kotlin.math.round(it * 2f) / 2f }
-                        Text(
-                            "★".repeat(stars.toInt()) + (if (stars % 1f != 0f) "½" else "") + "  " +
-                                String.format(java.util.Locale.ROOT, "%.1f/5", r * 5f),
-                            style = shadowed(m.subtitleSize.sp(), color = Color(0xFFFFD970)),
-                        )
-                    }
-                    Spacer(Modifier.height((m.s * 0.03f).dp()))
-                    for ((label, value) in d.facts) {
-                        Row {
-                            Text(label, style = shadowed(m.subtitleSize.sp(), color = TextDim), modifier = Modifier.width((m.width * 0.12f).dp()))
-                            Text(value, style = shadowed(m.subtitleSize.sp()), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        }
-                    }
-                    if (d.achievementsSupported) {
-                        Spacer(Modifier.height((m.s * 0.025f).dp()))
-                        AchievementsSummary(d.achievements, m, loadBadge, onAchievements)
-                    }
-                    Spacer(Modifier.height((m.s * 0.03f).dp()))
-                    val synopsis = d.synopsis ?: if (d.scraped) {
-                        "No description available. ScreenScraper provides descriptions once it is set up."
-                    } else {
-                        "No description yet. Settings ▸ Library ▸ Metadata & artwork scrapes one."
-                    }
-                    val scroll = rememberScrollState()
-                    val lineStep = with(density) { (m.subtitleSize * 1.4f * 2f).toInt() }
-                    LaunchedEffect(d.scroll) { scroll.animateScrollTo(d.scroll * lineStep) }
-                    Box(Modifier.weight(1f, fill = false).heightIn(max = (m.height * 0.32f).dp())) {
-                        Text(
-                            synopsis,
-                            style = shadowed((m.subtitleSize * 1.05f).sp(), color = if (d.synopsis == null) TextDim else TextBright),
-                            modifier = Modifier.verticalScroll(scroll, enabled = true),
-                        )
-                    }
-                    Spacer(Modifier.height((m.s * 0.03f).dp()))
-                    Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                        Box(Modifier.clickable(onClick = onPlay)) { Hint(confirmGlyph, "Play", m.subtitleSize.sp()) }
-                        if (d.achievementsSupported) {
-                            Box(Modifier.clickable(onClick = onAchievements)) { Hint("▶", "Achievements", m.subtitleSize.sp()) }
-                        }
-                        Hint(optionsGlyph, "Options", m.subtitleSize.sp())
-                        Hint(backGlyph, "Back", m.subtitleSize.sp())
-                        if (d.synopsis != null) Hint("↕", "Scroll", m.subtitleSize.sp())
-                    }
+                }
+                Spacer(Modifier.height((m.s * 0.03f).dp()))
+                Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Box(Modifier.clickable(onClick = onPlay)) { Hint(confirmGlyph, "Play", m.subtitleSize.sp()) }
+                    // Position in the list this was opened from; the bumpers and ←/→ page through it.
+                    if (d.count > 1) Hint("L1 R1", "Game ${d.position + 1} of ${d.count}", m.subtitleSize.sp())
+                    Hint(optionsGlyph, "Options", m.subtitleSize.sp())
+                    Hint(backGlyph, "Back", m.subtitleSize.sp())
+                    if (d.synopsis != null) Hint("↕", "Scroll", m.subtitleSize.sp())
                 }
             }
         }
@@ -199,8 +233,8 @@ private fun rememberArt(
 
 /**
  * The game's RetroAchievements progress on the Details screen, after the reference game card:
- * trophy, earned / total in amber, a progress bar and the latest unlocked badges. Tap (or ▶)
- * opens the full Achievements screen.
+ * trophy, earned / total in amber, a progress bar and the latest unlocked badges. A tap
+ * (or Options ▸ Achievements) opens the full Achievements screen.
  */
 @Composable
 private fun AchievementsSummary(

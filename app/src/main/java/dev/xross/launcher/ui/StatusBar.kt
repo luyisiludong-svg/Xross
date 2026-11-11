@@ -30,6 +30,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -40,11 +41,19 @@ import java.util.Locale
 private data class BatteryState(val percent: Int, val charging: Boolean)
 
 /**
- * Date, time, battery percentage and a three-bar battery gauge. [leading] (the profile avatar)
- * sits just before the clock.
+ * Date, time, battery percentage and a three-bar battery gauge, with room kept at the far right
+ * ([trailingWidth] × [trailingHeight]) for the profile avatar, which is drawn over that space by
+ * [AvatarHud]. While the avatar's mini-HUD expands over the clock and battery, [contentAlpha]
+ * fades them out.
  */
 @Composable
-fun StatusBar(textSize: TextUnit, modifier: Modifier = Modifier, leading: (@Composable () -> Unit)? = null) {
+fun StatusBar(
+    textSize: TextUnit,
+    modifier: Modifier = Modifier,
+    contentAlpha: () -> Float = { 1f },
+    trailingWidth: Dp = 0.dp,
+    trailingHeight: Dp = 0.dp,
+) {
     val context = LocalContext.current
     var now by remember { mutableStateOf(Date()) }
     LaunchedEffect(Unit) {
@@ -71,15 +80,15 @@ fun StatusBar(textSize: TextUnit, modifier: Modifier = Modifier, leading: (@Comp
     val heightDp = with(LocalDensity.current) { textSize.toDp() }
 
     Row(verticalAlignment = Alignment.CenterVertically, modifier = modifier) {
-        leading?.let {
-            it()
-            Spacer(Modifier.width(10.dp))
+        // Read in the draw phase, so the HUD's expansion never recomposes or re-lays-out the bar.
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fadeAlpha(contentAlpha)) {
+            Text(text, style = style)
+            battery?.let {
+                Spacer(Modifier.width(10.dp))
+                BatteryGauge(it, Modifier.size(width = heightDp * 1.9f, height = heightDp * 0.95f))
+            }
         }
-        Text(text, style = style)
-        battery?.let {
-            Spacer(Modifier.width(10.dp))
-            BatteryGauge(it, Modifier.size(width = heightDp * 1.9f, height = heightDp * 0.95f))
-        }
+        if (trailingWidth > 0.dp) Spacer(Modifier.size(width = trailingWidth, height = trailingHeight))
     }
 }
 

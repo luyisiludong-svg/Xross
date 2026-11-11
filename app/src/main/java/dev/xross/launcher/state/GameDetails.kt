@@ -32,7 +32,15 @@ data class GameDetailsState(
     val achievements: dev.xross.launcher.profile.AchievementsState? = null,
     /** The system has RetroAchievements (the summary row is shown). */
     val achievementsSupported: Boolean = false,
+    /** Where this game is in the list Details was opened from (0-based), and that list's size. */
+    val position: Int = 0,
+    val count: Int = 1,
+    /** How this page was reached: -1 from the next game, +1 from the previous one, 0 when opened. */
+    val pageDirection: Int = 0,
 ) {
+    val hasPrevious: Boolean get() = position > 0
+    val hasNext: Boolean get() = position < count - 1
+
     fun scrollBy(delta: Int): GameDetailsState = copy(scroll = (scroll + delta).coerceIn(0, MAX_SCROLL))
 
     companion object {
@@ -76,6 +84,25 @@ data class GameDetailsState(
     }
 }
 
+/**
+ * Paging between games on the Details screen (L1/R1 or Left/Right): the neighbours of the shown
+ * game in the list Details was opened from. The list doesn't wrap.
+ */
+object DetailsPager {
+    /** The game [delta] steps from [current] in [ids]; null at either end, or when [current] isn't listed. */
+    fun neighbor(ids: List<Long>, current: Long, delta: Int): Long? {
+        val i = ids.indexOf(current)
+        if (i < 0) return null
+        return ids.getOrNull(i + delta)
+    }
+
+    /** (position, count) of [current] in [ids]; a game outside the list is a list of its own. */
+    fun position(ids: List<Long>, current: Long): Pair<Int, Int> {
+        val i = ids.indexOf(current)
+        return if (i < 0) 0 to 1 else i to ids.size
+    }
+}
+
 /** What a text prompt is for; the answer comes back to [XmbViewModel.onTextEntered]. */
 sealed interface TextPrompt {
     val title: String
@@ -104,6 +131,12 @@ sealed interface TextPrompt {
     data class GameTitle(val gameId: Long, override val initial: String) : TextPrompt {
         override val title = "Title"
         override val hint = "Empty restores the automatic title"
+    }
+
+    /** Custom ring color for the avatar (Settings ▸ Theme ▸ Profile customization). */
+    data class AvatarBorderColor(override val initial: String) : TextPrompt {
+        override val title = "Avatar ring color"
+        override val hint = "Hex color, like #FFB5C5"
     }
 
     data class MatchQuery(val gameId: Long, val platformId: String, override val initial: String) : TextPrompt {
