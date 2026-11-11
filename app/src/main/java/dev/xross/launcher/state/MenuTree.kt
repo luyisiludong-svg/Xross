@@ -41,6 +41,22 @@ data class MenuSnapshot(
     val media: dev.xross.launcher.media.MediaLibrary = dev.xross.launcher.media.MediaLibrary(),
     /** Roots of mounted volumes; empty means "unknown", in which case nothing is marked offline. */
     val mountedRoots: List<String> = emptyList(),
+    /** Imported DATs with their match counts. */
+    val dats: List<dev.xross.launcher.data.DatSummary> = emptyList(),
+    /** gameId → DAT match, scraped fields and overrides. */
+    val metadata: Map<Long, dev.xross.launcher.data.GameMetadataEntity> = emptyMap(),
+    /** Folder DATs are imported from (resolved from the setting). */
+    val datFolder: String = "",
+    /** Which metadata services can run. */
+    val scraperSetup: ScraperSetup = ScraperSetup(),
+)
+
+/** What the Metadata settings need to know about service accounts (never the secrets). */
+data class ScraperSetup(
+    /** This build carries ScreenScraper developer credentials. */
+    val screenScraperAvailable: Boolean = false,
+    val screenScraperUser: String = "",
+    val steamGridDbKeySet: Boolean = false,
 )
 
 /** Pure builder from a [MenuSnapshot] to XMB lists. */
@@ -75,6 +91,8 @@ class MenuTree(private val s: MenuSnapshot) {
         key.startsWith(PLATFORM_PREFIX) ->
             gamesByPlatform[key.removePrefix(PLATFORM_PREFIX)].orEmpty().map { gameNode(it, showPlatform = false) }
         key == LIBRARY -> librarySettings()
+        key == DATS -> datSettings()
+        key == METADATA -> metadataSettings(dev.xross.launcher.scrape.ScrapeProgress())
         key == CONTROLS -> controlSettings()
         key == EMULATORS -> emulatorSettings()
         key == DISPLAY -> displaySettings()
@@ -124,6 +142,7 @@ class MenuTree(private val s: MenuSnapshot) {
             if (isOffline(game.path)) add("Not connected")
             if (game.favorite) add("★")
             if (showPlatform && platform != null) add(platform.shortName)
+            s.metadata[game.id]?.region?.let { add(it) }
             // Skip the extension when it only repeats the platform ("GBA · GBA").
             val ext = game.fileName.substringAfterLast('.', "").uppercase(Locale.ROOT)
             if (!(showPlatform && ext == platform?.shortName?.uppercase(Locale.ROOT))) add(ext)
@@ -134,15 +153,24 @@ class MenuTree(private val s: MenuSnapshot) {
             id = "game:${game.id}",
             title = game.title,
             subtitle = parts.filter { it.isNotEmpty() }.joinToString(" · "),
-            icon = NodeIcon.Glyph(if (platform?.isDiscBased == true || game.isDiscImage()) GlyphKey.GAME_DISC else GlyphKey.GAME_CART),
+            icon = gameIcon(game, platform),
             action = NodeAction.LaunchGame(game.id),
             menu = gameMenu(game, platform),
         )
     }
 
+    private fun gameIcon(game: GameEntity, platform: Platform?): NodeIcon {
+        val glyph = if (platform?.isDiscBased == true || game.isDiscImage()) GlyphKey.GAME_DISC else GlyphKey.GAME_CART
+        val meta = s.metadata[game.id]
+        // Only games a service has identified can have art; others skip the cache lookup.
+        if (meta?.scrapeStatus != dev.xross.launcher.scrape.ScrapeStatus.OK.name) return NodeIcon.Glyph(glyph)
+        return NodeIcon.Art(game.uuid, ICON_ART, glyph, meta.scrapedAt ?: 0L)
+    }
+
     /** Options menu for a game: play, favorite, per-game emulator, and its play history. */
     private fun gameMenu(game: GameEntity, platform: Platform?): List<MenuOption> = buildList {
         add(MenuOption("Play", command = Command.LaunchGame(game.id)))
+        add(MenuOption("Details", detail = "Box art, description and release info", command = Command.ShowDetails(game.id)))
         add(
             MenuOption(
                 if (game.favorite) "Remove from favorites" else "Add to favorites",
@@ -186,7 +214,30 @@ class MenuTree(private val s: MenuSnapshot) {
             val launches = if (game.playCount == 1) "1 time" else "${game.playCount} times"
             add(MenuOption("Played", detail = "$played · $launches"))
         }
+        add(MenuOption("Metadata", detail = metadataDetail(game), submenu = metadataMenu(game)))
         add(MenuOption("Information", detail = "File, size, fingerprints and playtime", command = Command.ShowGameInfo(game.id)))
+    }
+
+    private fun metadataDetail(game: GameEntity): String {
+        val meta = s.metadata[game.id]
+        return when {
+            meta?.locked == true -> "Set manually"
+            meta?.matchKind != null && meta.scrapeStatus == "OK" -> "Verified · scraped"
+            meta?.matchKind != null -> "Verified by DAT"
+            meta?.scrapeStatus == "OK" -> "Scraped"
+            meta?.scrapeStatus == "NOT_FOUND" -> "Not found online"
+            else -> "Not scraped yet"
+        }
+    }
+
+    private fun metadataMenu(game: GameEntity): List<MenuOption> = buildList {
+        val meta = s.metadata[game.id]
+        add(MenuOption("Edit title…", detail = meta?.titleOverride ?: "Use your own name for this game", command = Command.EditTitle(game.id)))
+        add(MenuOption("Find match…", detail = "Search by name when the automatic match is wrong", command = Command.FindMatch(game.id)))
+        add(MenuOption("Scrape again", detail = "Refresh text and art for this game", command = Command.Rescrape(game.id)))
+        if (meta?.locked == true || meta?.titleOverride != null) {
+            add(MenuOption("Use automatic match", detail = "Forget the manual title and match", command = Command.ResetMetadata(game.id)))
+        }
     }
 
     /**
@@ -241,6 +292,8 @@ class MenuTree(private val s: MenuSnapshot) {
         add(setting("lib:add", "Add ROM folder…", "Pick a folder with system subfolders (snes/, psx/…)", GlyphKey.ADD, Command.AddFolder))
         add(setting("lib:rescan", "Rescan library", s.scanStatus ?: "${s.games.size} games", GlyphKey.REFRESH, Command.Rescan))
         add(setting("lib:fingerprints", "Game fingerprints", fingerprintSummary(status), GlyphKey.STORAGE, Command.RecheckFingerprints))
+        add(folder(DATS, "DAT files", GlyphKey.INFO, datSummary()))
+        add(folder(METADATA, "Metadata & artwork", GlyphKey.DOWNLOAD, scrapeSummary()))
         add(
             setting(
                 "lib:hashlarge",
@@ -280,6 +333,115 @@ class MenuTree(private val s: MenuSnapshot) {
             )
         }
     }
+
+    private fun verifiedCount() = s.metadata.values.count { it.matchKind != null }
+
+    private fun datSummary(): String = when {
+        s.dats.isEmpty() -> "Verify titles offline with No-Intro and Redump DATs"
+        else -> "${countOf(s.dats.size, "DAT")} · ${verifiedCount()} of ${s.games.size} games verified"
+    }
+
+    /** Settings ▸ Library ▸ DAT files: import, folder, re-check, and one row per imported DAT. */
+    private fun datSettings(): List<XmbNode> = buildList {
+        add(
+            setting(
+                "dat:import",
+                "Import DATs",
+                "From ${s.datFolder} — .dat, .xml or .zip",
+                GlyphKey.REFRESH,
+                Command.ImportDats,
+            ),
+        )
+        add(setting("dat:folder", "DAT folder…", s.datFolder, GlyphKey.FOLDER, Command.PickDatFolder))
+        if (s.dats.isNotEmpty()) {
+            add(
+                setting(
+                    "dat:match",
+                    "Verify library",
+                    "${verifiedCount()} of ${s.games.size} games match a DAT entry",
+                    GlyphKey.STORAGE,
+                    Command.MatchDats,
+                ),
+            )
+        }
+        for (dat in s.dats) {
+            val parts = buildList {
+                dat.source?.let { add(it) }
+                dat.version?.let { add(it) }
+                add(countOf(dat.gameCount, "game"))
+                add("${dat.matched} in your library")
+            }
+            add(
+                XmbNode(
+                    id = "dat:file:${dat.id}",
+                    title = dat.name,
+                    subtitle = parts.joinToString(" · "),
+                    icon = NodeIcon.Glyph(GlyphKey.INFO),
+                    menu = listOf(
+                        MenuOption("File", detail = dat.path),
+                        MenuOption("Remove DAT", detail = "Forget its entries; the file stays", command = Command.RemoveDat(dat.id)),
+                    ),
+                ),
+            )
+        }
+    }
+
+    private fun scrapeSummary(): String {
+        val scraped = s.metadata.values.count { it.scrapeStatus == "OK" }
+        return if (scraped == 0) "Descriptions, box art and videos" else "$scraped of ${s.games.size} games scraped"
+    }
+
+    /** Settings ▸ Library ▸ Metadata & artwork, with the live scrape progress. Not cached. */
+    fun metadataSettings(progress: dev.xross.launcher.scrape.ScrapeProgress): List<XmbNode> = buildList {
+        val st = s.settings
+        val setup = s.scraperSetup
+        val now = when {
+            progress.running && progress.current != null -> "Scraping ${progress.done + 1} of ${progress.total} · ${progress.current}"
+            progress.running -> "Starting…"
+            progress.message != null -> progress.message
+            else -> scrapeSummary()
+        }
+        add(setting("meta:now", "Scrape library now", now, GlyphKey.DOWNLOAD, Command.ScrapeNow))
+        add(
+            setting(
+                "meta:auto", "Scrape automatically",
+                if (st.scrapeAutomatically) "On — new games are scraped while Xross is open" else "Off — only when you ask",
+                GlyphKey.REFRESH, Command.ToggleScrapeAutomatically,
+            ),
+        )
+        add(setting("meta:wifi", "Wi-Fi only", onOff(st.scrapeWifiOnly), GlyphKey.NETWORK, Command.ToggleScrapeWifiOnly))
+        add(setting("meta:videos", "Video snaps", if (st.scrapeVideos) "On — up to 40 MB per game" else "Off", GlyphKey.VIDEO, Command.ToggleScrapeVideos))
+        add(setting("meta:region", "Region", REGION_LABELS[st.scrapeRegion] ?: st.scrapeRegion, GlyphKey.NETWORK, Command.CycleScrapeRegion))
+        add(setting("meta:language", "Language", LANGUAGE_LABELS[st.scrapeLanguage] ?: st.scrapeLanguage, GlyphKey.NETWORK, Command.CycleScrapeLanguage))
+        add(
+            setting(
+                "meta:hasheous", "Hasheous",
+                if (st.hasheousEnabled) "On — exact identification by fingerprint, no account" else "Off",
+                GlyphKey.INFO, Command.ToggleHasheous,
+            ),
+        )
+        add(
+            setting(
+                "meta:ss", "ScreenScraper account…",
+                when {
+                    !setup.screenScraperAvailable -> "Unavailable in this build (no developer credentials)"
+                    setup.screenScraperUser.isNotBlank() -> "Signed in as ${setup.screenScraperUser}"
+                    else -> "Optional — your own account raises the daily quota"
+                },
+                GlyphKey.INFO, Command.EditScreenScraperAccount,
+            ),
+        )
+        add(
+            setting(
+                "meta:sgdb", "SteamGridDB API key…",
+                if (setup.steamGridDbKeySet) "Set — hero banners, capsules and logos" else "Needed for hero banners — free key at steamgriddb.com",
+                GlyphKey.INFO, Command.EditSteamGridDbKey,
+            ),
+        )
+        add(setting("meta:clear", "Clear downloaded artwork", "Removes images and videos; they download again on the next scrape", GlyphKey.STORAGE, Command.ClearArtwork))
+    }
+
+    private fun countOf(n: Int, noun: String) = if (n == 1) "1 $noun" else "${java.text.NumberFormat.getIntegerInstance().format(n)} ${noun}s"
 
     private fun controlSettings() = listOf(
         setting(
@@ -456,6 +618,19 @@ class MenuTree(private val s: MenuSnapshot) {
         const val ANDROID_GAMES = "collection:android-games"
         const val PLATFORM_PREFIX = "platform:"
         const val LIBRARY = "settings:library"
+        const val DATS = "settings:dats"
+        const val METADATA = "settings:metadata"
+
+        /** Row icons prefer the box, then a capsule. */
+        val ICON_ART = listOf(dev.xross.launcher.scrape.ArtKind.BOX_3D, dev.xross.launcher.scrape.ArtKind.BOX_2D, dev.xross.launcher.scrape.ArtKind.GRID)
+
+        val REGIONS = listOf("us", "eu", "jp", "wor")
+        val REGION_LABELS = mapOf("us" to "USA", "eu" to "Europe", "jp" to "Japan", "wor" to "World")
+        val LANGUAGES = listOf("en", "fr", "de", "es", "it", "pt", "ja")
+        val LANGUAGE_LABELS = mapOf(
+            "en" to "English", "fr" to "Français", "de" to "Deutsch", "es" to "Español",
+            "it" to "Italiano", "pt" to "Português", "ja" to "日本語",
+        )
         const val CONTROLS = "settings:controls"
         const val EMULATORS = "settings:emulators"
         const val DISPLAY = "settings:display"

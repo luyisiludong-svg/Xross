@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 11 and older. Service credentials never leave the device. (Downloaded art lives in
+     noBackupFilesDir, which is never backed up.) -->
+<full-backup-content>
+    <exclude domain="sharedpref" path="xross_credentials.xml" />
+</full-backup-content>

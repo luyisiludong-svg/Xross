@@ -8,12 +8,16 @@ import androidx.room.PrimaryKey
 
 @Entity(
     tableName = "games",
-    indices = [Index(value = ["path"], unique = true), Index("platformId")],
+    indices = [Index(value = ["path"], unique = true), Index("platformId"), Index(value = ["uuid"], unique = true)],
 )
 data class GameEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val path: String,
     val platformId: String,
+    /**
+     * Title shown everywhere (and indexed for search): a manual override, the DAT title, the
+     * scraped title or [fileTitle], in that order. Maintained by [GameDao.applyTitles].
+     */
     val title: String,
     val fileName: String,
     val sizeBytes: Long,
@@ -25,6 +29,10 @@ data class GameEntity(
     @ColumnInfo(defaultValue = "0") val playTimeMs: Long = 0,
     /** Per-game emulator ([dev.xross.launcher.storage.EmulatorOption.key]); null = platform default. */
     val emulatorOverride: String? = null,
+    /** Title derived from the file name by the scanner; what [title] falls back to. */
+    @ColumnInfo(defaultValue = "") val fileTitle: String = title,
+    /** Stable identity for on-disk assets (box art, videos); survives rescans of the same path. */
+    @ColumnInfo(defaultValue = "") val uuid: String = java.util.UUID.randomUUID().toString(),
 )
 
 /** External-content FTS4 index over game titles; Room keeps it in sync with triggers. */

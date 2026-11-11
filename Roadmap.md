@@ -22,13 +22,13 @@ with stub emulators · 📱 verified on a real device
 | --- | --- | --- |
 | **Phase 1 — Alpha** | XMB navigation, gamepad layer, ROM library, emulator launching, wave background | ✅ Complete |
 | **Phase 1b — Alpha hardening** | Hot-swap, USB-OTG, playtime, Options menu, per-game emulator, more emulators | ◐ Features done, including per-controller mappings and the axial deadzone; real-handheld testing and a Baseline Profile remain |
-| **Phase 2 — Beta** | Metadata, media hub, theme packs, on-screen controller and keyboard | ◐ Fingerprinting, media hub and gamepad search done; scrapers, DATs and theme packs not started |
+| **Phase 2 — Beta** | Metadata, media hub, theme packs, on-screen controller and keyboard | ◐ Fingerprinting, media hub, gamepad search, DAT verification, scrapers, Details screen and video snaps done; theme packs not started |
 | **Phase 3 — Release candidate** | Dual screen, docking, RetroAchievements, Xross Portal, FTPS | ⬜ Not started (hot-swap and live resolution change, two prerequisites, are done) |
 | **Phase 4 — v1.0** | Onboarding, app triage, tuning, theme/plugin format, release | ◐ App triage and performance work started |
 | **XMB fidelity** | Look and feel exactly like the XMB, plus Xross's extras | ◐ Home menu layout, motion and navigation match; per-game art, typeface, sounds and several system behaviors don't yet (§4.5) |
 
-**Codebase at a glance:** Kotlin + Jetpack Compose, one `:app` module, Room database at schema v4,
-22 platforms, 11 emulator launch recipes, 8 color themes (one follows the month), 149 unit tests, a 57-check on-device
+**Codebase at a glance:** Kotlin + Jetpack Compose, one `:app` module, Room database at schema v5,
+22 platforms, 11 emulator launch recipes, 8 color themes (one follows the month), 193 unit tests, a 57-check on-device
 smoke test, and test-only stand-ins for all 11 emulators.
 
 **Testing so far:** Almost all device testing used the Android emulator. One real device has
@@ -167,17 +167,17 @@ These are bugs or gaps in features that are already built, separate from the new
 
 | Item | Depends on | Notes |
 | --- | --- | --- |
-| DAT import (No-Intro and Redump Logiqx XML) | Fingerprints ✅ | Exact titles, regions and revisions offline; `findByCrc` lookup is ready |
+| DAT import (No-Intro and Redump Logiqx XML) ✅ | Fingerprints ✅ | Logiqx XML and clrmamepro text, also inside .zip; SHA-1 > MD5 > CRC32+size > set name; titles, regions, languages, revision, serial |
 | Per-track hashing for `.cue` / `.gdi` | | Redump matches tracks, not sheets |
-| ScreenScraper scraper | Developer credentials | Descriptions, box art, wheel art, video snaps |
-| SteamGridDB scraper | Per-user API key | Hero banners, logos, grids |
-| Hasheous matching | | Exact ROM verification |
+| ScreenScraper scraper ✅ 🧪 | Developer credentials | Built; needs `screenscraper.devId`/`devPassword` in local.properties. Tested only against canned responses |
+| SteamGridDB scraper ✅ 🧪 | Per-user API key | Hero banners, 600×900 capsules, logos. Canned responses only |
+| Hasheous matching ✅ 🧪 | | Hash lookup, no account. Canned responses only |
 | Language priority list | Scrapers | For example `es-ES, es, en-US, en` |
-| Throttled background batch scraper | Scrapers | Respects rate limits; stops while a game runs, like fingerprinting |
-| Disk asset cache keyed by UUID | Scrapers | Keeps images out of the database |
-| Game detail view | Scrapers | Box art, description, release info, playtime |
-| Manual match and override tool | Scrapers | For ambiguous or modified ROMs |
-| Video snap previews on focused games | Scraper snaps | |
+| Throttled background batch scraper ✅ | Scrapers | Per-service rate limits, quota handling, opt-in, Wi-Fi only by default; stops while a game runs |
+| Disk asset cache keyed by UUID ✅ | Scrapers | Atomic writes, content sniffing, pruning; outside backups |
+| Game detail view ✅ | Scrapers | Options ▸ Details or → on a game |
+| Manual match and override tool ✅ | Scrapers | Options ▸ Metadata: edit title, find match, scrape again, reset |
+| Video snap previews on focused games ✅ | Scraper snaps | Full-bleed behind the menu after 1.2 s; music ducked |
 
 **Customization**
 

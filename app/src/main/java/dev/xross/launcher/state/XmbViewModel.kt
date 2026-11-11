@@ -26,6 +26,9 @@ import dev.xross.launcher.launch.GameLauncher
 import dev.xross.launcher.launch.LaunchPlan
 import dev.xross.launcher.storage.PlatformRegistry
 import dev.xross.launcher.storage.VolumeEvent
+import dev.xross.launcher.storage.XrossPaths
+import dev.xross.launcher.scrape.ProviderId
+import dev.xross.launcher.scrape.ScrapeProgress
 import dev.xross.launcher.theme.XrossTheme
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -49,6 +52,9 @@ import java.io.File
 sealed interface UiEffect {
     data class StartActivity(val intent: Intent) : UiEffect
     data object PickFolder : UiEffect
+    data object PickDatFolder : UiEffect
+    /** Ask for text (account, key, title, search); the answer goes to [XmbViewModel.onTextEntered]. */
+    data class PromptText(val prompt: TextPrompt) : UiEffect
     data object RequestStorageAccess : UiEffect
     data class SetWallpaper(val uri: Uri) : UiEffect
 }
@@ -82,6 +88,8 @@ data class XmbUiState(
     val search: SearchState? = null,
     /** Information screen for a game, opened from its Options menu. */
     val info: GameInfoState? = null,
+    /** Game Details screen. */
+    val details: GameDetailsState? = null,
     /** Reading storage: a library scan or background fingerprinting is running. */
     val busy: Boolean = false,
     val showButtonHints: Boolean = true,
@@ -98,8 +106,11 @@ private data class Transient(
     val optionsMenu: OptionsMenuState? = null,
     val search: SearchState? = null,
     val info: GameInfoState? = null,
+    val details: GameDetailsState? = null,
     /** A library scan is running (fingerprinting is tracked by [FingerprintStatus.current]). */
     val scanning: Boolean = false,
+    /** DATs are being imported or matched. */
+    val datWork: Boolean = false,
 )
 
 class XmbViewModel(
@@ -141,14 +152,42 @@ class XmbViewModel(
     private val _effects = Channel<UiEffect>(Channel.BUFFERED)
     val effects = _effects.receiveAsFlow()
 
+    /** DAT summaries and per-game metadata: one input so the tree's combine stays within five flows. */
+    private data class Meta(
+        val dats: List<dev.xross.launcher.data.DatSummary> = emptyList(),
+        val metadata: Map<Long, dev.xross.launcher.data.GameMetadataEntity> = emptyMap(),
+    )
+
+    private val meta = combine(container.dats.summaries, container.database.metadata().observeAll()) { d, m ->
+        Meta(d, m.associateBy { it.gameId })
+    }
+
     private val tree: StateFlow<MenuTree> = combine(
-        env,
+        combine(env, meta, container.credentials.accounts) { e, m, accounts ->
+            e.copy(
+                dats = m.dats,
+                metadata = m.metadata,
+                scraperSetup = ScraperSetup(
+                    screenScraperAvailable = BuildConfig.SCREENSCRAPER_DEV_ID.isNotBlank(),
+                    screenScraperUser = accounts.screenScraperUser,
+                    steamGridDbKeySet = accounts.steamGridDbKey.isNotBlank(),
+                ),
+            )
+        },
         container.games.games,
         container.apps.apps,
         settingsStore.settings,
         container.media.library,
     ) { e, games, apps, settings, mediaLib ->
-        MenuTree(e.copy(games = games, apps = apps, settings = settings, media = mediaLib))
+        MenuTree(
+            e.copy(
+                games = games,
+                apps = apps,
+                settings = settings,
+                media = mediaLib,
+                datFolder = XrossPaths.datFolder(settings.datFolder).absolutePath,
+            ),
+        )
     }
         .stateIn(viewModelScope, SharingStarted.Eagerly, MenuTree(env.value))
 
@@ -164,10 +203,16 @@ class XmbViewModel(
     private var foreground = false
 
     /** Inputs that only some lists read live (fingerprint progress, Now Playing). */
-    private data class Live(val fingerprints: FingerprintStatus, val nowPlaying: dev.xross.launcher.media.NowPlaying)
+    private data class Live(
+        val fingerprints: FingerprintStatus,
+        val nowPlaying: dev.xross.launcher.media.NowPlaying,
+        val scrape: ScrapeProgress = ScrapeProgress(),
+    )
 
-    private val live: StateFlow<Live> = combine(fingerprintStatus, music.state) { fp, np -> Live(fp, np) }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, Live(FingerprintStatus(), music.state.value))
+    @OptIn(kotlinx.coroutines.FlowPreview::class)
+    private val live: StateFlow<Live> = combine(fingerprintStatus, music.state, container.scraper.progress.sample(500)) { fp, np, sc ->
+        Live(fp, np, sc)
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, Live(FingerprintStatus(), music.state.value))
 
     private data class Settled(val transient: Transient, val settings: dev.xross.launcher.data.XrossSettings, val overlay: MediaOverlay?)
 
@@ -198,7 +243,8 @@ class XmbViewModel(
             optionsMenu = tr.optionsMenu,
             search = tr.search,
             info = tr.info,
-            busy = tr.scanning || lv.fingerprints.current != null,
+            details = tr.details,
+            busy = tr.scanning || tr.datWork || lv.fingerprints.current != null || lv.scrape.running,
             showButtonHints = settings.showButtonHints,
         )
     }.stateIn(viewModelScope, SharingStarted.Eagerly, XmbUiState(coldBoot = coldBoot))
@@ -219,6 +265,7 @@ class XmbViewModel(
         val key = stack.last().key
         val items = when (key) {
             MenuTree.LIBRARY -> t.library(lv.fingerprints)
+            MenuTree.METADATA -> t.metadataSettings(lv.scrape)
             Categories.rootKey(Categories.MUSIC) -> t.musicRoot(lv.nowPlaying)
             else -> t.list(key)
         }
@@ -263,6 +310,7 @@ class XmbViewModel(
     override fun onAction(action: NavAction) {
         if (transient.value.remap != null || transient.value.booting != null) return
         transient.value.info?.let { return infoAction(it, action) }
+        transient.value.details?.let { return detailsAction(it, action) }
         if (media.onAction(action)) return
         transient.value.optionsMenu?.let { return optionsAction(it, action) }
         transient.value.search?.let { return searchAction(it, action) }
@@ -274,6 +322,7 @@ class XmbViewModel(
             NavAction.RIGHT -> when {
                 ui.depth == 0 -> moveCategory(+1)
                 ui.focused?.action is NodeAction.OpenList -> activate(ui.focused!!)
+                ui.focused?.action is NodeAction.LaunchGame -> showDetails((ui.focused!!.action as NodeAction.LaunchGame).gameId)
             }
             NavAction.PREV_CATEGORY -> moveCategory(-1)
             NavAction.NEXT_CATEGORY -> moveCategory(+1)
@@ -427,6 +476,215 @@ class XmbViewModel(
 
     // endregion
 
+    // region Scraping
+
+    private fun scrapeNow() {
+        val scraper = container.scraper
+        when {
+            !scraper.isConfigured -> toast("Turn on Hasheous or add a ScreenScraper or SteamGridDB account first")
+            scraper.progress.value.running -> toast("Already scraping")
+            settingsStore.current.scrapeWifiOnly && !dev.xross.launcher.scrape.Network.isUnmetered(context) ->
+                toast("Connect to Wi-Fi, or turn off Wi-Fi only")
+            else -> {
+                scraper.start(viewModelScope)
+                toast("Scraping in the background while Xross is open")
+            }
+        }
+    }
+
+    private fun rescrape(gameId: Long) {
+        if (!container.scraper.isConfigured) {
+            toast("Set up a metadata service first")
+            return
+        }
+        datWork {
+            when (container.scraper.scrapeOne(gameId)) {
+                dev.xross.launcher.scrape.ScrapeStatus.OK -> "Updated from online sources"
+                dev.xross.launcher.scrape.ScrapeStatus.NOT_FOUND -> "No service knows this game — try Find match"
+                dev.xross.launcher.scrape.ScrapeStatus.ERROR -> "Couldn't reach the services; try again later"
+                null -> "This game needs a fingerprint first; it's taken in the background"
+            }
+        }
+    }
+
+    /** The user picked a search result: lock the game to that identity and scrape it. */
+    private fun chooseMatch(command: Command.ChooseMatch) = datWork {
+        withContext(Dispatchers.IO) {
+            container.database.metadata().edit(command.gameId) { row ->
+                val base = dev.xross.launcher.data.DatRepository.withoutDatMatch(row).copy(locked = true, scrapeStatus = null)
+                when (command.provider) {
+                    ProviderId.SCREENSCRAPER -> base.copy(screenScraperId = command.id)
+                    ProviderId.STEAMGRIDDB -> base.copy(steamGridDbId = command.id)
+                    ProviderId.HASHEOUS -> base.copy(hasheousId = command.id)
+                }
+            }
+            container.database.games().applyTitles()
+        }
+        when (container.scraper.scrapeOne(command.gameId)) {
+            dev.xross.launcher.scrape.ScrapeStatus.OK -> "Match saved and scraped"
+            else -> "Match saved; scraping didn't finish — try Scrape again later"
+        }
+    }
+
+    /** Answers from the text dialog. Blank clears the value where that makes sense. */
+    fun onTextEntered(prompt: TextPrompt, text: String) {
+        val value = text.trim()
+        when (prompt) {
+            is TextPrompt.ScreenScraperUser ->
+                if (value.isEmpty()) {
+                    container.credentials.update { it.copy(screenScraperUser = "", screenScraperPassword = "") }
+                    toast("Signed out of ScreenScraper")
+                } else {
+                    emit(UiEffect.PromptText(TextPrompt.ScreenScraperPassword(value)))
+                }
+            is TextPrompt.ScreenScraperPassword -> {
+                container.credentials.update { it.copy(screenScraperUser = prompt.user, screenScraperPassword = text) }
+                toast("ScreenScraper account saved")
+            }
+            TextPrompt.SteamGridDbKey -> {
+                container.credentials.update { it.copy(steamGridDbKey = value) }
+                toast(if (value.isEmpty()) "SteamGridDB key removed" else "SteamGridDB key saved")
+            }
+            is TextPrompt.GameTitle -> viewModelScope.launch {
+                withContext(Dispatchers.IO) {
+                    container.database.metadata().edit(prompt.gameId) { it.copy(titleOverride = value.ifEmpty { null }) }
+                    container.database.games().applyTitles()
+                }
+                toast(if (value.isEmpty()) "Automatic title restored" else "Title changed")
+            }
+            is TextPrompt.MatchQuery -> {
+                if (value.isEmpty()) return
+                datWork {
+                    val hits = container.scraper.search(value, prompt.platformId)
+                    if (hits.isEmpty()) return@datWork "No matches for “$value”"
+                    val options = hits.take(30).map { hit ->
+                        MenuOption(
+                            hit.title,
+                            detail = listOfNotNull(hit.provider.label, hit.detail).joinToString(" · "),
+                            command = Command.ChooseMatch(prompt.gameId, hit.provider, hit.id),
+                        )
+                    }
+                    sounds.play(UiSound.OPTION)
+                    transient.update { it.copy(optionsMenu = OptionsMenuState.open("Choose a match for “$value”", options)) }
+                    "${hits.size} matches"
+                }
+            }
+        }
+    }
+
+    // endregion
+
+    // region Details screen
+
+    private var detailsJob: Job? = null
+
+    private fun showDetails(gameId: Long) {
+        detailsJob?.cancel()
+        detailsJob = viewModelScope.launch {
+            val details = withContext(Dispatchers.IO) {
+                val game = container.games.get(gameId) ?: return@withContext null
+                GameDetailsState.build(
+                    game,
+                    PlatformRegistry.byId(game.platformId),
+                    container.database.metadata().get(gameId),
+                    container.assets.version.value,
+                )
+            } ?: return@launch
+            sounds.play(UiSound.ENTER)
+            transient.update { it.copy(details = details) }
+        }
+    }
+
+    private fun detailsAction(details: GameDetailsState, action: NavAction) {
+        when (action) {
+            NavAction.UP, NavAction.DOWN -> {
+                val moved = details.scrollBy(if (action == NavAction.UP) -1 else 1)
+                if (moved != details) transient.update { it.copy(details = moved) }
+            }
+            NavAction.CONFIRM, NavAction.START -> {
+                transient.update { it.copy(details = null) }
+                launchGame(details.gameId)
+            }
+            NavAction.BACK, NavAction.LEFT -> closeDetails()
+            NavAction.OPTIONS -> {
+                closeDetails()
+                current().items.firstOrNull { (it.action as? NodeAction.LaunchGame)?.gameId == details.gameId }?.let(::openOptions)
+            }
+            NavAction.RIGHT, NavAction.PREV_CATEGORY, NavAction.NEXT_CATEGORY -> Unit
+        }
+    }
+
+    fun closeDetails() {
+        detailsJob?.cancel()
+        if (transient.value.details != null) {
+            sounds.play(UiSound.BACK)
+            transient.update { it.copy(details = null) }
+        }
+    }
+
+    // endregion
+
+    // region DATs
+
+    private var datJob: Job? = null
+
+    /** Runs DAT work with the busy indicator on and toasts its summary; one job at a time. */
+    private fun datWork(work: suspend () -> String) {
+        if (datJob?.isActive == true) {
+            toast("Still working on DATs…")
+            return
+        }
+        datJob = viewModelScope.launch {
+            transient.update { it.copy(datWork = true) }
+            try {
+                toast(work())
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                sounds.play(UiSound.ERROR)
+                toast("DAT error: ${e.message ?: e.javaClass.simpleName}")
+            } finally {
+                transient.update { it.copy(datWork = false) }
+            }
+        }
+    }
+
+    private fun importDats() {
+        if (!env.value.storageGranted) {
+            toast("Grant All files access first")
+            return
+        }
+        val dir = XrossPaths.datFolder(settingsStore.current.datFolder)
+        datWork {
+            withContext(Dispatchers.IO) { dir.mkdirs() }
+            val result = container.dats.importFolder(dir)
+            val verified = container.database.metadata().getAll().count { it.matchKind != null }
+            when {
+                result.failures.isNotEmpty() -> "Couldn't read ${result.failures.first()}"
+                result.imported + result.unchanged == 0 -> "No DATs in ${dir.absolutePath}"
+                else -> buildList {
+                    if (result.imported > 0) add("Imported ${result.imported} DAT" + if (result.imported == 1) "" else "s")
+                    if (result.imported == 0) add("DATs up to date")
+                    if (result.removed > 0) add("${result.removed} removed")
+                    add(gamesVerified(verified))
+                }.joinToString(" · ")
+            }
+        }
+    }
+
+    fun onDatFolderPicked(uri: Uri?) {
+        uri ?: return
+        val path = container.volumes.treeUriToPath(uri)
+        if (path == null) {
+            toast("That location isn't a local folder")
+            return
+        }
+        settingsStore.update { it.copy(datFolder = path) }
+        importDats()
+    }
+
+    // endregion
+
     // region Information screen
 
     private var infoJob: Job? = null
@@ -442,7 +700,10 @@ class XmbViewModel(
             val t = tree.value
             val info = withContext(Dispatchers.IO) {
                 val game = container.games.get(gameId) ?: return@withContext null
-                val hash = container.database.hashes().get(gameId)
+                val db = container.database
+                val hash = db.hashes().get(gameId)
+                val metadata = db.metadata().get(gameId)
+                val datRom = metadata?.datRomId?.let { db.dats().rom(it) }
                 val offline = t.isOffline(game.path)
                 GameInfo.build(
                     game = game,
@@ -451,6 +712,10 @@ class XmbViewModel(
                     emulator = t.emulatorSummary(game),
                     offline = offline,
                     fileExists = if (offline) null else File(game.path).exists(),
+                    metadata = metadata,
+                    datRom = datRom,
+                    datFile = datRom?.let { db.dats().file(it.datId) },
+                    anyDats = db.dats().files().isNotEmpty(),
                 )
             } ?: return@launch
             transient.update { it.copy(info = info) }
@@ -491,7 +756,7 @@ class XmbViewModel(
 
     override fun onRawKeyDown(keyCode: Int, controller: ConnectedController?): Boolean {
         val tr = transient.value
-        if (tr.remap == null && tr.optionsMenu == null && tr.info == null && tr.booting == null && !media.isOpen) {
+        if (tr.remap == null && tr.optionsMenu == null && tr.info == null && tr.details == null && tr.booting == null && !media.isOpen) {
             tr.search?.let { return searchRawKey(it, keyCode) }
         }
         val session = transient.value.remap ?: return false
@@ -570,6 +835,7 @@ class XmbViewModel(
             refreshFoldersAndRescan(quiet = true)
         }
         if (env.value.storageGranted && scanJob?.isActive != true) fingerprints.start(viewModelScope)
+        if (settingsStore.current.scrapeAutomatically && scanJob?.isActive != true) container.scraper.start(viewModelScope)
     }
 
     /** Activity paused (a game or another app is in front): stop background I/O. */
@@ -577,6 +843,7 @@ class XmbViewModel(
         foreground = false
         container.sessions.onBackground()
         fingerprints.stop()
+        container.scraper.stop()
         media.onBackground()
     }
 
@@ -712,7 +979,10 @@ class XmbViewModel(
         )
         env.update { it.copy(scanStatus = status) }
         if (!quiet || result.isFailure) toast(status)
-        if (foreground) fingerprints.start(viewModelScope)
+        if (foreground) {
+            fingerprints.start(viewModelScope)
+            if (settingsStore.current.scrapeAutomatically) container.scraper.start(viewModelScope)
+        }
     }
 
     // endregion
@@ -850,6 +1120,61 @@ class XmbViewModel(
             }
             Command.ToggleButtonHints -> settingsStore.update { it.copy(showButtonHints = !it.showButtonHints) }
             is Command.ShowGameInfo -> showGameInfo(command.gameId)
+            Command.ImportDats -> importDats()
+            Command.ScrapeNow -> scrapeNow()
+            Command.ToggleScrapeAutomatically -> {
+                settingsStore.update { it.copy(scrapeAutomatically = !it.scrapeAutomatically) }
+                if (settingsStore.current.scrapeAutomatically) container.scraper.start(viewModelScope) else container.scraper.stop()
+            }
+            Command.ToggleScrapeWifiOnly -> settingsStore.update { it.copy(scrapeWifiOnly = !it.scrapeWifiOnly) }
+            Command.ToggleScrapeVideos -> settingsStore.update { it.copy(scrapeVideos = !it.scrapeVideos) }
+            Command.CycleScrapeRegion -> settingsStore.update { it.copy(scrapeRegion = MenuTree.REGIONS.nextOf(it.scrapeRegion)) }
+            Command.CycleScrapeLanguage -> settingsStore.update { it.copy(scrapeLanguage = MenuTree.LANGUAGES.nextOf(it.scrapeLanguage)) }
+            Command.ToggleHasheous -> settingsStore.update { it.copy(hasheousEnabled = !it.hasheousEnabled) }
+            Command.EditScreenScraperAccount ->
+                if (BuildConfig.SCREENSCRAPER_DEV_ID.isBlank()) {
+                    toast("This build has no ScreenScraper developer credentials")
+                } else {
+                    emit(UiEffect.PromptText(TextPrompt.ScreenScraperUser(container.credentials.current.screenScraperUser)))
+                }
+            Command.EditSteamGridDbKey -> emit(UiEffect.PromptText(TextPrompt.SteamGridDbKey))
+            Command.ClearArtwork -> viewModelScope.launch {
+                container.scraper.stop()
+                val freed = container.assets.clear()
+                withContext(Dispatchers.IO) {
+                    val db = container.database.metadata()
+                    db.upsertAll(db.getAll().map { it.copy(scrapeStatus = null) })
+                }
+                toast("Freed ${MenuTree.formatSize(freed)} · art downloads again on the next scrape")
+            }
+            is Command.ShowDetails -> showDetails(command.gameId)
+            is Command.EditTitle -> viewModelScope.launch {
+                val game = container.games.get(command.gameId) ?: return@launch
+                val current = container.database.metadata().get(game.id)?.titleOverride ?: game.title
+                emit(UiEffect.PromptText(TextPrompt.GameTitle(game.id, current)))
+            }
+            is Command.FindMatch -> viewModelScope.launch {
+                val game = container.games.get(command.gameId) ?: return@launch
+                emit(UiEffect.PromptText(TextPrompt.MatchQuery(game.id, game.platformId, game.title)))
+            }
+            is Command.ChooseMatch -> chooseMatch(command)
+            is Command.Rescrape -> rescrape(command.gameId)
+            is Command.ResetMetadata -> viewModelScope.launch {
+                withContext(Dispatchers.IO) {
+                    container.database.metadata().edit(command.gameId) {
+                        it.copy(locked = false, titleOverride = null, screenScraperId = null, steamGridDbId = null, scrapeStatus = null)
+                    }
+                }
+                container.dats.matchAll()
+                toast("Back to the automatic match")
+                if (container.scraper.isConfigured) rescrape(command.gameId)
+            }
+            Command.PickDatFolder -> emit(UiEffect.PickDatFolder)
+            Command.MatchDats -> datWork { container.dats.matchAll().let { "${gamesVerified(it.matched)}" } }
+            is Command.RemoveDat -> datWork {
+                container.dats.remove(command.id)
+                "DAT removed"
+            }
             is Command.CycleEmulator -> cycleEmulator(command.platformId)
             Command.ToggleWave -> settingsStore.update { it.copy(waveEnabled = !it.waveEnabled) }
             Command.CycleWaveSpeed -> settingsStore.update { it.copy(waveSpeed = WAVE_SPEEDS.nextAfter(it.waveSpeed)) }
@@ -976,6 +1301,10 @@ class XmbViewModel(
                 context.checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) ==
                     PackageManager.PERMISSION_GRANTED
             }
+
+        private fun gamesVerified(n: Int) = if (n == 1) "1 game verified" else "$n games verified"
+
+        private fun List<String>.nextOf(value: String): String = this[(indexOf(value) + 1) % size]
 
         private fun List<Float>.nextAfter(value: Float): Float {
             val i = indexOfFirst { kotlin.math.abs(it - value) < 0.001f }

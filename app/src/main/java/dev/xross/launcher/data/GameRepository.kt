@@ -57,6 +57,8 @@ class GameRepository(
                 dao.updateFile(id, rom.platformId, rom.title, rom.sizeBytes, rom.lastModified)
             }
             dao.deleteIds(diff.toDelete)
+            // Changed files got their scanner title back; restore DAT/scraped/manual titles.
+            if (diff.toUpdate.isNotEmpty()) dao.applyTitles()
             ScanResult(diff.toInsert.size, diff.toUpdate.size, diff.toDelete.size, scanned.size)
         }
     }
