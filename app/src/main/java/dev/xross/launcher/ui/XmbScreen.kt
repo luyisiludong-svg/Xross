@@ -731,13 +731,14 @@ private fun ArtIcon(
                     .graphicsLayer { alpha = glow(); scaleX = 1.6f; scaleY = 1.6f }
                     .drawBehind { drawCircle(Brush.radialGradient(0f to Color.White.copy(alpha = 0.3f), 1f to Color.Transparent)) },
             )
+            // Exactly the glyph's footprint, so tall capsules and wide boxes never reach the
+            // neighbouring rows (the focus scale is applied by the layer above, as for glyphs).
             Image(
                 image,
                 contentDescription = null,
                 contentScale = ContentScale.Fit,
                 modifier = Modifier
-                    .size(size * 1.25f)
-                    .wrapContentSize(unbounded = true)
+                    .size(size)
                     .shadow(6.dp, RoundedCornerShape(3.dp), clip = false),
             )
         }

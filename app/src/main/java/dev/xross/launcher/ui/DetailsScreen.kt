@@ -148,7 +148,11 @@ internal fun DetailsScreen(
                         }
                     }
                     Spacer(Modifier.height((m.s * 0.03f).dp()))
-                    val synopsis = d.synopsis ?: "No description yet. Settings ▸ Library ▸ Metadata & artwork scrapes one."
+                    val synopsis = d.synopsis ?: if (d.scraped) {
+                        "No description available. ScreenScraper provides descriptions once it is set up."
+                    } else {
+                        "No description yet. Settings ▸ Library ▸ Metadata & artwork scrapes one."
+                    }
                     val scroll = rememberScrollState()
                     val lineStep = with(density) { (m.subtitleSize * 1.4f * 2f).toInt() }
                     LaunchedEffect(d.scroll) { scroll.animateScrollTo(d.scroll * lineStep) }

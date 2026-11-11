@@ -24,6 +24,8 @@ data class GameDetailsState(
     val playtime: String,
     /** Changes when new art is stored, so the screen reloads it. */
     val artVersion: Long,
+    /** A metadata service has identified this game (so a missing description is the service's). */
+    val scraped: Boolean = false,
     /** Synopsis scroll step, moved by up/down. */
     val scroll: Int = 0,
 ) {
@@ -56,6 +58,7 @@ data class GameDetailsState(
                     else -> "Not played yet"
                 },
                 artVersion = artVersion,
+                scraped = meta?.scrapeStatus == "OK",
             )
         }
 

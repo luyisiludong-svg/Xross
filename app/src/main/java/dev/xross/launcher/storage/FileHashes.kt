@@ -37,5 +37,37 @@ object FileHash {
         }
     }
 
+    /**
+     * Hashes of the largest file inside a zip (an arcade set's biggest ROM chip): what DAT-based
+     * services such as Hasheous index for MAME sets, since they list chips, not zips. Null for
+     * non-zips, empty or unreadable archives, or a member over [maxBytes].
+     */
+    suspend fun ofLargestZipMember(file: File, maxBytes: Long): FileHashes? {
+        if (!file.isFile || !file.name.endsWith(".zip", ignoreCase = true)) return null
+        return try {
+            java.util.zip.ZipFile(file).use { zip ->
+                val member = zip.entries().asSequence().filter { !it.isDirectory && it.size in 1..maxBytes }
+                    .maxByOrNull { it.size } ?: return null
+                val crc = CRC32()
+                val md5 = MessageDigest.getInstance("MD5")
+                val sha1 = MessageDigest.getInstance("SHA-1")
+                val buffer = ByteArray(64 * 1024)
+                zip.getInputStream(member).use { input ->
+                    while (true) {
+                        currentCoroutineContext().ensureActive()
+                        val n = input.read(buffer)
+                        if (n < 0) break
+                        crc.update(buffer, 0, n)
+                        md5.update(buffer, 0, n)
+                        sha1.update(buffer, 0, n)
+                    }
+                }
+                FileHashes(Fingerprinter.crcHex(crc.value), md5.digest().hex(), sha1.digest().hex())
+            }
+        } catch (_: java.io.IOException) {
+            null
+        }
+    }
+
     private fun ByteArray.hex() = joinToString("") { "%02x".format(it) }
 }

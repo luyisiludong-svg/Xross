@@ -259,6 +259,38 @@ class ScrapeProvidersTest {
         assertTrue(http.requests.isEmpty())
     }
 
+    @Test fun hasheousPicksTheArcadeSetThatOwnsTheChip() = runBlocking {
+        // Real shape: the shared chip belongs to After Burner, After Burner II and a German set.
+        val answer = """{"id": 9, "name": "After Burner", "platform": {"name": "Arcade"},
+            "signature": {"game": {"name": "After Burner", "description": "aburner", "year": "1987"}},
+            "signatures": {"MAMEArcade": [
+                {"game": {"name": "After Burner", "description": "aburner", "year": "1987", "publisher": "Sega"}},
+                {"game": {"name": "After Burner II", "description": "aburner2", "year": "1987", "publisher": "Sega"}},
+                {"game": {"name": "After Burner II (German)", "description": "aburner2g", "year": "1987", "publisher": "Sega"}}
+            ]}}"""
+        val http = FakeHttp(listOf("/Lookup/ByHash" to FakeHttp.json(200, answer)))
+        val arcade = request.copy(platformId = "arcade", fileName = "aburner2.zip")
+        val found = HasheousProvider(http, { true }, noWait).lookup(arcade) as ProviderResult.Found
+        assertTrue(http.requests.single().contains("returnAllSources=true"))
+        assertEquals("After Burner II", found.game.title)
+        assertEquals("Sega", found.game.publisher)
+        // An unknown set falls back to the top-level answer; other platforms don't ask for all sources.
+        assertEquals("After Burner", HasheousProvider.parse(JSONObject(answer), "zzz")!!.title)
+        // Real 1943 answer shape: no `signature`, and the set ("1943") isn't among the candidates.
+        val noSignature = JSONObject(
+            """{"id": 3, "name": "1943: The Battle of Midway", "publisher": {"name": "Capcom"}, "signatures": {
+                "MAMEArcade": [{"game": {"name": "1943u", "description": "1943u", "year": ""}},
+                               {"game": {"name": "1943: The Battle of Midway (US, Rev C)", "description": "1943u", "year": "1987"}}]}}""",
+        )
+        val fallback = HasheousProvider.parse(noSignature, "1943")!!
+        assertEquals("1943: The Battle of Midway", fallback.title)
+        assertEquals("1987", fallback.releaseDate)
+        assertEquals("Capcom", fallback.publisher)
+        val plain = FakeHttp(listOf("/Lookup/ByHash" to FakeHttp.json(200, answer)))
+        HasheousProvider(plain, { true }, noWait).lookup(request)
+        assertFalse(plain.requests.single().contains("returnAllSources"))
+    }
+
     // endregion
 
     // region Plumbing

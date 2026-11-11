@@ -24,9 +24,9 @@ android {
             setProperty(line.substring(0, eq).trim(), line.substring(eq + 1).trim().removeSurrounding("\""))
         }
     }
-    fun secret(name: String, envName: String = ""): String =
+    fun secret(name: String, vararg envNames: String): String =
         (project.findProperty(name) as String?) ?: local.getProperty(name)
-            ?: dotenv.getProperty(envName)?.takeIf { it.isNotBlank() } ?: ""
+            ?: envNames.firstNotNullOfOrNull { dotenv.getProperty(it)?.takeIf { v -> v.isNotBlank() } } ?: ""
     fun quoted(value: String) = "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
 
     defaultConfig {
@@ -36,6 +36,7 @@ android {
         // A personal account is only ever baked into debug builds (see below), for testing.
         buildConfigField("String", "DEBUG_SCREENSCRAPER_USER", "\"\"")
         buildConfigField("String", "DEBUG_SCREENSCRAPER_PASSWORD", "\"\"")
+        buildConfigField("String", "DEBUG_STEAMGRIDDB_KEY", "\"\"")
         applicationId = "dev.xross.launcher"
         minSdk = 28
         targetSdk = 36
@@ -49,6 +50,7 @@ android {
             // Pre-fills Settings ▸ Metadata ▸ ScreenScraper account on a fresh install, from .env.
             buildConfigField("String", "DEBUG_SCREENSCRAPER_USER", quoted(secret("screenscraper.user", "SCREENSCRAPER_USER")))
             buildConfigField("String", "DEBUG_SCREENSCRAPER_PASSWORD", quoted(secret("screenscraper.password", "SCREENSCRAPER_PASSWORD")))
+            buildConfigField("String", "DEBUG_STEAMGRIDDB_KEY", quoted(secret("steamgriddb.apiKey", "STEAMGRIDDB_API_KEY", "SteamGridDB_API")))
         }
         release {
             isMinifyEnabled = true
