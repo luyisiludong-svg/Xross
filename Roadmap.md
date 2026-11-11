@@ -37,8 +37,9 @@ plus 2 opt-in live-service tests), an
 on-device smoke test (updated for the new rows, not yet re-run, §3), and test-only stand-ins for
 all 11 emulators.
 
-**Testing so far:** One real device has run Xross: a Samsung Galaxy A55 (Android 16, 120 Hz). On
-2026-11-11 it ran the full Step 1 and Step 2 feature set with 12 arcade sets and 2 3DS images:
+**Testing so far:** One real device has run Xross: a Samsung Galaxy A55 (Android 16, 120 Hz). Later
+on 2026-11-11 it also ran Milestones 1–3 as an in-place upgrade of that install (docs/STATUS.md
+§3.11). Earlier that day it ran the full Step 1 and Step 2 feature set with 12 arcade sets and 2 3DS images:
 scanning, fingerprinting, live scraping (Hasheous and SteamGridDB), DAT verification, art, the
 Details and Information screens, manual matching, and a release-like (R8) build's frame pacing
 and memory. No controller, gaming handheld or real emulator install has been tested yet, and
@@ -60,7 +61,7 @@ ScreenScraper hasn't run live (it needs developer credentials).
 | Confirm/cancel swap | ✅ | Auto / South / East; Auto uses East on Nintendo pads |
 | Button-remap wizard | ✅ | 10-step capture (the last step is the media controls button), saved per controller model (vendor/product ID); keyboards and unidentified devices use a global mapping |
 | Radial and axial deadzones, anti-snapback, hold-to-repeat | ✅ 🧪 | Unit-tested; real stick motion can't be injected with adb. The radial deadzone has an "Off — hardware only" step that leaves only the driver's flat zone |
-| Media controls shortcut | ✅ 🧪 | **Select** toggles Now Playing from the XMB, an Options menu, Information or Details; holding **Guide** for 0.5 s does the same where the key reaches the app. Remappable; search, the photo viewer and the video player ignore it |
+| Media controls shortcut | ✅ 📱 | **Select** toggles Now Playing from the XMB, an Options menu, Information or Details; holding **Guide** for 0.5 s does the same where the key reaches the app. Remappable; search, the photo viewer and the video player ignore it |
 | Options (△ / Y) context menu with submenus | ✅ | Long-press opens it on touch |
 | Touch parity | ✅ | One category per horizontal swipe, continuous vertical drag, tap, long-press |
 | First D-pad press after a touch isn't lost | ✅ | |
@@ -79,9 +80,9 @@ ScreenScraper hasn't run live (it needs developer credentials).
 | Favorites, Recently Played | ✅ | |
 | Base ROMs folder | ✅ | Settings ▸ Library ▸ Base ROMs folder… (default `Xross/roms`); always scanned, beside auto-detection and added folders. **Create system folders** makes the 22 system folders, named by ES-DE's ids |
 | "All Games" folder | ✅ | Games ▸ All Games holds the platform folders; Search, Recently Played, Favorites and Android Games stay at the top. Settings ▸ Theme ▸ Platform folders brings back the flat list |
-| Portable `Xross/` folder | ✅ 🧪 | `config/`, `data/`, `dats/`, `media/`, `roms/`, `themes/` on primary storage, or on an SD card or USB drive (Settings ▸ System ▸ Xross folder). App storage until shared storage can be written; config already in the folder is adopted. `.nomedia` in `media/` and `themes/` is created first |
-| Settings as JSON | ✅ 🧪 | `settings.json`, `controllers.json`, `systems.json`; atomic writes (`.tmp`, sync, rename) off the main thread; one-time migration from SharedPreferences; unreadable files kept as `.bad`; edits made outside Xross picked up on resume. Credentials stay in the private `CredentialStore` |
-| Library database backup | ✅ 🧪 | Live database stays private. A snapshot goes to `Xross/data/xross.db` 4 s after Xross leaves the screen (if anything changed) or from Settings ▸ System ▸ Back up library now. On a clean install a backup with games is offered from Games and Settings ▸ System; restore applies on restart |
+| Portable `Xross/` folder | ✅ 📱 | `config/`, `data/`, `dats/`, `media/`, `roms/`, `themes/` on primary storage, or on an SD card or USB drive (Settings ▸ System ▸ Xross folder). App storage until shared storage can be written; config already in the folder is adopted. `.nomedia` in `media/` and `themes/` is created first |
+| Settings as JSON | ✅ 📱 | `settings.json`, `controllers.json`, `systems.json`; atomic writes (`.tmp`, sync, rename) off the main thread; one-time migration from SharedPreferences; unreadable files kept as `.bad`; edits made outside Xross picked up on resume. Credentials stay in the private `CredentialStore` |
+| Library database backup | ✅ 📱 | Live database stays private. A snapshot goes to `Xross/data/xross.db` 4 s after Xross leaves the screen (if anything changed) or from Settings ▸ System ▸ Back up library now. On a clean install a backup with games is offered from Games and Settings ▸ System; restore applies on restart |
 | Playtime per game | ✅ | Survives process death; shown on rows and in the Options menu |
 | Information screen (Options ▸ Information) | ✅ 🧪 | Platform, file, folder, size, dates, playtime, emulator, fingerprint source and CRC32/MD5/SHA-1 |
 | Content fingerprints (CRC32, MD5, SHA-1) | ✅ | Inside `.zip` / `.7z`; CHD SHA-1 from the header; No-Intro header-less hashes; background job that stops while a game runs |
@@ -114,7 +115,7 @@ All 11 recipes are verified only against the test stand-ins, not real emulator i
 | Background music pauses for games and videos | ✅ | Resumes when Xross is back in front |
 | Video player | ✅ | Seek, previous/next, loop, auto-hiding controls |
 | Clear empty state without storage access | ✅ 🧪 | Photo, Music and Video say "Storage access needed"; pressing the row opens the grant screen |
-| Custom Photo and Video folders | ✅ 🧪 | Settings ▸ Media ▸ Photo folders / Video folders. Empty = all of MediaStore; otherwise MediaStore filtered by path plus a direct walk for files it skips (`.nomedia` and hidden folders, unindexed drives), with thumbnails made by Xross. Reloads on resume and when a drive comes or goes |
+| Custom Photo and Video folders | ✅ 📱 | Settings ▸ Media ▸ Photo folders / Video folders. Empty = all of MediaStore; otherwise MediaStore filtered by path plus a direct walk for files it skips (`.nomedia` and hidden folders, unindexed drives), with thumbnails made by Xross. Reloads on resume and when a drive comes or goes |
 | Mini-player line hides after 30 s paused | ✅ | The corner "❚❚ Title — Artist" line fades out (0.9 s) and returns as soon as playback resumes |
 
 ### 2.5 Look and sound
@@ -161,7 +162,7 @@ All 11 recipes are verified only against the test stand-ins, not real emulator i
 | SteamGridDB art | ✅ 📱 | Capsule (600×900), hero banner and logo, by title; needs a free API key |
 | ScreenScraper | ✅ 🧪 | Descriptions, box art, logos, screenshots and video snaps; quota handling as the API requires. Built and unit-tested; not yet live (needs developer credentials) |
 | Background scraping | ✅ 📱 | Off until turned on, Wi-Fi only by default, paced per service, stops while a game runs |
-| Art in `Xross/media/<kind>/<system>/<rom stem>.<ext>` | ✅ 🧪 | ES-DE-style names (`covers`, `3dboxes`, `heroes`, `wheels`, `screenshots`, `capsules`, `snaps`), FAT-safe and de-duplicated per system; media copied in from ES-DE is used as is and never pruned. The old private UUID cache moves over once in the background. The UUID cache was verified on the Galaxy A55; the new layout is unit-tested only |
+| Art in `Xross/media/<kind>/<system>/<rom stem>.<ext>` | ✅ 📱 | ES-DE-style names (`covers`, `3dboxes`, `heroes`, `wheels`, `screenshots`, `capsules`, `snaps`), FAT-safe and de-duplicated per system; media copied in from ES-DE is used as is and never pruned. The old private UUID cache moves over once in the background; verified on the Galaxy A55 by upgrading a real install (41 files) |
 | Game Details screen | ✅ 📱 | Options ▸ Details or → on a game: background art, box art, logo, release facts, rating, playtime, description |
 | Manual match and title override | ✅ 📱 | Options ▸ Metadata: Edit title, Find match, Scrape again, Use automatic match |
 | Video snaps behind the menu | ✅ 🧪 | Plays after 1.2 s on a game, music ducked; untested with real snaps (ScreenScraper only) |
@@ -177,9 +178,9 @@ These are bugs or gaps in features that are already built, separate from the new
 | --- | --- | --- |
 | No real-hardware validation of controllers, sticks, emulators or audio | Biggest risk to Beta | Phase 1b hardware pass (§4.1) |
 | `tools/device-tests/smoke.sh` hasn't been re-run | Counts were updated on 2026-11-11 for the Options menu (Details, Metadata), Controls (Axial deadzone), All Games, the 10-step remap wizard and the new Library rows, and it gained checks for the new features; no emulator run yet | Re-run on an emulator |
-| Library organization untested on a device | App hiding and folders, the base ROMs folder, custom media folders and art in `Xross/media` are unit- and Robolectric-tested only | Include in the next device pass, with an SD card |
+| Library organization only tested on a phone | Passed on the Galaxy A55 on 2026-11-11 (docs/STATUS.md §3.11); no handheld, controller or SD card yet | Include in the hardware pass |
 | Folder names are typed in capitals | The gamepad keyboard has no lower case; "MY TOOLS" is saved as "My Tools" and short words like "TV" stay capitals | Keyboard modes (§4.5) |
-| Portable folder untested on real storage | Atomic replace on FAT/exFAT cards, the restore-and-restart flow and the backup on Android 9 are unit-tested (Robolectric) only | Check on a device with an SD card, and on an Android 9 or 10 device |
+| Portable folder untested on removable storage and old Android | Passed on the Galaxy A55's internal storage (migration, backup, restore and restart, outside edits). Moving the folder to an SD card or USB drive, atomic replace on FAT/exFAT, and Android 9/10 are unit-tested only | Check on a device with an SD card, and on an Android 9 or 10 device |
 | Config writes are asynchronous | A crash within milliseconds of changing a setting can lose that one change | Acceptable; writes are flushed before restores and folder moves |
 | ScreenScraper can't run yet | No descriptions, box art from ScreenScraper, or video snaps | Request developer credentials on the ScreenScraper forum; put them in `.env` |
 | Per-controller mappings and the axial deadzone are untested on hardware | Unit- and view-model-tested only | Test with two different controllers in the hardware pass |
