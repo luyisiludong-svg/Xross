@@ -56,6 +56,11 @@ class PlaySessionTracker(
         armed = Session(gameId, clock())
     }
 
+    /** The launch requested with [arm] didn't happen (the emulator couldn't be started). */
+    fun disarm() {
+        armed = null
+    }
+
     /** The launcher was paused; start the session if a launch was just requested. */
     fun onBackground() {
         val pending = armed ?: return

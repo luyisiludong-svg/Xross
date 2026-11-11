@@ -13,8 +13,12 @@ import kotlinx.coroutines.launch
 interface InputSink {
     fun onAction(action: NavAction)
 
-    /** Called with every fresh key press before mapping. Return true to consume it (remap capture). */
-    fun onRawKeyDown(keyCode: Int): Boolean = false
+    /**
+     * Called with every fresh key press before mapping. Return true to consume it (remap capture).
+     * [controller] is the identified controller model it came from, or null (keyboards without
+     * IDs, virtual and injected input).
+     */
+    fun onRawKeyDown(keyCode: Int, controller: ConnectedController?): Boolean = false
 
     fun onControllerUsed(family: ControllerFamily) {}
 }
@@ -22,8 +26,14 @@ interface InputSink {
 data class InputConfig(
     val confirm: ConfirmLayout = ConfirmLayout.AUTO,
     val deadzone: Float = 0.35f,
+    /** Global mapping, used for any device without its own entry in [profiles]. */
     val remap: Map<Int, NavAction> = emptyMap(),
-)
+    val axialDeadzone: Float = 0f,
+    /** [ControllerKey.id] → per-controller mapping. */
+    val profiles: Map<String, ControllerProfile> = emptyMap(),
+) {
+    fun remapFor(controller: ControllerKey?): Map<Int, NavAction> = remapFor(controller, profiles, remap)
+}
 
 /**
  * Gamepad abstraction layer: turns Android key and joystick events into [NavAction]s.
@@ -38,20 +48,25 @@ class GamepadHandler(
 ) {
     private val stick = StickTracker()
     private val hat = StickTracker(deadzone = 0.5f, snapbackWindowMs = 0)
+    private val guideHold = LongPressDetector()
     private var repeatJob: Job? = null
     private var lastFamily: ControllerFamily? = null
 
     fun onKeyEvent(event: KeyEvent): Boolean {
         val cfg = config()
-        val family = familyOf(event.device)
+        val device = event.device
+        val family = familyOf(device)
         val confirm = cfg.confirm.resolve(family)
-        val action = KeyMapper.map(event.keyCode, confirm, cfg.remap)
+        val key = device?.let { ControllerKey.of(it.vendorId, it.productId) }
+        val action = KeyMapper.map(event.keyCode, confirm, cfg.remapFor(key))
         val isFreshPress = event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0
 
         if (isFreshPress) {
             reportFamily(family)
-            if (sink.onRawKeyDown(event.keyCode)) return true
+            val controller = key?.let { ConnectedController(it, device.name.orEmpty()) }
+            if (sink.onRawKeyDown(event.keyCode, controller)) return true
         }
+        if (action == null && event.keyCode == KeyEvent.KEYCODE_BUTTON_MODE) return onGuide(event)
         if (action == null) return false
 
         if (event.action == KeyEvent.ACTION_DOWN) {
@@ -68,7 +83,9 @@ class GamepadHandler(
         if (!isJoystick || event.action != MotionEvent.ACTION_MOVE) return false
 
         reportFamily(familyOf(event.device))
-        stick.deadzone = config().deadzone
+        val cfg = config()
+        stick.deadzone = cfg.deadzone
+        stick.axialDeadzone = cfg.axialDeadzone
         val now = event.eventTime
 
         val stickPress = stick.update(
@@ -91,7 +108,23 @@ class GamepadHandler(
         return true
     }
 
+    /**
+     * Guide/Home has no short-press action (the OS often claims it, and a tap is too easy to hit
+     * by accident); holding it opens the media controls, like Select. Remapping the key replaces
+     * this. Consumed either way so the press never falls through to the framework.
+     */
+    private fun onGuide(event: KeyEvent): Boolean {
+        val longPress = when (event.action) {
+            KeyEvent.ACTION_DOWN -> guideHold.onDown(event.eventTime, event.downTime, event.repeatCount)
+            KeyEvent.ACTION_UP -> guideHold.onUp(event.eventTime)
+            else -> false
+        }
+        if (longPress) sink.onAction(NavAction.MEDIA)
+        return true
+    }
+
     fun release() {
+        guideHold.reset()
         stopRepeat()
         stick.reset()
         hat.reset()
@@ -124,7 +157,7 @@ class GamepadHandler(
     private fun centered(event: MotionEvent, axis: Int): Float {
         val range = event.device?.getMotionRange(axis, event.source) ?: return 0f
         val value = event.getAxisValue(axis)
-        // Hardware flat zone; our own radial deadzone is applied on top.
+        // Hardware flat zone; our own axial and radial deadzones are applied on top.
         return if (kotlin.math.abs(value) > range.flat) value else 0f
     }
 

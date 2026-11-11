@@ -20,6 +20,8 @@ data class AppEntry(
     val activityName: String,
     val label: String,
     val isGame: Boolean,
+    /** Preinstalled with the system (including updated system apps); Settings ▸ Apps can hide these. */
+    val isSystem: Boolean = false,
 ) {
     val component: ComponentName get() = ComponentName(packageName, activityName)
 }
@@ -44,6 +46,7 @@ class AppRepository(private val context: Context) {
                     activityName = info.activityInfo.name,
                     label = info.loadLabel(pm).toString(),
                     isGame = appInfo.isGame(),
+                    isSystem = appInfo.flags and ApplicationInfo.FLAG_SYSTEM != 0,
                 )
             }
             .distinctBy { it.packageName to it.activityName }

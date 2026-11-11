@@ -27,6 +27,8 @@ class FingerprintQueue(
     private val games: GameDao,
     private val hashes: GameHashDao,
     private val policy: () -> FingerprintPolicy,
+    /** Runs on the queue's thread after a pass that stored new fingerprints (e.g. DAT matching). */
+    private val onFinished: suspend (hashed: Int) -> Unit = {},
 ) {
     private val dispatcher = Executors.newSingleThreadExecutor { runnable ->
         Thread({
@@ -75,6 +77,7 @@ class FingerprintQueue(
                         }
                     }
                 }
+                if (done > 0) onFinished(done)
             } finally {
                 _current.value = null
                 if (BuildConfig.PERF_LOG && done > 0) {

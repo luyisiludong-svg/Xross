@@ -34,4 +34,6 @@ fun GlyphKey.drawable(): Int = when (this) {
     GlyphKey.REFRESH -> R.drawable.xmb_refresh
     GlyphKey.HOME -> R.drawable.xmb_home
     GlyphKey.INFO -> R.drawable.xmb_info
+    GlyphKey.DOWNLOAD -> R.drawable.xmb_download
+    GlyphKey.NETWORK -> R.drawable.xmb_network
 }
