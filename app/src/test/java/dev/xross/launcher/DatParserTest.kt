@@ -184,6 +184,10 @@ class DatParserTest {
     @Test fun arcadeSetsUseTheDescription() {
         assertEquals("Street Fighter II: The World Warrior", DatNames.bestTitle("sf2", "Street Fighter II: The World Warrior (World 910522)").title)
         assertEquals("Chrono Trigger", DatNames.bestTitle("Chrono Trigger (USA)", "Chrono Trigger (USA)").title)
+        // Found on device: one-word arcade titles differ from their set names only by case.
+        assertEquals("Amidar", DatNames.bestTitle("amidar", "Amidar").title)
+        assertEquals("Berzerk", DatNames.bestTitle("berzerk1", "Berzerk (revision RC28)").title)
+        assertEquals("pengo", DatNames.bestTitle("pengo", null).title)
     }
 
     @Test fun mapsDatSystemsToPlatforms() {
