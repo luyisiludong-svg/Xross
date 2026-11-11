@@ -85,6 +85,7 @@ sealed interface Command {
     data object CycleScrapeLanguage : Command
     data object ToggleHasheous : Command
     data object EditScreenScraperAccount : Command
+    data object CheckScreenScraperAccount : Command
     data object EditSteamGridDbKey : Command
     data object ClearArtwork : Command
     // Per game

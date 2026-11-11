@@ -10,12 +10,21 @@ import kotlinx.coroutines.sync.withLock
  * scrapes can't burst. Clock and sleep are injected for tests.
  */
 class RateLimiter(
-    private val minIntervalMs: Long,
+    private val baseIntervalMs: Long,
     private val clock: () -> Long = System::currentTimeMillis,
     private val sleep: suspend (Long) -> Unit = { delay(it) },
 ) {
     private val mutex = Mutex()
     private var nextAt = 0L
+
+    /** Current spacing; never below the base, raised when a service reports a tighter quota. */
+    @Volatile var minIntervalMs: Long = baseIntervalMs
+        private set
+
+    /** Adopts a service-reported pace (e.g. "N requests per minute"), never faster than the base. */
+    fun paceTo(intervalMs: Long) {
+        minIntervalMs = maxOf(baseIntervalMs, intervalMs)
+    }
 
     /** Suspends until a request may go out, and reserves that slot. */
     suspend fun acquire() = mutex.withLock {

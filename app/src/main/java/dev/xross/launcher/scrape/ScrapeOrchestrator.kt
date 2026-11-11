@@ -146,7 +146,10 @@ class ScrapeOrchestrator(
         gameLock.withLock {
             val hash = hashes.get(game.id)?.takeIf { it.fileSize == game.sizeBytes && it.fileModified == game.lastModified }
             val meta = metadata.get(game.id)
-            val identifiable = hash.hasContentHash() || meta?.screenScraperId != null || game.platformId == "arcade"
+            // Scrape once fingerprinting has had its turn: by hash, by a chosen id, or (arcade sets,
+            // files too large to hash) by whole-file hashes and names.
+            val identifiable = hash.hasContentHash() || meta?.screenScraperId != null || game.platformId == "arcade" ||
+                hash?.source == dev.xross.launcher.storage.HashSource.SKIPPED.name
             if (!identifiable) return@withLock null
 
             var request = buildRequest(game, hash, meta)
@@ -201,22 +204,34 @@ class ScrapeOrchestrator(
             status
         }
 
-    private fun buildRequest(game: GameEntity, hash: GameHashEntity?, meta: GameMetadataEntity?) = ScrapeRequest(
-        gameId = game.id,
-        uuid = game.uuid,
-        title = game.title,
-        fileName = game.fileName,
-        platformId = game.platformId,
-        sizeBytes = hash?.contentSize ?: game.sizeBytes,
-        // Header-less hashes are what DAT-based services index (No-Intro strips copier headers).
-        crc32 = hash?.dataCrc32 ?: hash?.crc32,
-        md5 = hash?.dataMd5 ?: hash?.md5,
-        sha1 = hash?.dataSha1 ?: hash?.sha1,
-        serial = meta?.serial,
-        screenScraperId = meta?.screenScraperId,
-        steamGridDbId = meta?.steamGridDbId,
-        prefs = prefs(),
-    )
+    private suspend fun buildRequest(game: GameEntity, hash: GameHashEntity?, meta: GameMetadataEntity?): ScrapeRequest {
+        // Arcade sets are fingerprinted by name only; services that need a hash get the zip's own.
+        val whole = if (game.platformId == "arcade" && hash.hasContentHash().not()) {
+            dev.xross.launcher.storage.FileHash.of(java.io.File(game.path), ARCADE_HASH_LIMIT)
+        } else {
+            null
+        }
+        return ScrapeRequest(
+            gameId = game.id,
+            uuid = game.uuid,
+            title = meta?.titleOverride ?: meta?.datTitle ?: game.title,
+            fileName = game.fileName,
+            platformId = game.platformId,
+            sizeBytes = hash?.contentSize ?: game.sizeBytes,
+            // As stored (ScreenScraper wants the local file's hashes)…
+            crc32 = whole?.crc32 ?: hash?.crc32,
+            md5 = whole?.md5 ?: hash?.md5,
+            sha1 = whole?.sha1 ?: hash?.sha1,
+            // …and header-less, which DAT-based services index.
+            dataCrc32 = hash?.dataCrc32,
+            dataMd5 = hash?.dataMd5,
+            dataSha1 = hash?.dataSha1,
+            serial = meta?.serial,
+            screenScraperId = meta?.screenScraperId,
+            steamGridDbId = meta?.steamGridDbId,
+            prefs = prefs(),
+        )
+    }
 
     /** First offered URL per art kind, ScreenScraper before SteamGridDB; returns problems. */
     private suspend fun downloadArt(uuid: String, found: List<ScrapedGame>, replace: Boolean): List<String> {
@@ -251,6 +266,8 @@ class ScrapeOrchestrator(
     companion object {
         private const val BATCH = 32
         private const val TITLE_FLUSH = 10
+        /** Whole-zip hashing for arcade sets stays cheap below this (sets average a few MB). */
+        private const val ARCADE_HASH_LIMIT = 256L shl 20
         /** A failed game is tried again after a day (quota resets, servers come back). */
         const val RETRY_AFTER_MS = 24L * 60 * 60 * 1000
 

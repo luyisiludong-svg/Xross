@@ -37,15 +37,22 @@ data class ScrapeRequest(
     val fileName: String,
     val platformId: String,
     val sizeBytes: Long,
+    /** Hashes of the file as stored (or of the archive member that holds the ROM). */
     val crc32: String? = null,
     val md5: String? = null,
     val sha1: String? = null,
+    /** Hashes with a copier header removed (No-Intro style), when the file had one. */
+    val dataCrc32: String? = null,
+    val dataMd5: String? = null,
+    val dataSha1: String? = null,
     val serial: String? = null,
     /** Provider ids chosen earlier (manual match) or found by a previous scrape. */
     val screenScraperId: String? = null,
     val steamGridDbId: String? = null,
     val prefs: ScrapePrefs = ScrapePrefs(),
-)
+) {
+    val hasHash: Boolean get() = crc32 != null || md5 != null || sha1 != null
+}
 
 /** One downloadable media item a provider offered. */
 data class ScrapedMedia(val kind: ArtKind, val url: String, val ext: String?)

@@ -24,7 +24,7 @@ import java.io.IOException
 class HasheousProvider(
     private val http: HttpClient,
     private val enabled: () -> Boolean,
-    private val limiter: RateLimiter = RateLimiter(minIntervalMs = 500),
+    private val limiter: RateLimiter = RateLimiter(baseIntervalMs = 500),
     private val baseUrl: String = "https://hasheous.org/api/v1",
 ) : ScrapeProvider {
 
@@ -35,9 +35,10 @@ class HasheousProvider(
     override suspend fun lookup(request: ScrapeRequest): ProviderResult {
         if (!enabled()) return ProviderResult.Unavailable("Hasheous is turned off")
         val body = JSONObject().apply {
-            request.crc32?.let { put("crc", it) }
-            request.md5?.let { put("md5", it) }
-            request.sha1?.let { put("sha1", it) }
+            // Hasheous indexes DAT entries, which list ROMs without copier headers.
+            (request.dataCrc32 ?: request.crc32)?.let { put("crc", it) }
+            (request.dataMd5 ?: request.md5)?.let { put("md5", it) }
+            (request.dataSha1 ?: request.sha1)?.let { put("sha1", it) }
         }
         if (body.length() == 0) return ProviderResult.NotFound // nothing to look up without a fingerprint
         limiter.acquire()

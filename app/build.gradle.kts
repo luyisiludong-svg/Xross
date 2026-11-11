@@ -10,20 +10,32 @@ android {
     namespace = "dev.xross.launcher"
     compileSdk = 36
 
-    // ScreenScraper developer credentials are issued per application and must not be committed:
-    // put screenscraper.devId / screenscraper.devPassword in local.properties (git-ignored) or
-    // pass them as Gradle properties (-Pscreenscraper.devId=…) on the release machine.
+    // ScreenScraper credentials never live in the repository. Looked up, in order, as a Gradle
+    // property (-Pscreenscraper.devId=…), in local.properties, or in the git-ignored .env file
+    // (SCREENSCRAPER_DEV_ID=…, see .env.example).
     val local = Properties().apply {
         rootProject.file("local.properties").takeIf { it.isFile }?.inputStream()?.use { load(it) }
     }
-    fun secret(name: String): String =
-        (project.findProperty(name) as String?) ?: local.getProperty(name) ?: ""
+    val dotenv = Properties().apply {
+        rootProject.file(".env").takeIf { it.isFile }?.readLines()?.forEach { raw ->
+            val line = raw.trim()
+            val eq = line.indexOf('=')
+            if (line.isEmpty() || line.startsWith("#") || eq <= 0) return@forEach
+            setProperty(line.substring(0, eq).trim(), line.substring(eq + 1).trim().removeSurrounding("\""))
+        }
+    }
+    fun secret(name: String, envName: String = ""): String =
+        (project.findProperty(name) as String?) ?: local.getProperty(name)
+            ?: dotenv.getProperty(envName)?.takeIf { it.isNotBlank() } ?: ""
     fun quoted(value: String) = "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
 
     defaultConfig {
         buildConfigField("boolean", "PERF_LOG", "false")
-        buildConfigField("String", "SCREENSCRAPER_DEV_ID", quoted(secret("screenscraper.devId")))
-        buildConfigField("String", "SCREENSCRAPER_DEV_PASSWORD", quoted(secret("screenscraper.devPassword")))
+        buildConfigField("String", "SCREENSCRAPER_DEV_ID", quoted(secret("screenscraper.devId", "SCREENSCRAPER_DEV_ID")))
+        buildConfigField("String", "SCREENSCRAPER_DEV_PASSWORD", quoted(secret("screenscraper.devPassword", "SCREENSCRAPER_DEV_PASSWORD")))
+        // A personal account is only ever baked into debug builds (see below), for testing.
+        buildConfigField("String", "DEBUG_SCREENSCRAPER_USER", "\"\"")
+        buildConfigField("String", "DEBUG_SCREENSCRAPER_PASSWORD", "\"\"")
         applicationId = "dev.xross.launcher"
         minSdk = 28
         targetSdk = 36
@@ -34,6 +46,9 @@ android {
     buildTypes {
         debug {
             buildConfigField("boolean", "PERF_LOG", "true")
+            // Pre-fills Settings ▸ Metadata ▸ ScreenScraper account on a fresh install, from .env.
+            buildConfigField("String", "DEBUG_SCREENSCRAPER_USER", quoted(secret("screenscraper.user", "SCREENSCRAPER_USER")))
+            buildConfigField("String", "DEBUG_SCREENSCRAPER_PASSWORD", quoted(secret("screenscraper.password", "SCREENSCRAPER_PASSWORD")))
         }
         release {
             isMinifyEnabled = true
@@ -104,6 +119,11 @@ dependencies {
     testImplementation(libs.robolectric)
     testImplementation(libs.androidx.test.core)
     testImplementation(libs.room.testing)
+}
+
+// ScreenScraperLiveTest makes real API calls; it only runs with -PliveScrape=true.
+tasks.withType<Test>().configureEach {
+    systemProperty("xross.liveScrape", (project.findProperty("liveScrape") as String?) ?: "false")
 }
 
 // Room writes the exported schema during KSP; the debug assets (used by migration tests) must be

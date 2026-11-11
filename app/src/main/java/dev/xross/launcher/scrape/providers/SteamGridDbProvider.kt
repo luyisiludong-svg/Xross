@@ -29,7 +29,7 @@ import java.util.Locale
 class SteamGridDbProvider(
     private val http: HttpClient,
     private val apiKey: () -> String,
-    private val limiter: RateLimiter = RateLimiter(minIntervalMs = 250),
+    private val limiter: RateLimiter = RateLimiter(baseIntervalMs = 250),
     private val baseUrl: String = "https://www.steamgriddb.com/api/v2",
 ) : ScrapeProvider {
 
