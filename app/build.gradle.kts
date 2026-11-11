@@ -38,6 +38,8 @@ android {
         buildConfigField("String", "DEBUG_SCREENSCRAPER_USER", "\"\"")
         buildConfigField("String", "DEBUG_SCREENSCRAPER_PASSWORD", "\"\"")
         buildConfigField("String", "DEBUG_STEAMGRIDDB_KEY", "\"\"")
+        buildConfigField("String", "DEBUG_RETROACHIEVEMENTS_USER", "\"\"")
+        buildConfigField("String", "DEBUG_RETROACHIEVEMENTS_KEY", "\"\"")
         applicationId = "dev.xross.launcher"
         minSdk = 28
         targetSdk = 36
@@ -50,8 +52,11 @@ android {
             buildConfigField("boolean", "PERF_LOG", "true")
             // Pre-fills Settings ▸ Metadata ▸ ScreenScraper account on a fresh install, from .env.
             buildConfigField("String", "DEBUG_SCREENSCRAPER_USER", quoted(secret("screenscraper.user", "SCREENSCRAPER_USER")))
-            buildConfigField("String", "DEBUG_SCREENSCRAPER_PASSWORD", quoted(secret("screenscraper.password", "SCREENSCRAPER_PASSWORD")))
+            buildConfigField("String", "DEBUG_SCREENSCRAPER_PASSWORD", quoted(secret("screenscraper.password", "SCREENSCRAPER_PASSWORD", "SCREENSCRAPER_USER_PASSWORD")))
             buildConfigField("String", "DEBUG_STEAMGRIDDB_KEY", quoted(secret("steamgriddb.apiKey", "STEAMGRIDDB_API_KEY", "SteamGridDB_API")))
+            // Links RetroAchievements on a fresh debug install (user name + Web API key, never the password).
+            buildConfigField("String", "DEBUG_RETROACHIEVEMENTS_USER", quoted(secret("retroachievements.user", "RETROACHIEVEMENTS_USER", "RETROACHIEVEMENT_USER")))
+            buildConfigField("String", "DEBUG_RETROACHIEVEMENTS_KEY", quoted(secret("retroachievements.apiKey", "RETROACHIEVEMENTS_WEB_API_KEY", "RETROACHIEVEMENT_USER_API")))
         }
         release {
             isMinifyEnabled = true

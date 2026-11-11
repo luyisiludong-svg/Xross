@@ -23,16 +23,35 @@ class BadgeImages(
         override fun sizeOf(key: String, value: ImageBitmap) = value.asAndroidBitmap().allocationByteCount
     }
 
+    /**
+     * The badge at [px], or null when it can't be had. A failed download is tried again twice,
+     * a few seconds apart, so a cell never stays blank after a passing network hiccup.
+     */
     suspend fun load(badgeName: String, px: Int): ImageBitmap? {
         val key = "$badgeName@$px"
         memory.get(key)?.let { return it }
-        val f = file(badgeName) ?: return null
-        val bitmap = withContext(Dispatchers.IO) { decode(f, px) } ?: return null
+        var f = file(badgeName)
+        var attempt = 0
+        while (f == null && attempt < RETRIES) {
+            kotlinx.coroutines.delay(RETRY_MS * ++attempt)
+            f = file(badgeName)
+        }
+        if (f == null) return null
+        val bitmap = withContext(Dispatchers.IO) { decode(f, px) }
+        if (bitmap == null) {
+            android.util.Log.w("XrossAchievements", "Badge $badgeName: can't decode ${f.length()} bytes")
+            return null
+        }
         memory.put(key, bitmap)
         return bitmap
     }
 
     fun trim() = memory.evictAll()
+
+    private companion object {
+        const val RETRIES = 2
+        const val RETRY_MS = 2_000L
+    }
 
     private fun decode(f: File, px: Int): ImageBitmap? = runCatching {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }

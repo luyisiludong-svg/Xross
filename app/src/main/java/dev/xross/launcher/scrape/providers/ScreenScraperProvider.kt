@@ -386,7 +386,7 @@ class ScreenScraperProvider(
          * else the first value present.
          */
         internal fun localized(raw: Any?, preferred: List<String>, keyField: String): String? = when (raw) {
-            is String -> raw.ifBlank { null }
+            is String -> raw.ifBlank { null }?.let(dev.xross.launcher.scrape.HtmlText::decode)
             is JSONArray -> {
                 val entries = (0 until raw.length()).mapNotNull { raw.optJSONObject(it) }
                     .mapNotNull { e -> textOf(e.opt("text"))?.let { e.optString(keyField) to it } }
@@ -401,8 +401,8 @@ class ScreenScraperProvider(
 
         /** `{"text": "…"}` or a plain string. */
         internal fun textOf(raw: Any?): String? = when (raw) {
-            is String -> raw.trim().ifEmpty { null }
-            is JSONObject -> raw.optString("text").trim().ifEmpty { null }
+            is String -> raw.trim().ifEmpty { null }?.let(dev.xross.launcher.scrape.HtmlText::decode)
+            is JSONObject -> raw.optString("text").trim().ifEmpty { null }?.let(dev.xross.launcher.scrape.HtmlText::decode)
             is Number -> raw.toString()
             else -> null
         }

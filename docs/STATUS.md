@@ -18,7 +18,7 @@ Legend: ✅ done and verified · ◐ partial · ❌ not started · 🧪 verified
 | Phase 3 (dual screen, hot-swap, RetroAchievements, Web Portal, FTPS) | ◐ RetroAchievements account linking, status bar avatar and User Card (§3.12), per-game achievement lists and unlock toasts (§3.13) done; two prerequisites done; the rest not started (§6) |
 | Phase 4 (onboarding, triage, profiling, plugin API) | ◐ app triage and performance work started |
 
-**Verification:** 391 JVM/Robolectric unit tests (387 run by default, 0 failures; 4 opt-in tests
+**Verification:** 395 JVM/Robolectric unit tests (391 run by default, 0 failures; 4 opt-in tests
 call the real services), end-to-end launch tests against stub builds of eleven emulators, a
 hot-swap test with a real removable volume, frame-pacing measurements across 12 display
 configurations on the emulator, live scraping runs, and a full feature pass on a **Samsung Galaxy
@@ -149,8 +149,8 @@ HTTPS Xross Portal (Ktor CIO), FTPS (Apache FtpServer), auth, uploads, library e
 
 ## 3. Test results
 
-### 3.1 Unit tests — 391 tests, 0 failures
-`./gradlew :app:testDebugUnitTest` (JVM + Robolectric on SDK 35): 387 run by default, 4 opt-in live
+### 3.1 Unit tests — 395 tests, 0 failures
+`./gradlew :app:testDebugUnitTest` (JVM + Robolectric on SDK 35): 391 run by default, 4 opt-in live
 tests skip unless `-PliveScrape=true`. The table below lists the original suites; later suites
 are listed after it.
 
@@ -475,7 +475,7 @@ by editing `settings.json`).
 | --- | --- |
 | ScreenScraper | Developer credentials only (no user account in `.env`, so the account check is skipped). 5 of 6 samples identified (3 arcade sets by hash, 2 of 3 3DS games by name search; *Ocarina of Time 3D* not found by name); all 5 with descriptions; box art and video snaps for all 5 cached through `AssetCache` into `media/3dboxes/<system>/` and `media/snaps/<system>/` with `.nomedia` written first; quota block read (10 of 10,000 requests, 0 of 1,000 not-found), pacing held at 1.2 s; 26.8 s for the run |
 | SteamGridDB | 8 of 8 samples got art |
-| RetroAchievements | The `.env` account signs in (`dorequest.php?r=login2`, POST body; token never printed). `.env` holds the account password, not a Web API key, so linking, profile, achievement lists and badges ran against recorded answers only. Add `RETROACHIEVEMENTS_WEB_API_KEY` to run them live |
+| RetroAchievements | The `.env` account signs in (`dorequest.php?r=login2`, POST body; token never printed). Linking, profile, achievement lists and badges ran live later the same day once the Web API key was in `.env` (§3.14) |
 
 **Galaxy A55 (Android 16, 120 Hz), debug build installed, `MANAGE_EXTERNAL_STORAGE` granted:**
 
@@ -505,6 +505,52 @@ by editing `settings.json`).
 **Not verified on hardware:** an unlock toast after a real emulator session, achievement lists
 from the live Web API, hero art and video snaps behind the menu on a scraped library (the smoke
 library has no scraped art), the audio ramp, a custom font from a pack.
+
+### 3.14 Live run with the full test library: emulator and Galaxy A55 (2026-11-11)
+
+Library: 370 arcade sets, 2 PSP ISOs (1.4 GB), 3DS images, and one album twice (60 FLAC + 60 MP3
+tracks with identical tags). Emulator: a dedicated `xross_test` AVD (API 36, arm64, 16 GB data,
+1080×2400 landscape). Phone: Galaxy A55 (arcade and PSP only; no test music on a personal phone).
+
+**Live services** (`.env`: ScreenScraper developer + user account, RetroAchievements user, password
+and Web API key):
+
+| Check | Result |
+| --- | --- |
+| ScreenScraper account | ✅ Signed in; 20,000 requests/day; quota shown in Settings ▸ Metadata on both devices |
+| `ScreenScraperLiveTest` | ✅ 7 of 8 samples (arcade by hash, 3DS and PSP by name; *Ocarina of Time 3D* not found by name); descriptions, box art and video snaps cached |
+| RetroAchievements sign-in | ✅ `RetroAchievementsLiveTest`: login, then linking with the Web API key, avatar cached, no key in any file |
+| RA game matching | ✅ 1941 and Street Fighter II by set name (28 and 32 achievements), Tekken 6 by title (65); OutRun 2006 is on RetroAchievements without a set and now shows "no achievements yet" (game lists include games without a set) |
+| Debug builds link RA from `.env` | ✅ Avatar in the status bar on first start on both devices; never under Robolectric |
+
+**On both devices:** library scrape (hero art, box art, logos, descriptions, video snaps; stopped
+by request after about 100 games on each, at 5–6 s a game with three services and snaps), User
+Card, Achievements screen (badge grid with D-pad browsing, detail bar, points, completion),
+Details summary with "▶ Achievements", focused-game hero art then video snap. On the emulator the
+GL wave rendered no frames while art or video covered the screen and resumed after. FLAC and MP3
+copies play (`c2.android.flac.decoder` / `c2.android.mp3.decoder`; Now Playing advanced).
+
+**Found and fixed:**
+
+1. **Two copies of an album merged into one with every track twice.** MediaStore gives identical
+   tags one album id. Albums are now split by folder and labelled by format ("… · FLAC",
+   "… · MP3"; the folder name when formats match); songs in All songs say which copy they are.
+2. **Descriptions showed `&quot;`** and other HTML references from ScreenScraper; decoded when
+   scraped and when shown (already-scraped games are fixed too).
+3. **Games without an achievement set looked "not recognized".** Game lists now include them
+   (cache format v2; older caches and matches are fetched again).
+4. **Badges could stay blank** when a grid asked for dozens at once during a scrape: at most 4
+   downloads at a time with a retry, and a failed cell tries again.
+5. **Badge grid showed 1⅓ rows on 20:9 screens:** cells are now sized so 2½ rows fit (10 columns).
+6. **User Card:** "10 POINTS" ran into "10 RETROPOINTS" (wider spacing); the menu showed through
+   the card (now fades like under Details).
+7. **Unit tests would have linked the tester's real RA account** through the debug `BuildConfig`
+   (caught by `ProfileCardTest`); the pre-fill skips Robolectric.
+8. `.env`: the ScreenScraper password key was misspelled (`SREENSCRAPER_…`); renamed. The build and
+   live tests also accept `SCREENSCRAPER_USER_PASSWORD` and `RETROACHIEVEMENT_USER_API`.
+
+Not covered: an unlock toast (needs achievements earned in an emulator), 3DS has no
+RetroAchievements, and the two largest 3DS images (6 GB) were not copied to the emulator.
 
 ## 4. Display matrix & performance
 

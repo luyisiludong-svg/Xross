@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -224,16 +225,24 @@ private fun BadgeGrid(
             grid.animateScrollToItem((v.index - AchievementsViewState.COLUMNS * 2).coerceAtLeast(0))
         }
     }
-    val badgePx = with(LocalDensity.current) { (m.s * 0.13f).toInt() }
-    LazyVerticalGrid(
-        columns = GridCells.Fixed(AchievementsViewState.COLUMNS),
-        state = grid,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-        modifier = modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 8.dp),
-    ) {
-        itemsIndexed(list, key = { _, a -> a.id }) { i, a ->
-            BadgeCell(a, focused = i == v.index, pulse = pulse, px = badgePx, loadBadge = loadBadge, onTap = { onBadgeTap(i) })
+    androidx.compose.foundation.layout.BoxWithConstraints(modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
+        // Cells as large as fit two and a half rows (wide screens) or the full width (tall ones).
+        val cols = AchievementsViewState.COLUMNS
+        val gap = 10.dp
+        val byWidth = (maxWidth - 12.dp - gap * (cols - 1)) / cols
+        val byHeight = (maxHeight - 16.dp - gap * 2) / 2.5f
+        val cell = minOf(byWidth, byHeight).coerceAtLeast(36.dp)
+        val badgePx = with(LocalDensity.current) { cell.roundToPx() }
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(cols),
+            state = grid,
+            horizontalArrangement = Arrangement.spacedBy(gap),
+            verticalArrangement = Arrangement.spacedBy(gap),
+            modifier = Modifier.width(cell * cols + gap * (cols - 1) + 12.dp).fillMaxHeight().padding(horizontal = 6.dp, vertical = 8.dp),
+        ) {
+            itemsIndexed(list, key = { _, a -> a.id }) { i, a ->
+                BadgeCell(a, focused = i == v.index, pulse = pulse, px = badgePx, loadBadge = loadBadge, onTap = { onBadgeTap(i) })
+            }
         }
     }
 }

@@ -60,6 +60,10 @@ data class Song(
     val albumId: Long,
     val track: Int,
     val durationMs: Long,
+    /** Folder the file is in; tells copies of one album apart (a FLAC rip next to an MP3 one). */
+    val folder: String = "",
+    /** "FLAC", "MP3", "AAC"… from the MIME type; empty when unknown. */
+    val format: String = "",
 )
 
 data class MediaLibrary(
@@ -332,6 +336,7 @@ class MediaRepository(private val context: Context) {
             MediaStore.Audio.Media._ID, MediaStore.Audio.Media.TITLE, MediaStore.Audio.Media.ARTIST,
             MediaStore.Audio.Media.ALBUM, MediaStore.Audio.Media.ALBUM_ID, MediaStore.Audio.Media.TRACK,
             MediaStore.Audio.Media.DURATION, MediaStore.Audio.Media.DISPLAY_NAME,
+            @Suppress("DEPRECATION") MediaStore.Audio.Media.DATA, MediaStore.Audio.Media.MIME_TYPE,
         )
         // Music only: skip ringtones, notification sounds and voice notes.
         val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0"
@@ -350,6 +355,8 @@ class MediaRepository(private val context: Context) {
                             // MediaStore encodes disc*1000 + track.
                             track = c.getInt(5) % 1000,
                             durationMs = c.getLong(6),
+                            folder = c.getString(8).orEmpty().substringBeforeLast('/', ""),
+                            format = formatOf(c.getString(9)),
                         ),
                     )
                 }
@@ -368,5 +375,20 @@ class MediaRepository(private val context: Context) {
         val AUDIO: Uri = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
 
         private fun String?.cleanTag(): String? = this?.takeIf { it.isNotBlank() && it != "<unknown>" }
+
+        /** Short format label for an audio MIME type ("audio/flac" → "FLAC"). */
+        fun formatOf(mime: String?): String = when (mime?.lowercase()?.substringAfter('/')) {
+            null, "" -> ""
+            "flac", "x-flac" -> "FLAC"
+            "mpeg", "mp3", "mpeg3", "x-mpeg" -> "MP3"
+            "mp4", "aac", "x-m4a", "m4a", "aac-adts" -> "AAC"
+            "ogg", "vorbis", "x-vorbis+ogg" -> "OGG"
+            "opus" -> "Opus"
+            "wav", "x-wav", "vnd.wave" -> "WAV"
+            "x-ms-wma" -> "WMA"
+            "alac" -> "ALAC"
+            "x-aiff", "aiff" -> "AIFF"
+            else -> mime.substringAfter('/').removePrefix("x-").uppercase()
+        }
     }
 }

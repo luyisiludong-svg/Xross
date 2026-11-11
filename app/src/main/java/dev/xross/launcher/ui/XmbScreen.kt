@@ -252,7 +252,7 @@ fun XmbScreen(
         var hintsHeightPx by remember { mutableIntStateOf(0) }
         val menuAlpha by animateFloatAsState(
             if (state.overlay == null && state.search == null && state.nameEntry == null && state.details == null &&
-                state.waveEditor == null && state.achievements == null
+                state.waveEditor == null && state.achievements == null && state.profileCard == null
             ) {
                 1f
             } else {

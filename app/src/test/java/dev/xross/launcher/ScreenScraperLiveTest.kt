@@ -55,7 +55,7 @@ class ScreenScraperLiveTest {
                 devPassword = env["SCREENSCRAPER_DEV_PASSWORD"].orEmpty(),
                 softName = "Xross",
                 user = env["SCREENSCRAPER_USER"].orEmpty(),
-                password = env["SCREENSCRAPER_PASSWORD"].orEmpty(),
+                password = (env["SCREENSCRAPER_PASSWORD"] ?: env["SCREENSCRAPER_USER_PASSWORD"]).orEmpty(),
             )
         }, limiter)
 
@@ -67,8 +67,8 @@ class ScreenScraperLiveTest {
             println("Account: none in .env; developer credentials only")
         }
 
-        val samples = listOf("ARCADE" to "arcade", "3DS" to "n3ds").flatMap { (dir, platform) ->
-            File(root, "localTestMedia/Roms/$dir").listFiles().orEmpty().filter { it.isFile }.sortedBy { it.name }.take(3).map { it to platform }
+        val samples = listOf("ARCADE" to "arcade", "3DS" to "n3ds", "PSP" to "psp").flatMap { (dir, platform) ->
+            File(root, "localTestMedia/Roms/$dir").listFiles().orEmpty().filter { it.isFile && !it.name.startsWith(".") }.sortedBy { it.name }.take(3).map { it to platform }
         }
         assumeTrue("no ROMs in localTestMedia/Roms/", samples.isNotEmpty())
         val xross = java.nio.file.Files.createTempDirectory("xross-live-ss").toFile()

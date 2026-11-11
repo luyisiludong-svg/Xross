@@ -192,7 +192,7 @@ These are bugs or gaps in features that are already built, separate from the new
 | Six newer emulator recipes may not accept a FileProvider URI | Launches could fail on real installs | Test each against a real install; fall back to the path extra |
 | Multi-file disc images (`.cue` + `.bin`) | One `content://` URI doesn't cover the `.bin` tracks | Rely on the emulator's own storage access and the path extra |
 | The Default pack still ships the PS3/PSP-like icons and sounds | Fine for testing, not for a public release | Make an original or open-licensed Default pack and offer the current one as an optional download (§4.2) |
-| RetroAchievements Web API features unverified live | `.env` holds the account password, not the Web API key; sign-in was checked live, profile/achievements only against recorded answers | Add `RETROACHIEVEMENTS_WEB_API_KEY` to `.env` and run `RetroAchievementsLiveTest` |
+| Unlock toasts unseen after a real session | Detection is unit-tested and the profile refresh runs live, but no achievement has been earned in an emulator yet | Earn one in RetroArch or PPSSPP with the same account, return to Xross |
 | Search matches word prefixes only, Latin letters and digits only | "rono" doesn't find "Chrono Trigger" | Add substring or trigram matching if users need it |
 | Playtime counts all wall-clock time away from Xross after a launch | Sleep and other apps count (capped at 24 h) | Acceptable for now; revisit with usage stats |
 | Search results at 80% opacity clip their text shadow slightly | Barely visible | Switch to `fadeAlpha` when that screen is next touched |
@@ -415,8 +415,8 @@ focused-game background (hero art, then video), which pairs with cutting idle CP
    shader settings. Still to do: an original Default pack and an open-licensed XMB-style font.
 7. ✅ Focused-game background (hero art, then video) with the wave paused under it. Still to do:
    a Baseline Profile.
-8. Add a RetroAchievements Web API key to `.env` and run `RetroAchievementsLiveTest`; then link the
-   account on a device and check achievement lists and an unlock toast after a real session.
+8. ✅ RetroAchievements live on an emulator and the Galaxy A55 (2026-11-11). Still to do: an unlock
+   toast after a real emulator session.
 
 ---
 

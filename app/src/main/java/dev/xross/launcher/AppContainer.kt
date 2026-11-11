@@ -74,6 +74,19 @@ class AppContainer(context: Context) {
             if (store.current.steamGridDbKey.isBlank() && BuildConfig.DEBUG_STEAMGRIDDB_KEY.isNotBlank()) {
                 store.update { it.copy(steamGridDbKey = BuildConfig.DEBUG_STEAMGRIDDB_KEY) }
             }
+            // The profile is fetched (and the key checked) by ProfileRepository on the first start.
+            // Never under Robolectric: unit tests also see the debug BuildConfig and must not link
+            // (or call) the tester's real account.
+            if (!store.current.retroAchievementsLinked && android.os.Build.FINGERPRINT != "robolectric" &&
+                BuildConfig.DEBUG_RETROACHIEVEMENTS_USER.isNotBlank() && BuildConfig.DEBUG_RETROACHIEVEMENTS_KEY.isNotBlank()
+            ) {
+                store.update {
+                    it.copy(
+                        retroAchievementsUser = BuildConfig.DEBUG_RETROACHIEVEMENTS_USER,
+                        retroAchievementsKey = BuildConfig.DEBUG_RETROACHIEVEMENTS_KEY,
+                    )
+                }
+            }
         }
     }
 

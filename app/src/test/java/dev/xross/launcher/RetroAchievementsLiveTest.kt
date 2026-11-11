@@ -81,7 +81,7 @@ class RetroAchievementsLiveTest {
         live()
         val env = env()
         val user = env["RETROACHIEVEMENT_USER"] ?: env["RETROACHIEVEMENTS_USER"]
-        val key = env["RETROACHIEVEMENTS_WEB_API_KEY"] ?: env["RETROACHIEVEMENT_WEB_API_KEY"]
+        val key = env["RETROACHIEVEMENTS_WEB_API_KEY"] ?: env["RETROACHIEVEMENT_WEB_API_KEY"] ?: env["RETROACHIEVEMENT_USER_API"]
         assumeTrue("RETROACHIEVEMENTS_WEB_API_KEY missing from .env", !user.isNullOrBlank() && !key.isNullOrBlank())
         val environment = XrossEnvironment(context, writeAccess = { true }, primaryRoot = { File(tmp.root, "Xross") })
         val credentials = CredentialStore(context)
@@ -94,22 +94,31 @@ class RetroAchievementsLiveTest {
         assertTrue("avatar cached", profiles.current.avatar?.isFile == true)
 
         val achievements = AchievementsRepository(RetroAchievementsClient(http), credentials, { environment.current }, hashes = { null })
-        val sample = File(root, "localTestMedia/Roms/ARCADE").listFiles().orEmpty().filter { it.isFile }.minByOrNull { it.name }
-        if (sample != null) {
-            val game = GameEntity(path = sample.path, platformId = "arcade", title = sample.nameWithoutExtension, fileName = sample.name, sizeBytes = sample.length(), lastModified = sample.lastModified())
+        val samples = listOf("ARCADE/1941.zip" to "arcade", "ARCADE/sf2.zip" to "arcade", "PSP/Tekken 6.iso" to "psp")
+            .map { (path, platform) -> File(root, "localTestMedia/Roms/$path") to platform }
+            .plus(
+                File(root, "localTestMedia/Roms/PSP").listFiles().orEmpty().filter { it.isFile && it.name.startsWith("OutRun") }.map { it to "psp" },
+            )
+            .filter { it.first.isFile }
+        var ready = 0
+        for ((sample, platform) in samples) {
+            val title = dev.xross.launcher.storage.RomScanner.cleanTitle(sample.nameWithoutExtension)
+            val game = GameEntity(path = sample.path, platformId = platform, title = title, fileName = sample.name, sizeBytes = sample.length(), lastModified = sample.lastModified())
             when (val state = achievements.load(game)) {
                 is AchievementsState.Ready -> {
+                    ready++
                     val p = state.progress
-                    println("${sample.name} → #${p.gameId} ${p.title}: ${p.unlocked}/${p.total} unlocked, ${p.earnedPoints}/${p.totalPoints} points (${state.matchedBy})")
+                    println("${sample.name} → #${p.gameId} ${p.title} (${p.consoleName}): ${p.unlocked}/${p.total} unlocked, ${p.earnedPoints}/${p.totalPoints} points, matched by ${state.matchedBy}")
                     p.achievements.firstOrNull()?.let { a ->
                         val badge = achievements.badgeFile(a.badgeName)
-                        println("  first badge ${a.title}: ${badge?.relativeTo(environment.current.root)} ${badge?.length()} bytes")
+                        println("  first badge \"${a.title}\": ${badge?.relativeTo(environment.current.root)} ${badge?.length()} bytes")
                         assertTrue(badge?.isFile == true)
                     }
                 }
-                else -> println("${sample.name}: $state")
+                else -> println("${sample.name} (\"$title\"): $state")
             }
         }
+        assertTrue("no sample resolved to a RetroAchievements game", samples.isEmpty() || ready > 0)
         environment.current.root.walkTopDown().filter { it.isFile }.forEach { f ->
             assertFalse("key leaked into ${f.name}", f.readBytes().toString(Charsets.ISO_8859_1).contains(key))
         }
