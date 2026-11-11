@@ -41,8 +41,21 @@ data class XrossSettings(
     /** platformId → [dev.xross.launcher.storage.EmulatorOption.key] */
     val emulatorChoice: Map<String, String> = emptyMap(),
     val waveEnabled: Boolean = true,
+    /** Wave shader uniforms (Settings ▸ Theme ▸ Wave settings); ranges in [dev.xross.launcher.theme.WaveLimits]. */
     val waveSpeed: Float = 1f,
-    /** [dev.xross.launcher.theme.XrossTheme] name. */
+    /** Fine strands riding the main ribbon (0–12). */
+    val waveLineCount: Int = dev.xross.launcher.theme.WaveLimits.DEFAULT_LINES,
+    /** Wave amplitude multiplier (0 = flat, 2 = stormy). */
+    val waveTurbulence: Float = dev.xross.launcher.theme.WaveLimits.DEFAULT_TURBULENCE,
+    /** Ribbon crest and halo width multiplier. */
+    val waveThickness: Float = dev.xross.launcher.theme.WaveLimits.DEFAULT_THICKNESS,
+    /** [dev.xross.launcher.theme.WaveTint] name: the theme's colors, a preset, or [waveColors]. */
+    val waveTint: String = dev.xross.launcher.theme.WaveTint.THEME.name,
+    /** Gradient used when [waveTint] is CUSTOM. */
+    val waveColors: dev.xross.launcher.theme.WaveColors = dev.xross.launcher.theme.WaveColors(),
+    /** Active theme pack: "default" (built in) or a folder name in `Xross/themes/`. */
+    val themePack: String = dev.xross.launcher.theme.pack.ThemePackLoader.DEFAULT_ID,
+    /** [dev.xross.launcher.theme.XrossTheme] name, or [dev.xross.launcher.theme.PACK_THEME] for the theme pack's own colors. */
     val theme: String = "LAVENDER",
     /** The pill of button hints in the bottom corner of the home menu. */
     val showButtonHints: Boolean = true,

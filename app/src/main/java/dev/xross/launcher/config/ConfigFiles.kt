@@ -9,6 +9,9 @@ import dev.xross.launcher.input.NavAction
 import dev.xross.launcher.storage.Platform
 import dev.xross.launcher.storage.PlatformRegistry
 import dev.xross.launcher.storage.SystemOverride
+import dev.xross.launcher.theme.WaveLimits
+import dev.xross.launcher.theme.WaveTint
+import dev.xross.launcher.theme.pack.ThemeManifest
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -58,11 +61,29 @@ data class SettingsFile(
 
     @Serializable
     data class Display(
+        /** Color theme name, or "PACK" for the theme pack's own palette. */
         val theme: String = D.theme,
+        /** Folder name in Xross/themes/, or "default". */
+        val themePack: String = D.themePack,
         val wave: Boolean = D.waveEnabled,
+        /** Wave shader uniforms: speed 0.5–2.0, lines 0–12, turbulence 0–2, thickness 0.5–3. */
         val waveSpeed: Float = D.waveSpeed,
+        val waveLines: Int = D.waveLineCount,
+        val waveTurbulence: Float = D.waveTurbulence,
+        val waveThickness: Float = D.waveThickness,
+        /** THEME, AURORA, SUNSET, OCEAN, SAKURA, PASTEL, MONO or CUSTOM (uses [waveColors]). */
+        val waveTint: String = D.waveTint,
+        val waveColors: WaveColors = WaveColors(),
         val buttonHints: Boolean = D.showButtonHints,
         val allGamesFolder: Boolean = D.allGamesFolder,
+    )
+
+    /** `#RRGGBB` gradient for the CUSTOM wave tint. */
+    @Serializable
+    data class WaveColors(
+        val top: String = D.waveColors.top,
+        val bottom: String = D.waveColors.bottom,
+        val wave: String = D.waveColors.wave,
     )
 
     @Serializable
@@ -184,7 +205,19 @@ object ConfigCodec {
     fun settingsFile(s: XrossSettings) = SettingsFile(
         library = SettingsFile.Library(s.baseRomsFolder, s.romFolders, s.autoDetectFolders, s.knownAutoFolders, s.hashLargeImages, s.datFolder),
         controls = SettingsFile.Controls(s.confirmLayout.name, s.deadzone, s.axialDeadzone),
-        display = SettingsFile.Display(s.theme, s.waveEnabled, s.waveSpeed, s.showButtonHints, s.allGamesFolder),
+        display = SettingsFile.Display(
+            theme = s.theme,
+            themePack = s.themePack,
+            wave = s.waveEnabled,
+            waveSpeed = s.waveSpeed,
+            waveLines = s.waveLineCount,
+            waveTurbulence = s.waveTurbulence,
+            waveThickness = s.waveThickness,
+            waveTint = s.waveTint,
+            waveColors = SettingsFile.WaveColors(s.waveColors.top, s.waveColors.bottom, s.waveColors.wave),
+            buttonHints = s.showButtonHints,
+            allGamesFolder = s.allGamesFolder,
+        ),
         sound = SettingsFile.Sound(s.soundEffects, s.soundVolume, s.bootSound, s.gameBootSound),
         media = SettingsFile.Media(s.slideshowSeconds, s.resumeMusicAfterGames, s.videoLoop),
         metadata = SettingsFile.Metadata(
@@ -208,8 +241,22 @@ object ConfigCodec {
         deadzone = f.controls.stickDeadzone.finiteOr(D.deadzone).coerceIn(0f, 0.95f),
         axialDeadzone = f.controls.axialDeadzone.finiteOr(D.axialDeadzone).coerceIn(0f, 0.95f),
         theme = f.display.theme.ifBlank { D.theme },
+        themePack = f.display.themePack.trim().ifBlank { D.themePack },
         waveEnabled = f.display.wave,
-        waveSpeed = f.display.waveSpeed.finiteOr(D.waveSpeed).coerceIn(0.1f, 4f),
+        waveSpeed = WaveLimits.clampSpeed(f.display.waveSpeed),
+        waveLineCount = WaveLimits.clampLines(f.display.waveLines),
+        waveTurbulence = WaveLimits.clampTurbulence(f.display.waveTurbulence),
+        waveThickness = WaveLimits.clampThickness(f.display.waveThickness),
+        waveTint = WaveTint.byName(f.display.waveTint).name,
+        waveColors = f.display.waveColors.let { c ->
+            // Each color falls back to the default on its own, so one typo doesn't reset the rest.
+            fun pick(text: String, fallback: String) = if (ThemeManifest.parseColor(text) != null) text.trim() else fallback
+            dev.xross.launcher.theme.WaveColors(
+                top = pick(c.top, D.waveColors.top),
+                bottom = pick(c.bottom, D.waveColors.bottom),
+                wave = pick(c.wave, D.waveColors.wave),
+            )
+        },
         showButtonHints = f.display.buttonHints,
         allGamesFolder = f.display.allGamesFolder,
         soundEffects = f.sound.effects,

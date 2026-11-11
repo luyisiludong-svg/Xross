@@ -37,6 +37,8 @@ import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.border
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -72,7 +74,6 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -85,7 +86,6 @@ import dev.xross.launcher.input.ConfirmLayout
 import dev.xross.launcher.media.MusicPlayer
 import dev.xross.launcher.media.ThumbKind
 import dev.xross.launcher.state.MediaOverlayController
-import dev.xross.launcher.state.MiniPlayerLine
 import dev.xross.launcher.input.NavAction
 import dev.xross.launcher.state.NodeAction
 import dev.xross.launcher.state.NodeIcon
@@ -97,8 +97,7 @@ import dev.xross.launcher.media.SnapPlayer
 import dev.xross.launcher.scrape.ArtKind
 import dev.xross.launcher.theme.ThemePalette
 import dev.xross.launcher.theme.XrossTheme
-import dev.xross.launcher.theme.rememberThemePalette
-import kotlinx.coroutines.delay
+import dev.xross.launcher.theme.rememberActivePalette
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.floor
@@ -173,8 +172,22 @@ fun XmbScreen(
     snapVolume: Float = 0.75f,
     onPlayDetails: () -> Unit = {},
     onCloseDetails: () -> Unit = {},
+    onAvatarTap: () -> Unit = {},
+    onProfileCardButtonTap: (Int) -> Unit = {},
+    onCloseProfileCard: () -> Unit = {},
+    onMiniPlayerTap: () -> Unit = {},
+    onMiniPlayerLongPress: () -> Unit = {},
+    loadBadge: suspend (String, Int) -> ImageBitmap? = { _, _ -> null },
+    /** Opaque hero art or a video snap covers the screen: the wave can stop rendering. */
+    onBackdropCoverChanged: (Boolean) -> Unit = {},
+    onWaveRowTap: (Int) -> Unit = {},
+    onWaveSlider: (Int, Float) -> Unit = { _, _ -> },
+    onCloseWaveSettings: () -> Unit = {},
+    onAchievementTap: (Int) -> Unit = {},
+    onCloseAchievements: () -> Unit = {},
+    onDetailsAchievements: () -> Unit = {},
 ) {
-    val palette = rememberThemePalette(XrossTheme.byName(state.theme))
+    val palette = rememberActivePalette(state.theme, LocalThemePack.current?.palette)
 
     // Slow "breathing" glow shared by everything that is focused.
     val pulse by rememberInfiniteTransition(label = "glow").animateFloat(
@@ -201,27 +214,50 @@ fun XmbScreen(
         fun Float.sp(): TextUnit = with(density) { this@sp.toSp() }
         fun Float.dp(): Dp = with(density) { this@dp.toDp() }
 
-        // Video snap of the focused game (or the open Details game), full-bleed behind the menu.
+        // Focused game: hero art after 250 ms, then its video snap after 1.2 s, full-bleed behind
+        // the menu (see BackdropTiming). The wave pauses while either fully covers the screen.
+        val focusedArt = state.focused?.icon as? NodeIcon.Art
+        val quiet = state.overlay == null && state.search == null && state.optionsMenu == null &&
+            state.info == null && state.booting == null && state.remap == null && state.waveEditor == null &&
+            state.achievements == null && state.profileCard == null && state.nameEntry == null
+        var heroCovers by remember { mutableStateOf(false) }
+        var videoCovers by remember { mutableStateOf(false) }
+        FocusBackdrop(
+            uuid = focusedArt?.uuid?.takeIf { quiet && state.details == null },
+            artVersion = focusedArt?.version ?: 0L,
+            maxPx = minOf(maxOf(m.width, m.height), 1600f).toInt(),
+            loadArt = loadArt,
+            onCovering = { heroCovers = it },
+        )
         if (snap != null) {
-            val focusedArt = (state.focused?.icon as? NodeIcon.Art)?.uuid
-            val quiet = state.overlay == null && state.search == null && state.optionsMenu == null &&
-                state.info == null && state.booting == null && state.remap == null
             SnapDriver(
-                uuid = state.details?.uuid ?: focusedArt.takeIf { quiet },
+                uuid = state.details?.uuid ?: focusedArt?.uuid.takeIf { quiet },
                 snap = snap,
                 videoFile = videoFile,
                 volume = snapVolume,
             )
             val playing by snap.player.collectAsState()
-            playing?.let { SnapVideo(it, Modifier.fillMaxSize(), scrim = 0.55f) }
+            playing?.let { SnapVideo(it, Modifier.fillMaxSize(), scrim = 0.55f, onCovering = { c -> videoCovers = c }) }
+            if (playing == null) videoCovers = false
         }
+        val covers = heroCovers || videoCovers
+        val reportCover by rememberUpdatedState(onBackdropCoverChanged)
+        LaunchedEffect(covers) { reportCover(covers) }
 
         val catPos by animateFloatAsState(state.categoryIndex.toFloat(), NavSpring, label = "category")
         val depth by animateFloatAsState(state.depth.coerceAtMost(1).toFloat(), NavSpring, label = "depth")
 
         // The menu fades out under media screens so only one set of text and hints is visible.
+        /** Height of the button-hint row, so the mini player can float just above it. */
+        var hintsHeightPx by remember { mutableIntStateOf(0) }
         val menuAlpha by animateFloatAsState(
-            if (state.overlay == null && state.search == null && state.nameEntry == null && state.details == null) 1f else 0f,
+            if (state.overlay == null && state.search == null && state.nameEntry == null && state.details == null &&
+                state.waveEditor == null && state.achievements == null
+            ) {
+                1f
+            } else {
+                0f
+            },
             tween(220),
             label = "menu",
         )
@@ -238,49 +274,57 @@ fun XmbScreen(
         )
         ItemColumn(state, m, { pulse }, loadAppIcon, loadThumb, loadArt, onItemTap, onItemLongPress)
 
-        // Mini "now playing" indicator while browsing; fades out after 30 s paused.
-        val np = state.nowPlaying
-        var pausedTimedOut by remember { mutableStateOf(false) }
-        val timePause = MiniPlayerLine.shouldTime(np)
-        LaunchedEffect(timePause) {
-            pausedTimedOut = false
-            if (timePause) {
-                delay(MiniPlayerLine.PAUSED_HIDE_MS)
-                pausedTimedOut = true
-            }
-        }
-        AnimatedVisibility(
-            visible = MiniPlayerLine.visible(np, overlayOpen = state.overlay != null, pausedTimedOut = pausedTimedOut),
-            enter = fadeIn(tween(MiniPlayerLine.FADE_IN_MS)),
-            exit = fadeOut(tween(MiniPlayerLine.FADE_OUT_MS)),
-            modifier = Modifier.align(Alignment.TopStart).padding(top = (m.s * 0.04f).dp(), start = (m.width * 0.025f).dp()),
-        ) {
-            var last by remember { mutableStateOf("") }
-            MiniPlayerLine.text(np)?.let { last = it }
-            Text(
-                last,
-                style = shadowed(m.subtitleSize.sp(), color = TextDim),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.widthIn(max = (m.width * 0.45f).dp()),
-            )
-        }
+        // (The "now playing" line that used to sit top-left is the floating MiniPlayerCard below.)
 
         StatusBar(
             textSize = m.statusSize.sp(),
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .padding(top = (m.s * 0.04f).dp(), end = (m.width * 0.025f).dp()),
+            leading = {
+                ProfileAvatar(
+                    avatar = state.profile.avatar,
+                    avatarVersion = state.profile.avatarVersion,
+                    size = 32.dp,
+                    focused = state.avatarFocused,
+                    pulse = { pulse },
+                    contentDescription = state.profile.username.ifEmpty { "Profile" },
+                    onClick = onAvatarTap,
+                )
+            },
         )
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
-            modifier = Modifier.align(Alignment.BottomEnd).padding((m.s * 0.04f).dp()),
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding((m.s * 0.04f).dp())
+                .onSizeChanged { hintsHeightPx = it.height },
         ) {
             BusyIndicator(busy = state.busy, size = (m.subtitleSize * 1.5f).dp())
             if (state.showButtonHints) ButtonHints(state, m.subtitleSize.sp(), Modifier)
         }
         }
+
+        // Floating mini player: at the root, outside the menu's fade, so it rides across every
+        // category; anything that takes over the screen or the corner covers it.
+        val miniCovered = state.overlay != null || state.search != null || state.nameEntry != null ||
+            state.details != null || state.optionsMenu != null || state.info != null ||
+            state.profileCard != null || state.remap != null || state.booting != null ||
+            state.waveEditor != null || state.achievements != null
+        MiniPlayerCard(
+            nowPlaying = state.nowPlaying,
+            covered = miniCovered,
+            loadThumb = loadThumb,
+            onClick = onMiniPlayerTap,
+            onLongClick = onMiniPlayerLongPress,
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(
+                    end = 16.dp,
+                    bottom = maxOf(16.dp, (hintsHeightPx + m.s * 0.04f).dp() + 8.dp),
+                ),
+        )
 
         state.overlay?.let { overlay ->
             MediaOverlayLayer(
@@ -334,7 +378,9 @@ fun XmbScreen(
             backGlyph = if (state.confirm == ConfirmLayout.EAST) state.family.south else state.family.east,
             optionsGlyph = state.family.north,
             loadArt = loadArt,
+            loadBadge = loadBadge,
             onPlay = onPlayDetails,
+            onAchievements = onDetailsAchievements,
             onDismiss = onCloseDetails,
         )
 
@@ -346,8 +392,53 @@ fun XmbScreen(
             onDismiss = onCloseInfo,
         )
 
+        UserCard(
+            card = state.profileCard,
+            profile = state.profile,
+            m = m,
+            pulse = { pulse },
+            confirmGlyph = if (state.confirm == ConfirmLayout.EAST) state.family.east else state.family.south,
+            backGlyph = if (state.confirm == ConfirmLayout.EAST) state.family.south else state.family.east,
+            onButtonTap = onProfileCardButtonTap,
+            onDismiss = onCloseProfileCard,
+            loadBadge = loadBadge,
+        )
+
+        AchievementsScreen(
+            view = state.achievements,
+            m = m,
+            pulse = { pulse },
+            backGlyph = if (state.confirm == ConfirmLayout.EAST) state.family.south else state.family.east,
+            optionsGlyph = state.family.north,
+            loadArt = loadArt,
+            loadBadge = loadBadge,
+            onBadgeTap = onAchievementTap,
+            onDismiss = onCloseAchievements,
+        )
+
+        WaveSettingsPanel(
+            editor = state.waveEditor,
+            settings = state.settings,
+            basePalette = palette,
+            m = m,
+            pulse = { pulse },
+            confirmGlyph = if (state.confirm == ConfirmLayout.EAST) state.family.east else state.family.south,
+            backGlyph = if (state.confirm == ConfirmLayout.EAST) state.family.south else state.family.east,
+            onRowTap = onWaveRowTap,
+            onSlider = onWaveSlider,
+            onDismiss = onCloseWaveSettings,
+        )
+
         state.remap?.let { RemapOverlay(it, m, onCancelRemap) }
         state.booting?.let { GameBootOverlay(it, palette, m) }
+
+        // Unlock toasts: top right under the status bar; drawn only, never focused.
+        UnlockToast(
+            toast = state.unlockToast,
+            m = m,
+            loadBadge = loadBadge,
+            modifier = Modifier.align(Alignment.TopEnd).padding(top = (m.s * 0.12f).dp(), end = (m.width * 0.025f).dp()),
+        )
 
         // Toasts sit above every overlay (search, Options, media) so feedback is never hidden.
         AnimatedVisibility(
@@ -412,7 +503,7 @@ private fun CategoryBar(
                 .clickable(remember { MutableInteractionSource() }, indication = null) { onCategoryTap(i) },
         ) {
             XmbIcon(
-                painter = painterResource(category.icon.drawable()),
+                painter = glyphPainter(category.icon),
                 size = iconDp,
                 focus = focus,
                 focusScale = m.categoryFocusScale,
@@ -564,7 +655,7 @@ private fun ItemRow(
         Box(Modifier.size(iconSize), contentAlignment = Alignment.Center) {
             when (val icon = node.icon) {
                 is NodeIcon.Glyph -> XmbIcon(
-                    painter = painterResource(icon.key.drawable()),
+                    painter = glyphPainter(icon.key),
                     size = iconSize,
                     focus = focus,
                     focusScale = m.itemFocusScale,
@@ -733,7 +824,7 @@ private fun ArtIcon(
     Box(Modifier.size(size), contentAlignment = Alignment.Center) {
         if (shown < 1f) {
             Box(Modifier.fadeAlpha { 1f - shown }) {
-                XmbIcon(painterResource(icon.fallback.drawable()), size, focus, focusScale, glow)
+                XmbIcon(glyphPainter(icon.fallback), size, focus, focusScale, glow)
             }
         }
         val image = bitmap ?: return@Box
@@ -785,7 +876,7 @@ private fun ThumbIcon(
     val bitmap by produceState<ImageBitmap?>(null, icon) { value = loadThumb(icon.kind, icon.id, px) }
     val image = bitmap
     if (image == null) {
-        XmbIcon(painterResource(icon.fallback.drawable()), size, focus, focusScale, glow)
+        XmbIcon(glyphPainter(icon.fallback), size, focus, focusScale, glow)
         return
     }
     // Wider than tall for photos/videos, square for album art.
@@ -885,6 +976,7 @@ internal fun shadowed(size: TextUnit, color: Color = TextBright, weight: FontWei
     color = color,
     fontSize = size,
     fontWeight = weight,
+    fontFamily = ThemeTypography.family,
     shadow = Shadow(DropShadow, Offset(0f, 3f), blurRadius = 6f),
 )
 
@@ -906,6 +998,7 @@ internal fun GlowText(
             style = TextStyle(
                 color = Color.White.copy(alpha = 0.55f),
                 fontSize = fontSize,
+                fontFamily = ThemeTypography.family,
                 shadow = Shadow(Color.White, Offset.Zero, blurRadius = 18f),
             ),
             maxLines = 1,

@@ -24,15 +24,15 @@ with stub emulators · 📱 verified on a real device
 | --- | --- | --- |
 | **Phase 1 — Alpha** | XMB navigation, gamepad layer, ROM library, emulator launching, wave background | ✅ Complete |
 | **Phase 1b — Alpha hardening** | Hot-swap, USB-OTG, playtime, Options menu, per-game emulator, more emulators | ◐ Features done, including per-controller mappings, the axial deadzone and a 0% ("hardware only") deadzone; real-handheld testing and a Baseline Profile remain |
-| **Phase 2 — Beta** | Metadata, media hub, theme packs, on-screen controller and keyboard, portable `Xross/` folder, library organization | ◐ Fingerprinting, media hub, gamepad search, DAT verification, scrapers, Details screen and video snaps done (ScreenScraper awaits developer credentials). The portable `Xross/` folder landed on 2026-11-11: JSON config, database backup and restore, `.nomedia`, and the `GameLauncher` interface. All Games, the media controls shortcut and the 30 s mini-player hide are done too. Library organization followed: hidden apps, app folders, the base ROMs folder with Create system folders, custom Photo/Video folders, and scraped art moved to `Xross/media`. Theme packs, the on-screen controller and wave settings are not started |
-| **Phase 3 — Release candidate** | Dual screen, docking, RetroAchievements, Xross Portal, FTPS | ⬜ Not started (hot-swap and live resolution change, two prerequisites, are done) |
+| **Phase 2 — Beta** | Metadata, media hub, theme packs, on-screen controller and keyboard, portable `Xross/` folder, library organization | ◐ Fingerprinting, media hub, gamepad search, DAT verification, scrapers, Details screen and video snaps done (ScreenScraper awaits developer credentials). The portable `Xross/` folder landed on 2026-11-11: JSON config, database backup and restore, `.nomedia`, and the `GameLauncher` interface. All Games, the media controls shortcut and the 30 s mini-player hide are done too. Library organization followed: hidden apps, app folders, the base ROMs folder with Create system folders, custom Photo/Video folders, and scraped art moved to `Xross/media`. Theme packs (the `Xross/themes/` loader, with the bundled icons and sounds moved into a built-in Default pack), wave shader settings and the focused-game background landed on 2026-11-11, and ScreenScraper passed its live run. The on-controller keyboard overlay is not started |
+| **Phase 3 — Release candidate** | Dual screen, docking, RetroAchievements, Xross Portal, FTPS | ◐ RetroAchievements account linking and the status bar profile (avatar, User Card) are done; per-game achievement lists (Details and Options ▸ Achievements) and unlock toasts followed the same day. Hot-swap and live resolution change, two prerequisites, are done too. The rest is not started |
 | **Phase 4 — v1.0** | Onboarding, tuning, theme/plugin format, release | ◐ Performance work started (app triage moved to Phase 2 as app folders) |
 | **XMB fidelity** | Look and feel exactly like the XMB, plus Xross's extras | ◐ Home menu layout, motion and navigation match, and games now show their own box art; the typeface, sounds and several system behaviors don't match yet (§4.5) |
 
 **Codebase at a glance:** Kotlin + Jetpack Compose, one `:app` module, Room database at schema v5,
 22 platforms, 11 emulator launch recipes, 8 color themes (one follows the month), three metadata
 services (Hasheous, SteamGridDB, ScreenScraper), settings in three JSON files in `Xross/config/`
-(kotlinx.serialization), art in `Xross/media` in ES-DE's layout, 320 unit tests (318 run by default
+(kotlinx.serialization), art in `Xross/media` in ES-DE's layout, 349 unit tests (347 run by default
 plus 2 opt-in live-service tests), an
 on-device smoke test (updated for the new rows, not yet re-run, §3), and test-only stand-ins for
 all 11 emulators.
@@ -116,16 +116,20 @@ All 11 recipes are verified only against the test stand-ins, not real emulator i
 | Video player | ✅ | Seek, previous/next, loop, auto-hiding controls |
 | Clear empty state without storage access | ✅ 🧪 | Photo, Music and Video say "Storage access needed"; pressing the row opens the grant screen |
 | Custom Photo and Video folders | ✅ 📱 | Settings ▸ Media ▸ Photo folders / Video folders. Empty = all of MediaStore; otherwise MediaStore filtered by path plus a direct walk for files it skips (`.nomedia` and hidden folders, unindexed drives), with thumbnails made by Xross. Reloads on resume and when a drive comes or goes |
-| Mini-player line hides after 30 s paused | ✅ | The corner "❚❚ Title — Artist" line fades out (0.9 s) and returns as soon as playback resumes |
+| Floating mini player | ✅ 📱 | Since 2026-11-11 a rounded card in the lower-right corner (16 dp in, just above the button hints) replaces the top-left "❚❚ Title — Artist" line: 40 dp album art (music-note fallback), bold 13 sp title that scrolls when too long, 11 sp artist, play/pause glyph. It sits at the root of the XMB, so it stays across every category, and steps aside for full-screen media, panels and dialogs. Tap opens Now Playing (as Select does); long press plays or pauses. Checked on the Galaxy A55 (STATUS §3.12) |
+| Mini player hides after 30 s paused | ✅ | Fades out (0.9 s) after 30 s paused; comes straight back when playback resumes or the track changes. The line version passed on the Galaxy A55; the card uses the same rules plus the track-change case, verified by unit tests |
 
 ### 2.5 Look and sound
 
 | Feature | State | Notes |
 | --- | --- | --- |
-| Wave background (GLSL ES 3.0) | ✅ | Speed setting (0.5×–2×); stops whenever Xross isn't in front |
+| Wave background (GLSL ES 3.0) | ✅ | Stops whenever Xross isn't in front, and while focused-game art or a snap covers it |
+| Wave shader uniforms ✅ | ✅ | Speed (0.5×–2×), ribbon lines (0–12), turbulence, thickness, color presets and a custom gradient, in `settings.json` and Settings ▸ Theme ▸ Wave settings with a live preview (2026-11-11) |
+| Theme packs ✅ | ✅ | `Xross/themes/<id>/` (theme.json, fonts, SVG/PNG icons, sounds), case-insensitive and contained lookups, partial packs inherit from the built-in Default pack (2026-11-11) |
+| Audio mapping ✅ | ✅ | `cursor.wav` for every D-pad step, `01. opening.wav` at startup (replaces the coldboot cue), `system_ng.wav` for errors and refused actions; the silent `snd_error.wav` placeholder is gone |
 | Day/night brightness shift | ✅ | |
 | Color themes | ✅ | Lavender, Crimson, Sapphire, Emerald, Amber, Rose, Midnight, and Original (a color per month, blended over the days around each month boundary) |
-| Icons from the design SVGs | ✅ | 28 VectorDrawables generated by `tools/icons/svg_icons.py` |
+| Icons from the design SVGs | ✅ | 29 SVGs in the Default theme pack, generated by `tools/icons/svg_icons.py` and drawn by the pack loader |
 | Focus glow, halos, drop shadows | ✅ | Glow no longer gets clipped into a box while categories switch (fixed 2026-11-10) |
 | Cold-boot fade-in and startup sound | ✅ | Can be turned off |
 | Busy indicator while scanning or fingerprinting | ✅ | Ring of dots in the bottom corner; appears after 0.4 s, steps 10×/s |
@@ -182,13 +186,13 @@ These are bugs or gaps in features that are already built, separate from the new
 | Folder names are typed in capitals | The gamepad keyboard has no lower case; "MY TOOLS" is saved as "My Tools" and short words like "TV" stay capitals | Keyboard modes (§4.5) |
 | Portable folder untested on removable storage and old Android | Passed on the Galaxy A55's internal storage (migration, backup, restore and restart, outside edits). Moving the folder to an SD card or USB drive, atomic replace on FAT/exFAT, and Android 9/10 are unit-tested only | Check on a device with an SD card, and on an Android 9 or 10 device |
 | Config writes are asynchronous | A crash within milliseconds of changing a setting can lose that one change | Acceptable; writes are flushed before restores and folder moves |
-| ScreenScraper can't run yet | No descriptions, box art from ScreenScraper, or video snaps | Request developer credentials on the ScreenScraper forum; put them in `.env` |
 | Per-controller mappings and the axial deadzone are untested on hardware | Unit- and view-model-tested only | Test with two different controllers in the hardware pass |
 | Text dialogs (account, key, title, search) use the system keyboard | On the Galaxy A55 the keyboard once didn't open until the field was tapped; later dialogs opened it by themselves | Replace with the gamepad keyboard (Step 4) |
 | About 41% CPU while idle in front at 120 Hz | The wave renders continuously; costs battery on handhelds | Drop to 60 Hz or pause the wave while nothing moves |
 | Six newer emulator recipes may not accept a FileProvider URI | Launches could fail on real installs | Test each against a real install; fall back to the path extra |
 | Multi-file disc images (`.cue` + `.bin`) | One `content://` URI doesn't cover the `.bin` tracks | Rely on the emulator's own storage access and the path extra |
-| `snd_error.wav` is silent, and there's no dedicated cursor sound | Errors and moves reuse other sounds | Replace with the theme-pack sound set (§4.2) |
+| The Default pack still ships the PS3/PSP-like icons and sounds | Fine for testing, not for a public release | Make an original or open-licensed Default pack and offer the current one as an optional download (§4.2) |
+| RetroAchievements Web API features unverified live | `.env` holds the account password, not the Web API key; sign-in was checked live, profile/achievements only against recorded answers | Add `RETROACHIEVEMENTS_WEB_API_KEY` to `.env` and run `RetroAchievementsLiveTest` |
 | Search matches word prefixes only, Latin letters and digits only | "rono" doesn't find "Chrono Trigger" | Add substring or trigram matching if users need it |
 | Playtime counts all wall-clock time away from Xross after a launch | Sleep and other apps count (capped at 24 h) | Acceptable for now; revisit with usage stats |
 | Search results at 80% opacity clip their text shadow slightly | Barely visible | Switch to `fadeAlpha` when that screen is next touched |
@@ -214,7 +218,7 @@ These are bugs or gaps in features that are already built, separate from the new
 | --- | --- | --- |
 | DAT import (No-Intro and Redump Logiqx XML) ✅ | Fingerprints ✅ | Logiqx XML and clrmamepro text, also inside .zip; SHA-1 > MD5 > CRC32+size > set name; titles, regions, languages, revision, serial |
 | Per-track hashing for `.cue` / `.gdi` | | Redump matches tracks, not sheets |
-| ScreenScraper scraper ✅ 🧪 | Developer credentials | Built to the API page's rules (translated in `docs/SCREENSCRAPER_API.md`); waiting for developer credentials (`SCREENSCRAPER_DEV_ID` in `.env`). Canned responses only so far |
+| ScreenScraper scraper ✅ | Developer credentials | Built to the API page's rules (translated in `docs/SCREENSCRAPER_API.md`). Live run on 2026-11-11 with the `.env` developer credentials: 5 of 6 samples identified, descriptions, box art and video snaps cached into `Xross/media/`, quota block read and pacing applied |
 | SteamGridDB scraper ✅ 📱 | Per-user API key | Hero banners, 600×900 capsules, logos. Verified live on the Galaxy A55 |
 | Hasheous matching ✅ 📱 | | Hash lookup, no account. Verified live on the Galaxy A55, including arcade sets |
 | Language priority list | Scrapers | ◐ One region and one language setting today; a full priority list (for example `es-ES, es, en-US, en`) is still to do |
@@ -255,19 +259,20 @@ another device. Details and the reasons for each decision: `docs/BACKLOG_ASSESSM
 | Custom Photo and Video folders ✅ | `.nomedia` in `Xross/media` ✅ | Done 2026-11-11 (§2.4) |
 | Media controls shortcut ✅ | — | Done 2026-11-11 (§2.1). Not available over a running emulator |
 | Hide the paused mini player after 30 s ✅ | — | Done 2026-11-11 (§2.4) |
+| Floating mini player card ✅ | — | Done 2026-11-11 (§2.4); replaces the top-left line |
 
 **Customization**
 
 | Item | Notes |
 | --- | --- |
-| Theme pack format and loader | Icons, sounds (cursor, confirm, back, error, boot), fonts, color palettes; packs live in `Xross/themes/` |
-| Move bundled assets into a default pack | Required before any public release (bundled sounds and icons resemble PS3/PSP assets) |
-| Wave parameters: line count, turbulence, thickness, custom gradients | The shader is ready for the uniforms; needs settings UI |
+| Theme pack format and loader ✅ | Done 2026-11-11: icons, sounds, a font, palette and wave defaults; packs live in `Xross/themes/` |
+| Move bundled assets into a default pack ✅ | Done 2026-11-11 (`assets/themes/default`). Still needed before a public release: replace its PS3/PSP-like contents with original assets |
+| Wave parameters: line count, turbulence, thickness, custom gradients ✅ | Done 2026-11-11 with a live-preview panel |
 | Battery-level color blending | Battery level is already read for the status bar |
 | Custom boot animations | |
 | Separate volume sliders for UI sounds, music and video snaps | Music currently uses the system media volume |
 | UI scale slider (50–150%) | Layout already scales automatically |
-| Custom fonts | Part of theme packs |
+| Custom fonts ✅ | Part of theme packs (one .ttf/.otf per pack) |
 | Status-bar mode options (transparent, dark, hidden) | Immersive (hidden) today |
 | Aspect-ratio overrides (letterbox / pillarbox) | |
 
@@ -287,7 +292,7 @@ another device. Details and the reasons for each decision: `docs/BACKLOG_ASSESSM
 | Dock detection | `DisplayManager`; live resolution switching already works |
 | `autorun.inf` manifests | **Parse only**: label, icon, scan paths. Never execute anything from removable media |
 | Volume labels and drive icons | |
-| RetroAchievements | Login with an encrypted token, progress in game details, unlock toasts in the launcher. An overlay over a running emulator is optional, since RetroArch shows its own |
+| RetroAchievements | ◐ **Done 2026-11-11:** Settings ▸ Accounts links an account (user name + Web API key, checked against the API before saving); the key lives only in `CredentialStore` (app-private, excluded from backups), never in `settings.json` or the Xross folder. A 32 dp avatar sits by the clock (silhouette until a picture is cached in `Xross/media/avatars/`), and the User Card shows rank, points, RetroRatio and recent unlocks, with Refresh and Unlink. Per-game achievement lists (badge grid, points, completion bar, unlock dates; Details summary and Options ▸ Achievements) and unlock toasts after playing were added later that day; games are matched by RetroAchievements' own hash method per system. **Still to do:** encrypt the key at rest (Keystore), a live run with a Web API key. An overlay over a running emulator is optional, since RetroArch shows its own |
 | HTTPS Xross Portal | Ktor CIO engine: PIN login, ROM and BIOS upload, library editing, diagnostics. Self-signed TLS means browser warnings |
 | FTPS server | Apache FtpServer with TLS; under 3% CPU when idle; only runs when enabled |
 
@@ -312,10 +317,10 @@ much each item adds to the feel:
 
 | Item | Depends on | Notes |
 | --- | --- | --- |
-| Background on a focused game: video, then hero art, then wave | Scraper art ✅ | ◐ Video snaps already play behind the menu after 1.2 s. Missing: the hero banner crossfading in first (after ~250 ms, so fast scrolling doesn't decode every banner), the snap fading in over it, its sound ramping in and out, and the wave paused while art covers it (also cuts idle CPU). Setting: Video and art / Art only / Off. No real snaps to test with yet (`localTestMedia/Video` is empty) |
+| Background on a focused game: video, then hero art, then wave ✅ | Scraper art ✅ | Done 2026-11-11: hero art crossfades in after 250 ms, the snap fades in over it after 1.2 s with a 300 ms audio ramp (music ducked), and the wave stops rendering while either covers the screen. Still open: a Video and art / Art only / Off setting, and a ramp down on leaving |
 | XMB-style rounded typeface | Theme pack loader for user fonts | Bundle an open-licensed font as the default; the Android default font is the most visible difference today |
 | Resume Game / Quit Game while an emulator Xross launched is running | — | Equivalent of the PS button's Quit Game and the PSP Go's Pause/Resume Game |
-| Distinct cursor sound and a working error sound | Sound packs (§4.2) | Moves reuse the options sound; `snd_error.wav` is silent |
+| Distinct cursor sound and a working error sound ✅ | Sound packs (§4.2) ✅ | `cursor.wav` and `system_ng.wav` roles; the Default pack's cursor sound is still the options tick at a lower gain |
 | XMB-style drill-down (folder icon beside its contents, no text breadcrumb) | — | |
 | Control panel on △ in the video and music players | — | Alongside the existing direct controls; pairs with the media controls shortcut (§4.2) |
 | Photo or theme background behind the menu | Theme packs (§4.2) | "Set as wallpaper" currently sets the Android wallpaper |
@@ -397,8 +402,8 @@ focused-game background (hero art, then video), which pairs with cutting idle CP
 
 1. Run the real-hardware pass on a handheld with a controller and real emulators (also covers
    per-controller mappings and the axial deadzone).
-2. Get ScreenScraper developer credentials and run `ScreenScraperLiveTest`, then check
-   descriptions, box art and video snaps on a device.
+2. ✅ ScreenScraper developer credentials and `ScreenScraperLiveTest` (2026-11-11). Still to do:
+   scrape a real library on a device and watch snaps behind the menu.
 3. ✅ Quick backlog wins (0% deadzone, 30 s mini-player hide, media controls shortcut, All Games)
    and the `smoke.sh` update. Still to do: re-run `smoke.sh` on an emulator.
 4. ✅ The portable folder: bootstrap, `settings.json`, `controllers.json`, `systems.json`,
@@ -406,10 +411,12 @@ focused-game background (hero art, then video), which pairs with cutting idle CP
    device with an SD card and on Android 9 or 10.
 5. ✅ On top of it: app hide and folders, custom Photo/Video folders, the base ROMs folder, and
    art in `Xross/media`. Still to do: a device pass with an SD card.
-6. Step 3: theme pack format (in `Xross/themes`), with the bundled assets moved into a default
-   pack, and shader settings. An XMB-style default font comes with it.
-7. Focused-game background (hero art, then video), together with pausing the wave under it and
+6. ✅ Theme pack format (in `Xross/themes`), with the bundled assets moved into a Default pack, and
+   shader settings. Still to do: an original Default pack and an open-licensed XMB-style font.
+7. ✅ Focused-game background (hero art, then video) with the wave paused under it. Still to do:
    a Baseline Profile.
+8. Add a RetroAchievements Web API key to `.env` and run `RetroAchievementsLiveTest`; then link the
+   account on a device and check achievement lists and an unlock toast after a real session.
 
 ---
 

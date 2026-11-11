@@ -39,9 +39,12 @@ import java.util.Locale
 
 private data class BatteryState(val percent: Int, val charging: Boolean)
 
-/** Date, time, battery percentage and a three-bar battery gauge. */
+/**
+ * Date, time, battery percentage and a three-bar battery gauge. [leading] (the profile avatar)
+ * sits just before the clock.
+ */
 @Composable
-fun StatusBar(textSize: TextUnit, modifier: Modifier = Modifier) {
+fun StatusBar(textSize: TextUnit, modifier: Modifier = Modifier, leading: (@Composable () -> Unit)? = null) {
     val context = LocalContext.current
     var now by remember { mutableStateOf(Date()) }
     LaunchedEffect(Unit) {
@@ -62,11 +65,16 @@ fun StatusBar(textSize: TextUnit, modifier: Modifier = Modifier) {
     val style = TextStyle(
         color = Color.White,
         fontSize = textSize,
+        fontFamily = ThemeTypography.family,
         shadow = Shadow(Color(0x99000000), Offset(0f, 3f), 6f),
     )
     val heightDp = with(LocalDensity.current) { textSize.toDp() }
 
     Row(verticalAlignment = Alignment.CenterVertically, modifier = modifier) {
+        leading?.let {
+            it()
+            Spacer(Modifier.width(10.dp))
+        }
         Text(text, style = style)
         battery?.let {
             Spacer(Modifier.width(10.dp))

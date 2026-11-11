@@ -7,7 +7,8 @@
 #   ./gradlew :emulator-stub:installRetroarchDebug   # optional: enables the launch check
 #   tools/device-tests/smoke.sh
 #
-# WARNING: clears Xross's app data and adds files under /sdcard/ROMs on the device.
+# WARNING: clears Xross's app data, moves /sdcard/Xross/config to /sdcard/Xross-smoke-backup/, and
+# replaces /sdcard/ROMs with test files on the device.
 set -u
 PKG=dev.xross.launcher
 PASS=0
@@ -37,13 +38,17 @@ expect() { # expect <text> <description>
     if grep -qF -- "$1" <<<"$s"; then ok "$2"; return; fi
     pause 0.5
   done
-  bad "$2 — '$1' not on screen"; sed 's/^/       | /' <<<"$s" | head -12
+  bad "$2 — '$1' not on screen"; grep -v '^[[:space:]]*$' <<<"$s" | sed 's/^/       | /' | head -12
 }
 expect_not() {
   local s; s=$(screen)
   if grep -qF -- "$1" <<<"$s"; then bad "$2 — '$1' unexpectedly on screen"; else ok "$2"; fi
 }
-top() { key $(for _ in $(seq 25); do printf 'KEYCODE_DPAD_UP '; done); }
+# Up at the top of a category root climbs onto the status bar avatar; the Down after it only
+# leaves the avatar, so the cursor ends on the root's first row.
+top() { key $(for _ in $(seq 25); do printf 'KEYCODE_DPAD_UP '; done) KEYCODE_DPAD_DOWN; }
+# Inside a list (drilled in) Up stops at the first row.
+top_list() { key $(for _ in $(seq 25); do printf 'KEYCODE_DPAD_UP '; done); }
 # Categories: Settings, Photo, Music, Video, Games, Apps.
 category() { # category <index>: go to that category's root, cursor on the first entry
   key KEYCODE_BACK KEYCODE_BACK KEYCODE_BACK
@@ -65,6 +70,10 @@ all_games() { # all_games <collections above it>: open All Games (the platform f
 
 echo "== Setup"
 adb shell pm clear "$PKG" >/dev/null
+# Config in the Xross folder outlives pm clear and would be adopted on start; move it aside so every
+# run starts from defaults (kept under /sdcard/Xross-smoke-backup/, never deleted).
+adb shell 'if [ -d /sdcard/Xross/config ]; then b=/sdcard/Xross-smoke-backup/$(date +%Y%m%d-%H%M%S); mkdir -p $b && mv /sdcard/Xross/config $b/; fi'
+adb shell rm -rf /sdcard/Xross/themes/smoke_pack
 adb shell appops set --uid "$PKG" MANAGE_EXTERNAL_STORAGE allow
 adb shell 'rm -rf /sdcard/ROMs; mkdir -p /sdcard/ROMs/snes /sdcard/ROMs/gba /sdcard/ROMs/psx
   for g in "Chrono Trigger (USA)" "EarthBound (USA)" "Super Metroid (USA, Europe)"; do echo x > "/sdcard/ROMs/snes/$g.sfc"; done
@@ -110,21 +119,28 @@ expect "CUE" "the .bin track is hidden behind its .cue (focused entry is the .cu
 key KEYCODE_BACK KEYCODE_BACK
 
 echo "== Favorites"
-# Game Options menu rows: Play, Details, Add to favorites, Emulator, (Played), Metadata, Information.
+# Game Options menu rows: Play, Details, Achievements (systems with RetroAchievements), Add to
+# favorites, Emulator, (Played), Metadata, Information.
 all_games
 key KEYCODE_DPAD_CENTER
 expect "Options" "Options hint is shown for a game"
 key KEYCODE_BUTTON_Y
 expect "Add to favorites" "Options button opens the game's menu"
 expect "Details" "Options menu offers Details"
+expect "Achievements" "Options menu offers Achievements (SNES has RetroAchievements)"
 expect "Metadata" "Options menu offers Metadata"
 key KEYCODE_DPAD_DOWN KEYCODE_DPAD_DOWN KEYCODE_DPAD_CENTER
+expect "Link your RetroAchievements account" "Achievements screen opens and asks to link an account"
+key KEYCODE_BACK
+expect_not "Link your RetroAchievements account" "Back closes the Achievements screen"
+key KEYCODE_BUTTON_Y
+key KEYCODE_DPAD_DOWN KEYCODE_DPAD_DOWN KEYCODE_DPAD_DOWN KEYCODE_DPAD_CENTER
 pause 0.6
 key KEYCODE_BUTTON_Y
 expect "Remove from favorites" "menu toggles favorite"
 
 echo "== Per-game emulator"
-key KEYCODE_DPAD_DOWN KEYCODE_DPAD_DOWN KEYCODE_DPAD_DOWN KEYCODE_DPAD_CENTER
+key KEYCODE_DPAD_DOWN KEYCODE_DPAD_DOWN KEYCODE_DPAD_DOWN KEYCODE_DPAD_DOWN KEYCODE_DPAD_CENTER
 expect "Platform default" "Emulator submenu lists the platform default"
 key KEYCODE_DPAD_DOWN KEYCODE_DPAD_CENTER
 pause 0.6
@@ -159,7 +175,11 @@ expect "Sound" "Settings lists the Sound section"
 top
 
 echo "== Settings"
+# Theme rows: Theme pack, Theme color, Wave background, Wave settings, Button hints, Platform folders.
 key $(for _ in $(seq 3); do printf 'KEYCODE_DPAD_DOWN '; done) KEYCODE_DPAD_CENTER
+expect "Theme pack" "Theme section lists theme packs"
+expect "Default" "the built-in Default pack is active"
+key KEYCODE_DPAD_DOWN
 expect "Lavender" "Theme section shows the current theme"
 key KEYCODE_DPAD_CENTER
 pause 0.5
@@ -167,8 +187,18 @@ expect "Crimson" "Theme color cycles"
 key KEYCODE_DPAD_DOWN KEYCODE_DPAD_CENTER
 expect "Off" "Wave background toggles off"
 key KEYCODE_DPAD_CENTER
-# Theme rows: Theme color, Wave background, Wave speed, Button hints, Platform folders.
-key KEYCODE_DPAD_DOWN KEYCODE_DPAD_DOWN KEYCODE_DPAD_DOWN
+key KEYCODE_DPAD_DOWN KEYCODE_DPAD_CENTER
+expect "Changes preview live behind this panel" "Wave settings panel opens"
+expect "Ribbon lines" "Wave settings lists the shader uniforms"
+key KEYCODE_DPAD_RIGHT
+expect "1.1×" "Speed slider moves right"
+key KEYCODE_DPAD_DOWN KEYCODE_DPAD_RIGHT
+expect "6" "Ribbon lines slider moves"
+key KEYCODE_BACK
+expect "1.1× · 6 lines" "Wave settings row summarizes the new values"
+adb shell cat /sdcard/Xross/config/settings.json | grep -q '"waveSpeed": 1.1' \
+  && ok "wave uniforms are saved to settings.json" || bad "waveSpeed not in settings.json"
+key KEYCODE_DPAD_DOWN KEYCODE_DPAD_DOWN
 expect "Inside All Games" "Platform folders setting shows the All Games layout"
 key KEYCODE_DPAD_CENTER
 expect "At the top of Games (classic)" "Platform folders toggles to the classic layout"
@@ -179,6 +209,43 @@ expect "Effects volume" "Sound section opens"
 key KEYCODE_DPAD_DOWN KEYCODE_DPAD_CENTER
 expect "100%" "Effects volume cycles"
 key KEYCODE_BACK
+
+echo "== Theme packs"
+# A minimal pack: name, palette, wave defaults, one sound; everything else inherits from Default.
+pack=$(mktemp -d)
+mkdir -p "$pack/smoke_pack/sounds"
+cat > "$pack/smoke_pack/theme.json" <<'JSON'
+{"name": "Smoke Pack", "author": "smoke", "palette": {"top": "#101830", "bottom": "#3060A0", "wave": "#C0E0FF"},
+ "wave": {"lineCount": 8, "turbulence": 1.4}}
+JSON
+cp "$(dirname "$0")/../../app/src/main/assets/themes/default/sounds/cursor.wav" "$pack/smoke_pack/sounds/CURSOR.WAV"
+adb shell rm -rf /sdcard/Xross/themes/smoke_pack
+adb push "$pack/smoke_pack" /sdcard/Xross/themes/ >/dev/null
+rm -rf "$pack"
+adb shell ls -a /sdcard/Xross/themes | grep -q '^.nomedia$' && ok "Xross/themes has .nomedia" || bad "Xross/themes/.nomedia missing"
+top
+key $(for _ in $(seq 3); do printf 'KEYCODE_DPAD_DOWN '; done) KEYCODE_DPAD_CENTER
+top_list
+key KEYCODE_BUTTON_Y
+expect "Look for new packs" "Theme pack Options offer a rescan"
+key $(for _ in $(seq 6); do printf 'KEYCODE_DPAD_DOWN '; done) KEYCODE_DPAD_CENTER
+pause 1
+key KEYCODE_DPAD_CENTER
+pause 1.5
+expect "Smoke Pack" "a pack in Xross/themes is found and applied"
+key KEYCODE_DPAD_DOWN
+expect "Theme pack · Smoke Pack" "the pack's palette becomes the theme color"
+key KEYCODE_DPAD_DOWN KEYCODE_DPAD_DOWN
+expect "8 lines" "the pack's wave defaults are applied"
+top_list
+key KEYCODE_DPAD_CENTER
+pause 1.5
+expect "Default" "cycling returns to the Default pack"
+key KEYCODE_BACK
+
+echo "== Secrets"
+cfg=$(adb shell cat /sdcard/Xross/config/settings.json /sdcard/Xross/config/controllers.json /sdcard/Xross/config/systems.json)
+grep -qiE 'password|apikey|api_key|web_api|"key"' <<<"$cfg" && bad "account fields found in Xross/config" || ok "no account names, passwords or keys in Xross/config"
 
 echo "== Analog stick deadzone"
 # Controls rows: Confirm button, Analog stick deadzone, Axial deadzone, Remap buttons…, Reset all.
@@ -201,7 +268,10 @@ done
 pause 0.6
 expect "Buttons remapped" "wizard completes after ten buttons (last: media controls)"
 key KEYCODE_DPAD_DOWN
-expect "10 custom bindings" "bindings are saved"
+expect "default mapping changed" "Reset all summarizes the changed mapping"
+key KEYCODE_DPAD_DOWN
+expect "10 custom bindings" "bindings are saved (Default mapping row)"
+key KEYCODE_DPAD_UP
 key KEYCODE_BUTTON_X
 pause 0.5
 expect "Using defaults" "remapped X confirms (it ran Reset button mapping)"

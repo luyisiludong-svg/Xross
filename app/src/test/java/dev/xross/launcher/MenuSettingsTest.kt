@@ -18,7 +18,7 @@ import org.junit.Test
 class MenuSettingsTest {
     @Test fun settingsRootListsEverySection() {
         val titles = MenuTree(MenuSnapshot()).list("root:settings").map { it.title }
-        assertEquals(listOf("Library", "Controls", "Emulators", "Theme", "Sound", "Media", "Apps", "System"), titles)
+        assertEquals(listOf("Library", "Controls", "Emulators", "Theme", "Sound", "Media", "Apps", "Accounts", "System"), titles)
     }
 
     @Test fun systemSettingsShowTheXrossFolderAndBackup() {
@@ -65,14 +65,14 @@ class MenuSettingsTest {
     }
 
     @Test fun themeSettingShowsThemeLabel() {
-        val node = MenuTree(MenuSnapshot(settings = XrossSettings(theme = "CRIMSON"))).list(MenuTree.DISPLAY).first()
+        val node = MenuTree(MenuSnapshot(settings = XrossSettings(theme = "CRIMSON"))).list(MenuTree.DISPLAY).single { it.id == "disp:theme" }
         assertEquals("Crimson", node.subtitle)
         assertEquals(NodeAction.Run(Command.CycleTheme), node.action)
         assertEquals(XrossTheme.LAVENDER, XrossTheme.byName("nonsense"))
     }
 
     @Test fun originalThemeSaysItChangesMonthly() {
-        val node = MenuTree(MenuSnapshot(settings = XrossSettings(theme = "ORIGINAL"))).list(MenuTree.DISPLAY).first()
+        val node = MenuTree(MenuSnapshot(settings = XrossSettings(theme = "ORIGINAL"))).list(MenuTree.DISPLAY).single { it.id == "disp:theme" }
         assertEquals("Original · changes every month", node.subtitle)
     }
 
