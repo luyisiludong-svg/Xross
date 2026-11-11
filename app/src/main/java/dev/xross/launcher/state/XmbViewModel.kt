@@ -15,7 +15,9 @@ import dev.xross.launcher.BuildConfig
 import dev.xross.launcher.audio.UiCue
 import dev.xross.launcher.audio.UiSound
 import dev.xross.launcher.input.ConfirmLayout
+import dev.xross.launcher.input.ConnectedController
 import dev.xross.launcher.input.ControllerFamily
+import dev.xross.launcher.input.ControllerProfile
 import dev.xross.launcher.input.InputConfig
 import dev.xross.launcher.input.InputSink
 import dev.xross.launcher.input.NavAction
@@ -26,6 +28,7 @@ import dev.xross.launcher.storage.PlatformRegistry
 import dev.xross.launcher.storage.VolumeEvent
 import dev.xross.launcher.theme.XrossTheme
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
@@ -39,6 +42,7 @@ import kotlinx.coroutines.flow.sample
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 
 /** One-shot requests that need an Activity. */
@@ -76,6 +80,11 @@ data class XmbUiState(
     val optionsMenu: OptionsMenuState? = null,
     /** Search overlay (gamepad keyboard + live results) while it is open. */
     val search: SearchState? = null,
+    /** Information screen for a game, opened from its Options menu. */
+    val info: GameInfoState? = null,
+    /** Reading storage: a library scan or background fingerprinting is running. */
+    val busy: Boolean = false,
+    val showButtonHints: Boolean = true,
 ) {
     val focused: XmbNode? get() = items.getOrNull(focusedIndex)
     val depth: Int get() = breadcrumb.size
@@ -88,6 +97,9 @@ private data class Transient(
     val booting: String? = null,
     val optionsMenu: OptionsMenuState? = null,
     val search: SearchState? = null,
+    val info: GameInfoState? = null,
+    /** A library scan is running (fingerprinting is tracked by [FingerprintStatus.current]). */
+    val scanning: Boolean = false,
 )
 
 class XmbViewModel(
@@ -185,6 +197,9 @@ class XmbViewModel(
             nowPlaying = lv.nowPlaying,
             optionsMenu = tr.optionsMenu,
             search = tr.search,
+            info = tr.info,
+            busy = tr.scanning || lv.fingerprints.current != null,
+            showButtonHints = settings.showButtonHints,
         )
     }.stateIn(viewModelScope, SharingStarted.Eagerly, XmbUiState(coldBoot = coldBoot))
 
@@ -219,7 +234,15 @@ class XmbViewModel(
     private fun current(): ListView = resolve(tree.value, nav.value, live.value)
 
     val inputConfig: InputConfig
-        get() = settingsStore.current.let { InputConfig(it.confirmLayout, it.deadzone, it.keyRemap) }
+        get() = settingsStore.current.let {
+            InputConfig(
+                confirm = it.confirmLayout,
+                deadzone = it.deadzone,
+                remap = it.keyRemap,
+                axialDeadzone = it.axialDeadzone,
+                profiles = it.controllerProfiles,
+            )
+        }
 
     private var toastJob: Job? = null
     private var scanJob: Job? = null
@@ -239,6 +262,7 @@ class XmbViewModel(
 
     override fun onAction(action: NavAction) {
         if (transient.value.remap != null || transient.value.booting != null) return
+        transient.value.info?.let { return infoAction(it, action) }
         if (media.onAction(action)) return
         transient.value.optionsMenu?.let { return optionsAction(it, action) }
         transient.value.search?.let { return searchAction(it, action) }
@@ -403,23 +427,100 @@ class XmbViewModel(
 
     // endregion
 
-    override fun onRawKeyDown(keyCode: Int): Boolean {
+    // region Information screen
+
+    private var infoJob: Job? = null
+
+    /**
+     * Loads the game, its fingerprint and a file check off the main thread, then opens the
+     * Information screen. Built from the tree as it is now, so it names the emulator that would
+     * actually launch.
+     */
+    private fun showGameInfo(gameId: Long) {
+        infoJob?.cancel()
+        infoJob = viewModelScope.launch {
+            val t = tree.value
+            val info = withContext(Dispatchers.IO) {
+                val game = container.games.get(gameId) ?: return@withContext null
+                val hash = container.database.hashes().get(gameId)
+                val offline = t.isOffline(game.path)
+                GameInfo.build(
+                    game = game,
+                    hash = hash,
+                    platform = PlatformRegistry.byId(game.platformId),
+                    emulator = t.emulatorSummary(game),
+                    offline = offline,
+                    fileExists = if (offline) null else File(game.path).exists(),
+                )
+            } ?: return@launch
+            transient.update { it.copy(info = info) }
+        }
+    }
+
+    private fun infoAction(info: GameInfoState, action: NavAction) {
+        val delta = when (action) {
+            NavAction.UP -> -1
+            NavAction.DOWN -> 1
+            NavAction.PREV_CATEGORY -> -INFO_PAGE
+            NavAction.NEXT_CATEGORY -> INFO_PAGE
+            NavAction.BACK, NavAction.CONFIRM, NavAction.OPTIONS, NavAction.START -> return closeInfo()
+            NavAction.LEFT, NavAction.RIGHT -> return
+        }
+        val moved = info.move(delta)
+        if (moved != info) {
+            sounds.play(UiSound.MOVE)
+            transient.update { it.copy(info = moved) }
+        }
+    }
+
+    fun closeInfo() {
+        infoJob?.cancel()
+        if (transient.value.info != null) {
+            sounds.play(UiSound.BACK)
+            transient.update { it.copy(info = null) }
+        }
+    }
+
+    /** Touch: tap a row to highlight it. */
+    fun onInfoRowTapped(index: Int) {
+        val info = transient.value.info ?: return
+        transient.update { it.copy(info = info.moveTo(index)) }
+    }
+
+    // endregion
+
+    override fun onRawKeyDown(keyCode: Int, controller: ConnectedController?): Boolean {
         val tr = transient.value
-        if (tr.remap == null && tr.optionsMenu == null && tr.booting == null && !media.isOpen) {
+        if (tr.remap == null && tr.optionsMenu == null && tr.info == null && tr.booting == null && !media.isOpen) {
             tr.search?.let { return searchRawKey(it, keyCode) }
         }
         val session = transient.value.remap ?: return false
-        val next = session.capture(keyCode)
+        val next = session.capture(keyCode, controller)
         if (next.isDone) {
-            settingsStore.update { it.copy(keyRemap = next.captured) }
+            saveRemap(next)
             transient.update { it.copy(remap = null) }
             sounds.play(UiSound.OK)
-            toast("Buttons remapped")
+            val name = next.controller?.name?.ifBlank { null }
+            toast(if (name != null) "Buttons remapped for $name" else "Buttons remapped")
         } else {
             if (next.step != session.step) sounds.play(UiSound.MOVE)
             transient.update { it.copy(remap = next) }
         }
         return true
+    }
+
+    /**
+     * An identified controller gets its own profile (other models keep theirs); a device without
+     * IDs replaces the global mapping.
+     */
+    private fun saveRemap(session: RemapSession) {
+        val controller = session.controller
+        if (controller != null) {
+            val profile = ControllerProfile(controller.name, session.captured)
+            settingsStore.update { it.copy(controllerProfiles = it.controllerProfiles + (controller.key.id to profile)) }
+        } else {
+            settingsStore.update { it.copy(keyRemap = session.captured) }
+        }
     }
 
     override fun onControllerUsed(family: ControllerFamily) {
@@ -582,24 +683,36 @@ class XmbViewModel(
         scanJob?.cancel()
         fingerprints.stop() // resume after the scan, against the updated library
         scanJob = viewModelScope.launch {
-            env.update { it.copy(scanStatus = "Scanning…") }
-            val roots = env.value.folders.map { File(it.path) }
-            val started = System.nanoTime()
-            val result = runCatching { container.games.scan(roots) }
-            // A newer scan replaced this one: not a failure, nothing to report.
-            if (result.exceptionOrNull() is CancellationException) return@launch
-            if (BuildConfig.PERF_LOG) {
-                val ms = (System.nanoTime() - started) / 1_000_000
-                android.util.Log.i("XrossScan", "scan ${result.getOrNull() ?: result.exceptionOrNull()} in $ms ms")
+            val self = coroutineContext[Job]
+            transient.update { it.copy(scanning = true) }
+            try {
+                scan(quiet)
+            } finally {
+                // A newer scan that replaced this one owns the flag now.
+                if (scanJob == null || scanJob === self) transient.update { it.copy(scanning = false) }
             }
-            val status = result.fold(
-                onSuccess = { "${it.total} games · +${it.added} −${it.removed}" },
-                onFailure = { "Scan failed: ${it.message}" },
-            )
-            env.update { it.copy(scanStatus = status) }
-            if (!quiet || result.isFailure) toast(status)
-            if (foreground) fingerprints.start(viewModelScope)
         }
+    }
+
+    /** One library scan: runs the repository scan (on Dispatchers.IO), then reports and resumes hashing. */
+    private suspend fun scan(quiet: Boolean) {
+        env.update { it.copy(scanStatus = "Scanning…") }
+        val roots = env.value.folders.map { File(it.path) }
+        val started = System.nanoTime()
+        val result = runCatching { container.games.scan(roots) }
+        // A newer scan replaced this one: not a failure, nothing to report.
+        if (result.exceptionOrNull() is CancellationException) return
+        if (BuildConfig.PERF_LOG) {
+            val ms = (System.nanoTime() - started) / 1_000_000
+            android.util.Log.i("XrossScan", "scan ${result.getOrNull() ?: result.exceptionOrNull()} in $ms ms")
+        }
+        val status = result.fold(
+            onSuccess = { "${it.total} games · +${it.added} −${it.removed}" },
+            onFailure = { "Scan failed: ${it.message}" },
+        )
+        env.update { it.copy(scanStatus = status) }
+        if (!quiet || result.isFailure) toast(status)
+        if (foreground) fingerprints.start(viewModelScope)
     }
 
     // endregion
@@ -720,9 +833,23 @@ class XmbViewModel(
             Command.CycleDeadzone -> settingsStore.update { it.copy(deadzone = DEADZONES.nextAfter(it.deadzone)) }
             Command.StartRemap -> transient.update { it.copy(remap = RemapSession()) }
             Command.ResetRemap -> {
-                settingsStore.update { it.copy(keyRemap = emptyMap()) }
-                toast("Button mapping reset")
+                settingsStore.update { it.copy(keyRemap = emptyMap(), controllerProfiles = emptyMap()) }
+                toast("All button mappings reset")
             }
+            Command.ResetGlobalRemap -> {
+                settingsStore.update { it.copy(keyRemap = emptyMap()) }
+                toast("Default mapping reset")
+            }
+            is Command.ResetControllerProfile -> {
+                val name = settingsStore.current.controllerProfiles[command.id]?.name?.ifBlank { null }
+                settingsStore.update { it.copy(controllerProfiles = it.controllerProfiles - command.id) }
+                toast(if (name != null) "Mapping reset for $name" else "Controller mapping reset")
+            }
+            Command.CycleAxialDeadzone -> settingsStore.update {
+                it.copy(axialDeadzone = AXIAL_DEADZONES.nextAfter(it.axialDeadzone))
+            }
+            Command.ToggleButtonHints -> settingsStore.update { it.copy(showButtonHints = !it.showButtonHints) }
+            is Command.ShowGameInfo -> showGameInfo(command.gameId)
             is Command.CycleEmulator -> cycleEmulator(command.platformId)
             Command.ToggleWave -> settingsStore.update { it.copy(waveEnabled = !it.waveEnabled) }
             Command.CycleWaveSpeed -> settingsStore.update { it.copy(waveSpeed = WAVE_SPEEDS.nextAfter(it.waveSpeed)) }
@@ -832,6 +959,8 @@ class XmbViewModel(
 
     companion object {
         private val DEADZONES = listOf(0.15f, 0.25f, 0.35f, 0.45f, 0.55f)
+        private val AXIAL_DEADZONES = listOf(0f, 0.1f, 0.2f, 0.3f)
+        private const val INFO_PAGE = 5
         private val WAVE_SPEEDS = listOf(0.5f, 1f, 1.5f, 2f)
         private val VOLUMES = listOf(0.25f, 0.5f, 0.75f, 1f)
         private val SLIDESHOW_SECONDS = listOf(3, 5, 10, 20)

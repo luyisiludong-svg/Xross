@@ -85,11 +85,12 @@ class OptionsMenuTest {
     @Test fun gameMenuOffersPlayFavoriteEmulatorAndHistory() {
         val game = GameEntity(7, "/r/psx/a.chd", "psx", "Vagrant Story", "a.chd", 10, 0, playCount = 3, playTimeMs = 135 * 60_000L)
         val menu = gameMenu(game, installed = setOf("duckstation", "retroarch"))
-        assertEquals(listOf("Play", "Add to favorites", "Emulator", "Played"), menu.map { it.label })
+        assertEquals(listOf("Play", "Add to favorites", "Emulator", "Played", "Information"), menu.map { it.label })
         assertEquals(Command.LaunchGame(7), menu[0].command)
         assertEquals(Command.ToggleFavorite(7), menu[1].command)
         assertEquals("DuckStation", menu[2].detail)
         assertEquals("2 h 15 min · 3 times", menu[3].detail)
+        assertEquals(Command.ShowGameInfo(7), menu[4].command)
 
         val choices = menu[2].submenu
         assertEquals(listOf("Platform default", "DuckStation", "RetroArch · swanstation", "RetroArch · pcsx_rearmed"), choices.map { it.label })
@@ -107,8 +108,8 @@ class OptionsMenuTest {
         assertEquals(listOf(false, false, true, false), choices.map { it.selected })
         assertEquals("Not installed", choices[1].detail) // DuckStation
         assertEquals("RetroArch · swanstation", choices[0].detail) // what the platform default resolves to
-        // No sessions yet: no history row.
-        assertEquals(listOf("Play", "Remove from favorites", "Emulator"), menu.map { it.label })
+        // No sessions yet: no history row, but Information is always there.
+        assertEquals(listOf("Play", "Remove from favorites", "Emulator", "Information"), menu.map { it.label })
     }
 
     // endregion

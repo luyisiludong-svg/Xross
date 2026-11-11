@@ -2,6 +2,8 @@ package dev.xross.launcher
 
 import dev.xross.launcher.data.GameEntity
 import dev.xross.launcher.data.XrossSettings
+import dev.xross.launcher.input.ControllerProfile
+import dev.xross.launcher.input.NavAction
 import dev.xross.launcher.state.Command
 import dev.xross.launcher.state.GlyphKey
 import dev.xross.launcher.state.MenuSnapshot
@@ -33,6 +35,48 @@ class MenuSettingsTest {
         assertEquals("Crimson", node.subtitle)
         assertEquals(NodeAction.Run(Command.CycleTheme), node.action)
         assertEquals(XrossTheme.LAVENDER, XrossTheme.byName("nonsense"))
+    }
+
+    @Test fun originalThemeSaysItChangesMonthly() {
+        val node = MenuTree(MenuSnapshot(settings = XrossSettings(theme = "ORIGINAL"))).list(MenuTree.DISPLAY).first()
+        assertEquals("Original · changes every month", node.subtitle)
+    }
+
+    @Test fun buttonHintsCanBeHidden() {
+        fun row(show: Boolean) = MenuTree(MenuSnapshot(settings = XrossSettings(showButtonHints = show)))
+            .list(MenuTree.DISPLAY).single { it.id == "disp:hints" }
+        assertEquals(NodeAction.Run(Command.ToggleButtonHints), row(true).action)
+        assertEquals("Hidden", row(false).subtitle)
+        assertTrue(row(true).subtitle!!.startsWith("Shown"))
+    }
+
+    @Test fun controlsShowAxialDeadzoneAndEachSavedController() {
+        val settings = XrossSettings(
+            axialDeadzone = 0.2f,
+            keyRemap = mapOf(99 to NavAction.CONFIRM),
+            controllerProfiles = mapOf(
+                "054c:0ce6" to ControllerProfile("DualSense Wireless Controller", mapOf(96 to NavAction.CONFIRM, 97 to NavAction.BACK)),
+                "045e:0b13" to ControllerProfile("", mapOf(96 to NavAction.BACK)),
+            ),
+        )
+        val rows = MenuTree(MenuSnapshot(settings = settings)).list(MenuTree.CONTROLS)
+        val byId = rows.associateBy { it.id }
+        assertEquals("20% per axis", byId.getValue("ctl:axial").subtitle)
+        assertEquals(NodeAction.Run(Command.CycleAxialDeadzone), byId.getValue("ctl:axial").action)
+        assertEquals("2 controllers · default mapping changed", byId.getValue("ctl:reset").subtitle)
+
+        val pad = byId.getValue("ctl:profile:054c:0ce6")
+        assertEquals("DualSense Wireless Controller", pad.title)
+        assertEquals("2 custom bindings · 054C:0CE6", pad.subtitle)
+        assertEquals(listOf(Command.ResetControllerProfile("054c:0ce6")), pad.menu.map { it.command })
+        // A controller that reported no name is labelled by its IDs.
+        assertEquals("Controller 045E:0B13", byId.getValue("ctl:profile:045e:0b13").title)
+        assertEquals(listOf(Command.ResetGlobalRemap), byId.getValue("ctl:profile:global").menu.map { it.command })
+
+        val defaults = MenuTree(MenuSnapshot()).list(MenuTree.CONTROLS).associateBy { it.id }
+        assertEquals("Off — radial only", defaults.getValue("ctl:axial").subtitle)
+        assertEquals("Using defaults", defaults.getValue("ctl:reset").subtitle)
+        assertTrue(defaults.keys.none { it.startsWith("ctl:profile:") })
     }
 
     @Test fun discAndCartridgeGamesGetDifferentIcons() {

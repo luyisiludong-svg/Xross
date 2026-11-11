@@ -91,7 +91,9 @@ import dev.xross.launcher.state.RemapSession
 import dev.xross.launcher.state.XmbCategory
 import dev.xross.launcher.state.XmbNode
 import dev.xross.launcher.state.XmbUiState
+import dev.xross.launcher.theme.ThemePalette
 import dev.xross.launcher.theme.XrossTheme
+import dev.xross.launcher.theme.rememberThemePalette
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.floor
@@ -157,8 +159,10 @@ fun XmbScreen(
     onCloseOptions: () -> Unit = {},
     onSearchKeyTap: (Int, Int) -> Unit = { _, _ -> },
     onSearchResultTap: (Int) -> Unit = {},
+    onInfoRowTap: (Int) -> Unit = {},
+    onCloseInfo: () -> Unit = {},
 ) {
-    val theme = XrossTheme.byName(state.theme)
+    val palette = rememberThemePalette(XrossTheme.byName(state.theme))
 
     // Slow "breathing" glow shared by everything that is focused.
     val pulse by rememberInfiniteTransition(label = "glow").animateFloat(
@@ -232,11 +236,14 @@ fun XmbScreen(
                 .align(Alignment.TopEnd)
                 .padding(top = (m.s * 0.04f).dp(), end = (m.width * 0.025f).dp()),
         )
-        ButtonHints(
-            state,
-            m.subtitleSize.sp(),
-            Modifier.align(Alignment.BottomEnd).padding((m.s * 0.04f).dp()),
-        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.align(Alignment.BottomEnd).padding((m.s * 0.04f).dp()),
+        ) {
+            BusyIndicator(busy = state.busy, size = (m.subtitleSize * 1.5f).dp())
+            if (state.showButtonHints) ButtonHints(state, m.subtitleSize.sp(), Modifier)
+        }
         }
 
         state.overlay?.let { overlay ->
@@ -272,8 +279,16 @@ fun XmbScreen(
             onDismiss = onCloseOptions,
         )
 
+        InfoPanel(
+            info = state.info,
+            m = m,
+            backGlyph = if (state.confirm == ConfirmLayout.EAST) state.family.south else state.family.east,
+            onRowTap = onInfoRowTap,
+            onDismiss = onCloseInfo,
+        )
+
         state.remap?.let { RemapOverlay(it, m, onCancelRemap) }
-        state.booting?.let { GameBootOverlay(it, theme, m) }
+        state.booting?.let { GameBootOverlay(it, palette, m) }
 
         // Toasts sit above every overlay (search, Options, media) so feedback is never hidden.
         AnimatedVisibility(
@@ -846,7 +861,9 @@ private fun RemapOverlay(session: RemapSession, m: XmbMetrics, onCancel: () -> U
             .clickable(remember { MutableInteractionSource() }, indication = null, onClick = onCancel),
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("Remap buttons  ${session.progress}", style = shadowed(with(density) { m.subtitleSize.toSp() }, TextDim))
+            val device = session.controller?.name?.ifBlank { null }
+                ?: if (session.deviceChosen) "Default mapping" else "Press a button on the controller to remap"
+            Text("Remap buttons  ${session.progress}  ·  $device", style = shadowed(with(density) { m.subtitleSize.toSp() }, TextDim))
             Spacer(Modifier.height(10.dp))
             GlowText(
                 "Press the button for: " + (session.target?.let(RemapSession::label) ?: ""),
@@ -861,7 +878,7 @@ private fun RemapOverlay(session: RemapSession, m: XmbMetrics, onCancel: () -> U
 
 /** Game start transition: a bright bloom washes over the screen while the start cue plays. */
 @Composable
-private fun GameBootOverlay(title: String, theme: XrossTheme, m: XmbMetrics) {
+private fun GameBootOverlay(title: String, palette: ThemePalette, m: XmbMetrics) {
     val progress = remember(title) { Animatable(0f) }
     LaunchedEffect(title) { progress.animateTo(1f, tween(900, easing = FastOutSlowInEasing)) }
     val density = LocalDensity.current
@@ -875,8 +892,8 @@ private fun GameBootOverlay(title: String, theme: XrossTheme, m: XmbMetrics) {
                 drawRect(Color.Black.copy(alpha = 0.92f * (p * 1.6f).coerceAtMost(1f)))
                 drawCircle(
                     Brush.radialGradient(
-                        0f to theme.glowColor.copy(alpha = 0.85f * p),
-                        0.6f to theme.glowColor.copy(alpha = 0.25f * p),
+                        0f to palette.glowColor.copy(alpha = 0.85f * p),
+                        0.6f to palette.glowColor.copy(alpha = 0.25f * p),
                         1f to Color.Transparent,
                         center = center,
                         radius = size.maxDimension * (0.2f + 0.6f * p),

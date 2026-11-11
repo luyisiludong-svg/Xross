@@ -4,10 +4,14 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.core.content.edit
 import dev.xross.launcher.input.ConfirmLayout
+import dev.xross.launcher.input.ControllerKey
+import dev.xross.launcher.input.ControllerProfile
 import dev.xross.launcher.input.NavAction
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import org.json.JSONException
+import org.json.JSONObject
 
 data class XrossSettings(
     val romFolders: List<String> = emptyList(),
@@ -15,14 +19,22 @@ data class XrossSettings(
     /** Auto-detected folders seen so far, kept so games survive their volume being unplugged. */
     val knownAutoFolders: List<String> = emptyList(),
     val confirmLayout: ConfirmLayout = ConfirmLayout.AUTO,
+    /** Radial deadzone: stick deflection (0–1 of full travel) below which nothing registers. */
     val deadzone: Float = 0.35f,
+    /** Axial deadzone: per-axis deflection ignored before the radial check; 0 turns it off. */
+    val axialDeadzone: Float = 0f,
+    /** Global mapping: keyboards, unidentified devices, and controllers without their own profile. */
     val keyRemap: Map<Int, NavAction> = emptyMap(),
+    /** [ControllerKey.id] → that controller model's own mapping. */
+    val controllerProfiles: Map<String, ControllerProfile> = emptyMap(),
     /** platformId → [dev.xross.launcher.storage.EmulatorOption.key] */
     val emulatorChoice: Map<String, String> = emptyMap(),
     val waveEnabled: Boolean = true,
     val waveSpeed: Float = 1f,
     /** [dev.xross.launcher.theme.XrossTheme] name. */
     val theme: String = "LAVENDER",
+    /** The pill of button hints in the bottom corner of the home menu. */
+    val showButtonHints: Boolean = true,
     val soundEffects: Boolean = true,
     val soundVolume: Float = 0.75f,
     val bootSound: Boolean = true,
@@ -59,15 +71,14 @@ class SettingsStore(context: Context) {
             ?.split('\n')?.filter { it.isNotBlank() }.orEmpty(),
         confirmLayout = enumOrDefault(prefs.getString(KEY_CONFIRM, null), ConfirmLayout.AUTO),
         deadzone = prefs.getFloat(KEY_DEADZONE, 0.35f),
-        keyRemap = decodeMap(prefs.getString(KEY_REMAP, null)).mapNotNull { (k, v) ->
-            val code = k.toIntOrNull() ?: return@mapNotNull null
-            val action = runCatching { NavAction.valueOf(v) }.getOrNull() ?: return@mapNotNull null
-            code to action
-        }.toMap(),
+        axialDeadzone = prefs.getFloat(KEY_AXIAL_DEADZONE, 0f),
+        keyRemap = decodeRemap(decodeMap(prefs.getString(KEY_REMAP, null))),
+        controllerProfiles = decodeProfiles(prefs.getString(KEY_PROFILES, null)),
         emulatorChoice = decodeMap(prefs.getString(KEY_EMULATORS, null)),
         waveEnabled = prefs.getBoolean(KEY_WAVE, true),
         waveSpeed = prefs.getFloat(KEY_WAVE_SPEED, 1f),
         theme = prefs.getString(KEY_THEME, null) ?: "LAVENDER",
+        showButtonHints = prefs.getBoolean(KEY_BUTTON_HINTS, true),
         soundEffects = prefs.getBoolean(KEY_SFX, true),
         soundVolume = prefs.getFloat(KEY_SFX_VOLUME, 0.75f),
         bootSound = prefs.getBoolean(KEY_BOOT_SOUND, true),
@@ -84,11 +95,14 @@ class SettingsStore(context: Context) {
         putString(KEY_KNOWN_AUTO, s.knownAutoFolders.joinToString("\n"))
         putString(KEY_CONFIRM, s.confirmLayout.name)
         putFloat(KEY_DEADZONE, s.deadzone)
-        putString(KEY_REMAP, encodeMap(s.keyRemap.map { (k, v) -> k.toString() to v.name }.toMap()))
+        putFloat(KEY_AXIAL_DEADZONE, s.axialDeadzone)
+        putString(KEY_REMAP, encodeMap(encodeRemap(s.keyRemap)))
+        putString(KEY_PROFILES, encodeProfiles(s.controllerProfiles))
         putString(KEY_EMULATORS, encodeMap(s.emulatorChoice))
         putBoolean(KEY_WAVE, s.waveEnabled)
         putFloat(KEY_WAVE_SPEED, s.waveSpeed)
         putString(KEY_THEME, s.theme)
+        putBoolean(KEY_BUTTON_HINTS, s.showButtonHints)
         putBoolean(KEY_SFX, s.soundEffects)
         putFloat(KEY_SFX_VOLUME, s.soundVolume)
         putBoolean(KEY_BOOT_SOUND, s.bootSound)
@@ -99,17 +113,20 @@ class SettingsStore(context: Context) {
         putBoolean(KEY_VIDEO_LOOP, s.videoLoop)
     }
 
-    private companion object {
+    internal companion object {
         const val KEY_FOLDERS = "rom_folders"
         const val KEY_AUTO_DETECT = "auto_detect_folders"
         const val KEY_KNOWN_AUTO = "known_auto_folders"
         const val KEY_CONFIRM = "confirm_layout"
         const val KEY_DEADZONE = "deadzone"
+        const val KEY_AXIAL_DEADZONE = "axial_deadzone"
         const val KEY_REMAP = "key_remap"
+        const val KEY_PROFILES = "controller_profiles"
         const val KEY_EMULATORS = "emulator_choice"
         const val KEY_WAVE = "wave_enabled"
         const val KEY_WAVE_SPEED = "wave_speed"
         const val KEY_THEME = "theme"
+        const val KEY_BUTTON_HINTS = "show_button_hints"
         const val KEY_SFX = "sound_effects"
         const val KEY_SFX_VOLUME = "sound_volume"
         const val KEY_BOOT_SOUND = "boot_sound"
@@ -127,6 +144,52 @@ class SettingsStore(context: Context) {
                 val i = line.indexOf('=')
                 if (i <= 0) null else line.substring(0, i) to line.substring(i + 1)
             }.toMap()
+
+        fun encodeRemap(remap: Map<Int, NavAction>): Map<String, String> =
+            remap.map { (k, v) -> k.toString() to v.name }.toMap()
+
+        /** Drops entries whose key code or action no longer parses (renamed actions, corruption). */
+        fun decodeRemap(raw: Map<String, String>): Map<Int, NavAction> = raw.mapNotNull { (k, v) ->
+            val code = k.toIntOrNull() ?: return@mapNotNull null
+            val action = runCatching { NavAction.valueOf(v) }.getOrNull() ?: return@mapNotNull null
+            code to action
+        }.toMap()
+
+        /**
+         * Profiles as JSON, because device names are free text (any character, including the
+         * separators the line format above relies on):
+         * `{"054c:0ce6": {"name": "DualSense Wireless Controller", "remap": {"96": "CONFIRM"}}}`
+         */
+        fun encodeProfiles(profiles: Map<String, ControllerProfile>): String {
+            val root = JSONObject()
+            for ((id, profile) in profiles) {
+                val remap = JSONObject()
+                for ((code, action) in profile.remap) remap.put(code.toString(), action.name)
+                root.put(id, JSONObject().put("name", profile.name).put("remap", remap))
+            }
+            return root.toString()
+        }
+
+        /** Unreadable data yields no profiles rather than a crash; the global mapping still applies. */
+        fun decodeProfiles(raw: String?): Map<String, ControllerProfile> {
+            if (raw.isNullOrBlank()) return emptyMap()
+            val root = try {
+                JSONObject(raw)
+            } catch (_: JSONException) {
+                return emptyMap()
+            }
+            val out = LinkedHashMap<String, ControllerProfile>()
+            for (id in root.keys()) {
+                if (ControllerKey.parse(id) == null) continue
+                val entry = root.optJSONObject(id) ?: continue
+                val remapJson = entry.optJSONObject("remap") ?: continue
+                val pairs = HashMap<String, String>()
+                for (code in remapJson.keys()) pairs[code] = remapJson.optString(code)
+                val remap = decodeRemap(pairs)
+                if (remap.isNotEmpty()) out[id] = ControllerProfile(entry.optString("name"), remap)
+            }
+            return out
+        }
 
         inline fun <reified E : Enum<E>> enumOrDefault(name: String?, default: E): E =
             name?.let { runCatching { enumValueOf<E>(it) }.getOrNull() } ?: default
