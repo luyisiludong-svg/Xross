@@ -3,15 +3,26 @@ package dev.xross.launcher.data
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.core.content.edit
+import dev.xross.launcher.config.AtomicFiles
+import dev.xross.launcher.config.ConfigCodec
+import dev.xross.launcher.config.ConfigWriter
 import dev.xross.launcher.input.ConfirmLayout
 import dev.xross.launcher.input.ControllerKey
 import dev.xross.launcher.input.ControllerProfile
 import dev.xross.launcher.input.NavAction
+import dev.xross.launcher.storage.PlatformRegistry
+import dev.xross.launcher.storage.SystemOverride
+import dev.xross.launcher.storage.XrossEnvironment
+import dev.xross.launcher.storage.XrossLayout
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.serialization.SerializationException
 import org.json.JSONException
 import org.json.JSONObject
+import java.io.File
+import java.io.IOException
+import java.util.concurrent.ConcurrentHashMap
 
 data class XrossSettings(
     val romFolders: List<String> = emptyList(),
@@ -41,7 +52,7 @@ data class XrossSettings(
     val gameBootSound: Boolean = true,
     /** Fully hash disc images over the size limit (slow on SD cards). */
     val hashLargeImages: Boolean = false,
-    /** Folder DATs are imported from; empty means [dev.xross.launcher.storage.XrossPaths.defaultDatFolder]. */
+    /** Folder DATs are imported from; empty means `dats/` in the Xross folder ([dev.xross.launcher.storage.XrossLayout.dats]). */
     val datFolder: String = "",
     /** Scrape new games in the background while Xross is open. Off until the user opts in. */
     val scrapeAutomatically: Boolean = false,
@@ -63,91 +74,174 @@ data class XrossSettings(
      * category next to Search and the collections (false: the classic, flatter PS3-style list).
      */
     val allGamesFolder: Boolean = true,
+    /** platformId → the user's extra folder names and extensions (systems.json). */
+    val systemOverrides: Map<String, SystemOverride> = emptyMap(),
 )
 
-/** SharedPreferences-backed settings exposed as a StateFlow. */
-class SettingsStore(context: Context) {
-    private val prefs: SharedPreferences =
-        context.getSharedPreferences("xross_settings", Context.MODE_PRIVATE)
+/**
+ * Settings as a StateFlow, persisted as three hand-editable JSON files in `Xross/config/`
+ * ([XrossLayout.settingsFile], [XrossLayout.controllersFile], [XrossLayout.systemsFile]), so a
+ * setup travels with the Xross folder. Writes are atomic and happen off the main thread
+ * ([ConfigWriter]).
+ *
+ * Settings saved by earlier versions in SharedPreferences are migrated once, then cleared.
+ * Account names, passwords and API keys are not settings: they stay in [CredentialStore], in
+ * app-private storage, and never reach these files.
+ */
+class SettingsStore(
+    context: Context,
+    private val environment: XrossEnvironment = XrossEnvironment(context),
+) {
+    private val legacy: SharedPreferences = context.getSharedPreferences(LEGACY_PREFS, Context.MODE_PRIVATE)
+    private val lock = Any()
 
-    private val _settings = MutableStateFlow(load())
+    @Volatile private var layout: XrossLayout = environment.current
+
+    /**
+     * Text last read from or queued for each config file. A file whose text differs from this was
+     * changed outside Xross.
+     */
+    private val known = ConcurrentHashMap<String, String>()
+
+    private val _settings = MutableStateFlow(open(layout))
     val settings: StateFlow<XrossSettings> = _settings.asStateFlow()
     val current: XrossSettings get() = _settings.value
 
-    fun update(transform: (XrossSettings) -> XrossSettings) {
-        val next = transform(_settings.value)
-        if (next == _settings.value) return
-        save(next)
-        _settings.value = next
+    /** Folder the config files live in right now. */
+    val configFolder: File get() = layout.config
+
+    fun update(transform: (XrossSettings) -> XrossSettings) = synchronized(lock) {
+        val previous = _settings.value
+        val next = transform(previous)
+        if (next == previous) return
+        apply(next, previous)
+        persist(layout, next)
     }
 
-    private fun load() = XrossSettings(
-        romFolders = prefs.getString(KEY_FOLDERS, null)
-            ?.split('\n')?.filter { it.isNotBlank() }.orEmpty(),
-        autoDetectFolders = prefs.getBoolean(KEY_AUTO_DETECT, true),
-        knownAutoFolders = prefs.getString(KEY_KNOWN_AUTO, null)
-            ?.split('\n')?.filter { it.isNotBlank() }.orEmpty(),
-        confirmLayout = enumOrDefault(prefs.getString(KEY_CONFIRM, null), ConfirmLayout.AUTO),
-        deadzone = prefs.getFloat(KEY_DEADZONE, 0.35f),
-        axialDeadzone = prefs.getFloat(KEY_AXIAL_DEADZONE, 0f),
-        keyRemap = decodeRemap(decodeMap(prefs.getString(KEY_REMAP, null))),
-        controllerProfiles = decodeProfiles(prefs.getString(KEY_PROFILES, null)),
-        emulatorChoice = decodeMap(prefs.getString(KEY_EMULATORS, null)),
-        waveEnabled = prefs.getBoolean(KEY_WAVE, true),
-        waveSpeed = prefs.getFloat(KEY_WAVE_SPEED, 1f),
-        theme = prefs.getString(KEY_THEME, null) ?: "LAVENDER",
-        showButtonHints = prefs.getBoolean(KEY_BUTTON_HINTS, true),
-        soundEffects = prefs.getBoolean(KEY_SFX, true),
-        soundVolume = prefs.getFloat(KEY_SFX_VOLUME, 0.75f),
-        bootSound = prefs.getBoolean(KEY_BOOT_SOUND, true),
-        gameBootSound = prefs.getBoolean(KEY_GAMEBOOT_SOUND, true),
-        hashLargeImages = prefs.getBoolean(KEY_HASH_LARGE, false),
-        datFolder = prefs.getString(KEY_DAT_FOLDER, null).orEmpty(),
-        scrapeAutomatically = prefs.getBoolean(KEY_SCRAPE_AUTO, false),
-        scrapeWifiOnly = prefs.getBoolean(KEY_SCRAPE_WIFI, true),
-        scrapeVideos = prefs.getBoolean(KEY_SCRAPE_VIDEOS, false),
-        scrapeRegion = prefs.getString(KEY_SCRAPE_REGION, null) ?: "us",
-        scrapeLanguage = prefs.getString(KEY_SCRAPE_LANGUAGE, null) ?: "en",
-        hasheousEnabled = prefs.getBoolean(KEY_HASHEOUS, true),
-        slideshowSeconds = prefs.getInt(KEY_SLIDESHOW, 5),
-        resumeMusicAfterGames = prefs.getBoolean(KEY_RESUME_MUSIC, true),
-        videoLoop = prefs.getBoolean(KEY_VIDEO_LOOP, false),
-        allGamesFolder = prefs.getBoolean(KEY_ALL_GAMES_FOLDER, true),
-    )
+    /**
+     * The Xross folder moved (storage access granted, another volume chosen). Config files
+     * already in the new folder win, so plugging in an SD card from another device brings its
+     * setup along; otherwise the current settings are written there. Returns true when settings
+     * were loaded from the new folder. Blocking file I/O.
+     */
+    fun relocate(next: XrossLayout): Boolean = synchronized(lock) {
+        if (next == layout) return false
+        ConfigWriter.awaitIdle()
+        layout = next
+        known.clear()
+        val adopt = next.configFiles.any { it.isFile }
+        val result = if (adopt) read(next, _settings.value) else _settings.value
+        apply(result, _settings.value)
+        persist(next, result)
+        adopt
+    }
 
-    private fun save(s: XrossSettings) = prefs.edit {
-        putString(KEY_FOLDERS, s.romFolders.joinToString("\n"))
-        putBoolean(KEY_AUTO_DETECT, s.autoDetectFolders)
-        putString(KEY_KNOWN_AUTO, s.knownAutoFolders.joinToString("\n"))
-        putString(KEY_CONFIRM, s.confirmLayout.name)
-        putFloat(KEY_DEADZONE, s.deadzone)
-        putFloat(KEY_AXIAL_DEADZONE, s.axialDeadzone)
-        putString(KEY_REMAP, encodeMap(encodeRemap(s.keyRemap)))
-        putString(KEY_PROFILES, encodeProfiles(s.controllerProfiles))
-        putString(KEY_EMULATORS, encodeMap(s.emulatorChoice))
-        putBoolean(KEY_WAVE, s.waveEnabled)
-        putFloat(KEY_WAVE_SPEED, s.waveSpeed)
-        putString(KEY_THEME, s.theme)
-        putBoolean(KEY_BUTTON_HINTS, s.showButtonHints)
-        putBoolean(KEY_SFX, s.soundEffects)
-        putFloat(KEY_SFX_VOLUME, s.soundVolume)
-        putBoolean(KEY_BOOT_SOUND, s.bootSound)
-        putBoolean(KEY_GAMEBOOT_SOUND, s.gameBootSound)
-        putBoolean(KEY_HASH_LARGE, s.hashLargeImages)
-        putString(KEY_DAT_FOLDER, s.datFolder)
-        putBoolean(KEY_SCRAPE_AUTO, s.scrapeAutomatically)
-        putBoolean(KEY_SCRAPE_WIFI, s.scrapeWifiOnly)
-        putBoolean(KEY_SCRAPE_VIDEOS, s.scrapeVideos)
-        putString(KEY_SCRAPE_REGION, s.scrapeRegion)
-        putString(KEY_SCRAPE_LANGUAGE, s.scrapeLanguage)
-        putBoolean(KEY_HASHEOUS, s.hasheousEnabled)
-        putInt(KEY_SLIDESHOW, s.slideshowSeconds)
-        putBoolean(KEY_RESUME_MUSIC, s.resumeMusicAfterGames)
-        putBoolean(KEY_VIDEO_LOOP, s.videoLoop)
-        putBoolean(KEY_ALL_GAMES_FOLDER, s.allGamesFolder)
+    /**
+     * Picks up config files edited outside Xross since they were last read or written.
+     * Blocking file I/O: call off the main thread. Returns true when settings changed.
+     */
+    fun reloadIfChanged(): Boolean = synchronized(lock) {
+        ConfigWriter.awaitIdle()
+        val edited = layout.configFiles.any { file ->
+            val text = AtomicFiles.readText(file)
+            text == null || text != known[file.absolutePath]
+        }
+        if (!edited) return false
+        val before = _settings.value
+        val result = read(layout, before)
+        apply(result, before)
+        persist(layout, result)
+        result != before
+    }
+
+    /** Blocks until pending writes are on disk (tests, and before copying the folder). */
+    fun flush() = ConfigWriter.awaitIdle()
+
+    /** Publishes [next] (except while the store is still being constructed) and applies its system overrides. */
+    private fun apply(next: XrossSettings, previous: XrossSettings?) {
+        if (previous == null || next.systemOverrides != previous.systemOverrides) {
+            PlatformRegistry.applyOverrides(next.systemOverrides)
+        }
+        if (previous != null) _settings.value = next
+    }
+
+    private fun open(at: XrossLayout): XrossSettings {
+        ConfigWriter.awaitIdle()
+        val migrated = if (at.configFiles.none { it.isFile }) legacySettings() else null
+        val loaded = migrated ?: read(at, XrossSettings())
+        apply(loaded, null)
+        persist(at, loaded)
+        if (migrated != null) {
+            // Clear the old preferences only once the JSON files are safely on disk.
+            ConfigWriter.awaitIdle()
+            if (at.configFiles.all { it.isFile }) legacy.edit { clear().putBoolean(KEY_MIGRATED, true) }
+        }
+        return loaded
+    }
+
+    /**
+     * Reads the three files onto [base]. A missing file keeps [base]'s part; an unreadable one is
+     * kept aside as `<name>.bad` (so a hand edit with a typo isn't lost) and its part keeps [base].
+     */
+    private fun read(at: XrossLayout, base: XrossSettings): XrossSettings {
+        var s = base
+        s = readOne(at.settingsFile, s, ConfigCodec::decodeSettings)
+        s = readOne(at.controllersFile, s, ConfigCodec::decodeControllers)
+        s = readOne(at.systemsFile, s, ConfigCodec::decodeSystems)
+        return s
+    }
+
+    private fun readOne(file: File, base: XrossSettings, decode: (XrossSettings, String) -> XrossSettings): XrossSettings {
+        val text = try {
+            AtomicFiles.readText(file)
+        } catch (_: IOException) {
+            null
+        } ?: return base
+        return try {
+            decode(base, text).also { known[file.absolutePath] = text }
+        } catch (_: SerializationException) {
+            quarantine(file)
+            base
+        } catch (_: IllegalArgumentException) {
+            quarantine(file)
+            base
+        }
+    }
+
+    private fun quarantine(file: File) {
+        val bad = File(file.parentFile, file.name + BAD_SUFFIX)
+        bad.delete()
+        if (!file.renameTo(bad)) file.delete()
+        known.remove(file.absolutePath)
+    }
+
+    /** Queues a write for each file whose content changed. */
+    private fun persist(at: XrossLayout, s: XrossSettings) {
+        write(at.settingsFile, ConfigCodec.encodeSettings(s))
+        write(at.controllersFile, ConfigCodec.encodeControllers(s))
+        write(at.systemsFile, ConfigCodec.encodeSystems(s))
+    }
+
+    private fun write(file: File, text: String) {
+        val key = file.absolutePath
+        if (known[key] == text && file.isFile) return
+        known[key] = text
+        ConfigWriter.write(file, text)
+    }
+
+    /** Settings saved by versions before the JSON files, or null when there are none to migrate. */
+    private fun legacySettings(): XrossSettings? {
+        if (legacy.getBoolean(KEY_MIGRATED, false)) return null
+        if (legacy.all.isEmpty()) return null
+        return loadLegacy(legacy)
     }
 
     internal companion object {
+        /** SharedPreferences file of versions before the JSON config files; emptied after migration. */
+        const val LEGACY_PREFS = "xross_settings"
+        const val KEY_MIGRATED = "migrated_to_json"
+        const val BAD_SUFFIX = ".bad"
+
         const val KEY_FOLDERS = "rom_folders"
         const val KEY_AUTO_DETECT = "auto_detect_folders"
         const val KEY_KNOWN_AUTO = "known_auto_folders"
@@ -177,6 +271,41 @@ class SettingsStore(context: Context) {
         const val KEY_RESUME_MUSIC = "resume_music_after_games"
         const val KEY_VIDEO_LOOP = "video_loop"
         const val KEY_ALL_GAMES_FOLDER = "all_games_folder"
+
+        /** Reads settings the way versions before the JSON config files stored them. */
+        fun loadLegacy(prefs: SharedPreferences) = XrossSettings(
+            romFolders = prefs.getString(KEY_FOLDERS, null)
+                ?.split('\n')?.filter { it.isNotBlank() }.orEmpty(),
+            autoDetectFolders = prefs.getBoolean(KEY_AUTO_DETECT, true),
+            knownAutoFolders = prefs.getString(KEY_KNOWN_AUTO, null)
+                ?.split('\n')?.filter { it.isNotBlank() }.orEmpty(),
+            confirmLayout = enumOrDefault(prefs.getString(KEY_CONFIRM, null), ConfirmLayout.AUTO),
+            deadzone = prefs.getFloat(KEY_DEADZONE, 0.35f),
+            axialDeadzone = prefs.getFloat(KEY_AXIAL_DEADZONE, 0f),
+            keyRemap = decodeRemap(decodeMap(prefs.getString(KEY_REMAP, null))),
+            controllerProfiles = decodeProfiles(prefs.getString(KEY_PROFILES, null)),
+            emulatorChoice = decodeMap(prefs.getString(KEY_EMULATORS, null)),
+            waveEnabled = prefs.getBoolean(KEY_WAVE, true),
+            waveSpeed = prefs.getFloat(KEY_WAVE_SPEED, 1f),
+            theme = prefs.getString(KEY_THEME, null) ?: "LAVENDER",
+            showButtonHints = prefs.getBoolean(KEY_BUTTON_HINTS, true),
+            soundEffects = prefs.getBoolean(KEY_SFX, true),
+            soundVolume = prefs.getFloat(KEY_SFX_VOLUME, 0.75f),
+            bootSound = prefs.getBoolean(KEY_BOOT_SOUND, true),
+            gameBootSound = prefs.getBoolean(KEY_GAMEBOOT_SOUND, true),
+            hashLargeImages = prefs.getBoolean(KEY_HASH_LARGE, false),
+            datFolder = prefs.getString(KEY_DAT_FOLDER, null).orEmpty(),
+            scrapeAutomatically = prefs.getBoolean(KEY_SCRAPE_AUTO, false),
+            scrapeWifiOnly = prefs.getBoolean(KEY_SCRAPE_WIFI, true),
+            scrapeVideos = prefs.getBoolean(KEY_SCRAPE_VIDEOS, false),
+            scrapeRegion = prefs.getString(KEY_SCRAPE_REGION, null) ?: "us",
+            scrapeLanguage = prefs.getString(KEY_SCRAPE_LANGUAGE, null) ?: "en",
+            hasheousEnabled = prefs.getBoolean(KEY_HASHEOUS, true),
+            slideshowSeconds = prefs.getInt(KEY_SLIDESHOW, 5),
+            resumeMusicAfterGames = prefs.getBoolean(KEY_RESUME_MUSIC, true),
+            videoLoop = prefs.getBoolean(KEY_VIDEO_LOOP, false),
+            allGamesFolder = prefs.getBoolean(KEY_ALL_GAMES_FOLDER, true),
+        )
 
         // Keys and values here never contain '=' or newlines (ints, enum names, ids).
         fun encodeMap(map: Map<String, String>) = map.entries.joinToString("\n") { "${it.key}=${it.value}" }

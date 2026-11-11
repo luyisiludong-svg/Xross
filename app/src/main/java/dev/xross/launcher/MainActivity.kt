@@ -34,6 +34,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import dev.xross.launcher.input.GamepadHandler
 import dev.xross.launcher.input.NavAction
+import dev.xross.launcher.launch.LaunchResult
 import dev.xross.launcher.state.MediaOverlay
 import dev.xross.launcher.state.UiEffect
 import dev.xross.launcher.storage.VolumeMonitor
@@ -69,8 +70,9 @@ class MainActivity : ComponentActivity() {
         viewModel.onDatFolderPicked(it)
     }
 
+    /** Android 9–10: read for the library, write for the portable Xross folder. */
     private val legacyStoragePermission =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) {
+        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
             viewModel.refreshEnvironment()
         }
 
@@ -186,6 +188,11 @@ class MainActivity : ComponentActivity() {
         super.onPause()
     }
 
+    override fun onStop() {
+        viewModel.onStopped()
+        super.onStop()
+    }
+
     override fun onDestroy() {
         unregisterReceiver(packageReceiver)
         volumeMonitor.unregister(this)
@@ -206,7 +213,24 @@ class MainActivity : ComponentActivity() {
             UiEffect.RequestStorageAccess -> requestStorageAccess()
             is UiEffect.SetWallpaper -> setWallpaper(effect.uri)
             is UiEffect.PromptText -> promptText(effect.prompt)
+            is UiEffect.Launch -> when (val result = container.launcher.start(effect.plan, this)) {
+                LaunchResult.Started -> Unit
+                is LaunchResult.Failed -> viewModel.onLaunchFailed(result.message)
+            }
+            UiEffect.RestartApp -> restartApp()
         }
+    }
+
+    /**
+     * Relaunches Xross in a fresh process, so a restored library database replaces the live one
+     * before Room opens it. As the home app, the system would bring it back anyway.
+     */
+    private fun restartApp() {
+        val relaunch = Intent(this, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+        startActivity(relaunch)
+        finishAffinity()
+        Runtime.getRuntime().exit(0)
     }
 
     /**
@@ -264,7 +288,9 @@ class MainActivity : ComponentActivity() {
             )
             if (!safeStart(perApp)) safeStart(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
         } else {
-            legacyStoragePermission.launch(Manifest.permission.READ_EXTERNAL_STORAGE)
+            legacyStoragePermission.launch(
+                arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_EXTERNAL_STORAGE),
+            )
         }
     }
 

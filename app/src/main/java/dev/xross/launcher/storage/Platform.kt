@@ -23,13 +23,29 @@ data class Platform(
 fun normalizeFolderName(name: String): String =
     name.lowercase().filter { it.isLetterOrDigit() }
 
+/**
+ * The user's additions to a built-in system, from `Xross/config/systems.json`: more folder names
+ * that identify it and more file extensions to list. Built-in values always stay.
+ */
+data class SystemOverride(
+    val extraFolders: Set<String> = emptySet(),
+    val extraExtensions: Set<String> = emptySet(),
+) {
+    val isEmpty: Boolean get() = extraFolders.isEmpty() && extraExtensions.isEmpty()
+
+    companion object {
+        fun normalizeExtension(ext: String): String = ext.trim().trimStart('.').lowercase()
+    }
+}
+
 object PlatformRegistry {
     private const val RA = "retroarch"
     private val archives = setOf("zip", "7z")
 
     private fun ra(vararg cores: String) = cores.map { EmulatorOption(RA, it) }
 
-    val all: List<Platform> = listOf(
+    /** Systems as Xross ships them, before any [SystemOverride]. */
+    val builtIn: List<Platform> = listOf(
         Platform(
             "nes", "Nintendo Entertainment System", "NES",
             setOf("nes", "famicom", "fc", "nintendoentertainmentsystem"),
@@ -170,12 +186,38 @@ object PlatformRegistry {
         ),
     )
 
-    private val byId = all.associateBy { it.id }
-    private val byAlias: Map<String, Platform> = buildMap {
-        for (platform in all) for (alias in platform.folderAliases) putIfAbsent(alias, platform)
+    private class Index(val all: List<Platform>, builtInAliases: Map<String, Set<String>>) {
+        val byId = all.associateBy { it.id }
+
+        /** Built-in folder names win over user-added ones, so an override can't steal "snes". */
+        val byAlias: Map<String, Platform> = buildMap {
+            for (platform in all) for (alias in builtInAliases[platform.id].orEmpty()) putIfAbsent(alias, platform)
+            for (platform in all) for (alias in platform.folderAliases) putIfAbsent(alias, platform)
+        }
     }
 
-    fun byId(id: String): Platform? = byId[id]
+    private val builtInAliases = builtIn.associate { it.id to it.folderAliases }
 
-    fun forFolder(folderName: String): Platform? = byAlias[normalizeFolderName(folderName)]
+    @Volatile private var index = Index(builtIn, builtInAliases)
+
+    /** Every system, with the user's [SystemOverride]s applied. */
+    val all: List<Platform> get() = index.all
+
+    fun byId(id: String): Platform? = index.byId[id]
+
+    fun forFolder(folderName: String): Platform? = index.byAlias[normalizeFolderName(folderName)]
+
+    /** Applies the user's additions (unknown system ids are ignored). Takes effect for the next scan. */
+    fun applyOverrides(overrides: Map<String, SystemOverride>) {
+        index = Index(withOverrides(builtIn, overrides), builtInAliases)
+    }
+
+    fun withOverrides(platforms: List<Platform>, overrides: Map<String, SystemOverride>): List<Platform> =
+        platforms.map { platform ->
+            val o = overrides[platform.id] ?: return@map platform
+            platform.copy(
+                folderAliases = platform.folderAliases + o.extraFolders.map(::normalizeFolderName).filter { it.isNotEmpty() },
+                extensions = platform.extensions + o.extraExtensions.map(SystemOverride::normalizeExtension).filter { it.isNotEmpty() },
+            )
+        }
 }

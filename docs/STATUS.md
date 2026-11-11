@@ -1,6 +1,6 @@
 # Project Xross — Implementation Status
 
-Status of the codebase against [`project_scope.md`](../project_scope.md), as of **2026-11-10**. It covers what has been built, how it was verified, measured
+Status of the codebase against [`project_scope.md`](../project_scope.md), as of **2026-11-11**. It covers what has been built, how it was verified, measured
 performance across device classes, known limitations, and the remaining work split into phases.
 
 Legend: ✅ done and verified · ◐ partial · ❌ not started · 🧪 verified only on the emulator / with stubs
@@ -12,17 +12,20 @@ Legend: ✅ done and verified · ◐ partial · ❌ not started · 🧪 verified
 | Area | State |
 | --- | --- |
 | Phase 1 (Alpha): XMB navigation, gamepad layer, library, emulator dispatch, wave shader | ✅ complete |
-| Phase 1b (hardening): hot-swap, USB-OTG, playtime, Options menu, per-game emulator, 6 more emulators | ✅ done; real-hardware testing, per-controller mappings and a Baseline Profile remain (§6) |
-| Visual front end from `assets/examples` (icons, themes, glow, status bar, sounds) | ✅ |
-| Phase 2 (metadata, media hub, theme packs, on-screen controller and keyboard) | ◐ fingerprinting, the media hub and gamepad search done (§2, §3.4–§3.6) |
+| Phase 1b (hardening): hot-swap, USB-OTG, playtime, Options menu, per-game emulator, 6 more emulators, per-controller mappings, axial deadzone, 0% deadzone | ✅ done; real-handheld testing and a Baseline Profile remain (§6) |
+| Visual front end from `assets/examples` (icons, themes, glow, status bar, sounds) | ✅ plus the Original monthly theme, busy indicator, optional button hints, Information screen |
+| Phase 2 (metadata, media hub, theme packs, on-screen controller and keyboard) | ◐ fingerprinting, media hub, gamepad search, DAT verification, scrapers, art, Details screen, manual matching and video snaps done (§2, §3); portable `Xross/` folder with JSON config and database backup, All Games, media controls shortcut and mini-player hide done (§3.9); ScreenScraper awaits developer credentials; theme packs and on-screen controller not started |
 | Phase 3 (dual screen, hot-swap, RetroAchievements, Web Portal, FTPS) | ❌ (two prerequisites done; see §6) |
 | Phase 4 (onboarding, triage, profiling, plugin API) | ◐ app triage and performance work started |
 
-**Verification:** 113 JVM/Robolectric unit tests (61 before this round), a 57-check on-device
-smoke test, end-to-end launch tests against stub builds of eleven emulators, a hot-swap test with
-a real removable volume, and frame-pacing measurements
-across 12 display configurations. Everything passes. All device testing used the Android
-emulator (API 37, host GPU). No physical handheld or controller has been tested yet.
+**Verification:** 285 JVM/Robolectric unit tests (283 run by default, 0 failures; 2 opt-in tests
+call the real services), end-to-end launch tests against stub builds of eleven emulators, a
+hot-swap test with a real removable volume, frame-pacing measurements across 12 display
+configurations on the emulator, live scraping runs, and a full feature pass on a **Samsung Galaxy
+A55** (Android 16, 120 Hz) on 2026-11-11 (§3.8). The on-device smoke test passed with 57 checks
+before Steps 1–2; it has since been updated for the new menu rows and features (§3.2) but not
+re-run. No physical controller, gaming handheld or real emulator install has been tested yet,
+and the portable folder hasn't run on a device (§3.9).
 
 ---
 
@@ -36,12 +39,13 @@ emulator (API 37, host GPU). No physical handheld or controller has been tested 
 | Android `InputDevice` gamepad handling (keys, sticks, hat) | ✅ 🧪 | Joystick motion is always consumed, so the D-pad never double-steps |
 | Vendor detection: PlayStation, Xbox, Nintendo, generic | ✅ | Picks the on-screen button glyphs (✕○△ / ABXY / Nintendo order) |
 | Confirm/cancel swap (Auto / South / East) | ✅ | Auto uses East on Nintendo pads |
-| Global button remapping (wizard) | ✅ | 9-step capture; verified on device |
+| Button remapping (wizard) | ✅ | 10-step capture (the last is the media controls button, Select by default); saved per controller model (vendor/product ID). The first device to press a button owns the session; keyboards and devices without IDs use a global mapping. Each saved controller can be reset on its own |
 | Options (△ / Y) context menu | ✅ | Slide-in panel with submenus; long-press opens it on touch |
 | Per-game remapping | ❌ | |
-| Mapping wizard per generic HID device (saved per controller) | ◐ | The wizard is global, not stored per device |
-| Analog deadzone (radial) + anti-snapback + hold-to-repeat | ✅ 🧪 | Unit-tested; adb cannot inject real stick motion |
-| Axial deadzone option | ❌ | |
+| Mapping saved per generic HID device | ✅ 🧪 | Unit- and view-model-tested; needs two real controllers to verify |
+| Analog deadzone (radial) + anti-snapback + hold-to-repeat | ✅ 🧪 | Unit-tested; adb cannot inject real stick motion. Steps: Off (hardware flat zone only) / 15 / 25 / 35 / 45 / 55% |
+| Media controls shortcut | ✅ 🧪 | Select, or Guide held 0.5 s, toggles Now Playing; remappable |
+| Axial deadzone option | ✅ 🧪 | Off / 10 / 20 / 30% per axis, applied before the radial check (Settings ▸ Controls) |
 | Touch parity (one category per horizontal swipe, continuous vertical drag, tap) | ✅ | |
 | First D-pad press after a touch is not lost | ✅ | Fixed ViewRootImpl "leave touch mode" swallowing |
 | On-screen controller overlay | ❌ | Phase 2 |
@@ -57,10 +61,11 @@ emulator (API 37, host GPU). No physical handheld or controller has been tested 
 | Playlists / custom tags | ❌ | |
 | Extension filtering, `.cue`/`.gdi`/`.m3u` track de-duplication | ✅ | |
 | Look inside `.zip`/`.7z`; CRC32/MD5/SHA-1 fingerprints | ✅ | Background job; see §3.4 |
+| Information screen (Options ▸ Information) | ✅ 📱 | Platform, file, folder, size, dates, playtime, emulator, DAT match, fingerprint source and hashes |
 | No-Intro header-less hashes (iNES, FDS, SNES copier) | ✅ | Stored alongside the full-file hashes |
 | CHD identification | ✅ | SHA-1 from the v4/v5 header |
 | Per-track hashes for `.cue`/`.gdi` (Redump) | ❌ | Sheets are skipped for now |
-| Redump/No-Intro DAT import and matching | ❌ | Next Phase 2 step; `findByCrc` lookup is ready |
+| Redump/No-Intro/MAME DAT import and matching | ✅ 📱 | Logiqx XML and clrmamepro text, plain or zipped; SHA-1 > MD5 > CRC32 + size > arcade set name (§3.7) |
 | Room library, incremental rescan, unmount-safe deletion | ✅ | 5,000 ROMs: first scan 1.9 s, rescan 0.9–1.1 s (emulator) |
 | Title search on the FTS4 index | ✅ | Games ▸ Search: live word-prefix results, launch and Options from results |
 | Multi-volume pooling (internal + microSD) with `ROMs`/`Games`/`Emulation` auto-detect | ✅ | |
@@ -74,10 +79,22 @@ emulator (API 37, host GPU). No physical handheld or controller has been tested 
 | Azahar, Eden, Flycast, M64Plus FZ, melonDS, ScummVM | ✅ 🧪 | Recipes from ES-DE's Android rules; new 3DS, Switch and ScummVM platforms |
 | Sudachi, Vita3K, others | ❌ | Sudachi is no longer in ES-DE's rules; no verified launch contract |
 
-### 3.3 Metadata & achievements — ❌ not started
-ScreenScraper, SteamGridDB, Hasheous, RetroAchievements, the language priority list, the batch
-scraper, the review tool, and the asset cache. Google Play and web-search scraping are dropped
-(see `FEASIBILITY.md`). Dusklight/TwilitRealm is parked until an API is documented.
+### 3.3 Metadata & achievements — ◐ metadata done, achievements not started
+
+| Feature | State | Notes |
+| --- | --- | --- |
+| Hasheous (hash identification, no account) | ✅ 📱 | `POST /api/v1/Lookup/ByHash`; arcade sets send their largest ROM chip and the set name picks between games that share it |
+| SteamGridDB (capsules, hero banners, logos) | ✅ 📱 | Free per-user API key; autocomplete search by the best known title |
+| ScreenScraper (descriptions, box art, logos, screenshots, video snaps) | ✅ 🧪 | Follows the API page (English guide: `docs/SCREENSCRAPER_API.md`): file hashes plus size, name search for files too large to hash, and the mandatory quota handling. Waiting for developer credentials; tested against canned responses only |
+| Throttled batch scraper | ✅ 📱 | Per-service pacing, back-off on 429, daily-quota stop, retry after a day on failure; only while Xross is in front; opt-in and Wi-Fi only by default |
+| Asset cache keyed by game UUID | ✅ 📱 | `noBackupFilesDir/assets/<uuid>/`; atomic writes; files accepted only if their bytes are PNG, JPEG, WebP or MP4; pruned when games go away |
+| Game Details screen | ✅ 📱 | Background art (or the playing snap), box art, logo, release facts, rating, playtime, scrollable description |
+| Manual match and override tool | ✅ 📱 | Options ▸ Metadata: Edit title, Find match (results from every service), Scrape again, Use automatic match |
+| Language priority list | ◐ | One region and one language setting |
+| RetroAchievements | ❌ | Phase 3 |
+
+Google Play and web-search scraping are dropped (see `FEASIBILITY.md`). Dusklight/TwilitRealm is
+parked until an API is documented.
 
 ### 3.4 Media engine & customization
 
@@ -88,11 +105,13 @@ scraper, the review tool, and the asset cache. Google Play and web-search scrapi
 | Music player as a background service | ✅ | Media3 ExoPlayer + MediaSession: notification, headset and lock-screen controls; albums, artists, shuffle, repeat |
 | BGM mode: music pauses for games and resumes after | ✅ | Settings ▸ Media; also pauses for videos |
 | Video player with controller playback and scrubbing | ✅ | Seek 10 s / 60 s, previous/next, loop toggle, auto-hiding on-screen display |
-| Video snap previews on focused games | ❌ | Needs snaps from the scraper (Phase 2) |
+| Video snap previews on focused games | ✅ 🧪 | Full-bleed behind the menu after 1.2 s on a game; music ducked to 20%; decoder released when focus moves. Needs ScreenScraper snaps to try on a device |
 | Wave background (GLSL ES 3.0) | ✅ | Glossy sheets plus strands, AA crests, dithering, vsync-snapped time, reduced-res target |
 | Wave parameters: speed | ✅ | 0.5×–2× |
 | Wave parameters: line count, turbulence, thickness, custom gradients | ❌ | Shader is ready for uniforms; no UI yet |
-| Color themes | ✅ | Lavender, Crimson, Sapphire, Emerald, Amber, Rose, Midnight |
+| Color themes | ✅ 📱 | Lavender, Crimson, Sapphire, Emerald, Amber, Rose, Midnight, and Original: a color per month, crossfaded over the three days either side of a month change |
+| Busy indicator | ✅ 📱 | Ring of dots by the hint pill while scanning, fingerprinting, importing DATs or scraping |
+| Hide the button-hint pill | ✅ 📱 | Settings ▸ Theme ▸ Button hints |
 | Day/night color shift | ✅ | Brightness follows the time of day |
 | Battery-level color blending | ❌ | Battery level is already read for the status bar |
 | Coldboot: fade-in + startup sound | ✅ | Once per process start; can be turned off |
@@ -108,7 +127,7 @@ scraper, the review tool, and the asset cache. Google Play and web-search scrapi
 
 | Feature | State | Notes |
 | --- | --- | --- |
-| Any aspect ratio / resolution | ✅ 🧪 | 12 configurations from 640×480 to 4K, plus portrait (§4) |
+| Any aspect ratio / resolution | ✅ 🧪 | 12 configurations from 640×480 to 4K (§4). Since 2026-11-10 Xross is locked to landscape (`sensorLandscape`); the portrait row in §4.1 predates the lock |
 | Live resolution change without restart | ✅ 🧪 | Verified by switching display size while running (docked-mode prerequisite) |
 | Dual-screen (Presentation API, per-screen layouts, swap hotkey) | ❌ | Phase 3 |
 | HDMI/DisplayPort dock detection (`DisplayManager`) | ❌ | Phase 3 |
@@ -123,8 +142,10 @@ HTTPS Xross Portal (Ktor CIO), FTPS (Apache FtpServer), auth, uploads, library e
 
 ## 3. Test results
 
-### 3.1 Unit tests — 113/113 pass
-`./gradlew :app:testDebugUnitTest` (JVM + Robolectric on SDK 35)
+### 3.1 Unit tests — 285 tests, 0 failures
+`./gradlew :app:testDebugUnitTest` (JVM + Robolectric on SDK 35): 283 run by default, 2 opt-in live
+tests skip unless `-PliveScrape=true`. The table below lists the original suites; later suites
+are listed after it.
 
 | Suite | Tests | Covers |
 | --- | --- | --- |
@@ -147,9 +168,25 @@ HTTPS Xross Portal (Ktor CIO), FTPS (Apache FtpServer), auth, uploads, library e
 
 `EmulatorIntentTest` grew to 10 tests (six new recipes, platform registry) and `NavigationTest` to 7.
 
-### 3.2 Device smoke test — 57/57 pass
+Added on 2026-11-11 (Milestones 1 and 2, 79 tests):
+
+| Suite | Tests | Covers |
+| --- | --- | --- |
+| `AllGamesFolderTest` | 7 | All Games grouping, registry order, classic flat layout, empty library, settings row |
+| `MediaShortcutTest` | 15 | Select → media controls, remapping, Guide long press (repeats, release, taps), mini-player 30 s hide |
+| `XrossEnvironmentTest` | 8 | App-storage fallback, shared root once writable, `.nomedia` first, chosen volume, unwritable volume fallback |
+| `AtomicFilesTest` | 5 | Atomic replace, failed write keeps the old file, leftover `.tmp`, coalesced background writes |
+| `ConfigCodecTest` | 10 | Round trip of every setting through the three files, key names, clamping, broken JSON, `systems.json` overrides |
+| `PortableSettingsTest` | 11 | Files written, SharedPreferences migration, `.bad` quarantine, outside edits, moving to shared storage, adopting existing config, credentials never written |
+| `DatabaseBackupManagerTest` | 9 | Snapshot in `Xross/data`, WAL contents included, backup only after changes, restore offer and staged restore, invalid files |
+| `GameLauncherTest` | 6 | Plans, `content://` grant inside the launcher, foreign plans refused, test doubles |
+| Others extended | 8 | `StickTrackerTest` (0% deadzone), `MenuSettingsTest` (deadzone label, System rows, restore row), `SettingsStoreTest`, `XmbViewModelTest` (deadzone cycle, media button) |
+
+### 3.2 Device smoke test — 57/57 passed before Steps 1–2; updated, not re-run
 `tools/device-tests/smoke.sh` resets the app, seeds ROMs, and drives the UI with key events.
-It checks screen content through the accessibility tree.
+It checks screen content through the accessibility tree. On 2026-11-11 its key counts were
+updated (Options menu, Controls, All Games) and it gained checks for Details/Metadata, the
+deadzone cycle, the Platform folders setting, the 10-button remap and the Select shortcut.
 
 | Group | Checks |
 | --- | --- |
@@ -273,6 +310,36 @@ Bugs found by this device pass and fixed:
 Not covered: a physical USB-OTG drive (the removable volume was the emulator's virtual disk),
 and the "deferred while a game runs" hot-swap path (unit-level only).
 
+### 3.9 Portable `Xross/` folder (Milestone 2)
+
+**Layout and fallback.** `XrossEnvironment` resolves the root: `Xross/` on primary storage, or on
+the drive chosen in Settings ▸ System ▸ Xross folder, once Xross can write shared storage (All
+files access on Android 11+, `WRITE_EXTERNAL_STORAGE` on 9–10). Before that, and whenever the
+chosen drive fails, it uses `files/Xross` in app storage. Every root is bootstrapped with
+`.nomedia` in `media/` and `themes/` before the other folders.
+
+**JSON configuration loader.** Measured with Robolectric on the development host (not yet on a
+device):
+
+| Item | Value |
+| --- | --- |
+| File sizes with defaults | `settings.json` 793 B, `controllers.json` 78 B, `systems.json` 11 KB (22 systems, including the reference `builtIn` blocks) |
+| Load time | ~0.75 ms per full load of all three files on the JVM host; expect several times more on a Snapdragon 665-class handheld |
+| When it runs | Once, synchronously, when the settings store is first used at startup; again off the main thread on each resume (`reloadIfChanged`, which only parses files whose text changed) |
+| Memory | One `XrossSettings` object plus the last-seen text of each file (~12 KB) |
+| Writes | Off the main thread on one background thread; repeated changes to a file coalesce to the newest content; `.tmp` + `fsync` + rename |
+| Dependency | kotlinx-serialization-json 1.8.1 plus the Kotlin serialization compiler plugin (serialization-core was already on the classpath through other libraries) |
+
+**Database backup (works on Android 9 and 10).** `VACUUM INTO` needs SQLite 3.27, which Android
+only ships from API 30, so the backup is: `PRAGMA wal_checkpoint(TRUNCATE)` (retried while
+readers block it), then `BEGIN IMMEDIATE` to hold writers off, a check that the WAL is empty
+(otherwise repeat), a stream copy of the main file, its header switched from WAL to rollback
+journal mode so it stands alone, a read-back check (`user_version` and game count), and a rename
+over `Xross/data/xross.db`. It runs 4 s after Xross leaves the screen when a library table
+changed, or from Settings ▸ System ▸ Back up library now. Restores are copied next to the live
+database and applied on the next start, before Room opens it; the live database is never
+replaced while open. Verified with Robolectric only.
+
 ---
 
 ## 4. Display matrix & performance
@@ -379,7 +446,8 @@ Unisoc T618) before calling it final.**
 - [x] Playtime tracking (`PlaySessionTracker`, survives process death; DB v3) and display
 - [x] Per-game emulator override (DB v4; override → platform choice → first installed)
 - [x] Options (△/Y) context menu with submenus; long-press opens it on touch
-- [ ] Per-controller saved mappings; axial deadzone option
+- [x] Per-controller saved mappings; axial deadzone option
+- [x] 0% ("hardware only") analog deadzone
 - [ ] Baseline Profile for faster startup and less early-scroll JIT jank
 - [x] Emulators added from ES-DE's published Android rules: Azahar (3DS), Eden (Switch),
       Flycast, M64Plus FZ, melonDS, ScummVM, with stub flavors and unit tests. Sudachi is not
@@ -399,6 +467,12 @@ Unisoc T618) before calling it final.**
 - [x] Media hub: photo viewer (zoom/pan, slideshow, wallpaper), music player as a background
       service with BGM mode, video player
 - [ ] Video snap previews on focused games (after the scraper provides snaps)
+- [x] Portable `Xross/` folder: `config/` JSON (settings, controllers, systems) with atomic writes
+      and SharedPreferences migration, `data/xross.db` backup and restore, `.nomedia` in
+      `media/` and `themes/`; `GameLauncher` interface (§3.9)
+- [x] All Games folder, media controls shortcut, mini-player hide after 30 s paused
+- [ ] Hide apps, app folders, base ROMs folder with Create system folders, custom Photo/Video
+      folders, scraped art in `Xross/media`
 - [ ] Separate BGM / UI / video-snap volume sliders
 - [ ] Theme packs: loadable icons, sounds (cursor/confirm/back/error/boot), fonts, palettes and
       wave parameters (line count, turbulence, thickness); move bundled assets into a pack
