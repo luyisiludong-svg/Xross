@@ -193,6 +193,52 @@ class XmbViewModelTest {
         assertEquals(0.15f, container.settings.current.deadzone)
     }
 
+    /** Settings ▸ Theme ▸ Wave settings: the panel opens, D-pad changes save live, Back closes. */
+    @Test fun waveSettingsPanelAdjustsTheShaderLive() {
+        val container = AppContainer(context)
+        val vm = viewModel(container = container)
+        vm.press(NavAction.PREV_CATEGORY, times = 6)
+        vm.await("the Settings root") { s -> s.items.any { it.title == "Theme" } }
+        vm.press(NavAction.DOWN, times = vm.state.value.items.indexOfFirst { it.title == "Theme" } - vm.state.value.focusedIndex)
+        vm.press(NavAction.CONFIRM)
+        vm.await("the Theme list") { s -> s.items.any { it.id == "disp:wavesettings" } }
+        assertEquals("disp:pack", vm.state.value.items.first().id)
+        vm.press(NavAction.DOWN, times = vm.state.value.items.indexOfFirst { it.id == "disp:wavesettings" } - vm.state.value.focusedIndex)
+        vm.press(NavAction.CONFIRM)
+        assertNotNull(vm.state.value.waveEditor)
+
+        vm.press(NavAction.RIGHT, times = 2) // Speed 1.0 → 1.2
+        assertEquals(1.2f, container.settings.current.waveSpeed)
+        assertEquals(1.2f, vm.state.value.settings.waveSpeed)
+        vm.press(NavAction.DOWN) // Ribbon lines
+        vm.press(NavAction.LEFT)
+        assertEquals(4, container.settings.current.waveLineCount)
+        vm.press(NavAction.BACK)
+        assertNull(vm.state.value.waveEditor)
+        // Saved to settings.json like any setting.
+        container.settings.flush()
+        val json = container.environment.current.settingsFile.readText()
+        assertTrue(json, json.contains("\"waveSpeed\": 1.2") && json.contains("\"waveLines\": 4"))
+    }
+
+    /** Confirm on an information row is refused (system_ng) rather than ignored, and nothing opens. */
+    @Test fun refusedActionsLeaveTheMenuAsItWas() {
+        val vm = viewModel()
+        vm.press(NavAction.PREV_CATEGORY, times = 6)
+        vm.await("the Settings root") { s -> s.items.any { it.title == "System" } }
+        vm.press(NavAction.DOWN, times = vm.state.value.items.indexOfFirst { it.title == "System" } - vm.state.value.focusedIndex)
+        vm.press(NavAction.CONFIRM)
+        vm.await("the System list") { s -> s.items.any { it.id == "sys:version" } }
+        vm.press(NavAction.UP, times = vm.state.value.focusedIndex)
+        assertEquals("sys:version", vm.state.value.focused?.id)
+        val before = vm.state.value
+        vm.press(NavAction.CONFIRM)
+        vm.press(NavAction.OPTIONS)
+        assertNull(vm.state.value.optionsMenu)
+        assertEquals(before.items, vm.state.value.items)
+        assertEquals(before.focusedIndex, vm.state.value.focusedIndex)
+    }
+
     @Test fun mediaButtonWithNothingPlayingExplainsItself() {
         val vm = viewModel()
         vm.press(NavAction.MEDIA)

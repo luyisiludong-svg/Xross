@@ -44,6 +44,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import dev.xross.launcher.profile.RaResult
 
 /** One-shot requests that need an Activity. */
 sealed interface UiEffect {
@@ -54,6 +55,8 @@ sealed interface UiEffect {
     data class PickMediaFolder(val kind: MediaFolderKind) : UiEffect
     /** Ask for text (account, key, title, search); the answer goes to [XmbViewModel.onTextEntered]. */
     data class PromptText(val prompt: TextPrompt) : UiEffect
+    /** RetroAchievements link dialog (user name + Web API key); answers [XmbViewModel.onRetroAchievementsEntered]. */
+    data class PromptRetroAchievements(val user: String, val linked: Boolean) : UiEffect
     data object RequestStorageAccess : UiEffect
     data class SetWallpaper(val uri: Uri) : UiEffect
 
@@ -100,6 +103,20 @@ data class XmbUiState(
     /** Reading storage: a library scan or background fingerprinting is running. */
     val busy: Boolean = false,
     val showButtonHints: Boolean = true,
+    /** The linked RetroAchievements profile behind the status bar avatar. */
+    val profile: dev.xross.launcher.profile.ProfileState = dev.xross.launcher.profile.ProfileState(),
+    /** The User Card while it is open. */
+    val profileCard: ProfileCardState? = null,
+    /** The status bar avatar has the focus (Up from the top of a category). */
+    val avatarFocused: Boolean = false,
+    /** Current settings (the wave uniforms and the Wave settings panel read them). */
+    val settings: dev.xross.launcher.data.XrossSettings = dev.xross.launcher.data.XrossSettings(),
+    /** Settings ▸ Theme ▸ Wave settings while it is open. */
+    val waveEditor: WaveEditorState? = null,
+    /** A game's Achievements screen while it is open. */
+    val achievements: AchievementsViewState? = null,
+    /** The unlock toast on screen (it never takes input). */
+    val unlockToast: UnlockToastState? = null,
 ) {
     val focused: XmbNode? get() = items.getOrNull(focusedIndex)
     val depth: Int get() = breadcrumb.size
@@ -119,6 +136,11 @@ private data class Transient(
     val scanning: Boolean = false,
     /** DATs are being imported or matched. */
     val datWork: Boolean = false,
+    val profileCard: ProfileCardState? = null,
+    val avatarFocused: Boolean = false,
+    val waveEditor: WaveEditorState? = null,
+    val achievements: AchievementsViewState? = null,
+    val unlockToast: UnlockToastState? = null,
 )
 
 class XmbViewModel(
@@ -171,8 +193,14 @@ class XmbViewModel(
     }
 
     private val tree: StateFlow<MenuTree> = combine(
-        combine(env, meta, container.credentials.accounts, container.screenScraper.quota) { e, m, accounts, quota ->
+        combine(env, meta, container.credentials.accounts, container.screenScraper.quota, container.profiles.state) { e, m, accounts, quota, profile ->
             e.copy(
+                accounts = AccountsSetup(
+                    retroAchievementsUser = accounts.retroAchievementsUser,
+                    retroAchievementsLinked = accounts.retroAchievementsLinked,
+                    retroAchievementsPoints = profile.profile?.totalPoints,
+                    retroAchievementsRank = profile.profile?.rank,
+                ),
                 dats = m.dats,
                 metadata = m.metadata,
                 scraperSetup = ScraperSetup(
@@ -224,9 +252,16 @@ class XmbViewModel(
         Live(fp, np, sc)
     }.stateIn(viewModelScope, SharingStarted.Eagerly, Live(FingerprintStatus(), music.state.value))
 
-    private data class Settled(val transient: Transient, val settings: dev.xross.launcher.data.XrossSettings, val overlay: MediaOverlay?)
+    private data class Settled(
+        val transient: Transient,
+        val settings: dev.xross.launcher.data.XrossSettings,
+        val overlay: MediaOverlay?,
+        val profile: dev.xross.launcher.profile.ProfileState,
+    )
 
-    private val settled = combine(transient, settingsStore.settings, media.overlay) { tr, st, ov -> Settled(tr, st, ov) }
+    private val settled = combine(transient, settingsStore.settings, media.overlay, container.profiles.state) { tr, st, ov, pr ->
+        Settled(tr, st, ov, pr)
+    }
 
     val state: StateFlow<XmbUiState> = combine(tree, nav, settled, live) { t, n, sd, lv ->
         val tr = sd.transient
@@ -257,6 +292,13 @@ class XmbViewModel(
             details = tr.details,
             busy = tr.scanning || tr.datWork || lv.fingerprints.current != null || lv.scrape.running,
             showButtonHints = settings.showButtonHints,
+            profile = sd.profile,
+            profileCard = tr.profileCard,
+            avatarFocused = tr.avatarFocused,
+            settings = settings,
+            waveEditor = tr.waveEditor,
+            achievements = tr.achievements,
+            unlockToast = tr.unlockToast,
         )
     }.stateIn(viewModelScope, SharingStarted.Eagerly, XmbUiState(coldBoot = coldBoot))
 
@@ -322,14 +364,19 @@ class XmbViewModel(
         if (transient.value.remap != null || transient.value.booting != null) return
         transient.value.nameEntry?.let { return nameEntryAction(it, action) }
         if (action == NavAction.MEDIA) return toggleMediaControls()
+        transient.value.waveEditor?.let { return waveEditorAction(it, action) }
+        transient.value.achievements?.let { return achievementsAction(it, action) }
+        transient.value.profileCard?.let { return profileCardAction(it, action) }
         transient.value.info?.let { return infoAction(it, action) }
         transient.value.details?.let { return detailsAction(it, action) }
         if (media.onAction(action)) return
         transient.value.optionsMenu?.let { return optionsAction(it, action) }
         transient.value.search?.let { return searchAction(it, action) }
+        if (transient.value.avatarFocused) return avatarAction(action)
         val ui = current()
         when (action) {
-            NavAction.UP -> moveCursor(-1)
+            // Up from the top of a category root climbs into the status bar, onto the avatar.
+            NavAction.UP -> if (ui.depth == 0 && ui.focusedIndex == 0) focusAvatar() else moveCursor(-1)
             NavAction.DOWN -> moveCursor(+1)
             NavAction.LEFT -> if (ui.depth > 0) back() else moveCategory(-1)
             NavAction.RIGHT -> when {
@@ -339,9 +386,9 @@ class XmbViewModel(
             }
             NavAction.PREV_CATEGORY -> moveCategory(-1)
             NavAction.NEXT_CATEGORY -> moveCategory(+1)
-            NavAction.CONFIRM, NavAction.START -> ui.focused?.let(::activate)
+            NavAction.CONFIRM, NavAction.START -> ui.focused?.let(::activate) ?: refuse()
             NavAction.BACK -> back()
-            NavAction.OPTIONS -> ui.focused?.let(::openOptions)
+            NavAction.OPTIONS -> ui.focused?.let(::openOptions) ?: refuse()
             NavAction.MEDIA -> Unit // handled above
         }
     }
@@ -358,13 +405,335 @@ class XmbViewModel(
                 sounds.play(UiSound.OPTION)
                 infoJob?.cancel()
                 detailsJob?.cancel()
-                transient.update { it.copy(optionsMenu = null, info = null, details = null) }
+                achievementsJob?.cancel()
+                transient.update {
+                    it.copy(
+                        optionsMenu = null, info = null, details = null, profileCard = null, avatarFocused = false,
+                        waveEditor = null, achievements = null,
+                    )
+                }
             }
             MediaOverlayController.NowPlayingToggle.CLOSED -> sounds.play(UiSound.BACK)
             MediaOverlayController.NowPlayingToggle.NOTHING_PLAYING -> toast(NOTHING_PLAYING)
             MediaOverlayController.NowPlayingToggle.UNAVAILABLE -> Unit
         }
     }
+
+    /** Touch: the floating mini player opens the full audio controls. */
+    fun onMiniPlayerTapped() = toggleMediaControls()
+
+    /** Touch: a long press on the mini player plays or pauses without opening anything. */
+    fun onMiniPlayerLongPressed() {
+        if (music.state.value.song == null) return
+        music.togglePlayPause()
+        sounds.play(UiSound.ENTER)
+    }
+
+    // region Profile (status bar avatar, User Card, RetroAchievements)
+
+    private val profiles = container.profiles
+    private var profileJob: Job? = null
+
+    private fun focusAvatar() {
+        sounds.play(UiSound.MOVE)
+        transient.update { it.copy(avatarFocused = true) }
+    }
+
+    private fun avatarAction(action: NavAction) {
+        when (action) {
+            NavAction.CONFIRM, NavAction.START -> openProfileCard()
+            NavAction.DOWN, NavAction.BACK -> {
+                sounds.play(UiSound.MOVE)
+                transient.update { it.copy(avatarFocused = false) }
+            }
+            NavAction.LEFT, NavAction.RIGHT, NavAction.PREV_CATEGORY, NavAction.NEXT_CATEGORY -> {
+                transient.update { it.copy(avatarFocused = false) }
+                moveCategory(if (action == NavAction.LEFT || action == NavAction.PREV_CATEGORY) -1 else +1)
+            }
+            NavAction.OPTIONS -> openProfileCard()
+            NavAction.UP, NavAction.MEDIA -> Unit
+        }
+    }
+
+    /** Touch: tap the avatar. */
+    fun onAvatarTapped() = openProfileCard()
+
+    private fun openProfileCard() {
+        sounds.play(UiSound.OPTION)
+        transient.update { it.copy(profileCard = ProfileCardState(), avatarFocused = false, optionsMenu = null) }
+    }
+
+    fun closeProfileCard() {
+        if (transient.value.profileCard != null) {
+            sounds.play(UiSound.BACK)
+            transient.update { it.copy(profileCard = null) }
+        }
+    }
+
+    private fun profileCardAction(card: ProfileCardState, action: NavAction) =
+        applyProfileCard(card, ProfileCard.onAction(card, action, profiles.current.linked))
+
+    /** Touch: tap a User Card button. */
+    fun onProfileCardButtonTapped(index: Int) {
+        val card = transient.value.profileCard ?: return
+        applyProfileCard(card, ProfileCard.tap(card, index, profiles.current.linked))
+    }
+
+    private fun applyProfileCard(before: ProfileCardState, outcome: ProfileCardOutcome) {
+        if (outcome.state != before) {
+            sounds.play(UiSound.MOVE)
+            transient.update { it.copy(profileCard = outcome.state) }
+        }
+        when (val effect = outcome.effect) {
+            ProfileCardEffect.None -> Unit
+            ProfileCardEffect.Close -> closeProfileCard()
+            is ProfileCardEffect.Press -> {
+                sounds.play(UiSound.ENTER)
+                when (effect.button) {
+                    ProfileCardButton.REFRESH -> refreshProfile(quiet = false)
+                    ProfileCardButton.LINK -> {
+                        transient.update { it.copy(profileCard = null) }
+                        promptRetroAchievements()
+                    }
+                    ProfileCardButton.UNLINK -> unlinkRetroAchievements()
+                    ProfileCardButton.CLOSE -> closeProfileCard()
+                }
+            }
+        }
+    }
+
+    private fun promptRetroAchievements() {
+        val account = container.credentials.current
+        emit(UiEffect.PromptRetroAchievements(account.retroAchievementsUser, account.retroAchievementsLinked))
+    }
+
+    /**
+     * Answer from the link dialog. An empty [key] keeps the saved key when the user name is
+     * unchanged; an empty [user] unlinks.
+     */
+    fun onRetroAchievementsEntered(user: String, key: String) {
+        val name = user.trim()
+        val saved = container.credentials.current
+        if (name.isEmpty()) {
+            if (saved.retroAchievementsLinked) unlinkRetroAchievements()
+            return
+        }
+        val apiKey = key.trim().ifEmpty {
+            if (name.equals(saved.retroAchievementsUser, ignoreCase = true)) saved.retroAchievementsKey else ""
+        }
+        if (apiKey.isEmpty()) return toast("Enter your Web API key (retroachievements.org ▸ Settings ▸ Keys)")
+        profileJob?.cancel()
+        profileJob = viewModelScope.launch {
+            toast("Checking RetroAchievements account…")
+            when (val result = profiles.link(name, apiKey)) {
+                is RaResult.Ok -> toast("Linked RetroAchievements as ${result.profile.username}")
+                else -> fail(raFailure(result))
+            }
+        }
+    }
+
+    private fun refreshProfile(quiet: Boolean) {
+        if (!profiles.current.linked) return
+        if (profileJob?.isActive == true) return
+        profileJob = viewModelScope.launch {
+            val result = profiles.refresh()
+            if (!quiet) toast(if (result is RaResult.Ok) "Profile updated" else raFailure(result))
+        }
+    }
+
+    private fun unlinkRetroAchievements() {
+        profileJob?.cancel()
+        profileJob = viewModelScope.launch {
+            profiles.unlink()
+            withContext(Dispatchers.IO) { container.achievements.clear() }
+            transient.update { it.copy(profileCard = it.profileCard?.let { ProfileCardState() }) }
+            toast("RetroAchievements account unlinked")
+        }
+    }
+
+    private fun raFailure(result: RaResult): String = when (result) {
+        is RaResult.Ok -> ""
+        RaResult.InvalidCredentials -> "RetroAchievements refused that Web API key"
+        RaResult.UserNotFound -> "No RetroAchievements user by that name"
+        is RaResult.Failed -> result.reason
+    }
+
+    // endregion
+
+    // region Unlock toasts
+
+    private val unlockQueue = UnlockQueue()
+    private var unlockJob: Job? = null
+
+    /** Shows the next queued unlock unless one is on screen; each stays [UNLOCK_TOAST_MS]. */
+    private fun showNextUnlock() {
+        if (unlockJob?.isActive == true) return
+        val next = unlockQueue.next() ?: return
+        unlockJob = viewModelScope.launch {
+            sounds.play(UiSound.TROPHY)
+            transient.update { it.copy(unlockToast = next) }
+            delay(UNLOCK_TOAST_MS)
+            transient.update { it.copy(unlockToast = null) }
+            delay(UNLOCK_TOAST_GAP_MS)
+            unlockJob = null
+            showNextUnlock()
+        }
+    }
+
+    // endregion
+
+    // region Theme packs and Wave settings
+
+    private fun applyThemePack(id: String) {
+        viewModelScope.launch {
+            val loaded = container.themes.select(id)
+            settingsStore.update { s ->
+                var next = s.copy(themePack = loaded.id)
+                // A pack with its own colors switches to them; leaving it falls back to a fixed theme.
+                next = when {
+                    loaded.palette != null -> next.copy(theme = dev.xross.launcher.theme.PACK_THEME)
+                    s.theme == dev.xross.launcher.theme.PACK_THEME -> next.copy(theme = XrossTheme.LAVENDER.name)
+                    else -> next
+                }
+                // Its wave defaults, keeping the user's color tint.
+                loaded.wave?.let { w -> next = WaveEditor.reset(next, w).copy(waveTint = s.waveTint, waveEnabled = s.waveEnabled) }
+                next
+            }
+            sounds.useTheme(loaded)
+            if (loaded.id != id) {
+                fail("Couldn't load that theme pack; using Default")
+            } else {
+                sounds.play(UiSound.OK)
+                toast("Theme pack: ${loaded.info.name}" + (loaded.problems.firstOrNull()?.let { " · $it" } ?: ""))
+            }
+        }
+    }
+
+    private fun openWaveSettings() {
+        transient.update { it.copy(waveEditor = WaveEditorState(), optionsMenu = null) }
+    }
+
+    private fun waveEditorAction(editor: WaveEditorState, action: NavAction) {
+        val outcome = WaveEditor.onAction(editor, action, settingsStore.current, container.themes.active.value.wave)
+        applyWaveOutcome(editor, outcome)
+    }
+
+    private fun applyWaveOutcome(before: WaveEditorState, outcome: WaveEditorOutcome) {
+        when {
+            outcome.close -> return closeWaveSettings()
+            outcome.blocked -> refuse()
+            outcome.settings != null -> {
+                settingsStore.update { outcome.settings }
+                sounds.play(UiSound.MOVE)
+            }
+            outcome.state != before -> sounds.play(UiSound.MOVE)
+        }
+        if (outcome.state != before) transient.update { it.copy(waveEditor = outcome.state) }
+    }
+
+    fun closeWaveSettings() {
+        if (transient.value.waveEditor != null) {
+            sounds.play(UiSound.BACK)
+            transient.update { it.copy(waveEditor = null) }
+        }
+    }
+
+    /** Touch: tap a row to focus it; tapping the focused row acts like Confirm. */
+    fun onWaveRowTapped(index: Int) {
+        val editor = transient.value.waveEditor ?: return
+        if (index == editor.index) {
+            waveEditorAction(editor, NavAction.CONFIRM)
+        } else if (index in WaveEditor.rows.indices) {
+            sounds.play(UiSound.MOVE)
+            transient.update { it.copy(waveEditor = editor.copy(index = index)) }
+        }
+    }
+
+    /** Touch: a slider dragged or tapped at [fraction] of its track. */
+    fun onWaveSliderChanged(index: Int, fraction: Float) {
+        val editor = transient.value.waveEditor ?: return
+        val row = WaveEditor.rows.getOrNull(index) ?: return
+        if (editor.index != index) transient.update { it.copy(waveEditor = editor.copy(index = index)) }
+        settingsStore.update { WaveEditor.setFraction(row, it, fraction) }
+    }
+
+    // endregion
+
+    // region Achievements screen
+
+    private var achievementsJob: Job? = null
+
+    private fun showAchievements(gameId: Long) {
+        achievementsJob?.cancel()
+        achievementsJob = viewModelScope.launch {
+            val game = container.games.get(gameId) ?: return@launch
+            val platform = PlatformRegistry.byId(game.platformId)
+            val view = AchievementsViewState(
+                gameId = game.id,
+                uuid = game.uuid,
+                title = game.title,
+                platform = platform?.name,
+                result = container.achievements.cached(game),
+                artVersion = container.assets.version.value,
+            )
+            sounds.play(UiSound.ENTER)
+            transient.update { it.copy(achievements = view, details = null, optionsMenu = null) }
+            val result = container.achievements.load(game)
+            transient.update { t -> t.copy(achievements = t.achievements?.takeIf { it.gameId == gameId }?.withResult(result)) }
+        }
+    }
+
+    private fun refreshAchievements(gameId: Long, quiet: Boolean) {
+        if (achievementsJob?.isActive == true) return
+        achievementsJob = viewModelScope.launch {
+            val game = container.games.get(gameId) ?: return@launch
+            if (!quiet) toast("Refreshing achievements…")
+            val result = container.achievements.load(game, maxAgeMs = 0)
+            transient.update { t -> t.copy(achievements = t.achievements?.takeIf { it.gameId == gameId }?.withResult(result)) }
+            if (!quiet && result is dev.xross.launcher.profile.AchievementsState.Failed) fail(result.reason)
+        }
+    }
+
+    private fun achievementsAction(view: AchievementsViewState, action: NavAction) {
+        val outcome = AchievementsGrid.onAction(view, action)
+        when (outcome.effect) {
+            AchievementsEffect.Close -> return closeAchievements()
+            AchievementsEffect.Refresh -> {
+                sounds.play(UiSound.OPTION)
+                return refreshAchievements(view.gameId, quiet = false)
+            }
+            AchievementsEffect.None -> Unit
+        }
+        if (outcome.state != view) {
+            sounds.play(UiSound.MOVE)
+            transient.update { it.copy(achievements = outcome.state) }
+        } else if (action == NavAction.CONFIRM || action == NavAction.START) {
+            // Nothing to run on a badge; its details are already shown.
+            Unit
+        } else if (view.achievements.isNotEmpty() && action in GRID_MOVES) {
+            refuse()
+        }
+    }
+
+    fun closeAchievements() {
+        achievementsJob?.cancel()
+        if (transient.value.achievements != null) {
+            sounds.play(UiSound.BACK)
+            transient.update { it.copy(achievements = null) }
+        }
+    }
+
+    /** Touch: tap a badge to show its details. */
+    fun onAchievementTapped(index: Int) {
+        val view = transient.value.achievements ?: return
+        val next = AchievementsGrid.tap(view, index)
+        if (next != view) {
+            sounds.play(UiSound.MOVE)
+            transient.update { it.copy(achievements = next) }
+        }
+    }
+
+    // endregion
 
     // region Search
 
@@ -449,7 +818,7 @@ class XmbViewModel(
     // region Options menu
 
     private fun openOptions(node: XmbNode) {
-        if (node.menu.isEmpty()) return
+        if (node.menu.isEmpty()) return refuse()
         sounds.play(UiSound.OPTION)
         transient.update { it.copy(optionsMenu = OptionsMenuState.open(node.title, node.menu)) }
     }
@@ -626,6 +995,11 @@ class XmbViewModel(
             } ?: return@launch
             sounds.play(UiSound.ENTER)
             transient.update { it.copy(details = details) }
+            if (details.achievementsSupported) {
+                val game = container.games.get(gameId) ?: return@launch
+                val result = container.achievements.load(game)
+                transient.update { t -> t.copy(details = t.details?.takeIf { it.gameId == gameId }?.copy(achievements = result)) }
+            }
         }
     }
 
@@ -644,7 +1018,8 @@ class XmbViewModel(
                 closeDetails()
                 current().items.firstOrNull { (it.action as? NodeAction.LaunchGame)?.gameId == details.gameId }?.let(::openOptions)
             }
-            NavAction.RIGHT, NavAction.PREV_CATEGORY, NavAction.NEXT_CATEGORY, NavAction.MEDIA -> Unit
+            NavAction.RIGHT -> if (details.achievementsSupported) showAchievements(details.gameId) else refuse()
+            NavAction.PREV_CATEGORY, NavAction.NEXT_CATEGORY, NavAction.MEDIA -> Unit
         }
     }
 
@@ -685,7 +1060,7 @@ class XmbViewModel(
 
     private fun importDats() {
         if (!env.value.storageGranted) {
-            toast("Grant All files access first")
+            fail("Grant All files access first")
             return
         }
         val dir = datFolder(settingsStore.current.datFolder)
@@ -871,7 +1246,11 @@ class XmbViewModel(
         }
         if (env.value.storageGranted && scanJob?.isActive != true) fingerprints.start(viewModelScope)
         if (settingsStore.current.scrapeAutomatically && scanJob?.isActive != true) container.scraper.start(viewModelScope)
+        if (profileLoaded && profiles.isStale()) refreshProfile(quiet = true)
     }
+
+    /** The offline profile cache has been read (see init). */
+    private var profileLoaded = false
 
     /** Activity paused (a game or another app is in front): stop background I/O. */
     fun onBackground() {
@@ -888,6 +1267,12 @@ class XmbViewModel(
         viewModelScope.launch {
             container.games.addPlayTime(finished.gameId, finished.durationMs)
             val game = container.games.get(finished.gameId) ?: return@launch
+            // Unlocks earned in the emulator: fetch them now so their toasts appear on return.
+            container.achievements.invalidate(game)
+            if (profiles.current.linked) {
+                profileJob?.cancel()
+                refreshProfile(quiet = true)
+            }
             val played = MenuTree.formatPlaytime(finished.durationMs) ?: "under a minute"
             toast("Played ${game.title} for $played")
         }
@@ -920,7 +1305,10 @@ class XmbViewModel(
             if (changed) settingsStore.relocate(container.environment.current) else settingsStore.reloadIfChanged()
             changed
         }
-        if (moved) moveArtFrom(previous)
+        if (moved) {
+            moveArtFrom(previous)
+            profiles.load()
+        }
         publishPortable()
         if (firstLoad || moved) {
             val restorable = container.backups.findRestorable()
@@ -1255,7 +1643,7 @@ class XmbViewModel(
 
     private fun rescan(quiet: Boolean) {
         if (!env.value.storageGranted) {
-            toast("Grant All files access first")
+            fail("Grant All files access first")
             return
         }
         scanJob?.cancel()
@@ -1342,7 +1730,7 @@ class XmbViewModel(
                 run(action.command)
             }
             is NodeAction.OpenMedia -> openMedia(action)
-            NodeAction.None -> Unit
+            NodeAction.None -> refuse()
         }
     }
 
@@ -1380,10 +1768,7 @@ class XmbViewModel(
                 delay(600)
                 transient.update { it.copy(booting = null) }
             }
-            is LaunchPlan.Failed -> {
-                sounds.play(UiSound.ERROR)
-                toast(plan.message)
-            }
+            is LaunchPlan.Failed -> fail(plan.message)
         }
     }
 
@@ -1391,8 +1776,7 @@ class XmbViewModel(
     fun onLaunchFailed(message: String) {
         container.sessions.disarm()
         transient.update { it.copy(booting = null) }
-        sounds.play(UiSound.ERROR)
-        toast(message)
+        fail(message)
     }
 
     private fun run(command: Command) {
@@ -1451,6 +1835,10 @@ class XmbViewModel(
                     emit(UiEffect.PromptText(TextPrompt.ScreenScraperUser(container.credentials.current.screenScraperUser)))
                 }
             Command.EditSteamGridDbKey -> emit(UiEffect.PromptText(TextPrompt.SteamGridDbKey))
+            Command.LinkRetroAchievements -> promptRetroAchievements()
+            Command.RefreshRetroAchievements ->
+                if (profiles.current.linked) refreshProfile(quiet = false) else promptRetroAchievements()
+            Command.OpenProfileCard -> openProfileCard()
             Command.CheckScreenScraperAccount -> datWork {
                 when (val check = container.screenScraper.checkAccount()) {
                     is dev.xross.launcher.scrape.providers.AccountCheck.Ok ->
@@ -1467,6 +1855,7 @@ class XmbViewModel(
                 }
                 toast("Freed ${MenuTree.formatSize(freed)} · art downloads again on the next scrape")
             }
+            is Command.ShowAchievements -> showAchievements(command.gameId)
             is Command.ShowDetails -> showDetails(command.gameId)
             is Command.EditTitle -> viewModelScope.launch {
                 val game = container.games.get(command.gameId) ?: return@launch
@@ -1497,10 +1886,32 @@ class XmbViewModel(
             }
             is Command.CycleEmulator -> cycleEmulator(command.platformId)
             Command.ToggleWave -> settingsStore.update { it.copy(waveEnabled = !it.waveEnabled) }
-            Command.CycleWaveSpeed -> settingsStore.update { it.copy(waveSpeed = WAVE_SPEEDS.nextAfter(it.waveSpeed)) }
+            Command.OpenWaveSettings -> openWaveSettings()
             Command.CycleTheme -> settingsStore.update {
-                val next = XrossTheme.entries[(XrossTheme.byName(it.theme).ordinal + 1) % XrossTheme.entries.size]
-                it.copy(theme = next.name)
+                // The theme pack's own colors join the cycle when the active pack has them.
+                val names = XrossTheme.entries.map { t -> t.name } +
+                    listOfNotNull(dev.xross.launcher.theme.PACK_THEME.takeIf { container.themes.active.value.palette != null })
+                val i = names.indexOf(it.theme).coerceAtLeast(-1)
+                it.copy(theme = names[(i + 1) % names.size])
+            }
+            Command.CycleThemePack -> {
+                val packs = container.themes.packs.value
+                if (packs.size <= 1) {
+                    viewModelScope.launch {
+                        val found = container.themes.rediscover()
+                        if (found.size <= 1) fail("No theme packs in ${container.environment.current.themes.absolutePath}")
+                        else applyThemePack(found[(found.indexOfFirst { it.id == settingsStore.current.themePack } + 1) % found.size].id)
+                    }
+                } else {
+                    val i = packs.indexOfFirst { it.id == settingsStore.current.themePack }
+                    applyThemePack(packs[(i + 1) % packs.size].id)
+                }
+            }
+            is Command.SetThemePack -> applyThemePack(command.id)
+            Command.ReloadThemePacks -> viewModelScope.launch {
+                val found = container.themes.rediscover()
+                container.themes.reload()
+                toast(if (found.size == 1) "No theme packs in Xross/themes" else "${found.size} theme packs")
             }
             Command.ToggleSoundEffects -> settingsStore.update { it.copy(soundEffects = !it.soundEffects) }
             Command.CycleSoundVolume -> {
@@ -1516,7 +1927,7 @@ class XmbViewModel(
             }
             Command.RecheckFingerprints -> {
                 if (!env.value.storageGranted) {
-                    toast("Grant All files access first")
+                    fail("Grant All files access first")
                 } else if (scanJob?.isActive != true) {
                     fingerprints.restart(viewModelScope)
                     toast("Checking for files without fingerprints")
@@ -1643,6 +2054,15 @@ class XmbViewModel(
         _effects.trySend(effect)
     }
 
+    /** An action that isn't allowed here (Options on an item without a menu, Confirm on an information row). */
+    private fun refuse() = sounds.play(UiSound.ERROR)
+
+    /** Something failed: the error sound, then the message. */
+    private fun fail(message: String) {
+        sounds.play(UiSound.ERROR)
+        toast(message)
+    }
+
     private fun toast(message: String) {
         toastJob?.cancel()
         transient.update { it.copy(toast = message) }
@@ -1685,8 +2105,47 @@ class XmbViewModel(
         viewModelScope.launch {
             tree.collect { if (transient.value.search?.query?.isNotBlank() == true) runSearch(0) }
         }
-        if (coldBoot && settingsStore.current.bootSound) sounds.playCue(UiCue.COLDBOOT, settingsStore.current.soundVolume)
+        // Theme pack: discover, activate the saved one, and keep sounds and Settings ▸ Theme in step.
+        viewModelScope.launch {
+            container.themes.rediscover()
+            val wanted = settingsStore.current.themePack
+            if (wanted != container.themes.active.value.id) container.themes.select(wanted)
+            // Startup sound once the pack's sounds are in place (01. opening.wav by default).
+            if (coldBoot && settingsStore.current.bootSound) sounds.playCue(UiCue.OPENING, settingsStore.current.soundVolume)
+        }
+        viewModelScope.launch {
+            combine(container.themes.packs, container.themes.active) { packs, active -> packs to active }.collect { (packs, active) ->
+                sounds.useTheme(active)
+                env.update {
+                    it.copy(
+                        themes = ThemeSetup(
+                            packs = packs.map { p -> p.id to p.name }.ifEmpty { listOf(active.id to active.info.name) },
+                            activeId = active.id,
+                            activeName = active.info.name,
+                            activeAuthor = active.info.manifest.author,
+                            packPalette = active.palette != null,
+                            problems = active.problems,
+                        ),
+                    )
+                }
+            }
+        }
+        // Unlock toasts: new unlocks found by any profile refresh, one at a time.
+        viewModelScope.launch {
+            profiles.unlocks.collect { badges ->
+                container.achievements.invalidateAll()
+                unlockQueue.offer(badges)
+                showNextUnlock()
+                transient.value.achievements?.let { refreshAchievements(it.gameId, quiet = true) }
+            }
+        }
         refreshEnvironment()
+        // Avatar and profile from the Xross folder first (instant, offline), then the network if stale.
+        viewModelScope.launch {
+            profiles.load()
+            profileLoaded = true
+            if (profiles.isStale()) refreshProfile(quiet = true)
+        }
     }
 
     companion object {
@@ -1694,10 +2153,12 @@ class XmbViewModel(
         internal val DEADZONES = listOf(0f, 0.15f, 0.25f, 0.35f, 0.45f, 0.55f)
         private val AXIAL_DEADZONES = listOf(0f, 0.1f, 0.2f, 0.3f)
         private const val INFO_PAGE = 5
-        private val WAVE_SPEEDS = listOf(0.5f, 1f, 1.5f, 2f)
         private val VOLUMES = listOf(0.25f, 0.5f, 0.75f, 1f)
         private val SLIDESHOW_SECONDS = listOf(3, 5, 10, 20)
         private const val GAMEBOOT_HANDOFF_MS = 1100L
+        internal const val UNLOCK_TOAST_MS = 4_500L
+        private const val UNLOCK_TOAST_GAP_MS = 350L
+        private val GRID_MOVES = setOf(NavAction.LEFT, NavAction.RIGHT, NavAction.UP, NavAction.DOWN)
         private const val VOLUME_SETTLE_MS = 1200L
         private const val SEARCH_DEBOUNCE_MS = 140L
         private const val BACKUP_DELAY_MS = 4_000L

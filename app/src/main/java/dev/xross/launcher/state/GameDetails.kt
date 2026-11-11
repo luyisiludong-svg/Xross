@@ -28,6 +28,10 @@ data class GameDetailsState(
     val scraped: Boolean = false,
     /** Synopsis scroll step, moved by up/down. */
     val scroll: Int = 0,
+    /** RetroAchievements progress; null while loading or for systems without achievements. */
+    val achievements: dev.xross.launcher.profile.AchievementsState? = null,
+    /** The system has RetroAchievements (the summary row is shown). */
+    val achievementsSupported: Boolean = false,
 ) {
     fun scrollBy(delta: Int): GameDetailsState = copy(scroll = (scroll + delta).coerceIn(0, MAX_SCROLL))
 
@@ -59,6 +63,7 @@ data class GameDetailsState(
                 },
                 artVersion = artVersion,
                 scraped = meta?.scrapeStatus == "OK",
+                achievementsSupported = dev.xross.launcher.profile.RaConsoles.of(game.platformId) != null,
             )
         }
 

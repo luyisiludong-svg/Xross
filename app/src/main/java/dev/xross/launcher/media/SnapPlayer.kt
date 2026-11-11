@@ -21,6 +21,9 @@ import java.io.File
  */
 class SnapPlayer(private val context: Context, private val music: MusicPlayer) {
 
+    private val handler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var ramp: Runnable? = null
+
     private val _player = MutableStateFlow<ExoPlayer?>(null)
     /** The playing snap's player, for the surface; null when nothing plays. */
     val player: StateFlow<ExoPlayer?> = _player.asStateFlow()
@@ -38,7 +41,15 @@ class SnapPlayer(private val context: Context, private val music: MusicPlayer) {
             )
             .build()
         p.repeatMode = Player.REPEAT_MODE_ONE
-        p.volume = volume.coerceIn(0f, 1f)
+        // Silent until the first frame is ready, then ramped up (see BackdropTiming.AUDIO_RAMP_MS).
+        p.volume = 0f
+        val target = volume.coerceIn(0f, 1f)
+        p.addListener(object : Player.Listener {
+            override fun onRenderedFirstFrame() {
+                p.removeListener(this)
+                startRamp(p, target)
+            }
+        })
         p.setMediaItem(MediaItem.fromUri(android.net.Uri.fromFile(video)))
         p.prepare()
         p.playWhenReady = true
@@ -46,11 +57,33 @@ class SnapPlayer(private val context: Context, private val music: MusicPlayer) {
         _player.value = p
     }
 
+    /** Raises [p]'s volume from 0 to [target] over [RAMP_MS], in ~16 ms steps on the main thread. */
+    private fun startRamp(p: ExoPlayer, target: Float) {
+        ramp?.let(handler::removeCallbacks)
+        val start = android.os.SystemClock.uptimeMillis()
+        val step = object : Runnable {
+            override fun run() {
+                if (_player.value !== p) return
+                val elapsed = android.os.SystemClock.uptimeMillis() - start
+                p.volume = dev.xross.launcher.ui.BackdropTiming.rampVolume(elapsed, target)
+                if (elapsed < RAMP_MS) handler.postDelayed(this, 16) else ramp = null
+            }
+        }
+        ramp = step
+        handler.post(step)
+    }
+
     fun stop() {
+        ramp?.let(handler::removeCallbacks)
+        ramp = null
         val p = _player.value ?: return
         _player.value = null
         file = null
         p.release()
         music.setDucked(false)
+    }
+
+    private companion object {
+        const val RAMP_MS = dev.xross.launcher.ui.BackdropTiming.AUDIO_RAMP_MS
     }
 }

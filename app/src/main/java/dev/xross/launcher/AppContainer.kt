@@ -29,6 +29,8 @@ import dev.xross.launcher.storage.XrossEnvironment
 import dev.xross.launcher.media.MediaRepository
 import dev.xross.launcher.media.MusicPlayer
 import dev.xross.launcher.media.SnapPlayer
+import dev.xross.launcher.profile.ProfileRepository
+import dev.xross.launcher.profile.RetroAchievementsClient
 import dev.xross.launcher.storage.FingerprintPolicy
 import dev.xross.launcher.storage.StorageVolumes
 
@@ -47,7 +49,12 @@ class AppContainer(context: Context) {
     }
     val volumes: StorageVolumes by lazy { StorageVolumes(appContext) }
     val launcher: GameLauncher by lazy { AndroidIntentGameLauncher(appContext) }
-    val sounds: UiSounds by lazy { UiSounds(appContext) }
+    /** Theme packs: the built-in Default pack and folders in `Xross/themes/`. */
+    val themePacks: dev.xross.launcher.theme.pack.ThemePackLoader by lazy {
+        dev.xross.launcher.theme.pack.ThemePackLoader(appContext.assets) { environment.current.themes }
+    }
+    val themes: dev.xross.launcher.theme.pack.ThemeRuntime by lazy { dev.xross.launcher.theme.pack.ThemeRuntime(themePacks) }
+    val sounds: UiSounds by lazy { UiSounds(appContext).also { it.useTheme(themes.active.value) } }
     val sessions: PlaySessionTracker by lazy { PlaySessionTracker(PrefsSessionStore(appContext)) }
     val media: MediaRepository by lazy { MediaRepository(appContext) }
     val music: MusicPlayer by lazy { MusicPlayer(appContext) }
@@ -109,6 +116,25 @@ class AppContainer(context: Context) {
             networkAllowed = { !settings.current.scrapeWifiOnly || Network.isUnmetered(appContext) },
         )
     }
+    /** The linked RetroAchievements account (status bar avatar, User Card, Settings ▸ Accounts). */
+    val profiles: ProfileRepository by lazy {
+        ProfileRepository(
+            client = RetroAchievementsClient(http),
+            credentials = credentials,
+            layout = { environment.current },
+        )
+    }
+
+    /** RetroAchievements game lists and progress for the Details and Achievements screens. */
+    val achievements: dev.xross.launcher.profile.AchievementsRepository by lazy {
+        dev.xross.launcher.profile.AchievementsRepository(
+            client = RetroAchievementsClient(http),
+            credentials = credentials,
+            layout = { environment.current },
+            hashes = { id -> database.hashes().get(id) },
+        )
+    }
+
     val fingerprints: FingerprintQueue by lazy {
         FingerprintQueue(
             games = database.games(),

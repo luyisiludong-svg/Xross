@@ -1,6 +1,6 @@
 # Launcher role = source icon id (run `svg_icons.py list` to see ids and previews).
-# Regenerate with:
-#   python3 tools/icons/svg_icons.py build assets/icons tools/icons/icon_map.txt app/src/main/res/drawable
+# Regenerate the Default theme pack's icons with:
+#   python3 tools/icons/svg_icons.py build assets/icons tools/icons/icon_map.txt app/src/main/assets/themes/default/icons
 
 # Category bar
 settings      = group1_04   # toolbox

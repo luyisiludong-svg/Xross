@@ -86,7 +86,8 @@ import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 
-private val OverlayText = TextStyle(color = Color.White, shadow = Shadow(Color(0xAA000000), Offset(0f, 2f), 6f))
+private val OverlayText: TextStyle
+    get() = TextStyle(color = Color.White, fontFamily = ThemeTypography.family, shadow = Shadow(Color(0xAA000000), Offset(0f, 2f), 6f))
 
 private fun style(size: TextUnit, weight: FontWeight = FontWeight.Normal, color: Color = Color.White) =
     OverlayText.copy(fontSize = size, fontWeight = weight, color = color)

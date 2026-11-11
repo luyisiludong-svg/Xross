@@ -16,10 +16,19 @@ import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.roundToLong
 
-/** Tunables for the background; read every frame so changes apply live. */
+/**
+ * Tunables for the background, read every frame so changes apply live (Settings ▸ Theme ▸
+ * Wave settings previews them as the sliders move). Ranges: [dev.xross.launcher.theme.WaveLimits].
+ */
 data class WaveParams(
     val speed: Float = 1f,
     val palette: ThemePalette = XrossTheme.LAVENDER.palette(),
+    /** Fine strands riding the main sheet, 0–12 (`uLines`). */
+    val lineCount: Int = 5,
+    /** Amplitude multiplier, 0–2 (`uTurb`). */
+    val turbulence: Float = 1f,
+    /** Crest, halo and strand width multiplier, 0.5–3 (`uThick`). */
+    val thickness: Float = 1f,
 ) {
     // Converted once per parameter change, not per frame, so the GL loop allocates nothing.
     internal val topRgb = palette.top.rgb()
@@ -52,6 +61,9 @@ class WaveRenderer(
     private var uBottom = 0
     private var uWave = 0
     private var uBright = 0
+    private var uLines = 0
+    private var uTurb = 0
+    private var uThick = 0
     private var width = 1
     private var height = 1
 
@@ -69,6 +81,9 @@ class WaveRenderer(
         uBottom = GLES30.glGetUniformLocation(program, "uBottom")
         uWave = GLES30.glGetUniformLocation(program, "uWave")
         uBright = GLES30.glGetUniformLocation(program, "uBright")
+        uLines = GLES30.glGetUniformLocation(program, "uLines")
+        uTurb = GLES30.glGetUniformLocation(program, "uTurb")
+        uThick = GLES30.glGetUniformLocation(program, "uThick")
         lastFrameNs = 0L
     }
 
@@ -102,6 +117,9 @@ class WaveRenderer(
         GLES30.glUniform3fv(uBottom, 1, p.bottomRgb, 0)
         GLES30.glUniform3fv(uWave, 1, p.waveRgb, 0)
         GLES30.glUniform1f(uBright, 0.8f + 0.2f * daylight)
+        GLES30.glUniform1i(uLines, p.lineCount.coerceIn(0, MAX_LINES))
+        GLES30.glUniform1f(uTurb, p.turbulence.coerceIn(0f, 2f))
+        GLES30.glUniform1f(uThick, p.thickness.coerceIn(0.5f, 3f))
         GLES30.glDrawArrays(GLES30.GL_TRIANGLES, 0, 3)
     }
 
@@ -158,6 +176,9 @@ class WaveRenderer(
     }
 
     companion object {
+        /** Upper bound of `uLines`; the shader's strand loop is unrolled to this. */
+        const val MAX_LINES = 12
+
         /** Render-target scale: keep the long side near 1280 px. */
         fun renderScale(widthPx: Int, heightPx: Int): Float =
             (1280f / max(widthPx, heightPx)).coerceIn(0.4f, 1f)
@@ -178,11 +199,15 @@ uniform vec3 uTop;
 uniform vec3 uBottom;
 uniform vec3 uWave;
 uniform float uBright;
+uniform int uLines;      // strands riding the main sheet, 0-12
+uniform float uTurb;     // amplitude multiplier, 0-2
+uniform float uThick;    // crest/halo/strand width multiplier, 0.5-3
 out vec4 fragColor;
 
 // Low-frequency curve: two long swells plus a slow ripple. All speeds are small so motion
 // reads as drifting light rather than oscillation.
 float curve(float x, float t, float base, float amp, float phase) {
+    amp *= uTurb;
     return base
         + amp * 0.62 * sin(x * 0.85 + t * 0.21 + phase)
         + amp * 0.28 * sin(x * 1.70 - t * 0.33 + phase * 1.9)
@@ -195,8 +220,8 @@ vec3 sheet(vec2 uv, float x, float t, float base, float amp, float phase, float 
     float c = curve(x, t, base, amp, phase);
     float d = uv.y - c;                         // > 0 above the crest
     float aa = max(fwidth(d), 1e-4);
-    float crest = 1.0 - smoothstep(0.0, aa * 2.5 + 0.0025, abs(d));
-    float halo = exp(-(d * d) / 0.0022);
+    float crest = 1.0 - smoothstep(0.0, (aa * 2.5 + 0.0025) * uThick, abs(d));
+    float halo = exp(-(d * d) / (0.0022 * uThick * uThick));
     float body = smoothstep(aa, -0.03, d) * exp(d / 0.16);
     return uWave * strength * (crest * 0.32 + halo * 0.10 + body * 0.075);
 }
@@ -221,13 +246,15 @@ void main() {
     col += sheet(uv, x, t * 1.15, 0.36, 0.12, 4.3, 0.55);
     col += sheet(uv, x, t * 0.6,  0.58, 0.06, 5.7, 0.35);
 
-    // A handful of fine strands riding the main sheet.
-    for (int i = 0; i < 5; i++) {
+    // Fine strands riding the main sheet, centred on it whatever their number.
+    float mid = (float(uLines) - 1.0) * 0.5;
+    for (int i = 0; i < 12; i++) {
+        if (i >= uLines) break;
         float fi = float(i);
-        float c = curve(x, t * (0.95 + fi * 0.03), 0.50 + (fi - 2.0) * 0.012, 0.10, fi * 0.18);
+        float c = curve(x, t * (0.95 + fi * 0.03), 0.50 + (fi - mid) * 0.012, 0.10, fi * 0.18);
         float d = abs(uv.y - c);
         float aa = max(fwidth(uv.y - c), 1e-4);
-        col += uWave * 0.10 * (1.0 - smoothstep(0.0, aa * 1.5, d));
+        col += uWave * 0.10 * (1.0 - smoothstep(0.0, aa * 1.5 * uThick, d));
     }
 
     col *= uBright;
