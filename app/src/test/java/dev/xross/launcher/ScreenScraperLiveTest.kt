@@ -17,14 +17,14 @@ import org.robolectric.RobolectricTestRunner
 import java.io.File
 
 /**
- * Real ScreenScraper calls against the ROMs in the git-ignored `Roms/` folder. Opt-in and
- * skipped by default:
+ * Real calls to the metadata services, against the ROMs in the git-ignored `Roms/` folder.
+ * Opt-in and skipped by default:
  *
  *     ./gradlew :app:testDebugUnitTest --tests '*ScreenScraperLiveTest*' -PliveScrape=true
  *
- * Needs SCREENSCRAPER_DEV_ID / SCREENSCRAPER_DEV_PASSWORD (and optionally SCREENSCRAPER_USER /
- * SCREENSCRAPER_PASSWORD) in `.env`. Prints what was found; asserts only that the service
- * answered, since the catalogue changes. Uses a handful of files to stay well inside quotas.
+ * Each test runs only when its credentials are in `.env`: SCREENSCRAPER_DEV_ID (+ password, and
+ * optionally a user account) for ScreenScraper; STEAMGRIDDB_API_KEY (or SteamGridDB_API) for
+ * SteamGridDB. Prints what was found. Uses a handful of files to stay well inside quotas.
  */
 @RunWith(RobolectricTestRunner::class)
 class ScreenScraperLiveTest {
@@ -74,5 +74,59 @@ class ScreenScraperLiveTest {
             if (result is ProviderResult.QuotaExceeded || result is ProviderResult.Unavailable) break
         }
         println("Quota after run: ${provider.quota.value?.summary}")
+    }
+
+    /**
+     * The app's arcade path end to end: Hasheous names each set from its largest ROM chip, then
+     * SteamGridDB finds art for that title; one image per game is downloaded and checked by its
+     * bytes. 3DS games use their file names. Fails if nothing is found at all.
+     */
+    @Test fun steamGridDbFindsArtForSampleRoms() = runBlocking {
+        assumeTrue("pass -PliveScrape=true to run", System.getProperty("xross.liveScrape") == "true")
+        val env = env()
+        val key = env["STEAMGRIDDB_API_KEY"] ?: env["SteamGridDB_API"]
+        assumeTrue("STEAMGRIDDB_API_KEY missing from .env", !key.isNullOrBlank())
+        val http = UrlConnectionHttp("Xross/live-test")
+        val hasheous = dev.xross.launcher.scrape.providers.HasheousProvider(http, { true })
+        val sgdb = dev.xross.launcher.scrape.providers.SteamGridDbProvider(http, { key!! })
+
+        val samples = listOf("ARCADE" to "arcade", "3DS" to "n3ds").flatMap { (dir, platform) ->
+            File(root, "Roms/$dir").listFiles().orEmpty().filter { it.isFile }.sortedBy { it.name }.take(4).map { it to platform }
+        }
+        assumeTrue("no ROMs in Roms/", samples.isNotEmpty())
+        val out = java.nio.file.Files.createTempDirectory("xross-live").toFile()
+        var withArt = 0
+        for ((file, platform) in samples) {
+            var title = RomScanner.cleanTitle(file.nameWithoutExtension)
+            if (platform == "arcade") {
+                val chip = FileHash.ofLargestZipMember(file, 256L shl 20)
+                val named = hasheous.lookup(
+                    ScrapeRequest(
+                        gameId = 0, uuid = "live", title = title, fileName = file.name, platformId = platform, sizeBytes = file.length(),
+                        dataCrc32 = chip?.crc32, dataMd5 = chip?.md5, dataSha1 = chip?.sha1,
+                    ),
+                )
+                (named as? ProviderResult.Found)?.game?.title?.let { title = it }
+            }
+            val result = sgdb.lookup(
+                ScrapeRequest(gameId = 0, uuid = "live", title = title, fileName = file.name, platformId = platform, sizeBytes = file.length()),
+            )
+            val line = when (result) {
+                is ProviderResult.Found -> {
+                    val first = result.game.media.first()
+                    val dest = File(out, "${file.nameWithoutExtension}.part")
+                    val dl = http.download(first.url, dest, first.kind.maxBytes)
+                    val type = dev.xross.launcher.scrape.AssetCache.sniff(dest)
+                    if (dl.code == 200 && type != null) withArt++
+                    "#${result.game.providerId} ${result.game.media.joinToString { it.kind.name }} · ${first.kind} ${dl.code} ${dl.bytes / 1024} KB $type"
+                }
+                else -> result.toString()
+            }
+            println("${file.name} → \"$title\": $line")
+            if (result is ProviderResult.Unavailable) break
+        }
+        out.deleteRecursively()
+        println("$withArt of ${samples.size} games got art")
+        org.junit.Assert.assertTrue("SteamGridDB found no art for any sample", withArt > 0)
     }
 }

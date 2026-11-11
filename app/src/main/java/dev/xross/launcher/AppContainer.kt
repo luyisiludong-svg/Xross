@@ -46,7 +46,8 @@ class AppContainer(context: Context) {
     val dats: DatRepository by lazy { DatRepository(database) }
     val credentials: CredentialStore by lazy {
         CredentialStore(appContext).also { store ->
-            // Debug builds only (release builds carry empty strings): the tester's account from .env.
+            // Debug builds only (release builds carry empty strings): the tester's accounts from .env,
+            // used only where nothing has been entered in Settings.
             if (store.current.screenScraperUser.isBlank() && BuildConfig.DEBUG_SCREENSCRAPER_USER.isNotBlank()) {
                 store.update {
                     it.copy(
@@ -54,6 +55,9 @@ class AppContainer(context: Context) {
                         screenScraperPassword = BuildConfig.DEBUG_SCREENSCRAPER_PASSWORD,
                     )
                 }
+            }
+            if (store.current.steamGridDbKey.isBlank() && BuildConfig.DEBUG_STEAMGRIDDB_KEY.isNotBlank()) {
+                store.update { it.copy(steamGridDbKey = BuildConfig.DEBUG_STEAMGRIDDB_KEY) }
             }
         }
     }

@@ -41,7 +41,10 @@ data class ScrapeRequest(
     val crc32: String? = null,
     val md5: String? = null,
     val sha1: String? = null,
-    /** Hashes with a copier header removed (No-Intro style), when the file had one. */
+    /**
+     * Hashes as DAT-based services index them: the ROM with a copier header removed (No-Intro
+     * style), or an arcade set's largest ROM chip. Null when the same as the file hashes.
+     */
     val dataCrc32: String? = null,
     val dataMd5: String? = null,
     val dataSha1: String? = null,

@@ -205,12 +205,12 @@ class ScrapeOrchestrator(
         }
 
     private suspend fun buildRequest(game: GameEntity, hash: GameHashEntity?, meta: GameMetadataEntity?): ScrapeRequest {
-        // Arcade sets are fingerprinted by name only; services that need a hash get the zip's own.
-        val whole = if (game.platformId == "arcade" && hash.hasContentHash().not()) {
-            dev.xross.launcher.storage.FileHash.of(java.io.File(game.path), ARCADE_HASH_LIMIT)
-        } else {
-            null
-        }
+        // Arcade sets are fingerprinted by name only. ScreenScraper asks for the hashes of the local
+        // file (the zip); DAT-based Hasheous indexes the ROM chips inside it, so it gets the
+        // largest chip's hashes in the header-less slots.
+        val arcade = game.platformId == "arcade" && hash.hasContentHash().not()
+        val whole = if (arcade) dev.xross.launcher.storage.FileHash.of(java.io.File(game.path), ARCADE_HASH_LIMIT) else null
+        val chip = if (arcade) dev.xross.launcher.storage.FileHash.ofLargestZipMember(java.io.File(game.path), ARCADE_HASH_LIMIT) else null
         return ScrapeRequest(
             gameId = game.id,
             uuid = game.uuid,
@@ -223,9 +223,9 @@ class ScrapeOrchestrator(
             md5 = whole?.md5 ?: hash?.md5,
             sha1 = whole?.sha1 ?: hash?.sha1,
             // …and header-less, which DAT-based services index.
-            dataCrc32 = hash?.dataCrc32,
-            dataMd5 = hash?.dataMd5,
-            dataSha1 = hash?.dataSha1,
+            dataCrc32 = chip?.crc32 ?: hash?.dataCrc32,
+            dataMd5 = chip?.md5 ?: hash?.dataMd5,
+            dataSha1 = chip?.sha1 ?: hash?.dataSha1,
             serial = meta?.serial,
             screenScraperId = meta?.screenScraperId,
             steamGridDbId = meta?.steamGridDbId,

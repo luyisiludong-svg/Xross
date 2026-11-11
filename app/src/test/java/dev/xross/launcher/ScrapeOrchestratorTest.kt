@@ -163,7 +163,12 @@ class ScrapeOrchestratorTest {
     }
 
     @Test fun arcadeSetsSendTheZipsOwnHashes() = runBlocking {
-        val zip = tmp.newFile("1941.zip").apply { writeBytes(ByteArray(4096) { (it % 251).toByte() }) }
+        val chip = ByteArray(2048) { (it % 13).toByte() }
+        val zip = tmp.newFile("1941.zip")
+        java.util.zip.ZipOutputStream(zip.outputStream()).use { out ->
+            out.putNextEntry(java.util.zip.ZipEntry("small.bin")); out.write(ByteArray(16)); out.closeEntry()
+            out.putNextEntry(java.util.zip.ZipEntry("41_09.bin")); out.write(chip); out.closeEntry()
+        }
         db.games().insertAll(listOf(GameEntity(path = zip.path, platformId = "arcade", title = "1941", fileName = "1941.zip", sizeBytes = zip.length(), lastModified = zip.lastModified())))
         val game = db.games().getAll().single()
         db.hashes().upsert(GameHashEntity.from(game, Fingerprint(HashSource.ARCHIVE_SET, detail = "12 files")))
@@ -174,7 +179,9 @@ class ScrapeOrchestratorTest {
         assertEquals(expected.crc32, request.crc32)
         assertEquals(expected.sha1, request.sha1)
         assertEquals("1941.zip", request.fileName)
-        assertEquals(4096L, request.sizeBytes)
+        assertEquals(zip.length(), request.sizeBytes)
+        // Hasheous gets the largest chip, which is what MAME DATs list.
+        assertEquals(java.security.MessageDigest.getInstance("SHA-1").digest(chip).joinToString("") { "%02x".format(it) }, request.dataSha1)
     }
 
     @Test fun filesSkippedAsTooLargeAreScrapedByName() = runBlocking {
@@ -245,5 +252,7 @@ class ScrapeOrchestratorTest {
         assertEquals(GameDetailsState.MAX_SCROLL, d.scrollBy(1_000).scroll)
         assertEquals("Not played yet", GameDetailsState.build(game.copy(playCount = 0, playTimeMs = 0), null, null, 0).playtime)
         assertEquals("1995", GameDetailsState.formatDate("1995"))
+        assertTrue(GameDetailsState.build(game, null, meta.copy(scrapeStatus = "OK"), 0).scraped)
+        assertFalse(d.scraped)
     }
 }
