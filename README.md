@@ -92,7 +92,8 @@ on screens 600 dp and wider.
   unlock toasts when you come back to Xross.
 * **Credentials for builds:** copy [`.env.example`](.env.example) to `.env` (git-ignored). The build
   reads ScreenScraper developer credentials from it. Debug builds only also pre-fill your
-  SteamGridDB key and ScreenScraper account in Settings. An English guide to ScreenScraper's API
+  SteamGridDB key, ScreenScraper account and RetroAchievements user name and Web API key (never
+  the password) on a fresh install. An English guide to ScreenScraper's API
   rules is in [`docs/SCREENSCRAPER_API.md`](docs/SCREENSCRAPER_API.md).
 
 ## Status
@@ -110,7 +111,7 @@ on screens 600 dp and wider.
 | Media hub | Done. Photo viewer (zoom, pan, slideshow, wallpaper), background music player with media-session controls, video player; music pauses for games and videos |
 | Wave background | Done. GLSL ES 3.0 ribbon shader with day/night palette; speed, ribbon lines, turbulence, thickness and color presets as live uniforms (Settings ▸ Theme ▸ Wave settings). Pauses whenever the launcher isn't in front or game art covers it |
 | Theme packs | Done. `Xross/themes/<id>/` with `theme.json`, fonts, SVG/PNG icons and sounds; the bundled icons and sounds are the built-in Default pack |
-| RetroAchievements | Done. Account linking, status bar avatar, User Card, per-game achievement lists, unlock toasts. Live sign-in checked; Web API features tested against recorded answers until a Web API key is in `.env` |
+| RetroAchievements | Done. Account linking, status bar avatar, User Card, per-game achievement lists, unlock toasts. Verified live on an emulator and the Galaxy A55; unlock toasts not yet seen after a real session |
 | Library organization | Done. Hide apps (Options ▸ Hide, Settings ▸ Apps ▸ Hidden apps, Hide system apps), app folders (Emulators, Streaming, Tools or your own name, with emulators suggested), base ROMs folder with Create system folders, and custom Photo/Video folders that also find files MediaStore skips. Not yet tested on a device |
 | Extras | Android apps (games sorted into Games ▸ Android Games), 8 color themes including Original (a color per month), busy indicator, optional button hints, Information screen, can be set as the HOME launcher, Android TV leanback entry |
 | XMB fidelity | Closer. The home menu's layout, motion, navigation, status bar and options panel match the XMB, and games show their own box art; an XMB-style typeface and cursor sound, a still-image background per game, and Resume/Quit Game are missing |
@@ -239,6 +240,8 @@ Xross/themes/<theme_id>/
 * File names are matched without regard to case, and a pack can't reach files outside its
   folder. A pack with its own `palette` switches the color theme to it; its `wave` values become
   the wave settings.
+* **Albums**: an album found in more than one folder (the same rip as FLAC and MP3, say) shows
+  once per folder, labelled by format ("… · FLAC") or, when the formats match, by folder name.
 * **Media**: Settings ▸ Media sets the slideshow interval, whether music resumes after a game or
   stops, video looping, and which folders Photo and Video show (all of them by default).
 * **Apps**: Options (△ / Y) on an app hides it or moves it into a folder; Settings ▸ Apps lists

@@ -9,6 +9,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.Serializable
@@ -126,6 +127,9 @@ class AchievementsRepository(
     private val fetchedAt = ConcurrentHashMap<String, Long>()
     private val badgeLocks = ConcurrentHashMap<String, Mutex>()
 
+    /** A badge grid asks for dozens of images at once; a few downloads at a time is plenty. */
+    private val badgeDownloads = kotlinx.coroutines.sync.Semaphore(BADGE_DOWNLOADS)
+
     /** Memory copy for [game], if loaded this session (instant redraws). */
     fun cached(game: GameEntity): AchievementsState.Ready? = memory[game.uuid]
 
@@ -198,10 +202,22 @@ class AchievementsRepository(
             if (!dir.isDirectory && !dir.mkdirs()) return@withLock null
             val tmp = File(dir, "$clean.part")
             try {
-                if (!client.downloadImage(RetroAchievementsClient.badgeUrl(clean), tmp)) return@withLock null
+                val url = RetroAchievementsClient.badgeUrl(clean)
+                val ok = badgeDownloads.withPermit {
+                    client.downloadImage(url, tmp) || run {
+                        // One retry: a busy media host or a dropped connection is usually brief.
+                        kotlinx.coroutines.delay(BADGE_RETRY_MS)
+                        client.downloadImage(url, tmp)
+                    }
+                }
+                if (!ok) {
+                    android.util.Log.w(TAG, "Badge $clean: download refused or failed")
+                    return@withLock null
+                }
                 AtomicFiles.copy(tmp, dest)
                 dest
-            } catch (_: IOException) {
+            } catch (e: IOException) {
+                android.util.Log.w(TAG, "Badge $clean: ${e.javaClass.simpleName}")
                 null
             } finally {
                 tmp.delete()
@@ -218,7 +234,14 @@ class AchievementsRepository(
     }
 
     @Serializable
-    private data class MatchRecord(val raId: Int, val kind: RaMatchKind, val size: Long, val modified: Long)
+    private data class MatchRecord(
+        val raId: Int,
+        val kind: RaMatchKind,
+        val size: Long,
+        val modified: Long,
+        /** [LIST_VERSION] of the game list this was matched against; older records are matched again. */
+        val listVersion: Int = 1,
+    )
 
     @Serializable
     private data class ConsoleCache(val version: Int = 1, val consoleId: Int, val fetchedAtMs: Long, val games: List<RaGameEntry>)
@@ -227,7 +250,7 @@ class AchievementsRepository(
         val matches = readMatches()
         matches[game.uuid]?.let { rec ->
             // A changed file may be another dump: match it again.
-            if (rec.size == game.sizeBytes && rec.modified == game.lastModified) {
+            if (rec.size == game.sizeBytes && rec.modified == game.lastModified && rec.listVersion == LIST_VERSION) {
                 return if (rec.raId > 0) Resolution.Found(rec.raId, rec.kind) else Resolution.NoMatch
             }
         }
@@ -236,7 +259,7 @@ class AchievementsRepository(
             is RaListResult.Error -> return Resolution.Failed(failure(list.error))
         }
         val hit = RaMatcher.match(game.title, game.fileName, hashes(game.id), console, games)
-        val record = MatchRecord(hit?.first?.id ?: 0, hit?.second ?: RaMatchKind.HASH, game.sizeBytes, game.lastModified)
+        val record = MatchRecord(hit?.first?.id ?: 0, hit?.second ?: RaMatchKind.HASH, game.sizeBytes, game.lastModified, LIST_VERSION)
         writeMatches(matches + (game.uuid to record))
         return hit?.let { Resolution.Found(it.first.id, it.second) } ?: Resolution.NoMatch
     }
@@ -245,10 +268,12 @@ class AchievementsRepository(
     private suspend fun consoleGames(consoleId: Int, key: String): RaListResult = consoleLock.withLock {
         val file = consoleFile(consoleId)
         val cached = readJson(file)?.let { runCatching { JSON.decodeFromString(ConsoleCache.serializer(), it) }.getOrNull() }
-        if (cached != null && clock() - cached.fetchedAtMs < CONSOLE_TTL_MS) return@withLock RaListResult.Ok(cached.games)
+        if (cached != null && cached.version == LIST_VERSION && clock() - cached.fetchedAtMs < CONSOLE_TTL_MS) {
+            return@withLock RaListResult.Ok(cached.games)
+        }
         when (val fresh = client.fetchGameList(key, consoleId)) {
             is RaListResult.Ok -> {
-                writeJson(file, JSON.encodeToString(ConsoleCache.serializer(), ConsoleCache(consoleId = consoleId, fetchedAtMs = clock(), games = fresh.games)))
+                writeJson(file, JSON.encodeToString(ConsoleCache.serializer(), ConsoleCache(LIST_VERSION, consoleId, clock(), fresh.games)))
                 fresh
             }
             is RaListResult.Error -> cached?.let { RaListResult.Ok(it.games) } ?: fresh
@@ -298,7 +323,12 @@ class AchievementsRepository(
         /** Re-fetch progress when this session's copy is older than this. */
         const val FRESH_MS = 10L * 60 * 1000
         const val CONSOLE_TTL_MS = 7L * 24 * 60 * 60 * 1000
+        /** 2: lists include games without achievements (version 1 held only games with a set). */
+        const val LIST_VERSION = 2
         const val RA_DIR = "ra"
+        private const val TAG = "XrossAchievements"
+        private const val BADGE_DOWNLOADS = 4
+        private const val BADGE_RETRY_MS = 800L
         const val MATCHES = "matches.json"
         /** Relative to the media folder. */
         const val BADGES_DIR = "ra/badges"

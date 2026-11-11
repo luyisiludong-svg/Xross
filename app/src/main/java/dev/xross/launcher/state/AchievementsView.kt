@@ -33,8 +33,8 @@ data class AchievementsViewState(
     }
 
     companion object {
-        /** Badges per grid row; the screen sizes cells to fit. */
-        const val COLUMNS = 8
+        /** Badges per grid row; the screen sizes cells so about two and a half rows show. */
+        const val COLUMNS = 10
     }
 }
 

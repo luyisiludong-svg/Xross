@@ -24,10 +24,40 @@ class MediaMenus(private val media: MediaLibrary, private val storageGranted: Bo
     private val photosByFolder by lazy { media.photos.groupBy { it.folder } }
     private val videosByFolder by lazy { media.videos.groupBy { it.folder } }
     private val songsSorted by lazy { media.songs.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.title }) }
-    private val albums by lazy {
-        media.songs.groupBy { it.albumId }.values
-            .map { songs -> songs.sortedWith(compareBy({ it.track }, { it.title.lowercase() })) }
-            .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.first().album })
+    /**
+     * Albums: MediaStore's album, split by folder when one album id spans several folders. The
+     * same album ripped twice (FLAC and MP3 with identical tags) shares an id, and would otherwise
+     * list every track twice; each copy becomes its own album, labelled by format or folder.
+     */
+    private val albums: List<AlbumGroup> by lazy {
+        media.songs.groupBy { it.albumId }.flatMap { (id, all) ->
+            val byFolder = all.groupBy { it.folder }
+            byFolder.map { (folder, songs) ->
+                AlbumGroup(
+                    key = if (byFolder.size == 1) ALBUM + id else "$ALBUM$id$COPY$folder",
+                    songs = songs.sortedWith(compareBy({ it.track }, { it.title.lowercase() })),
+                    copyLabel = if (byFolder.size == 1) null else copyLabel(songs, byFolder.values),
+                )
+            }
+        }.sortedWith(compareBy<AlbumGroup, String>(String.CASE_INSENSITIVE_ORDER) { it.songs.first().album }.thenBy { it.copyLabel.orEmpty() })
+    }
+
+    /** One album on screen, possibly one copy of an album that exists in several folders. */
+    private data class AlbumGroup(val key: String, val songs: List<Song>, val copyLabel: String?) {
+        val title: String get() = songs.first().album + (copyLabel?.let { " · $it" } ?: "")
+    }
+
+    /** Song id → its album copy's label, for songs whose album exists in several folders. */
+    private val copyOfSong: Map<Long, String> by lazy {
+        albums.filter { it.copyLabel != null }.flatMap { g -> g.songs.map { it.id to g.copyLabel!! } }.toMap()
+    }
+
+    /** "FLAC" when the copies differ in format, else the folder name ("Disc rip", "Music"). */
+    private fun copyLabel(songs: List<Song>, copies: Collection<List<Song>>): String {
+        fun dominant(s: List<Song>) = s.groupingBy { it.format }.eachCount().maxByOrNull { it.value }?.key.orEmpty()
+        val format = dominant(songs)
+        val formats = copies.map(::dominant)
+        return if (format.isNotEmpty() && formats.count { it == format } == 1) format else songs.first().folder.substringAfterLast('/')
     }
     private val artists by lazy {
         media.songs.groupBy { it.artist }.toSortedMap(String.CASE_INSENSITIVE_ORDER)
@@ -62,8 +92,10 @@ class MediaMenus(private val media: MediaLibrary, private val storageGranted: Bo
 
     fun songs(key: String): List<Song> = when {
         key == SONGS_ALL -> songsSorted
-        key.startsWith(ALBUM) -> key.removePrefix(ALBUM).toLongOrNull()
-            ?.let { id -> albums.firstOrNull { it.first().albumId == id } }.orEmpty()
+        key.startsWith(ALBUM) -> albums.firstOrNull { it.key == key }?.songs
+            // A key without a folder (saved before albums were split) opens the first copy.
+            ?: key.removePrefix(ALBUM).substringBefore(COPY).toLongOrNull()
+                ?.let { id -> albums.firstOrNull { it.songs.first().albumId == id } }?.songs.orEmpty()
         key.startsWith(ARTIST) -> artists[key.removePrefix(ARTIST)].orEmpty()
         else -> emptyList()
     }
@@ -148,18 +180,18 @@ class MediaMenus(private val media: MediaLibrary, private val storageGranted: Bo
     private fun songNode(s: Song, key: String, i: Int, showAlbum: Boolean) = XmbNode(
         id = "song:${s.id}",
         title = s.title,
-        subtitle = listOfNotNull(s.artist, s.album.takeIf { showAlbum }, duration(s.durationMs)).joinToString(" · "),
+        subtitle = listOfNotNull(s.artist, s.album.takeIf { showAlbum }, copyOfSong[s.id], duration(s.durationMs)).joinToString(" · "),
         icon = thumb(ThumbKind.ALBUM_ART, s.id, GlyphKey.MUSIC),
         action = NodeAction.OpenMedia(MediaKind.SONG, key, i),
     )
 
-    private fun albumNode(songs: List<Song>): XmbNode {
-        val first = songs.first()
-        return folder(ALBUM + first.albumId, first.album, "${first.artist} · ${count(songs.size, "song")}", thumb(ThumbKind.ALBUM_ART, first.id, GlyphKey.ALBUM))
+    private fun albumNode(album: AlbumGroup): XmbNode {
+        val first = album.songs.first()
+        return folder(album.key, album.title, "${first.artist} · ${count(album.songs.size, "song")}", thumb(ThumbKind.ALBUM_ART, first.id, GlyphKey.ALBUM))
     }
 
     private fun artistNode(name: String, songs: List<Song>): XmbNode {
-        val albumCount = songs.map { it.albumId }.distinct().size
+        val albumCount = songs.map { it.albumId to it.folder }.distinct().size
         return folder(ARTIST + name, name, "${count(albumCount, "album")} · ${count(songs.size, "song")}", NodeIcon.Glyph(GlyphKey.ARTIST))
     }
 
@@ -193,6 +225,8 @@ class MediaMenus(private val media: MediaLibrary, private val storageGranted: Bo
         const val ALBUMS = "music:albums"
         const val ARTISTS = "music:artists"
         const val ALBUM = "music:album:"
+        /** Separates the album id from the folder in the key of one copy of a split album. */
+        const val COPY = "|"
         const val ARTIST = "music:artist:"
 
         private val DATE: DateFormat = DateFormat.getDateInstance(DateFormat.MEDIUM)

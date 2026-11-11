@@ -189,7 +189,7 @@ private fun Header(profile: ProfileState, m: XmbMetrics) {
 @Composable
 private fun Stats(p: RaProfile, size: TextUnit) {
     val number = remember { NumberFormat.getIntegerInstance() }
-    Row(horizontalArrangement = Arrangement.spacedBy(22.dp), verticalAlignment = Alignment.Bottom) {
+    Row(horizontalArrangement = Arrangement.spacedBy(36.dp), verticalAlignment = Alignment.Bottom) {
         // Points lead, in the trophy amber, as on the reference cards.
         Column {
             Row(verticalAlignment = Alignment.CenterVertically) {

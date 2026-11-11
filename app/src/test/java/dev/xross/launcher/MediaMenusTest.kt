@@ -131,4 +131,38 @@ class MediaMenusTest {
         assertEquals(420f / (2400f * 2.25f), x2, 1e-4f)
         assertEquals(675f / (1080f * 2.25f), y2, 1e-4f)
     }
+
+    /** The same album as FLAC and MP3 (identical tags, so one MediaStore album id) is two albums. */
+    @Test fun anAlbumInTwoFoldersBecomesTwoLabelledAlbums() {
+        fun song(id: Long, title: String, track: Int, folder: String, format: String) = dev.xross.launcher.media.Song(
+            id, android.net.Uri.EMPTY, title, "Atsushi Kitajo", "PERSONA3 RELOAD OST", 77, track, 180_000, folder, format,
+        )
+        val flac = "/storage/emulated/0/Music/P3R Flac"
+        val mp3 = "/storage/emulated/0/Music/P3R MP3"
+        val menus = MediaMenus(
+            dev.xross.launcher.media.MediaLibrary(
+                songs = listOf(
+                    song(1, "Full Moon Full Life", 1, flac, "FLAC"), song(2, "Aria of the Soul", 2, flac, "FLAC"),
+                    song(3, "Full Moon Full Life", 1, mp3, "MP3"), song(4, "Aria of the Soul", 2, mp3, "MP3"),
+                ),
+            ),
+        )
+        val albums = menus.list(MediaMenus.ALBUMS)
+        assertEquals(listOf("PERSONA3 RELOAD OST · FLAC", "PERSONA3 RELOAD OST · MP3"), albums.map { it.title })
+        val flacSongs = menus.songs((albums[0].action as NodeAction.OpenList).key)
+        assertEquals(listOf(1L, 2L), flacSongs.map { it.id }) // each track once, in order
+        assertEquals(listOf(3L, 4L), menus.songs((albums[1].action as NodeAction.OpenList).key).map { it.id })
+        // An old key without the folder still opens an album.
+        assertEquals(2, menus.songs(MediaMenus.ALBUM + 77).size)
+        // Songs say which copy they belong to; the artist counts both copies.
+        assertTrue(menus.list(MediaMenus.SONGS_ALL).first().subtitle!!.contains("FLAC") || menus.list(MediaMenus.SONGS_ALL).first().subtitle!!.contains("MP3"))
+        assertEquals("2 albums · 4 songs", menus.list(MediaMenus.ARTISTS).single().subtitle)
+        // Same format twice: the folder names tell them apart.
+        val twice = MediaMenus(
+            dev.xross.launcher.media.MediaLibrary(songs = listOf(song(5, "A", 1, "/m/Rip 1", "MP3"), song(6, "A", 1, "/m/Rip 2", "MP3"))),
+        )
+        assertEquals(listOf("PERSONA3 RELOAD OST · Rip 1", "PERSONA3 RELOAD OST · Rip 2"), twice.list(MediaMenus.ALBUMS).map { it.title })
+        assertEquals("FLAC", dev.xross.launcher.media.MediaRepository.formatOf("audio/flac"))
+        assertEquals("MP3", dev.xross.launcher.media.MediaRepository.formatOf("audio/mpeg"))
+    }
 }

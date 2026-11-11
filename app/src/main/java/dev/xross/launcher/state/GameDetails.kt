@@ -53,7 +53,8 @@ data class GameDetailsState(
                 uuid = game.uuid,
                 title = game.title,
                 platform = platform?.name,
-                synopsis = meta?.synopsis?.trim()?.ifEmpty { null },
+                // Descriptions scraped before entity decoding still hold "&quot;" and friends.
+                synopsis = meta?.synopsis?.trim()?.ifEmpty { null }?.let(dev.xross.launcher.scrape.HtmlText::decode),
                 facts = facts,
                 rating = meta?.rating,
                 playtime = when {

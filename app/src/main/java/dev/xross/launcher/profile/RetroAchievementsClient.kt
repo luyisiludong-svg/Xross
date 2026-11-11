@@ -144,13 +144,14 @@ class RetroAchievementsClient(
     }
 
     /**
-     * Every game of one console that has achievements, with the ROM hashes RetroAchievements
-     * recognizes for it (`API_GetGameList`, `f=1&h=1`). Large for the big consoles, so callers
-     * cache it ([RaGameResolver]).
+     * Every game of one console, with the ROM hashes RetroAchievements recognizes for it
+     * (`API_GetGameList`, `h=1`). Games without an achievement set are included, so a recognized
+     * game can say "no achievements yet" instead of "not recognized". Large for the big consoles,
+     * so callers cache it ([AchievementsRepository]).
      */
     suspend fun fetchGameList(apiKey: String, consoleId: Int): RaListResult {
         if (apiKey.isBlank()) return RaListResult.Error(RaResult.InvalidCredentials)
-        val url = "$apiBase/$GAME_LIST?i=$consoleId&f=1&h=1&y=${enc(apiKey.trim())}"
+        val url = "$apiBase/$GAME_LIST?i=$consoleId&h=1&y=${enc(apiKey.trim())}"
         return when (val r = getUrl(url, MAX_LIST_BYTES)) {
             is Answer.Error -> RaListResult.Error(r.result)
             is Answer.Json -> RaListResult.Ok(parseGameList(r.element))

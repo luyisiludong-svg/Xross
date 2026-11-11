@@ -110,7 +110,7 @@ class AchievementsTest {
         assertTrue(client.fetchGameList(KEY, 1) is RaListResult.Ok)
         val (progress, list) = http.requests
         assertTrue(progress, progress.startsWith("https://retroachievements.org/API/API_GetGameInfoAndUserProgress.php?u=Max+Milyin&y=$KEY&g=1&a=1"))
-        assertTrue(list, list.startsWith("https://retroachievements.org/API/API_GetGameList.php?i=1&f=1&h=1&y=$KEY"))
+        assertTrue(list, list.startsWith("https://retroachievements.org/API/API_GetGameList.php?i=1&h=1&y=$KEY"))
         // Errors carry fixed text, never the URL.
         val failing = RetroAchievementsClient(FakeHttp(listOf(RetroAchievementsClient.GAME_PROGRESS to HttpResponse(500, ByteArray(0), null))))
         val error = failing.fetchGameProgress("u", KEY, 1) as RaGameResult.Error
@@ -238,6 +238,21 @@ class AchievementsTest {
         assertEquals(3, offline.progress.total)
     }
 
+    @Test fun aGameWithoutASetIsRecognizedAndOldListsAreFetchedAgain() = runBlocking {
+        // A list cached by an earlier version (only games with achievements, version 1).
+        val ra = File(layout.data, "ra").apply { mkdirs() }
+        File(ra, "console-1.json").writeText("""{"version": 1, "consoleId": 1, "fetchedAtMs": 999, "games": []}""")
+        val http = FakeHttp(
+            listOf(
+                RetroAchievementsClient.GAME_LIST to FakeHttp.json(200, LIST_JSON),
+                RetroAchievementsClient.GAME_PROGRESS to FakeHttp.json(200, """{"ID": 1, "Title": "Sonic the Hedgehog", "Achievements": []}"""),
+            ),
+        )
+        val ready = repo(http).load(game()) as AchievementsState.Ready
+        assertTrue("the old list was refetched", http.requests.any { it.contains(RetroAchievementsClient.GAME_LIST) })
+        assertEquals(0, ready.progress.total) // recognized, no set yet: "no achievements yet", not "not recognized"
+    }
+
     @Test fun reportsNotLinkedUnsupportedAndNoMatch() = runBlocking {
         assertTrue(repo(onlineHttp()).load(game(platform = "n3ds", file = "mh4u.3ds")) is AchievementsState.Unsupported)
         assertEquals(AchievementsState.NoMatch, repo(onlineHttp(), md5 = "ffffffffffffffffffffffffffffffff").load(game(file = "Hack.md")))
@@ -288,11 +303,11 @@ class AchievementsTest {
         assertEquals(1, v.index)
         v = AchievementsGrid.onAction(v, NavAction.DOWN).state
         assertEquals(1 + cols, v.index)
-        assertEquals(1 + cols, AchievementsGrid.onAction(view(20, 1 + cols), NavAction.DOWN).state.index - cols) // row 3 exists
+        assertEquals(1 + cols * 2, AchievementsGrid.onAction(view(30, 1 + cols), NavAction.DOWN).state.index) // row 3 exists
         assertEquals(19, AchievementsGrid.onAction(view(20, 18), NavAction.RIGHT).state.index)
         assertEquals(19, AchievementsGrid.onAction(view(20, 19), NavAction.RIGHT).state.index) // last stays
         assertEquals(3, AchievementsGrid.onAction(view(20, 3), NavAction.UP).state.index) // top row stays
-        assertEquals(19, AchievementsGrid.onAction(view(20, 12), NavAction.DOWN).state.index) // short last row: clamp
+        assertEquals(24, AchievementsGrid.onAction(view(25, 17), NavAction.DOWN).state.index) // short last row: clamp
         assertEquals(AchievementsEffect.Close, AchievementsGrid.onAction(v, NavAction.BACK).effect)
         assertEquals(AchievementsEffect.Refresh, AchievementsGrid.onAction(v, NavAction.OPTIONS).effect)
         assertEquals(5, AchievementsGrid.tap(v, 5).index)
