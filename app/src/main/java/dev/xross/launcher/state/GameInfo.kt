@@ -1,8 +1,12 @@
 package dev.xross.launcher.state
 
 import androidx.compose.runtime.Immutable
+import dev.xross.launcher.data.DatFileEntity
+import dev.xross.launcher.data.DatRomEntity
 import dev.xross.launcher.data.GameEntity
 import dev.xross.launcher.data.GameHashEntity
+import dev.xross.launcher.data.GameMetadataEntity
+import dev.xross.launcher.data.dat.MatchKind
 import dev.xross.launcher.storage.HashSource
 import dev.xross.launcher.storage.Platform
 import dev.xross.launcher.storage.SkipReason
@@ -52,6 +56,12 @@ object GameInfo {
         fileExists: Boolean?,
         zone: ZoneId = ZoneId.systemDefault(),
         locale: Locale = Locale.getDefault(),
+        /** DAT match and scraped fields, when known. */
+        metadata: GameMetadataEntity? = null,
+        datRom: DatRomEntity? = null,
+        datFile: DatFileEntity? = null,
+        /** Whether any DAT is imported (so "not in any DAT" means something). */
+        anyDats: Boolean = false,
     ): GameInfoState {
         val dates = DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT)
             .withLocale(locale)
@@ -80,9 +90,33 @@ object GameInfo {
             )
             add(InfoRow("Last played", game.lastPlayed?.let(::date) ?: "Never"))
             emulator?.let { add(InfoRow("Emulator", it)) }
+            addAll(datRows(metadata, datRom, datFile, anyDats))
             addAll(fingerprintRows(game, hash, numbers, ::date))
         }
         return GameInfoState(title = game.title, subtitle = platform?.name, rows = rows)
+    }
+
+    private fun datRows(
+        meta: GameMetadataEntity?,
+        rom: DatRomEntity?,
+        file: DatFileEntity?,
+        anyDats: Boolean,
+    ): List<InfoRow> = buildList {
+        val kind = meta?.matchKind?.let { runCatching { MatchKind.valueOf(it) }.getOrNull() }
+        if (kind == null) {
+            when {
+                meta?.locked == true -> add(InfoRow("Verified", "Identity set manually"))
+                anyDats -> add(InfoRow("Verified", "Not in any imported DAT"))
+            }
+            return@buildList
+        }
+        val from = file?.let { f -> listOfNotNull(f.source, f.name).distinct().joinToString(": ") }
+        add(InfoRow("Verified", "Matched by ${kind.label}" + (from?.let { " · $it" } ?: "")))
+        rom?.let { add(InfoRow("DAT entry", it.gameName)) }
+        meta.region?.let { add(InfoRow("Region", it)) }
+        meta.languages?.let { add(InfoRow("Languages", it)) }
+        meta.revision?.let { add(InfoRow("Revision", it)) }
+        meta.serial?.let { add(InfoRow("Serial", it, monospace = true)) }
     }
 
     private fun status(offline: Boolean, exists: Boolean?): String = when {

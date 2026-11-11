@@ -9,6 +9,17 @@ sealed interface NodeIcon {
     data class App(val packageName: String) : NodeIcon
     /** Photo/video thumbnail or embedded album art, with a glyph to show until it loads. */
     data class Thumb(val kind: ThumbKind, val id: Long, val fallback: GlyphKey) : NodeIcon
+
+    /**
+     * Scraped game art from the asset cache (first kind present wins), crossfading in over
+     * [fallback]. [version] changes when new art is stored, so the row reloads it.
+     */
+    data class Art(
+        val uuid: String,
+        val kinds: List<dev.xross.launcher.scrape.ArtKind>,
+        val fallback: GlyphKey,
+        val version: Long,
+    ) : NodeIcon
 }
 
 enum class MediaKind { PHOTO, SONG, VIDEO }
@@ -18,7 +29,7 @@ enum class GlyphKey {
     SETTINGS, GAMES, APPS, PHOTO, MUSIC, VIDEO, ALBUM, ARTIST, SHUFFLE, SEARCH,
     PLATFORM, GAME_CART, GAME_DISC, FAVORITES, RECENT, HANDHELD, FOLDER, STORAGE,
     CONTROLS, EMULATORS, DISPLAY, SOUND, SYSTEM,
-    ADD, REFRESH, HOME, INFO,
+    ADD, REFRESH, HOME, INFO, DOWNLOAD, NETWORK,
 }
 
 sealed interface Command {
@@ -61,6 +72,28 @@ sealed interface Command {
     /** Removes one controller model's saved mapping ([dev.xross.launcher.input.ControllerKey.id]). */
     data class ResetControllerProfile(val id: String) : Command
     data object ResetGlobalRemap : Command
+    data object ImportDats : Command
+    data object PickDatFolder : Command
+    data object MatchDats : Command
+    data class RemoveDat(val id: Long) : Command
+    // Scraping
+    data object ScrapeNow : Command
+    data object ToggleScrapeAutomatically : Command
+    data object ToggleScrapeWifiOnly : Command
+    data object ToggleScrapeVideos : Command
+    data object CycleScrapeRegion : Command
+    data object CycleScrapeLanguage : Command
+    data object ToggleHasheous : Command
+    data object EditScreenScraperAccount : Command
+    data object EditSteamGridDbKey : Command
+    data object ClearArtwork : Command
+    // Per game
+    data class ShowDetails(val gameId: Long) : Command
+    data class EditTitle(val gameId: Long) : Command
+    data class FindMatch(val gameId: Long) : Command
+    data class ChooseMatch(val gameId: Long, val provider: dev.xross.launcher.scrape.ProviderId, val id: String) : Command
+    data class Rescrape(val gameId: Long) : Command
+    data class ResetMetadata(val gameId: Long) : Command
 }
 
 sealed interface NodeAction {

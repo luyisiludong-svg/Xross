@@ -41,6 +41,19 @@ data class XrossSettings(
     val gameBootSound: Boolean = true,
     /** Fully hash disc images over the size limit (slow on SD cards). */
     val hashLargeImages: Boolean = false,
+    /** Folder DATs are imported from; empty means [dev.xross.launcher.storage.XrossPaths.defaultDatFolder]. */
+    val datFolder: String = "",
+    /** Scrape new games in the background while Xross is open. Off until the user opts in. */
+    val scrapeAutomatically: Boolean = false,
+    /** Only scrape on unmetered networks. */
+    val scrapeWifiOnly: Boolean = true,
+    /** Download video snaps (large). */
+    val scrapeVideos: Boolean = false,
+    /** ScreenScraper region code for names, dates and box art. */
+    val scrapeRegion: String = "us",
+    /** Language code for descriptions and genres. */
+    val scrapeLanguage: String = "en",
+    val hasheousEnabled: Boolean = true,
     val slideshowSeconds: Int = 5,
     /** Pause music when a game starts and pick it up again on return. */
     val resumeMusicAfterGames: Boolean = true,
@@ -84,6 +97,13 @@ class SettingsStore(context: Context) {
         bootSound = prefs.getBoolean(KEY_BOOT_SOUND, true),
         gameBootSound = prefs.getBoolean(KEY_GAMEBOOT_SOUND, true),
         hashLargeImages = prefs.getBoolean(KEY_HASH_LARGE, false),
+        datFolder = prefs.getString(KEY_DAT_FOLDER, null).orEmpty(),
+        scrapeAutomatically = prefs.getBoolean(KEY_SCRAPE_AUTO, false),
+        scrapeWifiOnly = prefs.getBoolean(KEY_SCRAPE_WIFI, true),
+        scrapeVideos = prefs.getBoolean(KEY_SCRAPE_VIDEOS, false),
+        scrapeRegion = prefs.getString(KEY_SCRAPE_REGION, null) ?: "us",
+        scrapeLanguage = prefs.getString(KEY_SCRAPE_LANGUAGE, null) ?: "en",
+        hasheousEnabled = prefs.getBoolean(KEY_HASHEOUS, true),
         slideshowSeconds = prefs.getInt(KEY_SLIDESHOW, 5),
         resumeMusicAfterGames = prefs.getBoolean(KEY_RESUME_MUSIC, true),
         videoLoop = prefs.getBoolean(KEY_VIDEO_LOOP, false),
@@ -108,6 +128,13 @@ class SettingsStore(context: Context) {
         putBoolean(KEY_BOOT_SOUND, s.bootSound)
         putBoolean(KEY_GAMEBOOT_SOUND, s.gameBootSound)
         putBoolean(KEY_HASH_LARGE, s.hashLargeImages)
+        putString(KEY_DAT_FOLDER, s.datFolder)
+        putBoolean(KEY_SCRAPE_AUTO, s.scrapeAutomatically)
+        putBoolean(KEY_SCRAPE_WIFI, s.scrapeWifiOnly)
+        putBoolean(KEY_SCRAPE_VIDEOS, s.scrapeVideos)
+        putString(KEY_SCRAPE_REGION, s.scrapeRegion)
+        putString(KEY_SCRAPE_LANGUAGE, s.scrapeLanguage)
+        putBoolean(KEY_HASHEOUS, s.hasheousEnabled)
         putInt(KEY_SLIDESHOW, s.slideshowSeconds)
         putBoolean(KEY_RESUME_MUSIC, s.resumeMusicAfterGames)
         putBoolean(KEY_VIDEO_LOOP, s.videoLoop)
@@ -132,6 +159,13 @@ class SettingsStore(context: Context) {
         const val KEY_BOOT_SOUND = "boot_sound"
         const val KEY_GAMEBOOT_SOUND = "gameboot_sound"
         const val KEY_HASH_LARGE = "hash_large_images"
+        const val KEY_DAT_FOLDER = "dat_folder"
+        const val KEY_SCRAPE_AUTO = "scrape_automatically"
+        const val KEY_SCRAPE_WIFI = "scrape_wifi_only"
+        const val KEY_SCRAPE_VIDEOS = "scrape_videos"
+        const val KEY_SCRAPE_REGION = "scrape_region"
+        const val KEY_SCRAPE_LANGUAGE = "scrape_language"
+        const val KEY_HASHEOUS = "hasheous_enabled"
         const val KEY_SLIDESHOW = "slideshow_seconds"
         const val KEY_RESUME_MUSIC = "resume_music_after_games"
         const val KEY_VIDEO_LOOP = "video_loop"

@@ -65,6 +65,10 @@ class MainActivity : ComponentActivity() {
         viewModel.onFolderPicked(it)
     }
 
+    private val pickDatFolder = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) {
+        viewModel.onDatFolderPicked(it)
+    }
+
     private val legacyStoragePermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) {
             viewModel.refreshEnvironment()
@@ -123,6 +127,7 @@ class MainActivity : ComponentActivity() {
                     state = state,
                     loadAppIcon = { pkg -> container.apps.icon(pkg, ICON_PX) },
                     loadThumb = { kind, id, px -> container.media.thumbnail(kind, id, px) },
+                    loadArt = { uuid, kinds, px -> container.art.load(uuid, kinds, px) },
                     media = viewModel.media,
                     music = container.music,
                     onAction = viewModel::onAction,
@@ -136,6 +141,15 @@ class MainActivity : ComponentActivity() {
                     onSearchResultTap = viewModel::onSearchResultTapped,
                     onInfoRowTap = viewModel::onInfoRowTapped,
                     onCloseInfo = viewModel::closeInfo,
+                    snap = container.snaps,
+                    videoFile = { uuid ->
+                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                            container.assets.file(uuid, dev.xross.launcher.scrape.ArtKind.VIDEO)
+                        }
+                    },
+                    snapVolume = container.settings.current.soundVolume,
+                    onPlayDetails = { viewModel.onAction(NavAction.CONFIRM) },
+                    onCloseDetails = viewModel::closeDetails,
                 )
             }
         }
@@ -188,9 +202,45 @@ class MainActivity : ComponentActivity() {
         when (effect) {
             is UiEffect.StartActivity -> safeStart(effect.intent)
             UiEffect.PickFolder -> runCatching { pickFolder.launch(null) }
+            UiEffect.PickDatFolder -> runCatching { pickDatFolder.launch(null) }
             UiEffect.RequestStorageAccess -> requestStorageAccess()
             is UiEffect.SetWallpaper -> setWallpaper(effect.uri)
+            is UiEffect.PromptText -> promptText(effect.prompt)
         }
+    }
+
+    /**
+     * A system text dialog (works with touch, hardware keyboards and the device's IME; the D-pad
+     * moves between the field and the buttons). Secrets are masked and never pre-filled.
+     */
+    private fun promptText(prompt: dev.xross.launcher.state.TextPrompt) {
+        val input = android.widget.EditText(this).apply {
+            setSingleLine()
+            setText(prompt.initial)
+            setSelection(text.length)
+            hint = prompt.hint
+            inputType = if (prompt.secret) {
+                android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+            } else {
+                android.text.InputType.TYPE_CLASS_TEXT
+            }
+        }
+        val pad = (20 * resources.displayMetrics.density).toInt()
+        val frame = android.widget.FrameLayout(this).apply {
+            setPadding(pad, pad / 2, pad, 0)
+            addView(input)
+        }
+        android.app.AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle(prompt.title)
+            .setView(frame)
+            .setPositiveButton(android.R.string.ok) { _, _ -> viewModel.onTextEntered(prompt, input.text.toString()) }
+            .setNegativeButton(android.R.string.cancel, null)
+            .create()
+            .apply {
+                window?.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE)
+                setOnDismissListener { hideSystemBars() }
+            }
+            .show()
     }
 
     /** System crop-and-set screen (it doubles as confirmation); falls back to "Set picture as". */

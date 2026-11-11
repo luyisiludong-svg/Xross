@@ -44,6 +44,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -91,6 +92,8 @@ import dev.xross.launcher.state.RemapSession
 import dev.xross.launcher.state.XmbCategory
 import dev.xross.launcher.state.XmbNode
 import dev.xross.launcher.state.XmbUiState
+import dev.xross.launcher.media.SnapPlayer
+import dev.xross.launcher.scrape.ArtKind
 import dev.xross.launcher.theme.ThemePalette
 import dev.xross.launcher.theme.XrossTheme
 import dev.xross.launcher.theme.rememberThemePalette
@@ -148,6 +151,7 @@ fun XmbScreen(
     state: XmbUiState,
     loadAppIcon: suspend (String) -> ImageBitmap?,
     loadThumb: suspend (ThumbKind, Long, Int) -> ImageBitmap?,
+    loadArt: suspend (String, List<ArtKind>, Int) -> ImageBitmap?,
     media: MediaOverlayController,
     music: MusicPlayer,
     onAction: (NavAction) -> Unit,
@@ -161,6 +165,11 @@ fun XmbScreen(
     onSearchResultTap: (Int) -> Unit = {},
     onInfoRowTap: (Int) -> Unit = {},
     onCloseInfo: () -> Unit = {},
+    snap: SnapPlayer? = null,
+    videoFile: suspend (String) -> java.io.File? = { null },
+    snapVolume: Float = 0.75f,
+    onPlayDetails: () -> Unit = {},
+    onCloseDetails: () -> Unit = {},
 ) {
     val palette = rememberThemePalette(XrossTheme.byName(state.theme))
 
@@ -189,12 +198,27 @@ fun XmbScreen(
         fun Float.sp(): TextUnit = with(density) { this@sp.toSp() }
         fun Float.dp(): Dp = with(density) { this@dp.toDp() }
 
+        // Video snap of the focused game (or the open Details game), full-bleed behind the menu.
+        if (snap != null) {
+            val focusedArt = (state.focused?.icon as? NodeIcon.Art)?.uuid
+            val quiet = state.overlay == null && state.search == null && state.optionsMenu == null &&
+                state.info == null && state.booting == null && state.remap == null
+            SnapDriver(
+                uuid = state.details?.uuid ?: focusedArt.takeIf { quiet },
+                snap = snap,
+                videoFile = videoFile,
+                volume = snapVolume,
+            )
+            val playing by snap.player.collectAsState()
+            playing?.let { SnapVideo(it, Modifier.fillMaxSize(), scrim = 0.55f) }
+        }
+
         val catPos by animateFloatAsState(state.categoryIndex.toFloat(), NavSpring, label = "category")
         val depth by animateFloatAsState(state.depth.coerceAtMost(1).toFloat(), NavSpring, label = "depth")
 
         // The menu fades out under media screens so only one set of text and hints is visible.
         val menuAlpha by animateFloatAsState(
-            if (state.overlay == null && state.search == null) 1f else 0f,
+            if (state.overlay == null && state.search == null && state.details == null) 1f else 0f,
             tween(220),
             label = "menu",
         )
@@ -209,7 +233,7 @@ fun XmbScreen(
             pulse = { pulse },
             onCategoryTap = onCategoryTap,
         )
-        ItemColumn(state, m, { pulse }, loadAppIcon, loadThumb, onItemTap, onItemLongPress)
+        ItemColumn(state, m, { pulse }, loadAppIcon, loadThumb, loadArt, onItemTap, onItemLongPress)
 
         // Mini "now playing" indicator while browsing.
         AnimatedVisibility(
@@ -277,6 +301,18 @@ fun XmbScreen(
             backGlyph = if (state.confirm == ConfirmLayout.EAST) state.family.south else state.family.east,
             onTap = onOptionTap,
             onDismiss = onCloseOptions,
+        )
+
+        DetailsScreen(
+            details = state.details,
+            m = m,
+            snapPlaying = snap?.player?.collectAsState()?.value != null,
+            confirmGlyph = if (state.confirm == ConfirmLayout.EAST) state.family.east else state.family.south,
+            backGlyph = if (state.confirm == ConfirmLayout.EAST) state.family.south else state.family.east,
+            optionsGlyph = state.family.north,
+            loadArt = loadArt,
+            onPlay = onPlayDetails,
+            onDismiss = onCloseDetails,
         )
 
         InfoPanel(
@@ -398,6 +434,7 @@ private fun ItemColumn(
     pulse: () -> Float,
     loadAppIcon: suspend (String) -> ImageBitmap?,
     loadThumb: suspend (ThumbKind, Long, Int) -> ImageBitmap?,
+    loadArt: suspend (String, List<ArtKind>, Int) -> ImageBitmap?,
     onItemTap: (Int) -> Unit,
     onItemLongPress: (Int) -> Unit,
 ) {
@@ -470,6 +507,7 @@ private fun ItemColumn(
                 pulse = pulse,
                 loadAppIcon = loadAppIcon,
                 loadThumb = loadThumb,
+                loadArt = loadArt,
                 modifier = rowModifier,
             )
         }
@@ -493,6 +531,7 @@ private fun ItemRow(
     pulse: () -> Float,
     loadAppIcon: suspend (String) -> ImageBitmap?,
     loadThumb: suspend (ThumbKind, Long, Int) -> ImageBitmap?,
+    loadArt: suspend (String, List<ArtKind>, Int) -> ImageBitmap?,
     modifier: Modifier,
 ) {
     val density = LocalDensity.current
@@ -510,6 +549,7 @@ private fun ItemRow(
                 )
                 is NodeIcon.App -> AppIcon(icon.packageName, iconSize, focus, m.itemFocusScale, loadAppIcon)
                 is NodeIcon.Thumb -> ThumbIcon(icon, iconSize, focus, m.itemFocusScale, glow = { if (isFocused) pulse() * focus() else 0f }, loadThumb)
+                is NodeIcon.Art -> ArtIcon(icon, iconSize, focus, m.itemFocusScale, glow = { if (isFocused) pulse() * focus() else 0f }, loadArt)
             }
         }
         Spacer(Modifier.width(with(density) { (m.textGap + m.itemIcon * (m.itemFocusScale - 1f) / 2).toDp() }))
@@ -648,6 +688,59 @@ private fun BlurredCopy(
         contentAlignment = Alignment.Center,
     ) {
         Image(painter, contentDescription = null, colorFilter = ColorFilter.tint(tint), modifier = Modifier.size(size))
+    }
+}
+
+/**
+ * Scraped box art as a game's icon. The platform glyph shows until the art is decoded, then the
+ * art crossfades in over it (and the glyph out), so a row never pops.
+ */
+@Composable
+private fun ArtIcon(
+    icon: NodeIcon.Art,
+    size: Dp,
+    focus: () -> Float,
+    focusScale: Float,
+    glow: () -> Float,
+    loadArt: suspend (String, List<ArtKind>, Int) -> ImageBitmap?,
+) {
+    val px = with(LocalDensity.current) { (size * focusScale * 1.4f).roundToPx() }
+    val bitmap by produceState<ImageBitmap?>(null, icon.uuid, icon.version) { value = loadArt(icon.uuid, icon.kinds, px) }
+    val shown by animateFloatAsState(if (bitmap != null) 1f else 0f, tween(320), label = "art")
+    Box(Modifier.size(size), contentAlignment = Alignment.Center) {
+        if (shown < 1f) {
+            Box(Modifier.fadeAlpha { 1f - shown }) {
+                XmbIcon(painterResource(icon.fallback.drawable()), size, focus, focusScale, glow)
+            }
+        }
+        val image = bitmap ?: return@Box
+        Box(
+            Modifier
+                .size(size)
+                .graphicsLayer {
+                    val s = 1f + (focusScale - 1f) * focus()
+                    scaleX = s
+                    scaleY = s
+                    alpha = shown
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .graphicsLayer { alpha = glow(); scaleX = 1.6f; scaleY = 1.6f }
+                    .drawBehind { drawCircle(Brush.radialGradient(0f to Color.White.copy(alpha = 0.3f), 1f to Color.Transparent)) },
+            )
+            Image(
+                image,
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier
+                    .size(size * 1.25f)
+                    .wrapContentSize(unbounded = true)
+                    .shadow(6.dp, RoundedCornerShape(3.dp), clip = false),
+            )
+        }
     }
 }
 

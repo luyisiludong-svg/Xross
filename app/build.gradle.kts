@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -8,8 +10,20 @@ android {
     namespace = "dev.xross.launcher"
     compileSdk = 36
 
+    // ScreenScraper developer credentials are issued per application and must not be committed:
+    // put screenscraper.devId / screenscraper.devPassword in local.properties (git-ignored) or
+    // pass them as Gradle properties (-Pscreenscraper.devId=…) on the release machine.
+    val local = Properties().apply {
+        rootProject.file("local.properties").takeIf { it.isFile }?.inputStream()?.use { load(it) }
+    }
+    fun secret(name: String): String =
+        (project.findProperty(name) as String?) ?: local.getProperty(name) ?: ""
+    fun quoted(value: String) = "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+
     defaultConfig {
         buildConfigField("boolean", "PERF_LOG", "false")
+        buildConfigField("String", "SCREENSCRAPER_DEV_ID", quoted(secret("screenscraper.devId")))
+        buildConfigField("String", "SCREENSCRAPER_DEV_PASSWORD", quoted(secret("screenscraper.devPassword")))
         applicationId = "dev.xross.launcher"
         minSdk = 28
         targetSdk = 36

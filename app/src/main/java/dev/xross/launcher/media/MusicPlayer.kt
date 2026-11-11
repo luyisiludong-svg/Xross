@@ -97,6 +97,14 @@ class MusicPlayer(private val context: Context) {
         pausedForGame = false
     }
 
+    /**
+     * Lowers music under a video snap without pausing it (snaps don't take audio focus, so
+     * nothing else is interrupted), and restores it afterwards.
+     */
+    fun setDucked(ducked: Boolean) {
+        player.volume = if (ducked) DUCK_VOLUME else 1f
+    }
+
     /** Game starting: pause and remember to resume. */
     fun pauseForGame() {
         if (player.isPlaying) {
@@ -140,4 +148,8 @@ class MusicPlayer(private val context: Context) {
             MediaMetadata.Builder().setTitle(title).setArtist(artist).setAlbumTitle(album).build(),
         )
         .build()
+
+    private companion object {
+        const val DUCK_VOLUME = 0.2f
+    }
 }

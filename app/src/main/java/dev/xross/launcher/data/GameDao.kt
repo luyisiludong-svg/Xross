@@ -21,11 +21,31 @@ interface GameDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertAll(games: List<GameEntity>)
 
+    /** A changed file gets its scanner title back; [applyTitles] then re-applies any better title. */
     @Query(
-        "UPDATE games SET platformId = :platformId, title = :title, sizeBytes = :size, " +
+        "UPDATE games SET platformId = :platformId, title = :title, fileTitle = :title, sizeBytes = :size, " +
             "lastModified = :modified WHERE id = :id",
     )
     suspend fun updateFile(id: Long, platformId: String, title: String, size: Long, modified: Long)
+
+    /**
+     * Sets every game's shown title to the best one known: manual override, DAT title, scraped
+     * title, then the scanner's file title. Only rows that change are written, so the FTS
+     * triggers fire for those alone.
+     */
+    @Query(
+        """
+        UPDATE games SET title = COALESCE(
+            (SELECT COALESCE(m.titleOverride, m.datTitle, m.scrapedTitle) FROM game_metadata m WHERE m.gameId = games.id),
+            NULLIF(fileTitle, ''),
+            title)
+        WHERE title IS NOT COALESCE(
+            (SELECT COALESCE(m.titleOverride, m.datTitle, m.scrapedTitle) FROM game_metadata m WHERE m.gameId = games.id),
+            NULLIF(fileTitle, ''),
+            title)
+        """,
+    )
+    suspend fun applyTitles(): Int
 
     @Query("DELETE FROM games WHERE id IN (:ids)")
     suspend fun deleteIdsChunk(ids: List<Long>)
