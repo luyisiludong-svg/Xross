@@ -34,8 +34,9 @@ Xross/
   config/   settings.json, controllers.json, systems.json (hand-editable; picked up on resume)
   data/     xross.db, a backup snapshot of the library database
   dats/     No-Intro / Redump / MAME DATs to import
-  media/    scraped art and videos (has a .nomedia, so it stays out of Photo and Video)
-  roms/     optional ROM library, one folder per system
+  media/    scraped art and videos (has a .nomedia, so it stays out of Photo and Video):
+            covers/ 3dboxes/ heroes/ wheels/ screenshots/ capsules/ snaps/, each <system>/<rom name>.<ext>
+  roms/     the default base ROMs folder, one folder per system
   themes/   theme packs (has a .nomedia)
 ```
 
@@ -52,6 +53,12 @@ Xross/
   **Restore library backup**; Xross restarts to apply it.
 * **Accounts stay private.** ScreenScraper and SteamGridDB credentials are never written to
   `config/`; they stay in app storage.
+* **Art is named like ES-DE's** (`media/covers/snes/Super Mario World (USA).png`), so it survives
+  a library rebuild and ES-DE media copied into `media/` is used as is. Names are cleaned for
+  FAT32/exFAT cards. Art from earlier versions is moved here once, in the background.
+* **Base ROMs folder:** **Settings ▸ Library ▸ Base ROMs folder…** (default `Xross/roms`) is always
+  scanned; **Create system folders** makes `snes/`, `psx/`, … for all 22 systems. Auto-detected
+  `ROMs/` folders and folders you add keep working.
 * **`systems.json`** sets the emulator per system and lets you add folder names and file
   extensions; each system's `builtIn` block is there for reference and is rewritten on save.
   Settings saved by earlier versions are moved into these files on first start.
@@ -91,6 +98,7 @@ on screens 600 dp and wider.
 | Emulator dispatch | Done. RetroArch (per-platform core), DuckStation, NetherSX2, Dolphin, PPSSPP, Azahar, Eden, Flycast, M64Plus FZ, melonDS and ScummVM, chosen per platform or per game. ROMs go out as a path extra plus a `content://` URI with a read grant. Verified with stand-ins only |
 | Media hub | Done. Photo viewer (zoom, pan, slideshow, wallpaper), background music player with media-session controls, video player; music pauses for games and videos |
 | Wave background | Done. GLSL ES 3.0 ribbon shader with day/night palette and adjustable speed. Pauses whenever the launcher isn't in front |
+| Library organization | Done. Hide apps (Options ▸ Hide, Settings ▸ Apps ▸ Hidden apps, Hide system apps), app folders (Emulators, Streaming, Tools or your own name, with emulators suggested), base ROMs folder with Create system folders, and custom Photo/Video folders that also find files MediaStore skips. Not yet tested on a device |
 | Extras | Android apps (games sorted into Games ▸ Android Games), 8 color themes including Original (a color per month), busy indicator, optional button hints, Information screen, can be set as the HOME launcher, Android TV leanback entry |
 | XMB fidelity | Closer. The home menu's layout, motion, navigation, status bar and options panel match the XMB, and games show their own box art; an XMB-style typeface and cursor sound, a still-image background per game, and Resume/Quit Game are missing |
 | Not started | Theme packs and shader settings, on-screen controller, dual screen, RetroAchievements, Xross Portal, FTPS |
@@ -104,7 +112,7 @@ PS3 and PSP instruction manuals in `assets/docs` as the reference. Feature-by-fe
 ## Testing
 
 ```bash
-./gradlew :app:testDebugUnitTest                  # 285 JVM + Robolectric tests (2 live tests skip)
+./gradlew :app:testDebugUnitTest                  # 320 JVM + Robolectric tests (2 live tests skip)
 ./gradlew :app:testDebugUnitTest --tests '*ScreenScraperLiveTest*' -PliveScrape=true   # real API calls, uses .env and localTestMedia/Roms/
 ./gradlew :app:installDebug :emulator-stub:installRetroarchDebug
 tools/device-tests/smoke.sh                       # on-device smoke test (see warning below)
@@ -145,7 +153,9 @@ launch intent they receive. Never install them alongside real emulators.
 * **Sounds**: `app/src/main/assets/sounds`, mapped in `audio/UiSounds.kt`. Settings ▸ Sound
   toggles effects, volume, the startup cue and the game-start cue.
 * **Media**: Settings ▸ Media sets the slideshow interval, whether music resumes after a game or
-  stops, and video looping.
+  stops, video looping, and which folders Photo and Video show (all of them by default).
+* **Apps**: Options (△ / Y) on an app hides it or moves it into a folder; Settings ▸ Apps lists
+  hidden apps and can hide every system app.
 
 ## Layout
 
@@ -153,17 +163,17 @@ launch intent they receive. Never install them alongside real emulators.
 app/src/main/java/dev/xross/launcher/
   input/    GamepadHandler, KeyMapper, StickTracker, ControllerFamily, ControllerProfiles
   storage/  Platform (PlatformRegistry), RomScanner, Fingerprinter, FileHashes, StorageVolumes,
-            VolumeMonitor, XrossPaths, XrossEnvironment (the Xross/ folder), StorageAccess
+            VolumeMonitor, XrossPaths, XrossEnvironment (the Xross/ folder), StorageAccess, SystemFolders
   config/   ConfigFiles (settings/controllers/systems JSON), AtomicFiles, ConfigWriter
   data/     Room (GameEntity, GameHashEntity, MetadataEntities, DAOs, XrossDatabase), GameRepository,
             AppRepository, DatRepository, FingerprintQueue, PlaySessionTracker, SettingsStore,
             CredentialStore, DatabaseBackupManager
   data/dat/ DatParser (Logiqx XML, clrmamepro), DatNames, DatMatcher
-  scrape/   ScrapeOrchestrator, AssetCache, ArtLoader, RateLimiter, Http, Network,
+  scrape/   ScrapeOrchestrator, AssetCache + MediaNames (Xross/media layout), ArtLoader, RateLimiter, Http, Network,
             providers/ (Hasheous, ScreenScraper, SteamGridDB)
   launch/   EmulatorRegistry (intent matrix), GameLauncher (interface), AndroidIntentGameLauncher
-  media/    MediaRepository (MediaStore), MusicPlayer, PlaybackService (Media3 session), SnapPlayer
-  state/    MenuTree, MediaMenus, Navigation (NavState), OptionsMenu, Search, RemapSession,
+  media/    MediaRepository (MediaStore + custom folders), MediaFolderScan, MusicPlayer, PlaybackService (Media3 session), SnapPlayer
+  state/    MenuTree, MediaMenus, Navigation (NavState), OptionsMenu, Search, NameEntry, AppFolders, RemapSession,
             GameInfo, GameDetails, MediaOverlayController, XmbViewModel
   ui/       XmbScreen, MediaScreens, SearchOverlay, OptionsPanel, InfoPanel, DetailsScreen,
             SnapLayer, BusyIndicator, StatusBar, WaveBackground + WaveRenderer (GLSL), Glyphs

@@ -207,11 +207,13 @@ pause 0.5
 expect "Using defaults" "remapped X confirms (it ran Reset button mapping)"
 
 echo "== Rescan"
+# Library rows: All files access, Add ROM folder…, Base ROMs folder…, Create system folders, Rescan library, …
 key KEYCODE_BACK
 top
 key KEYCODE_DPAD_CENTER
+expect "Base ROMs folder" "Library shows the base ROMs folder"
 adb shell 'echo x > "/sdcard/ROMs/gba/Metroid Fusion (USA).gba"'
-key KEYCODE_DPAD_DOWN KEYCODE_DPAD_DOWN KEYCODE_DPAD_CENTER
+key $(for _ in $(seq 4); do printf 'KEYCODE_DPAD_DOWN '; done) KEYCODE_DPAD_CENTER
 pause 1.2
 expect "+1" "rescan picks up a new file"
 adb shell 'rm "/sdcard/ROMs/gba/Metroid Fusion (USA).gba"'

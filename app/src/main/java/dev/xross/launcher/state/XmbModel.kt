@@ -73,6 +73,30 @@ sealed interface Command {
     /** Asks before replacing the library with the backup in the Xross folder. */
     data object ConfirmRestore : Command
     data object RestoreBackup : Command
+
+    // Apps: hiding and folders
+    data class LaunchApp(val packageName: String, val activityName: String) : Command
+    data class HideApp(val packageName: String) : Command
+    data class UnhideApp(val packageName: String) : Command
+    data object UnhideAllApps : Command
+    data object ToggleHideSystemApps : Command
+    /** [folder] null takes the app out of its folder. */
+    data class MoveAppToFolder(val packageName: String, val folder: String?) : Command
+    /** Type a new folder name on the gamepad keyboard, then move the app into it. */
+    data class NewAppFolder(val packageName: String) : Command
+    /** Moves every installed emulator that isn't in a folder into Emulators. */
+    data object GroupEmulators : Command
+    data object ClearAppFolders : Command
+
+    // Library: base ROMs folder
+    data object PickBaseRomsFolder : Command
+    data object ResetBaseRomsFolder : Command
+    data object CreateSystemFolders : Command
+
+    // Media: custom Photo / Video folders
+    data class AddMediaFolder(val kind: MediaFolderKind) : Command
+    data class RemoveMediaFolder(val kind: MediaFolderKind, val path: String) : Command
+    data class ClearMediaFolders(val kind: MediaFolderKind) : Command
     data class ShowGameInfo(val gameId: Long) : Command
     data object ToggleButtonHints : Command
     data object CycleAxialDeadzone : Command
@@ -152,3 +176,6 @@ object Categories {
 
     fun rootKey(categoryId: String) = "root:$categoryId"
 }
+
+/** Which media tab a custom folder list belongs to. */
+enum class MediaFolderKind(val label: String) { PHOTO("Photo"), VIDEO("Video") }

@@ -70,13 +70,33 @@ data class MediaLibrary(
 
 enum class ThumbKind { PHOTO, VIDEO, ALBUM_ART }
 
+/** Custom folders for Photo and Video; an empty list means everything MediaStore knows. */
+data class MediaFolders(val photo: List<String> = emptyList(), val video: List<String> = emptyList())
+
 /**
  * Photos, music and videos from MediaStore (which already parses ID3/Vorbis tags and EXIF).
  * Reloads automatically when MediaStore reports changes, debounced so a bulk copy triggers one
  * reload.
+ *
+ * With custom [MediaFolders], Photo and Video show only those folders: MediaStore is filtered by
+ * path, and a direct walk adds files it doesn't index (`.nomedia` and hidden folders, some USB
+ * drives). Walked files get negative ids, a `content://` URI from Xross's FileProvider (so the
+ * viewer, the player and "Set as wallpaper" work as for any photo), and thumbnails made here.
  */
 class MediaRepository(private val context: Context) {
     private val resolver = context.contentResolver
+
+    @Volatile private var folders = MediaFolders()
+
+    /** Files found by the folder walk, by their synthetic id, for thumbnails. */
+    private val walked = java.util.concurrent.ConcurrentHashMap<Long, java.io.File>()
+
+    /** Sets the custom folders; returns true when they changed (the caller refreshes). */
+    fun setFolders(next: MediaFolders): Boolean {
+        if (next == folders) return false
+        folders = next
+        return true
+    }
     private val _library = MutableStateFlow(MediaLibrary())
     val library: StateFlow<MediaLibrary> = _library.asStateFlow()
 
@@ -87,11 +107,78 @@ class MediaRepository(private val context: Context) {
     private var reloadJob: Job? = null
 
     suspend fun refresh() = withContext(Dispatchers.IO) {
+        val f = folders
         _library.value = MediaLibrary(
-            photos = runCatching { queryPhotos() }.getOrDefault(emptyList()),
-            videos = runCatching { queryVideos() }.getOrDefault(emptyList()),
+            photos = runCatching { photosIn(f.photo) }.getOrDefault(emptyList()),
+            videos = runCatching { videosIn(f.video) }.getOrDefault(emptyList()),
             songs = runCatching { querySongs() }.getOrDefault(emptyList()),
         )
+    }
+
+    private fun photosIn(custom: List<String>): List<Photo> {
+        if (custom.isEmpty()) return queryPhotos(null).map { it.first }
+        val indexed = queryPhotos(custom)
+        val known = indexed.mapNotNullTo(HashSet()) { it.second }
+        val extra = MediaFolderScan.walk(custom, MediaFolderScan.PHOTO_EXTENSIONS)
+            .filter { it.absolutePath !in known }
+            .mapNotNull(::photoFromFile)
+        return (indexed.map { it.first } + extra).sortedByDescending { it.takenAt }
+    }
+
+    private fun videosIn(custom: List<String>): List<Video> {
+        if (custom.isEmpty()) return queryVideos(null).map { it.first }
+        val indexed = queryVideos(custom)
+        val known = indexed.mapNotNullTo(HashSet()) { it.second }
+        val extra = MediaFolderScan.walk(custom, MediaFolderScan.VIDEO_EXTENSIONS)
+            .filter { it.absolutePath !in known }
+            .mapNotNull(::videoFromFile)
+        return (indexed.map { it.first } + extra).sortedByDescending { it.modifiedAt }
+    }
+
+    private fun shareUri(file: java.io.File): Uri? = runCatching {
+        androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.files", file)
+    }.getOrNull()
+
+    private fun photoFromFile(file: java.io.File): Photo? {
+        val uri = shareUri(file) ?: return null
+        val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        runCatching { android.graphics.BitmapFactory.decodeFile(file.path, bounds) }
+        val orientation = runCatching {
+            when (android.media.ExifInterface(file.path).getAttributeInt(android.media.ExifInterface.TAG_ORIENTATION, 1)) {
+                android.media.ExifInterface.ORIENTATION_ROTATE_90 -> 90
+                android.media.ExifInterface.ORIENTATION_ROTATE_180 -> 180
+                android.media.ExifInterface.ORIENTATION_ROTATE_270 -> 270
+                else -> 0
+            }
+        }.getOrDefault(0)
+        val id = MediaFolderScan.syntheticId(file.absolutePath)
+        walked[id] = file
+        return Photo(
+            id, uri, file.name, file.parentFile?.name ?: "Other", file.lastModified(),
+            bounds.outWidth.coerceAtLeast(0), bounds.outHeight.coerceAtLeast(0), file.length(), orientation,
+        )
+    }
+
+    private fun videoFromFile(file: java.io.File): Video? {
+        val uri = shareUri(file) ?: return null
+        var duration = 0L
+        var width = 0
+        var height = 0
+        runCatching {
+            android.media.MediaMetadataRetriever().run {
+                try {
+                    setDataSource(file.path)
+                    duration = extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+                    width = extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: 0
+                    height = extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: 0
+                } finally {
+                    release()
+                }
+            }
+        }
+        val id = MediaFolderScan.syntheticId(file.absolutePath)
+        walked[id] = file
+        return Video(id, uri, file.name, file.parentFile?.name ?: "Other", duration, width, height, file.length(), file.lastModified())
     }
 
     /** Starts watching MediaStore; call once with a long-lived scope. */
@@ -120,6 +207,7 @@ class MediaRepository(private val context: Context) {
 
     @Suppress("DEPRECATION")
     private fun loadThumb(kind: ThumbKind, id: Long, sizePx: Int): Bitmap? {
+        if (id < 0) return walked[id]?.let { localThumb(kind, it, sizePx) }
         val uri = when (kind) {
             ThumbKind.PHOTO -> ContentUris.withAppendedId(IMAGES, id)
             ThumbKind.VIDEO -> ContentUris.withAppendedId(VIDEOS, id)
@@ -142,17 +230,61 @@ class MediaRepository(private val context: Context) {
         }
     }
 
+    /** Thumbnail for a walked file: a downsampled, EXIF-rotated decode, or a video frame. */
+    private fun localThumb(kind: ThumbKind, file: java.io.File, sizePx: Int): Bitmap? = when (kind) {
+        ThumbKind.PHOTO -> {
+            val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            android.graphics.BitmapFactory.decodeFile(file.path, bounds)
+            var sample = 1
+            while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= sizePx) sample *= 2
+            val bitmap = android.graphics.BitmapFactory.decodeFile(file.path, android.graphics.BitmapFactory.Options().apply { inSampleSize = sample })
+            val degrees = runCatching {
+                when (android.media.ExifInterface(file.path).getAttributeInt(android.media.ExifInterface.TAG_ORIENTATION, 1)) {
+                    android.media.ExifInterface.ORIENTATION_ROTATE_90 -> 90f
+                    android.media.ExifInterface.ORIENTATION_ROTATE_180 -> 180f
+                    android.media.ExifInterface.ORIENTATION_ROTATE_270 -> 270f
+                    else -> 0f
+                }
+            }.getOrDefault(0f)
+            if (bitmap == null || degrees == 0f) {
+                bitmap
+            } else {
+                Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, android.graphics.Matrix().apply { postRotate(degrees) }, true)
+            }
+        }
+        ThumbKind.VIDEO -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            android.media.ThumbnailUtils.createVideoThumbnail(file, Size(sizePx, sizePx), null)
+        } else {
+            android.media.MediaMetadataRetriever().run {
+                try {
+                    setDataSource(file.path)
+                    frameAtTime?.let { frame ->
+                        val scale = sizePx.toFloat() / maxOf(frame.width, frame.height)
+                        if (scale >= 1f) frame else Bitmap.createScaledBitmap(frame, (frame.width * scale).toInt().coerceAtLeast(1), (frame.height * scale).toInt().coerceAtLeast(1), true)
+                    }
+                } finally {
+                    release()
+                }
+            }
+        }
+        ThumbKind.ALBUM_ART -> null
+    }
+
     // region Queries
 
-    private fun queryPhotos(): List<Photo> {
+    /** Photos with their file path (null when MediaStore doesn't report one); [inFolders] null = all. */
+    @Suppress("DEPRECATION") // DATA is the only path column on Android 9; readable with All files access
+    private fun queryPhotos(inFolders: List<String>?): List<Pair<Photo, String?>> {
         val cols = arrayOf(
             MediaStore.Images.Media._ID, MediaStore.Images.Media.DISPLAY_NAME,
             MediaStore.Images.Media.BUCKET_DISPLAY_NAME, MediaStore.Images.Media.DATE_TAKEN,
             MediaStore.Images.Media.DATE_MODIFIED, MediaStore.Images.Media.WIDTH,
             MediaStore.Images.Media.HEIGHT, MediaStore.Images.Media.SIZE,
-            MediaStore.Images.Media.ORIENTATION,
+            MediaStore.Images.Media.ORIENTATION, MediaStore.Images.Media.DATA,
         )
-        return resolver.query(IMAGES, cols, null, null, "${MediaStore.Images.Media.DATE_MODIFIED} DESC, ${MediaStore.Images.Media.DISPLAY_NAME} COLLATE NOCASE ASC")?.use { c ->
+        val selection = inFolders?.let { MediaFolderScan.selection(MediaStore.Images.Media.DATA, it) }
+        val args = inFolders?.let { MediaFolderScan.selectionArgs(it) }
+        return resolver.query(IMAGES, cols, selection, args, "${MediaStore.Images.Media.DATE_MODIFIED} DESC, ${MediaStore.Images.Media.DISPLAY_NAME} COLLATE NOCASE ASC")?.use { c ->
             buildList {
                 while (c.moveToNext()) {
                     val id = c.getLong(0)
@@ -162,21 +294,24 @@ class MediaRepository(private val context: Context) {
                             id, ContentUris.withAppendedId(IMAGES, id), c.getString(1).orEmpty(),
                             c.getString(2) ?: "Other", taken, c.getInt(5), c.getInt(6), c.getLong(7),
                             orientation = c.getInt(8),
-                        ),
+                        ) to c.getString(9),
                     )
                 }
             }
         }.orEmpty()
     }
 
-    private fun queryVideos(): List<Video> {
+    @Suppress("DEPRECATION")
+    private fun queryVideos(inFolders: List<String>?): List<Pair<Video, String?>> {
         val cols = arrayOf(
             MediaStore.Video.Media._ID, MediaStore.Video.Media.DISPLAY_NAME,
             MediaStore.Video.Media.BUCKET_DISPLAY_NAME, MediaStore.Video.Media.DURATION,
             MediaStore.Video.Media.WIDTH, MediaStore.Video.Media.HEIGHT, MediaStore.Video.Media.SIZE,
-            MediaStore.Video.Media.DATE_MODIFIED,
+            MediaStore.Video.Media.DATE_MODIFIED, MediaStore.Video.Media.DATA,
         )
-        return resolver.query(VIDEOS, cols, null, null, "${MediaStore.Video.Media.DATE_MODIFIED} DESC, ${MediaStore.Video.Media.DISPLAY_NAME} COLLATE NOCASE ASC")?.use { c ->
+        val selection = inFolders?.let { MediaFolderScan.selection(MediaStore.Video.Media.DATA, it) }
+        val args = inFolders?.let { MediaFolderScan.selectionArgs(it) }
+        return resolver.query(VIDEOS, cols, selection, args, "${MediaStore.Video.Media.DATE_MODIFIED} DESC, ${MediaStore.Video.Media.DISPLAY_NAME} COLLATE NOCASE ASC")?.use { c ->
             buildList {
                 while (c.moveToNext()) {
                     val id = c.getLong(0)
@@ -185,7 +320,7 @@ class MediaRepository(private val context: Context) {
                             id, ContentUris.withAppendedId(VIDEOS, id), c.getString(1).orEmpty(),
                             c.getString(2) ?: "Other", c.getLong(3), c.getInt(4), c.getInt(5), c.getLong(6),
                             c.getLong(7) * 1000,
-                        ),
+                        ) to c.getString(8),
                     )
                 }
             }

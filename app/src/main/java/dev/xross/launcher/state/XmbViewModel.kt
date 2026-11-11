@@ -50,6 +50,8 @@ sealed interface UiEffect {
     data class StartActivity(val intent: Intent) : UiEffect
     data object PickFolder : UiEffect
     data object PickDatFolder : UiEffect
+    data object PickBaseRomsFolder : UiEffect
+    data class PickMediaFolder(val kind: MediaFolderKind) : UiEffect
     /** Ask for text (account, key, title, search); the answer goes to [XmbViewModel.onTextEntered]. */
     data class PromptText(val prompt: TextPrompt) : UiEffect
     data object RequestStorageAccess : UiEffect
@@ -89,6 +91,8 @@ data class XmbUiState(
     val optionsMenu: OptionsMenuState? = null,
     /** Search overlay (gamepad keyboard + live results) while it is open. */
     val search: SearchState? = null,
+    /** Typing a name (a new app folder) on the gamepad keyboard. */
+    val nameEntry: NameEntry? = null,
     /** Information screen for a game, opened from its Options menu. */
     val info: GameInfoState? = null,
     /** Game Details screen. */
@@ -108,6 +112,7 @@ private data class Transient(
     val booting: String? = null,
     val optionsMenu: OptionsMenuState? = null,
     val search: SearchState? = null,
+    val nameEntry: NameEntry? = null,
     val info: GameInfoState? = null,
     val details: GameDetailsState? = null,
     /** A library scan is running (fingerprinting is tracked by [FingerprintStatus.current]). */
@@ -190,6 +195,7 @@ class XmbViewModel(
                 settings = settings,
                 media = mediaLib,
                 datFolder = datFolder(settings.datFolder).absolutePath,
+                baseRomsFolder = baseRomsFolder(settings.baseRomsFolder).absolutePath,
             ),
         )
     }
@@ -246,6 +252,7 @@ class XmbViewModel(
             nowPlaying = lv.nowPlaying,
             optionsMenu = tr.optionsMenu,
             search = tr.search,
+            nameEntry = tr.nameEntry,
             info = tr.info,
             details = tr.details,
             busy = tr.scanning || tr.datWork || lv.fingerprints.current != null || lv.scrape.running,
@@ -313,6 +320,7 @@ class XmbViewModel(
 
     override fun onAction(action: NavAction) {
         if (transient.value.remap != null || transient.value.booting != null) return
+        transient.value.nameEntry?.let { return nameEntryAction(it, action) }
         if (action == NavAction.MEDIA) return toggleMediaControls()
         transient.value.info?.let { return infoAction(it, action) }
         transient.value.details?.let { return detailsAction(it, action) }
@@ -782,6 +790,7 @@ class XmbViewModel(
 
     override fun onRawKeyDown(keyCode: Int, controller: ConnectedController?): Boolean {
         val tr = transient.value
+        tr.nameEntry?.let { return nameRawKey(it, keyCode) }
         if (tr.remap == null && tr.optionsMenu == null && tr.info == null && tr.details == null && tr.booting == null && !media.isOpen) {
             tr.search?.let { return searchRawKey(it, keyCode) }
         }
@@ -905,11 +914,13 @@ class XmbViewModel(
      * is offered for restore.
      */
     private suspend fun syncXrossFolder(firstLoad: Boolean) {
+        val previous = container.environment.current
         val moved = withContext(Dispatchers.IO) {
             val changed = container.environment.refresh()
             if (changed) settingsStore.relocate(container.environment.current) else settingsStore.reloadIfChanged()
             changed
         }
+        if (moved) moveArtFrom(previous)
         publishPortable()
         if (firstLoad || moved) {
             val restorable = container.backups.findRestorable()
@@ -917,6 +928,15 @@ class XmbViewModel(
             if (restorable != null && container.backups.announceOnce(restorable)) {
                 toast("Found a library backup with ${countOf(restorable.games, "game")} — restore it from Games")
             }
+        }
+    }
+
+    /** Art follows the Xross folder to its new place, in the background. */
+    private fun moveArtFrom(previous: dev.xross.launcher.storage.XrossLayout) {
+        if (previous.media.absolutePath == container.environment.current.media.absolutePath) return
+        viewModelScope.launch {
+            val report = runCatching { container.assets.relocateFrom(previous.media) }.getOrNull() ?: return@launch
+            if (report.moved > 0) toast("Moved ${countOf(report.moved, "art file")} to the new Xross folder")
         }
     }
 
@@ -940,6 +960,7 @@ class XmbViewModel(
                 toast("No other drive is connected")
                 return@launch
             }
+            val previous = container.environment.current
             val currentVolume = StorageVolumes.volumeRootOf(layout.root.absolutePath)
             val index = volumes.indexOfFirst { it.root.path.trimEnd('/') == currentVolume }
             val next = volumes[(index + 1) % volumes.size]
@@ -952,6 +973,7 @@ class XmbViewModel(
             if (moved && now.root.absolutePath.startsWith(next.root.path)) {
                 sounds.play(UiSound.OK)
                 toast("Xross folder: ${now.root.absolutePath}")
+                moveArtFrom(previous)
                 container.backups.backupNow()
             } else {
                 sounds.play(UiSound.ERROR)
@@ -960,6 +982,141 @@ class XmbViewModel(
             publishPortable()
         }
     }
+
+    // region Apps
+
+    private fun launchApp(packageName: String, activityName: String) {
+        val app = container.apps.apps.value.firstOrNull { it.packageName == packageName && it.activityName == activityName } ?: return
+        sounds.play(UiSound.ENTER)
+        emit(UiEffect.StartActivity(container.apps.launchIntent(app)))
+    }
+
+    private fun appLabel(packageName: String): String =
+        container.apps.apps.value.firstOrNull { it.packageName == packageName }?.label ?: packageName
+
+    private fun moveAppToFolder(packageName: String, folder: String?) {
+        val name = folder?.let { AppFolders.normalizeName(it) }
+        settingsStore.update { s ->
+            s.copy(appFolders = if (name == null) s.appFolders - packageName else s.appFolders + (packageName to name))
+        }
+        sounds.play(UiSound.OK)
+        toast(if (name == null) "${appLabel(packageName)} is out of its folder" else "${appLabel(packageName)} moved to $name")
+    }
+
+    private fun nameEntryAction(entry: NameEntry, action: NavAction) {
+        val outcome = entry.onAction(action)
+        applyNameEntry(entry, outcome)
+    }
+
+    private fun applyNameEntry(before: NameEntry, outcome: NameEntryOutcome) {
+        when (val effect = outcome.effect) {
+            NameEntryEffect.None -> if (outcome.state != before) {
+                sounds.play(if (outcome.state.text != before.text) UiSound.ENTER else UiSound.MOVE)
+                transient.update { it.copy(nameEntry = outcome.state) }
+            }
+            NameEntryEffect.Close -> closeNameEntry()
+            is NameEntryEffect.Submit -> {
+                transient.update { it.copy(nameEntry = null) }
+                when (val purpose = before.purpose) {
+                    is NamePurpose.NewAppFolder -> {
+                        val name = AppFolders.normalizeName(effect.text)
+                        if (name == null) toast("Type a name first") else moveAppToFolder(purpose.packageName, name)
+                    }
+                }
+            }
+        }
+    }
+
+    fun closeNameEntry() {
+        if (transient.value.nameEntry != null) {
+            sounds.play(UiSound.BACK)
+            transient.update { it.copy(nameEntry = null) }
+        }
+    }
+
+    /** Touch: tap a key of the name keyboard. */
+    fun onNameKeyTapped(row: Int, column: Int) {
+        val entry = transient.value.nameEntry ?: return
+        applyNameEntry(entry, entry.tap(row, column))
+    }
+
+    /** Hardware keyboards type names directly. */
+    private fun nameRawKey(entry: NameEntry, keyCode: Int): Boolean {
+        val next = when (keyCode) {
+            in android.view.KeyEvent.KEYCODE_A..android.view.KeyEvent.KEYCODE_Z -> entry.type('A' + (keyCode - android.view.KeyEvent.KEYCODE_A))
+            in android.view.KeyEvent.KEYCODE_0..android.view.KeyEvent.KEYCODE_9 -> entry.type('0' + (keyCode - android.view.KeyEvent.KEYCODE_0))
+            android.view.KeyEvent.KEYCODE_SPACE -> entry.type(' ')
+            android.view.KeyEvent.KEYCODE_DEL -> entry.backspace()
+            android.view.KeyEvent.KEYCODE_ENTER -> return true.also { applyNameEntry(entry, entry.onAction(NavAction.START)) }
+            else -> return false
+        }
+        applyNameEntry(entry, NameEntryOutcome(next))
+        return true
+    }
+
+    // endregion
+
+    // region Base ROMs folder and media folders
+
+    /** The base ROMs folder setting, or `roms/` in the Xross folder in use. */
+    private fun baseRomsFolder(setting: String): File =
+        if (setting.isBlank()) container.environment.current.roms else File(setting)
+
+    fun onBaseRomsFolderPicked(uri: Uri?) {
+        uri ?: return
+        val path = container.volumes.treeUriToPath(uri) ?: return toast("That location isn't a local folder")
+        settingsStore.update { it.copy(baseRomsFolder = path) }
+        toast("Base ROMs folder: $path")
+        refreshFoldersAndRescan()
+    }
+
+    private fun createSystemFolders() {
+        if (!env.value.storageGranted || !container.environment.current.portable) {
+            emit(UiEffect.RequestStorageAccess)
+            return
+        }
+        viewModelScope.launch {
+            val base = baseRomsFolder(settingsStore.current.baseRomsFolder)
+            val result = withContext(Dispatchers.IO) { dev.xross.launcher.storage.SystemFolders.create(base) }
+            when {
+                !result.ok -> {
+                    sounds.play(UiSound.ERROR)
+                    toast("Couldn't create ${countOf(result.failed.size, "folder")} in ${base.absolutePath}")
+                }
+                result.created.isEmpty() -> toast("All ${result.existing.size} system folders are already in ${base.absolutePath}")
+                else -> {
+                    sounds.play(UiSound.OK)
+                    toast("Created ${countOf(result.created.size, "folder")} in ${base.absolutePath}")
+                }
+            }
+            refreshFolders()
+        }
+    }
+
+    fun onMediaFolderPicked(kind: MediaFolderKind, uri: Uri?) {
+        uri ?: return
+        val path = container.volumes.treeUriToPath(uri)?.trimEnd('/') ?: return toast("That location isn't a local folder")
+        updateMediaFolders(kind) { (it + path).distinct() }
+        toast("${kind.label} now includes $path")
+    }
+
+    private fun updateMediaFolders(kind: MediaFolderKind, transform: (List<String>) -> List<String>) {
+        settingsStore.update {
+            when (kind) {
+                MediaFolderKind.PHOTO -> it.copy(photoFolders = transform(it.photoFolders))
+                MediaFolderKind.VIDEO -> it.copy(videoFolders = transform(it.videoFolders))
+            }
+        }
+    }
+
+    /** Applies the folder lists to the media library and reloads it when they changed. */
+    private fun syncMediaFolders(s: dev.xross.launcher.data.XrossSettings) {
+        if (container.media.setFolders(dev.xross.launcher.media.MediaFolders(s.photoFolders, s.videoFolders))) {
+            viewModelScope.launch { container.media.refresh() }
+        }
+    }
+
+    // endregion
 
     /** The DAT folder setting, or `dats/` in the Xross folder in use. */
     private fun datFolder(setting: String): File =
@@ -1053,6 +1210,10 @@ class XmbViewModel(
             (after - before).firstOrNull()?.let { toast("${label(it)} connected") }
             (before - after).firstOrNull()?.let { toast("${label(it)} removed — its games are kept") }
             if (env.value.storageGranted) rescan(quiet = true)
+            // Custom Photo/Video folders on that drive appear or disappear.
+            container.media.refresh()
+            // The Xross folder itself may have been on that drive.
+            syncXrossFolder(firstLoad = false)
         }
     }
 
@@ -1074,11 +1235,15 @@ class XmbViewModel(
                 knownAuto = settings.knownAutoFolders,
                 mountedRoots = roots,
                 autoDetect = settings.autoDetectFolders,
+                base = baseRomsFolder(settings.baseRomsFolder).absolutePath,
             )
             if (plan.knownAuto != settings.knownAutoFolders) settingsStore.update { it.copy(knownAutoFolders = plan.knownAuto) }
             plan.folders
         } else {
-            LibraryFolders.plan(settings.romFolders, emptyList(), settings.knownAutoFolders, roots, autoDetect = false).folders
+            LibraryFolders.plan(
+                settings.romFolders, emptyList(), settings.knownAutoFolders, roots, autoDetect = false,
+                base = baseRomsFolder(settings.baseRomsFolder).absolutePath,
+            ).folders
         }
         env.update { it.copy(folders = folders, mountedRoots = roots) }
     }
@@ -1171,13 +1336,7 @@ class XmbViewModel(
                 sounds.play(UiSound.ENTER)
             }
             is NodeAction.LaunchGame -> launchGame(action.gameId)
-            is NodeAction.LaunchApp -> {
-                val app = container.apps.apps.value.firstOrNull {
-                    it.packageName == action.packageName && it.activityName == action.activityName
-                } ?: return
-                sounds.play(UiSound.ENTER)
-                emit(UiEffect.StartActivity(container.apps.launchIntent(app)))
-            }
+            is NodeAction.LaunchApp -> launchApp(action.packageName, action.activityName)
             is NodeAction.Run -> {
                 sounds.play(UiSound.ENTER)
                 run(action.command)
@@ -1403,6 +1562,58 @@ class XmbViewModel(
             }
             Command.ConfirmRestore -> confirmRestore()
             Command.RestoreBackup -> restoreBackup()
+            is Command.LaunchApp -> launchApp(command.packageName, command.activityName)
+            is Command.HideApp -> {
+                settingsStore.update { it.copy(hiddenApps = it.hiddenApps + command.packageName) }
+                toast("${appLabel(command.packageName)} hidden — Settings ▸ Apps ▸ Hidden apps shows it again")
+            }
+            is Command.UnhideApp -> {
+                settingsStore.update { it.copy(hiddenApps = it.hiddenApps - command.packageName) }
+                toast("${appLabel(command.packageName)} is back")
+            }
+            Command.UnhideAllApps -> {
+                val n = settingsStore.current.hiddenApps.size
+                settingsStore.update { it.copy(hiddenApps = emptySet()) }
+                toast(if (n == 1) "1 app is back" else "$n apps are back")
+            }
+            Command.ToggleHideSystemApps -> settingsStore.update { it.copy(hideSystemApps = !it.hideSystemApps) }
+            is Command.MoveAppToFolder -> moveAppToFolder(command.packageName, command.folder)
+            is Command.NewAppFolder -> {
+                sounds.play(UiSound.OPTION)
+                transient.update {
+                    it.copy(nameEntry = NameEntry("New folder for ${appLabel(command.packageName)}", NamePurpose.NewAppFolder(command.packageName)))
+                }
+            }
+            Command.GroupEmulators -> {
+                val loose = AppFolders.ungroupedEmulators(container.apps.apps.value, settingsStore.current)
+                if (loose.isEmpty()) {
+                    toast("Every emulator is already in a folder")
+                } else {
+                    settingsStore.update { s -> s.copy(appFolders = s.appFolders + loose.associate { it.packageName to AppFolders.EMULATORS }) }
+                    sounds.play(UiSound.OK)
+                    toast("Moved ${countOf(loose.size, "emulator")} into ${AppFolders.EMULATORS}")
+                }
+            }
+            Command.ClearAppFolders -> {
+                settingsStore.update { it.copy(appFolders = emptyMap()) }
+                toast("App folders removed; the apps are back in Apps")
+            }
+            Command.PickBaseRomsFolder -> emit(UiEffect.PickBaseRomsFolder)
+            Command.ResetBaseRomsFolder -> {
+                settingsStore.update { it.copy(baseRomsFolder = "") }
+                toast("Base ROMs folder: ${baseRomsFolder("").absolutePath}")
+                refreshFoldersAndRescan()
+            }
+            Command.CreateSystemFolders -> createSystemFolders()
+            is Command.AddMediaFolder -> emit(UiEffect.PickMediaFolder(command.kind))
+            is Command.RemoveMediaFolder -> {
+                updateMediaFolders(command.kind) { it - command.path }
+                toast("Removed ${command.path.substringAfterLast('/')}")
+            }
+            is Command.ClearMediaFolders -> {
+                updateMediaFolders(command.kind) { emptyList() }
+                toast("${command.kind.label} shows everything again")
+            }
             is Command.LaunchGame -> launchGame(command.gameId)
             Command.OpenSearch -> transient.update { it.copy(search = SearchState()) }
             is Command.SetGameEmulator -> viewModelScope.launch {
@@ -1448,6 +1659,19 @@ class XmbViewModel(
     init {
         container.media.watch(viewModelScope)
         container.backups.watch()
+        // Art is named after each game's ROM: keep the index current, then move the old private cache once.
+        viewModelScope.launch {
+            var migrated = false
+            container.games.games.collect { games ->
+                container.assets.setLibrary(games)
+                if (!migrated && games.isNotEmpty()) {
+                    migrated = true
+                    viewModelScope.launch { runCatching { container.assets.migrateLegacy() } }
+                }
+            }
+        }
+        syncMediaFolders(settingsStore.current)
+        viewModelScope.launch { settingsStore.settings.collect(::syncMediaFolders) }
         viewModelScope.launch {
             container.backups.status.collect { status -> env.update { it.copy(portable = it.portable.copy(backup = status)) } }
         }

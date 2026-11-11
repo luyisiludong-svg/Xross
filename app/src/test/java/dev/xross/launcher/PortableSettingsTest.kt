@@ -160,6 +160,27 @@ class PortableSettingsTest {
         for (key in listOf("password", "apiKey", "steamGridDbKey", "screenScraperUser")) assertFalse(key in all)
     }
 
+    @Test fun appHidingFoldersAndMediaFoldersLiveInSettingsJson() {
+        val s = store()
+        s.update {
+            it.copy(
+                hiddenApps = setOf("com.example.ads"),
+                hideSystemApps = true,
+                appFolders = mapOf("com.retroarch.aarch64" to "Emulators"),
+                baseRomsFolder = "/storage/1A2B-3C4D/ROMs",
+                photoFolders = listOf("/storage/emulated/0/Pictures/Shots"),
+                videoFolders = listOf("/storage/1A2B-3C4D/Movies"),
+            )
+        }
+        s.flush()
+        val json = File(config, "settings.json").readText()
+        assertTrue(json.contains("\"hidden\": [\n      \"com.example.ads\"\n    ]"))
+        assertTrue(json.contains("\"com.retroarch.aarch64\": \"Emulators\""))
+        assertTrue(json.contains("\"baseRomsFolder\": \"/storage/1A2B-3C4D/ROMs\""))
+        assertTrue(json.contains("\"customFolders\": [\n      \"/storage/emulated/0/Pictures/Shots\"\n    ]"))
+        assertEquals(s.current, store().current)
+    }
+
     @Test fun defaultsMatchANeverConfiguredInstall() {
         assertEquals(XrossSettings(), store().current)
     }

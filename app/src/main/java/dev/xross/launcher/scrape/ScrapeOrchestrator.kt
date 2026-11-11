@@ -43,7 +43,7 @@ data class ScrapeProgress(
  *
  * Like fingerprinting, it only runs while Xross is in front ([start] on resume, [stop] on pause)
  * and on one I/O lane, so it never competes with a running emulator. Results land in
- * `game_metadata`; art lands in [AssetCache] keyed by the game's UUID.
+ * `game_metadata`; art lands in [AssetCache] (`Xross/media/<kind>/<system>/<rom stem>.<ext>`).
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class ScrapeOrchestrator(
@@ -198,6 +198,7 @@ class ScrapeOrchestrator(
                 // Every service is unconfigured or rejected its credentials: record nothing.
                 else -> return@withLock null
             }
+            cache.register(game)
             val artProblems = downloadArt(game.uuid, found, replaceArt)
             metadata.edit(game.id) { merge(it, found, status, (problems + artProblems).firstOrNull(), clock()) }
             if (BuildConfig.PERF_LOG) Log.i("XrossScrape", "${game.id}: $status (${found.joinToString { it.provider.label }})")

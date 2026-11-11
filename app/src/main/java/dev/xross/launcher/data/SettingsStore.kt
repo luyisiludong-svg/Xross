@@ -76,6 +76,18 @@ data class XrossSettings(
     val allGamesFolder: Boolean = true,
     /** platformId → the user's extra folder names and extensions (systems.json). */
     val systemOverrides: Map<String, SystemOverride> = emptyMap(),
+    /** Package names hidden from Apps and Games ▸ Android Games. */
+    val hiddenApps: Set<String> = emptySet(),
+    /** Also hide apps that came with the system (preinstalled or updated system apps). */
+    val hideSystemApps: Boolean = false,
+    /** Package name → the Apps folder it's in. */
+    val appFolders: Map<String, String> = emptyMap(),
+    /** The library's home folder; empty means `roms/` in the Xross folder ([dev.xross.launcher.storage.XrossLayout.roms]). */
+    val baseRomsFolder: String = "",
+    /** Photo shows only these folders; empty means everything MediaStore knows. */
+    val photoFolders: List<String> = emptyList(),
+    /** Video shows only these folders; empty means everything MediaStore knows. */
+    val videoFolders: List<String> = emptyList(),
 )
 
 /**
