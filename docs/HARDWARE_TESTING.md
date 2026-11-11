@@ -2,7 +2,7 @@
 
 How to install, exercise and measure Xross on a physical handheld, phone or TV box, and what to
 send back when something is wrong. Feature status and emulator measurements are in
-[`STATUS.md`](STATUS.md).
+[`STATUS.md`](STATUS.md); open work is in [`Roadmap.md`](../Roadmap.md).
 
 > **Don't run `tools/device-tests/smoke.sh` on a device that holds your real ROM collection.**
 > It runs `rm -rf /sdcard/ROMs` to seed its own test files and clears Xross's app data. It is
@@ -166,8 +166,8 @@ Check by eye and ear:
 - [ ] **Hot-swap:** with Xross open, pull the SD card (or USB drive). A toast names the drive, its
       games stay listed as "Not connected", and re-inserting it brings them back without
       restarting. Favorites and playtime on those games must survive.
-- [ ] **Playtime:** play a game for a couple of minutes, return, and check the row shows
-      "Played N min"
+- [ ] **Playtime:** play a game for a couple of minutes, return, and check the line under its
+      title reads "Playtime: N mins" (it said "Never played" before)
 - [ ] **Options menu:** △ / Y (or long-press) on a game opens Play / Favorite / Emulator; setting
       an emulator there applies to that game only
 - [ ] **Search:** Games ▸ Search; type with the D-pad (△ / Y = space, L1 = delete, R1 = results)
@@ -200,6 +200,31 @@ Check by eye and ear:
 - [ ] Options ▸ Move to folder ▸ Emulators (suggested for emulators) and ▸ New folder… (typed on
       the gamepad keyboard) create folders at the top of Apps
 
+## 6c. Profile, game tiles and Details paging (Phase 2b.1)
+
+Link a RetroAchievements account first (Settings ▸ Accounts), and scrape a few games so they have
+logos and hero art.
+
+- [ ] The avatar sits at the far right of the status bar, right of the clock and battery
+- [ ] Up from the first row of a category expands it into a mini-HUD (user, rank, points, recent
+      badges) in place, with the clock and battery fading out behind it; Down or Back collapses
+      it and they come back. No jump or jitter in the rest of the status bar
+- [ ] In the HUD, Confirm refreshes the profile, Options opens the User Card, Left/Right switch
+      category; tapping outside it closes it
+- [ ] Games show 16:9 tiles: the logo if there is one, else wide art, else the title on a plate;
+      the focused tile's glow isn't clipped by its neighbours
+- [ ] Details (Options ▸ Details or → on a game): L1/R1 and ←/→ page to the previous and next game
+      with a slide; art, facts and achievements change; at the first and last game nothing
+      happens; Back returns to the list with the cursor on the last game shown
+- [ ] Resting on a game with achievements shows "unlocked/total" and points above the button
+      hints; a game RetroAchievements doesn't know shows nothing
+- [ ] **Games ▸ RetroAchievements** opens the dashboard: profile header, completion, mastered
+      games, recent unlocks; it scrolls with the D-pad and closes with Back. With Wi-Fi off it
+      still shows the cached data
+- [ ] **Settings ▸ Theme ▸ Profile customization:** color, width and glow change the preview at
+      once and are saved in `config/settings.json` under `profile.avatarStyle`
+- [ ] Idle CPU with the glow on vs. off (`adb shell top -n 1 | grep xross`); note both
+
 ## 7. Photo, Music and Video
 
 - [ ] Photo, Music and Video show your device's pictures, songs (with album art) and videos
@@ -208,8 +233,8 @@ Check by eye and ear:
 - [ ] Photo viewer: L1/R1 zoom, D-pad pans without showing black edges, Start runs a
       slideshow, Options opens the system "Set wallpaper" screen
 - [ ] Music keeps playing while you browse and shows a media notification; headset buttons work
-- [ ] Pausing music for 30 s fades the "❚❚ Title" line in the top-left corner; resuming
-      brings it back
+- [ ] While music plays, a mini player card sits in the lower-right corner above the button
+      hints; pausing for 30 s fades it out, and resuming brings it back
 - [ ] Starting a game pauses music; it resumes when you come back
       (Settings ▸ Media ▸ Music while playing games)
 - [ ] Video: smooth playback at the file's aspect ratio; ←/→ and L1/R1 seek; music pauses during

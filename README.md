@@ -1,9 +1,10 @@
 # Xross — XMB launcher for Android handhelds
 
 A controller-first launcher for Android handhelds in the style of the cross-media bar, built from
-[`project_scope.md`](project_scope.md). Phase 1 (Alpha) is complete and Phase 2 (Beta) is under
-way. The feasibility review and the decisions behind this build are in
-[`docs/FEASIBILITY.md`](docs/FEASIBILITY.md).
+[`project_scope.md`](project_scope.md). Phase 1 (Alpha) is complete, Phase 2 (Beta) is under
+way, and the first milestone of the customization engine (Phase 2b.1) has landed.
+[`Roadmap.md`](Roadmap.md) is the single planning document: status, backlog, order of work,
+scope decisions and the specs for upcoming features.
 
 Xross was called Wave until 2026-11-11. The application ID changed from `dev.wave.launcher` to
 `dev.xross.launcher`, so an older Wave install is a separate app: uninstall it by hand, since its
@@ -79,14 +80,18 @@ on screens 600 dp and wider.
   (descriptions, box art, video snaps) needs developer credentials issued to the app, plus
   optionally your own account. Scraping runs only while Xross is in front; automatic scraping is
   off until you turn it on, and Wi-Fi only by default.
-* **Per game:** **Options ▸ Details** (or → on a game), **Options ▸ Metadata** to edit the title,
+* **Per game:** **Options ▸ Details** (or → on a game; L1/R1 or ←/→ there pages to the next and
+  previous game), **Options ▸ Metadata** to edit the title,
   find the right match by name, scrape again or go back to the automatic match, and
   **Options ▸ Information** for the file, hashes, DAT match and playtime.
 * **RetroAchievements:** **Settings ▸ Accounts** links your account with your user name and Web
-  API key (retroachievements.org ▸ Settings ▸ Keys). The status bar shows your avatar; the User
-  Card (Up from the top of a category, or tap the avatar) shows rank, points and recent unlocks.
-  **Options ▸ Achievements** on a game (or → on the Details screen) opens its badge grid with
-  progress, points and unlock dates. Games are matched by ROM hash the way RetroAchievements
+  API key (retroachievements.org ▸ Settings ▸ Keys). Your avatar sits at the far right of the
+  status bar; Up from the top of a category (or a tap) expands it into a mini-HUD with your rank,
+  points and latest badges, Confirm refreshes it, and Options opens the full User Card (Refresh,
+  Unlink). **Games ▸ RetroAchievements** is a dashboard: profile, library completion, mastered
+  games and recent unlocks. Resting on a game shows its progress ("18/42", points) above the
+  button hints. **Options ▸ Achievements** on a game (or → on the Details screen) opens its badge
+  grid with progress, points and unlock dates. Games are matched by ROM hash the way RetroAchievements
   hashes them (header-less for NES/SNES/PC Engine, set name for arcade); disc systems and games
   not fingerprinted yet are matched by exact title. Achievements unlocked in an emulator show as
   unlock toasts when you come back to Xross.
@@ -102,26 +107,32 @@ on screens 600 dp and wider.
 | --- | --- |
 | XMB navigation | Done. Settings, Photo, Music, Video, Games and Apps; per-category drill-down stacks, breadcrumb, spring-animated scroll, touch swipe, tap and long-press |
 | Gamepad layer | Done. Vendor detection (Sony/Microsoft/Nintendo/generic) with matching glyphs, confirm/cancel swap (Auto/South/East), radial (including "Off — hardware only") and axial deadzones, anti-snapback, stick/hat auto-repeat, button-remap wizard saved per controller model, Options (△ / Y) menu, Select (or held Guide) for the media controls |
-| Portable folder | Done. `Xross/` with JSON config (atomic writes, migration from earlier versions), a library database backup with restore, `.nomedia` for media and themes, and moving the folder to an SD card or USB drive. Not yet tested on a device |
-| Library | Done. File-path scanner over internal storage, microSD and USB-OTG; Room DB with an FTS4 title index and gamepad search; incremental rescan; hot-swap that keeps games on removed drives; cue/gdi/m3u de-duplication; favorites, Recently Played and playtime |
+| Portable folder | Done. `Xross/` with JSON config (atomic writes, migration from earlier versions), a library database backup with restore, `.nomedia` for media and themes, and moving the folder to an SD card or USB drive. Tested on a phone's internal storage; SD cards and Android 9/10 not yet |
+| Library | Done. File-path scanner over internal storage, microSD and USB-OTG; Room DB with an FTS4 title index and gamepad search; incremental rescan; hot-swap that keeps games on removed drives; cue/gdi/m3u de-duplication; favorites, Recently Played and playtime (shown under each game's title) |
 | Fingerprinting | Done. CRC32/MD5/SHA-1 inside `.zip`/`.7z`, CHD header SHA-1 and No-Intro header-less hashes, in a background job that stops while a game runs |
 | DAT verification | Done. No-Intro, Redump and MAME DATs (Logiqx XML or clrmamepro, plain or zipped) matched by SHA-1, MD5, CRC32 + size or arcade set name; Room schema v5 |
-| Scraping and art | Done. Hasheous, SteamGridDB and ScreenScraper with per-service pacing and quotas; art cached on disk per game; box art on game rows; Details screen; manual match and title override; video snaps behind the menu. ScreenScraper awaits developer credentials |
+| Scraping and art | Done. Hasheous, SteamGridDB and ScreenScraper with per-service pacing and quotas; art cached on disk per game; box art on game rows; Details screen with paging between games; manual match and title override; hero art and video snaps behind the focused game. All three services verified live |
 | Emulator dispatch | Done. RetroArch (per-platform core), DuckStation, NetherSX2, Dolphin, PPSSPP, Azahar, Eden, Flycast, M64Plus FZ, melonDS and ScummVM, chosen per platform or per game. ROMs go out as a path extra plus a `content://` URI with a read grant. Verified with stand-ins only |
 | Media hub | Done. Photo viewer (zoom, pan, slideshow, wallpaper), background music player with media-session controls, video player; music pauses for games and videos |
 | Wave background | Done. GLSL ES 3.0 ribbon shader with day/night palette; speed, ribbon lines, turbulence, thickness and color presets as live uniforms (Settings ▸ Theme ▸ Wave settings). Pauses whenever the launcher isn't in front or game art covers it |
 | Theme packs | Done. `Xross/themes/<id>/` with `theme.json`, fonts, SVG/PNG icons and sounds; the bundled icons and sounds are the built-in Default pack |
-| RetroAchievements | Done. Account linking, status bar avatar, User Card, per-game achievement lists, unlock toasts. Verified live on an emulator and the Galaxy A55; unlock toasts not yet seen after a real session |
-| Library organization | Done. Hide apps (Options ▸ Hide, Settings ▸ Apps ▸ Hidden apps, Hide system apps), app folders (Emulators, Streaming, Tools or your own name, with emulators suggested), base ROMs folder with Create system folders, and custom Photo/Video folders that also find files MediaStore skips. Not yet tested on a device |
+| RetroAchievements | Done. Account linking, status bar avatar with an expanding mini-HUD, User Card, Games ▸ RetroAchievements dashboard, per-game telemetry and achievement lists, unlock toasts. Linking and lists verified live on an emulator and the Galaxy A55; the 2b.1 HUD and dashboard are unit-tested only; unlock toasts not yet seen after a real session |
+| Library organization | Done. Hide apps (Options ▸ Hide, Settings ▸ Apps ▸ Hidden apps, Hide system apps), app folders (Emulators, Streaming, Tools or your own name, with emulators suggested), base ROMs folder with Create system folders, and custom Photo/Video folders that also find files MediaStore skips. Tested on the Galaxy A55 |
+| Customization | 16:9 XMB game tiles (logo, wide art or a title plate); Settings ▸ Theme ▸ Profile customization for the avatar's border and glow (`profile.avatarStyle` in `settings.json`). Theme 2.0 (layouts, palettes from game art, custom shaders, BGM, haptics) is planned, see Roadmap §4.3 |
 | Extras | Android apps (games sorted into Games ▸ Android Games), 8 color themes including Original (a color per month), busy indicator, optional button hints, Information screen, can be set as the HOME launcher, Android TV leanback entry |
-| XMB fidelity | Closer. The home menu's layout, motion, navigation, status bar and options panel match the XMB, and games show their own box art; an XMB-style typeface and cursor sound, a still-image background per game, and Resume/Quit Game are missing |
+| XMB fidelity | Closer. The home menu's layout, motion, navigation, status bar and options panel match the XMB; games show their own tiles, and focusing one brings up its art and video. An XMB-style typeface, Resume/Quit Game and the folder drill-down are missing |
 | Not started | On-screen controller, dual screen, Xross Portal, FTPS |
 
-[`Roadmap.md`](Roadmap.md) summarizes what is done, what is left, and the order of the remaining
-work. [`docs/XMB_FIDELITY.md`](docs/XMB_FIDELITY.md) compares Xross with the real XMB, using the
-PS3 and PSP instruction manuals in `assets/docs` as the reference. Feature-by-feature test results and device/performance measurements are in
-[`docs/STATUS.md`](docs/STATUS.md). Testing on a physical handheld is described in
-[`docs/HARDWARE_TESTING.md`](docs/HARDWARE_TESTING.md).
+### Documentation
+
+| Document | Contents |
+| --- | --- |
+| [`Roadmap.md`](Roadmap.md) | **The plan**: what is done, known issues, what is left by phase (including the Phase 2b customization engine and its Theme 2.0 spec), order of work, scope decisions |
+| [`docs/STATUS.md`](docs/STATUS.md) | Test suites, device runs, performance measurements, bugs found and fixed |
+| [`docs/HARDWARE_TESTING.md`](docs/HARDWARE_TESTING.md) | Checklist for testing on a physical handheld |
+| [`docs/XMB_FIDELITY.md`](docs/XMB_FIDELITY.md) | Comparison with the real XMB, using the PS3 and PSP manuals in `assets/docs` |
+| [`docs/FEASIBILITY.md`](docs/FEASIBILITY.md) | The original feasibility review behind the scope changes |
+| [`docs/SCREENSCRAPER_API.md`](docs/SCREENSCRAPER_API.md) | English guide to ScreenScraper's API rules |
 
 ## Testing
 
@@ -263,14 +274,20 @@ app/src/main/java/dev/xross/launcher/
             providers/ (Hasheous, ScreenScraper, SteamGridDB)
   launch/   EmulatorRegistry (intent matrix), GameLauncher (interface), AndroidIntentGameLauncher
   media/    MediaRepository (MediaStore + custom folders), MediaFolderScan, MusicPlayer, PlaybackService (Media3 session), SnapPlayer
+  profile/  RetroAchievementsClient, ProfileRepository, AchievementsRepository, RaGames, BadgeImages
   state/    MenuTree, MediaMenus, Navigation (NavState), OptionsMenu, Search, NameEntry, AppFolders, RemapSession,
-            GameInfo, GameDetails, MediaOverlayController, XmbViewModel
-  ui/       XmbScreen, MediaScreens, SearchOverlay, OptionsPanel, InfoPanel, DetailsScreen,
-            SnapLayer, BusyIndicator, StatusBar, WaveBackground + WaveRenderer (GLSL), Glyphs
-  theme/    XrossTheme palettes, SeasonalPalette (Original theme)
+            GameInfo, GameDetails, MediaOverlayController, AchievementsView, ProfileCard, RaHub,
+            AvatarEditor, WaveEditor, MiniPlayerLine, LibraryFolders, XmbViewModel
+  ui/       XmbScreen, GameTile, MediaScreens, SearchOverlay, OptionsPanel, InfoPanel, DetailsScreen,
+            SnapLayer, FocusBackdrop, BusyIndicator, StatusBar, AvatarHud, ProfileAvatar, UserCard,
+            AchievementsScreen, RaHubScreen, UnlockToast, MiniPlayerCard, AvatarStylePanel,
+            WaveSettingsPanel, Frosted, WaveBackground + WaveRenderer (GLSL), Glyphs
+  theme/    XrossTheme palettes, SeasonalPalette (Original theme), WaveStyle, AvatarStyle,
+            pack/ (ThemePackLoader, ThemeManifest, ThemeRuntime, SvgIcon)
   audio/    UiSounds (SoundPool effects + streamed boot cues)
 app/schemas/         exported Room schemas (v1–v5) used by the migration tests
-docs/                feasibility review, implementation status, XMB fidelity, hardware testing guide,
+Roadmap.md           the plan (status, backlog, specs); see "Documentation" above
+docs/                implementation status, hardware testing guide, XMB fidelity, feasibility review,
                      ScreenScraper API guide (English)
 .env.example         keys for local service credentials (.env itself is git-ignored)
 assets/docs/         PS3 and PSP instruction manuals (local reference only, git-ignored)
