@@ -1,10 +1,12 @@
 # Wave Roadmap
 
 What has been built, what is left, and in what order, measured against the product scope in
-[`project_scope.md`](project_scope.md). Updated **2026-11-10**.
+[`project_scope.md`](project_scope.md). Updated **2026-11-11**.
 
 Related documents:
 
+- [`docs/XMB_FIDELITY.md`](docs/XMB_FIDELITY.md): how close Wave is to the real XMB, checked
+  against the PS3 and PSP manuals in `assets/docs`
 - [`docs/STATUS.md`](docs/STATUS.md): feature-by-feature test results and performance data
 - [`docs/FEASIBILITY.md`](docs/FEASIBILITY.md): why some scope items were changed or dropped
 - [`docs/HARDWARE_TESTING.md`](docs/HARDWARE_TESTING.md): how to test on a real handheld
@@ -23,6 +25,7 @@ with stub emulators · 📱 verified on a real device
 | **Phase 2 — Beta** | Metadata, media hub, theme packs, on-screen controller and keyboard | ◐ Fingerprinting, media hub and gamepad search done; scrapers, DATs and theme packs not started |
 | **Phase 3 — Release candidate** | Dual screen, docking, RetroAchievements, Wave Portal, FTPS | ⬜ Not started (hot-swap and live resolution change, two prerequisites, are done) |
 | **Phase 4 — v1.0** | Onboarding, app triage, tuning, theme/plugin format, release | ◐ App triage and performance work started |
+| **XMB fidelity** | Look and feel exactly like the XMB, plus Wave's extras | ◐ Home menu layout, motion and navigation match; per-game art, typeface, sounds and several system behaviors don't yet (§4.5) |
 
 **Codebase at a glance:** Kotlin + Jetpack Compose, one `:app` module, Room database at schema v4,
 22 platforms, 11 emulator launch recipes, 7 color themes, 115 unit tests, a 57-check on-device
@@ -223,6 +226,34 @@ These are bugs or gaps in features that are already built, separate from the new
 | Play Store / F-Droid compliance review | `MANAGE_EXTERNAL_STORAGE` is a Play review risk; bundled assets must be replaced |
 | Orientation setting | Optional: let users unlock rotation (for example portrait phones or vertical handhelds) |
 
+### 4.5 XMB fidelity
+
+From the assessment in [`docs/XMB_FIDELITY.md`](docs/XMB_FIDELITY.md). **Verdict: not there yet.**
+The home menu already reads as an XMB at a glance, but the Games lists, the typeface, the sounds
+and several system behaviors described in the PS3 and PSP manuals don't match yet. Ordered by how
+much each item adds to the feel:
+
+| Item | Depends on | Notes |
+| --- | --- | --- |
+| Per-game icons, with a background crossfade to the game's art on focus | Scraper and asset cache (§4.2) | The largest gap: every game currently shows the same disc or cartridge glyph |
+| XMB-style rounded typeface | Theme pack loader for user fonts | Bundle an open-licensed font as the default; the Android default font is the most visible difference today |
+| Monthly background color ("Original" theme) | — | PSP changes the color each month, PS3 by time, day and month; Wave only shifts brightness |
+| Resume Game / Quit Game while an emulator Wave launched is running | — | Equivalent of the PS button's Quit Game and the PSP Go's Pause/Resume Game |
+| Busy icon while scanning, fingerprinting or loading | — | The XMB shows one while reading data |
+| Setting to hide the button-hint pill | — | The XMB home menu has no on-screen hints; keep Wave's hints as an option |
+| Distinct cursor sound and a working error sound | Sound packs (§4.2) | Moves reuse the options sound; `snd_error.wav` is silent |
+| XMB-style drill-down (folder icon beside its contents, no text breadcrumb) | — | |
+| Information screen in the options menu | — | Title, platform, file, size, hashes, playtime; richer after the scraper |
+| Control panel on △ in the video and music players | — | Alongside the existing direct controls |
+| Photo or theme background behind the menu | Theme packs (§4.2) | "Set as wallpaper" currently sets the Android wallpaper |
+| Connected drives as items in their categories | Hot-swap ✅ | |
+| Keyboard input modes and an optional multi-tap keypad | — | Lower case, accented letters, symbols |
+| Delete, sort and Display All in the options menu | — | |
+| Screensaver when docked or idle on a TV | Dock detection (§4.3) | |
+
+Wave's sounds, icons and font must stay original or open-licensed by default, with Sony-like
+assets loadable only by the user through theme packs.
+
 ---
 
 ## 5. Scope changes
@@ -273,10 +304,13 @@ Real-hardware pass ──┬──▶ DAT import ──▶ Scrapers ──▶ De
 ### Suggested next steps
 
 1. Run the real-hardware pass on at least one handheld with a controller and real emulators.
-2. Update `docs/STATUS.md` for the landscape lock, the Galaxy A55 results, the rendering fixes
+2. Quick XMB-fidelity wins with no dependencies (§4.5): monthly background color, busy icon,
+   a setting to hide the button hints, the Information screen, and an XMB-style default font.
+3. Update `docs/STATUS.md` for the landscape lock, the Galaxy A55 results, the rendering fixes
    and the media access message.
-3. Add a Baseline Profile.
-4. Start Phase 2 metadata with DAT import.
+4. Add a Baseline Profile.
+5. Start Phase 2 metadata with DAT import. Per-game art from the scrapers is the biggest single
+   step toward the XMB feel.
 
 ---
 

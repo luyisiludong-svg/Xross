@@ -34,10 +34,12 @@ on screens 600 dp and wider.
 | Media hub | Done. Photo viewer (zoom, pan, slideshow, wallpaper), background music player with media-session controls, video player; music pauses for games and videos |
 | Wave background | Done. GLSL ES 3.0 ribbon shader with day/night palette and adjustable speed. Pauses whenever the launcher isn't in front |
 | Extras | Android apps (games sorted into Games ▸ Android Games), 7 color themes, can be set as the HOME launcher, Android TV leanback entry |
+| XMB fidelity | Not there yet. The home menu's layout, motion, navigation, status bar and options panel match the XMB; per-game icons and backgrounds, an XMB-style typeface and cursor sound, the monthly background color, Resume/Quit Game and the busy icon are missing |
 | Not started | Scrapers and DAT matching, theme packs, on-screen controller, dual screen, RetroAchievements, Wave Portal, FTPS |
 
 [`Roadmap.md`](Roadmap.md) summarizes what is done, what is left, and the order of the remaining
-work. Feature-by-feature test results and device/performance measurements are in
+work. [`docs/XMB_FIDELITY.md`](docs/XMB_FIDELITY.md) compares Wave with the real XMB, using the
+PS3 and PSP instruction manuals in `assets/docs` as the reference. Feature-by-feature test results and device/performance measurements are in
 [`docs/STATUS.md`](docs/STATUS.md). Testing on a physical handheld is described in
 [`docs/HARDWARE_TESTING.md`](docs/HARDWARE_TESTING.md).
 
@@ -94,7 +96,9 @@ app/src/main/java/dev/wave/launcher/
   theme/    WaveTheme palettes
   audio/    UiSounds (SoundPool effects + streamed boot cues)
 app/schemas/         exported Room schemas (v1–v4) used by the migration tests
-docs/                feasibility review, implementation status, hardware testing guide
+docs/                feasibility review, implementation status, XMB fidelity, hardware testing guide
+assets/docs/         PS3 and PSP instruction manuals (reference only, not for distribution)
+assets/examples/     XMB reference screenshots and design mock-ups
 tools/icons/         SVG → VectorDrawable converter and icon role map
 tools/emulator-stub/ test-only emulator stand-ins (Gradle module :emulator-stub)
 tools/device-tests/  adb-driven smoke test
