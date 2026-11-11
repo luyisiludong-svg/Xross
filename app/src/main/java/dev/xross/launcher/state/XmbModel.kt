@@ -20,6 +20,19 @@ sealed interface NodeIcon {
         val fallback: GlyphKey,
         val version: Long,
     ) : NodeIcon
+
+    /**
+     * A game's rectangular XMB tile: its clear logo, else wide art, else [label] on a frosted
+     * plate with [fallback] behind it. [scraped] is false for games no service has identified
+     * (nothing to load). [version] changes when new art is stored, so the tile reloads it.
+     */
+    data class Tile(
+        val uuid: String,
+        val label: String,
+        val fallback: GlyphKey,
+        val version: Long,
+        val scraped: Boolean,
+    ) : NodeIcon
 }
 
 enum class MediaKind { PHOTO, SONG, VIDEO }
@@ -45,6 +58,10 @@ sealed interface Command {
     data class CycleEmulator(val platformId: String) : Command
     data object ToggleWave : Command
     data object OpenWaveSettings : Command
+    /** Settings ▸ Theme ▸ Profile customization: the avatar's ring and glow. */
+    data object OpenAvatarStyle : Command
+    /** Games ▸ RetroAchievements: the profile dashboard. */
+    data object OpenRaHub : Command
     data object CycleTheme : Command
     data object CycleThemePack : Command
     data class SetThemePack(val id: String) : Command

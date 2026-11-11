@@ -173,6 +173,34 @@ class AchievementsRepository(
         }
     }
 
+    /**
+     * What is already known about [game] without the network: this session's copy, else the copy
+     * in the Xross folder for a file that was matched before. Null when nothing is cached.
+     */
+    suspend fun peek(game: GameEntity): AchievementsState.Ready? = withContext(io) {
+        memory[game.uuid]?.let { return@withContext it }
+        if (!credentials.current.retroAchievementsLinked || RaConsoles.of(game.platformId) == null) return@withContext null
+        val rec = readMatches()[game.uuid]?.takeIf { it.raId > 0 && it.size == game.sizeBytes && it.modified == game.lastModified }
+            ?: return@withContext null
+        readProgress(rec.raId)?.let { AchievementsState.Ready(it, rec.kind, offline = true) }
+    }
+
+    /** Progress across [games] from the session and the Xross folder. No network; blocking I/O on [io]. */
+    suspend fun librarySummary(games: List<GameEntity>): RaLibrarySummary = withContext(io) {
+        val supported = games.filter { RaConsoles.of(it.platformId) != null }
+        if (!credentials.current.retroAchievementsLinked) return@withContext RaLibrarySummary(supportedGames = supported.size)
+        val matches = readMatches()
+        val known = supported.mapNotNull { game ->
+            val progress = memory[game.uuid]?.progress
+                ?: matches[game.uuid]?.takeIf { it.raId > 0 }?.let { readProgress(it.raId) }
+            progress?.let { game to it }
+        }
+        RaLibrarySummary.of(supported.size, known)
+    }
+
+    private fun readProgress(raId: Int): RaGameProgress? =
+        readJson(gameFile(raId))?.let { runCatching { JSON.decodeFromString(RaGameProgress.serializer(), it) }.getOrNull() }
+
     /** Forget this session's copy (after playing, unlocks may have changed). */
     fun invalidate(game: GameEntity) {
         fetchedAt.remove(game.uuid)

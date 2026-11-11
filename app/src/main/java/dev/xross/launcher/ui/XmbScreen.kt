@@ -98,6 +98,7 @@ import dev.xross.launcher.scrape.ArtKind
 import dev.xross.launcher.theme.ThemePalette
 import dev.xross.launcher.theme.XrossTheme
 import dev.xross.launcher.theme.rememberActivePalette
+import kotlinx.coroutines.delay
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.floor
@@ -186,6 +187,11 @@ fun XmbScreen(
     onAchievementTap: (Int) -> Unit = {},
     onCloseAchievements: () -> Unit = {},
     onDetailsAchievements: () -> Unit = {},
+    onCloseAvatarHud: () -> Unit = {},
+    onAvatarRowTap: (Int) -> Unit = {},
+    onAvatarSlider: (Int, Float) -> Unit = { _, _ -> },
+    onCloseAvatarStyle: () -> Unit = {},
+    onCloseRaHub: () -> Unit = {},
 ) {
     val palette = rememberActivePalette(state.theme, LocalThemePack.current?.palette)
 
@@ -216,10 +222,15 @@ fun XmbScreen(
 
         // Focused game: hero art after 250 ms, then its video snap after 1.2 s, full-bleed behind
         // the menu (see BackdropTiming). The wave pauses while either fully covers the screen.
-        val focusedArt = state.focused?.icon as? NodeIcon.Art
+        val focusedArt = when (val icon = state.focused?.icon) {
+            is NodeIcon.Art -> FocusedArt(icon.uuid, icon.version)
+            is NodeIcon.Tile -> if (icon.scraped) FocusedArt(icon.uuid, icon.version) else null
+            else -> null
+        }
         val quiet = state.overlay == null && state.search == null && state.optionsMenu == null &&
             state.info == null && state.booting == null && state.remap == null && state.waveEditor == null &&
-            state.achievements == null && state.profileCard == null && state.nameEntry == null
+            state.achievements == null && state.profileCard == null && state.nameEntry == null &&
+            state.avatarEditor == null && state.raHub == null
         var heroCovers by remember { mutableStateOf(false) }
         var videoCovers by remember { mutableStateOf(false) }
         FocusBackdrop(
@@ -250,17 +261,21 @@ fun XmbScreen(
         // The menu fades out under media screens so only one set of text and hints is visible.
         /** Height of the button-hint row, so the mini player can float just above it. */
         var hintsHeightPx by remember { mutableIntStateOf(0) }
-        val menuAlpha by animateFloatAsState(
-            if (state.overlay == null && state.search == null && state.nameEntry == null && state.details == null &&
-                state.waveEditor == null && state.achievements == null && state.profileCard == null
-            ) {
-                1f
-            } else {
-                0f
-            },
-            tween(220),
-            label = "menu",
-        )
+        val menuShown = state.overlay == null && state.search == null && state.nameEntry == null && state.details == null &&
+            state.waveEditor == null && state.achievements == null && state.profileCard == null &&
+            state.avatarEditor == null && state.raHub == null
+        val menuAlpha by animateFloatAsState(if (menuShown) 1f else 0f, tween(220), label = "menu")
+        // The avatar's glow pulses only while the menu is in front and in use: it holds still once
+        // the screen has been idle for a while, under overlays, and when the activity is stopped.
+        var idle by remember { mutableStateOf(false) }
+        LaunchedEffect(state.categoryIndex, state.listKey, state.focusedIndex, state.avatarFocused, state.settings.avatarStyle) {
+            idle = false
+            delay(AVATAR_GLOW_IDLE_MS)
+            idle = true
+        }
+        val started by lifecycleStarted()
+        val avatarGlowRuns = started && !idle && menuShown
+
         Box(Modifier.fillMaxSize().graphicsLayer { alpha = menuAlpha }) {
         CategoryBar(
             categories = state.categories,
@@ -276,22 +291,44 @@ fun XmbScreen(
 
         // (The "now playing" line that used to sit top-left is the floating MiniPlayerCard below.)
 
+        // Status bar: clock and battery, then the avatar at the far right. The avatar is drawn by
+        // AvatarHud over the room the bar keeps for it, and grows in place into the mini-HUD,
+        // which takes the clock's and battery's place while it is open.
+        val hudExpansion = animateFloatAsState(
+            if (state.avatarFocused) 1f else 0f,
+            tween(260, easing = FastOutSlowInEasing),
+            label = "avatarHud",
+        )
+        val statusTop = (m.s * 0.04f).dp()
+        val statusEnd = (m.width * 0.025f).dp()
         StatusBar(
             textSize = m.statusSize.sp(),
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(top = (m.s * 0.04f).dp(), end = (m.width * 0.025f).dp()),
-            leading = {
-                ProfileAvatar(
-                    avatar = state.profile.avatar,
-                    avatarVersion = state.profile.avatarVersion,
-                    size = 32.dp,
-                    focused = state.avatarFocused,
-                    pulse = { pulse },
-                    contentDescription = state.profile.username.ifEmpty { "Profile" },
-                    onClick = onAvatarTap,
-                )
-            },
+            modifier = Modifier.align(Alignment.TopEnd).padding(top = statusTop, end = statusEnd),
+            contentAlpha = { 1f - hudExpansion.value },
+            trailingWidth = StatusAvatarBox + 10.dp,
+            trailingHeight = StatusAvatarBox,
+        )
+        if (state.avatarFocused) {
+            // A tap anywhere outside the expanded HUD collapses it.
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .clickable(remember { MutableInteractionSource() }, indication = null, onClick = onCloseAvatarHud),
+            )
+        }
+        AvatarHud(
+            expansion = { hudExpansion.value },
+            expanded = state.avatarFocused,
+            profile = state.profile,
+            style = state.settings.avatarStyle,
+            animateGlow = avatarGlowRuns,
+            m = m,
+            confirmGlyph = if (state.confirm == ConfirmLayout.EAST) state.family.east else state.family.south,
+            backGlyph = if (state.confirm == ConfirmLayout.EAST) state.family.south else state.family.east,
+            optionsGlyph = state.family.north,
+            onAvatarTap = onAvatarTap,
+            loadBadge = loadBadge,
+            modifier = Modifier.align(Alignment.TopEnd).padding(top = statusTop, end = statusEnd),
         )
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -311,20 +348,31 @@ fun XmbScreen(
         val miniCovered = state.overlay != null || state.search != null || state.nameEntry != null ||
             state.details != null || state.optionsMenu != null || state.info != null ||
             state.profileCard != null || state.remap != null || state.booting != null ||
-            state.waveEditor != null || state.achievements != null
-        MiniPlayerCard(
-            nowPlaying = state.nowPlaying,
-            covered = miniCovered,
-            loadThumb = loadThumb,
-            onClick = onMiniPlayerTap,
-            onLongClick = onMiniPlayerLongPress,
+            state.waveEditor != null || state.achievements != null ||
+            state.avatarEditor != null || state.raHub != null
+        // The mini player stacks above the focused game's RetroAchievements badge, which sits
+        // just above the hints; each takes no room while hidden, so the other settles into place.
+        Column(
+            horizontalAlignment = Alignment.End,
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(
                     end = 16.dp,
                     bottom = maxOf(16.dp, (hintsHeightPx + m.s * 0.04f).dp() + 8.dp),
                 ),
-        )
+        ) {
+            MiniPlayerCard(
+                nowPlaying = state.nowPlaying,
+                covered = miniCovered,
+                loadThumb = loadThumb,
+                onClick = onMiniPlayerTap,
+                onLongClick = onMiniPlayerLongPress,
+            )
+            GameTelemetryBadge(
+                telemetry = state.focusedTelemetry.takeIf { !miniCovered && !state.avatarFocused },
+                size = m.subtitleSize.sp(),
+            )
+        }
 
         state.overlay?.let { overlay ->
             MediaOverlayLayer(
@@ -402,6 +450,19 @@ fun XmbScreen(
             onButtonTap = onProfileCardButtonTap,
             onDismiss = onCloseProfileCard,
             loadBadge = loadBadge,
+            avatarStyle = state.settings.avatarStyle,
+        )
+
+        RaHubScreen(
+            hub = state.raHub,
+            profile = state.profile,
+            style = state.settings.avatarStyle,
+            m = m,
+            confirmGlyph = if (state.confirm == ConfirmLayout.EAST) state.family.east else state.family.south,
+            backGlyph = if (state.confirm == ConfirmLayout.EAST) state.family.south else state.family.east,
+            loadArt = loadArt,
+            loadBadge = loadBadge,
+            onDismiss = onCloseRaHub,
         )
 
         AchievementsScreen(
@@ -427,6 +488,19 @@ fun XmbScreen(
             onRowTap = onWaveRowTap,
             onSlider = onWaveSlider,
             onDismiss = onCloseWaveSettings,
+        )
+
+        AvatarStylePanel(
+            editor = state.avatarEditor,
+            style = state.settings.avatarStyle,
+            profile = state.profile,
+            m = m,
+            pulse = { pulse },
+            confirmGlyph = if (state.confirm == ConfirmLayout.EAST) state.family.east else state.family.south,
+            backGlyph = if (state.confirm == ConfirmLayout.EAST) state.family.south else state.family.east,
+            onRowTap = onAvatarRowTap,
+            onSlider = onAvatarSlider,
+            onDismiss = onCloseAvatarStyle,
         )
 
         state.remap?.let { RemapOverlay(it, m, onCancelRemap) }
@@ -463,6 +537,25 @@ fun XmbScreen(
 }
 
 // region Category bar
+
+/** The focused row's scraped art, for the hero backdrop and the video snap. */
+private data class FocusedArt(val uuid: String, val version: Long)
+
+/** Without input for this long, the avatar's glow stops pulsing. */
+private const val AVATAR_GLOW_IDLE_MS = 30_000L
+
+/** True while the activity is at least started; animations tied to it stop in the background. */
+@Composable
+private fun lifecycleStarted(): androidx.compose.runtime.State<Boolean> {
+    val owner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    return produceState(owner.lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED), owner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { source, _ ->
+            value = source.lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)
+        }
+        owner.lifecycle.addObserver(observer)
+        awaitDispose { owner.lifecycle.removeObserver(observer) }
+    }
+}
 
 /** Critically damped: no overshoot, ~200 ms settle, and velocity carries across retargets. */
 private val NavSpring = spring<Float>(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = 520f)
@@ -651,9 +744,14 @@ private fun ItemRow(
     val density = LocalDensity.current
     val titleSp = with(density) { m.titleSize.toSp() }
     val subtitleSp = with(density) { m.subtitleSize.toSp() }
+    // A game tile is wider than the square icon slot it is centered on: the text starts further
+    // right by half the difference (at the focus scale) and gives up the same width.
+    val tileHeight = iconSize * GameTileHeightScale
+    val tileOverhang = if (node.icon is NodeIcon.Tile) (tileHeight * GameTileAspect - iconSize) * m.itemFocusScale / 2 else 0.dp
     Row(verticalAlignment = Alignment.CenterVertically, modifier = modifier) {
         Box(Modifier.size(iconSize), contentAlignment = Alignment.Center) {
             when (val icon = node.icon) {
+                is NodeIcon.Tile -> GameTile(icon, tileHeight, focus, m.itemFocusScale, glow = { if (isFocused) pulse() * focus() else 0f }, loadArt)
                 is NodeIcon.Glyph -> XmbIcon(
                     painter = glyphPainter(icon.key),
                     size = iconSize,
@@ -666,8 +764,8 @@ private fun ItemRow(
                 is NodeIcon.Art -> ArtIcon(icon, iconSize, focus, m.itemFocusScale, glow = { if (isFocused) pulse() * focus() else 0f }, loadArt)
             }
         }
-        Spacer(Modifier.width(with(density) { (m.textGap + m.itemIcon * (m.itemFocusScale - 1f) / 2).toDp() }))
-        Column(Modifier.width(textWidth)) {
+        Spacer(Modifier.width(with(density) { (m.textGap + m.itemIcon * (m.itemFocusScale - 1f) / 2).toDp() } + tileOverhang))
+        Column(Modifier.width((textWidth - tileOverhang).coerceAtLeast(iconSize))) {
             GlowText(
                 text = node.title,
                 fontSize = titleSp,

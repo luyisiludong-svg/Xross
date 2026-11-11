@@ -28,7 +28,7 @@ class AllGamesFolderTest {
 
     @Test fun platformsAreGroupedInAllGamesByDefault() {
         val root = tree().root()
-        assertEquals(listOf("Search", "Recently Played", "Favorites", "All Games", "Android Games"), root.map { it.title })
+        assertEquals(listOf("Search", "Recently Played", "Favorites", "All Games", "Android Games", "RetroAchievements"), root.map { it.title })
         val allGames = root.single { it.title == "All Games" }
         assertEquals(NodeAction.OpenList(MenuTree.ALL_GAMES), allGames.action)
         assertEquals("3 systems · 4 titles", allGames.subtitle)
@@ -46,7 +46,7 @@ class AllGamesFolderTest {
     @Test fun classicLayoutKeepsPlatformsAtTheTopLevel() {
         val root = tree(XrossSettings(allGamesFolder = false)).root().map { it.title }
         assertEquals(
-            listOf("Search", "Recently Played", "Favorites", "Super Nintendo", "Game Boy Advance", "PlayStation", "Android Games"),
+            listOf("Search", "Recently Played", "Favorites", "Super Nintendo", "Game Boy Advance", "PlayStation", "Android Games", "RetroAchievements"),
             root,
         )
     }

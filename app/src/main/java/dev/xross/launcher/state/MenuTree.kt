@@ -177,6 +177,17 @@ class MenuTree(private val s: MenuSnapshot) {
         if (androidGames.isNotEmpty()) {
             add(folder(ANDROID_GAMES, "Android Games", GlyphKey.HANDHELD, countLabel(androidGames.size)))
         }
+        if (s.games.isNotEmpty() || s.accounts.retroAchievementsLinked) {
+            add(
+                XmbNode(
+                    id = RA_HUB,
+                    title = "RetroAchievements",
+                    subtitle = retroAchievementsSummary(),
+                    icon = NodeIcon.Glyph(GlyphKey.TROPHY),
+                    action = NodeAction.Run(Command.OpenRaHub),
+                ),
+            )
+        }
         if (s.games.isEmpty()) {
             s.portable.restorable?.let { backup ->
                 add(
@@ -199,6 +210,17 @@ class MenuTree(private val s: MenuSnapshot) {
                 ),
             )
         }
+    }
+
+    private fun retroAchievementsSummary(): String {
+        val a = s.accounts
+        if (!a.retroAchievementsLinked) return "Link an account to track achievements"
+        val number = java.text.NumberFormat.getIntegerInstance()
+        return listOfNotNull(
+            a.retroAchievementsUser.ifEmpty { null },
+            a.retroAchievementsPoints?.let { "${number.format(it)} points" },
+            a.retroAchievementsRank?.let { "rank #${number.format(it)}" },
+        ).joinToString(" · ").ifEmpty { "Profile, mastered games and recent unlocks" }
     }
 
     /**
@@ -226,8 +248,8 @@ class MenuTree(private val s: MenuSnapshot) {
             // Skip the extension when it only repeats the platform ("GBA · GBA").
             val ext = game.fileName.substringAfterLast('.', "").uppercase(Locale.ROOT)
             if (!(showPlatform && ext == platform?.shortName?.uppercase(Locale.ROOT))) add(ext)
-            add(formatSize(game.sizeBytes))
-            formatPlaytime(game.playTimeMs)?.let { add("Played $it") }
+            // Tracked playtime where the file size used to be (the size is in Information).
+            add(playtimeSubtitle(game.playTimeMs))
         }
         return XmbNode(
             id = "game:${game.id}",
@@ -239,12 +261,15 @@ class MenuTree(private val s: MenuSnapshot) {
         )
     }
 
+    /**
+     * The rectangular XMB tile for a game. Only games a service has identified can have art; the
+     * others say so, and the tile skips the cache lookup and shows the title on its plate.
+     */
     private fun gameIcon(game: GameEntity, platform: Platform?): NodeIcon {
         val glyph = if (platform?.isDiscBased == true || game.isDiscImage()) GlyphKey.GAME_DISC else GlyphKey.GAME_CART
         val meta = s.metadata[game.id]
-        // Only games a service has identified can have art; others skip the cache lookup.
-        if (meta?.scrapeStatus != dev.xross.launcher.scrape.ScrapeStatus.OK.name) return NodeIcon.Glyph(glyph)
-        return NodeIcon.Art(game.uuid, ICON_ART, glyph, meta.scrapedAt ?: 0L)
+        val scraped = meta?.scrapeStatus == dev.xross.launcher.scrape.ScrapeStatus.OK.name
+        return NodeIcon.Tile(game.uuid, game.title, glyph, if (scraped) meta?.scrapedAt ?: 0L else 0L, scraped)
     }
 
     /** Options menu for a game: play, favorite, per-game emulator, and its play history. */
@@ -817,6 +842,12 @@ class MenuTree(private val s: MenuSnapshot) {
         )
     }
 
+    private fun avatarSummary(): String {
+        val a = s.settings.avatarStyle
+        val color = dev.xross.launcher.theme.AvatarColorPreset.of(a.borderColorHex)?.label ?: a.borderColorHex
+        return "$color ring · ${formatDecimal(a.borderWidthDp)} dp · glow " + if (a.glowEnabled) "on" else "off"
+    }
+
     private fun displaySettings() = listOf(
         XmbNode(
             id = "disp:pack",
@@ -834,6 +865,7 @@ class MenuTree(private val s: MenuSnapshot) {
         setting("disp:theme", "Theme color", themeColorLabel(), GlyphKey.DISPLAY, Command.CycleTheme),
         setting("disp:wave", "Wave background", onOff(s.settings.waveEnabled), GlyphKey.DISPLAY, Command.ToggleWave),
         setting("disp:wavesettings", "Wave settings", waveSummary(), GlyphKey.DISPLAY, Command.OpenWaveSettings),
+        setting("disp:avatar", "Profile customization", avatarSummary(), GlyphKey.USERS, Command.OpenAvatarStyle),
         setting(
             "disp:hints",
             "Button hints",
@@ -1000,6 +1032,8 @@ class MenuTree(private val s: MenuSnapshot) {
         const val FAVORITES = "collection:favorites"
         const val ANDROID_GAMES = "collection:android-games"
         const val ALL_GAMES = "collection:all-games"
+        /** Id of the Games ▸ RetroAchievements row. */
+        const val RA_HUB = "games:retroachievements"
         const val PLATFORM_PREFIX = "platform:"
         const val LIBRARY = "settings:library"
         const val DATS = "settings:dats"
@@ -1040,6 +1074,19 @@ class MenuTree(private val s: MenuSnapshot) {
         fun formatDecimal(v: Float): String {
             val r = kotlin.math.round(v * 10f) / 10f
             return if (r % 1f == 0f) r.toInt().toString() else String.format(Locale.ROOT, "%.1f", r)
+        }
+
+        /**
+         * The line under a game's title: "Never played", "Playtime: 12 mins" under an hour, then
+         * "Playtime: 14h 25m". A session shorter than a minute counts as one minute.
+         */
+        fun playtimeSubtitle(ms: Long): String {
+            if (ms <= 0) return "Never played"
+            val minutes = (ms / 60_000).coerceAtLeast(1)
+            return when {
+                minutes < 60 -> "Playtime: $minutes " + if (minutes == 1L) "min" else "mins"
+                else -> "Playtime: ${minutes / 60}h ${minutes % 60}m"
+            }
         }
 
         fun formatPlaytime(ms: Long): String? {

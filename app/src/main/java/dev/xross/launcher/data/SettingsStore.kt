@@ -101,6 +101,8 @@ data class XrossSettings(
     val photoFolders: List<String> = emptyList(),
     /** Video shows only these folders; empty means everything MediaStore knows. */
     val videoFolders: List<String> = emptyList(),
+    /** Ring and glow of the profile avatar (Settings ▸ Theme ▸ Profile customization). */
+    val avatarStyle: dev.xross.launcher.theme.AvatarStyleConfig = dev.xross.launcher.theme.AvatarStyleConfig(),
 )
 
 /**

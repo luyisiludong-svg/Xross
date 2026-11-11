@@ -9,6 +9,8 @@ import dev.xross.launcher.input.NavAction
 import dev.xross.launcher.storage.Platform
 import dev.xross.launcher.storage.PlatformRegistry
 import dev.xross.launcher.storage.SystemOverride
+import dev.xross.launcher.theme.AvatarStyleConfig
+import dev.xross.launcher.theme.AvatarStyleLimits
 import dev.xross.launcher.theme.WaveLimits
 import dev.xross.launcher.theme.WaveTint
 import dev.xross.launcher.theme.pack.ThemeManifest
@@ -38,7 +40,12 @@ data class SettingsFile(
     val apps: Apps = Apps(),
     val photo: MediaFolders = MediaFolders(),
     val video: MediaFolders = MediaFolders(),
+    val profile: Profile = Profile(),
 ) {
+    /** The profile avatar: ring color (`#RRGGBB`), ring width 1–6 dp, glow on/off, speed 0.5–2.0, intensity 0.1–1.0. */
+    @Serializable
+    data class Profile(val avatarStyle: AvatarStyleConfig = D.avatarStyle)
+
     @Serializable
     data class Library(
         /** Home of the library; empty = `roms/` in the Xross folder. Scanned like an added folder. */
@@ -226,6 +233,7 @@ object ConfigCodec {
         apps = SettingsFile.Apps(s.hiddenApps.sorted(), s.hideSystemApps, s.appFolders.toSortedMap()),
         photo = SettingsFile.MediaFolders(s.photoFolders),
         video = SettingsFile.MediaFolders(s.videoFolders),
+        profile = SettingsFile.Profile(s.avatarStyle),
     )
 
     /** Applies settings.json onto [base], keeping [base]'s mappings and systems. Out-of-range numbers are clamped. */
@@ -280,6 +288,7 @@ object ConfigCodec {
         }.toMap(),
         photoFolders = cleanFolders(f.photo.customFolders),
         videoFolders = cleanFolders(f.video.customFolders),
+        avatarStyle = AvatarStyleLimits.clamp(f.profile.avatarStyle),
     )
 
     private fun cleanFolders(paths: List<String>) = paths.map { it.trim().trimEnd('/') }.filter { it.isNotEmpty() }.distinct()

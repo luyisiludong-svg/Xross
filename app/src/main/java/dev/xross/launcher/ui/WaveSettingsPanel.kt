@@ -162,14 +162,14 @@ private fun WaveRowView(
         }
         WaveEditor.fraction(row, settings)?.let { fraction ->
             Spacer(Modifier.height(5.dp))
-            Slider(fraction, focused, onSlider)
+            SettingSlider(fraction, focused, onSlider)
         }
     }
 }
 
 /** A thin track with an amber fill and a round knob; drag or tap to set. */
 @Composable
-private fun Slider(fraction: Float, focused: Boolean, onChange: (Float) -> Unit) {
+internal fun SettingSlider(fraction: Float, focused: Boolean, onChange: (Float) -> Unit) {
     val change by rememberUpdatedState(onChange)
     BoxWithConstraints(
         Modifier

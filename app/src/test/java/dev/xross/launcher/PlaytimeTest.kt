@@ -142,8 +142,9 @@ class PlaytimeTest {
         )
         val rows = MenuTree(MenuSnapshot(games = games)).list("platform:snes")
         assertEquals(listOf("Played", "Never"), rows.map { it.title })
-        assertTrue(rows[0].subtitle!!.contains("Played 2 h 15 min"))
-        assertTrue("Played" !in rows[1].subtitle!!)
+        // Tracked playtime takes the place of the file size under the title.
+        assertEquals("SFC · Playtime: 2h 15m", rows[0].subtitle)
+        assertEquals("SFC · Never played", rows[1].subtitle)
     }
 
     // endregion

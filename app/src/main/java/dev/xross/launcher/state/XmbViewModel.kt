@@ -35,7 +35,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.sample
@@ -117,8 +120,18 @@ data class XmbUiState(
     val achievements: AchievementsViewState? = null,
     /** The unlock toast on screen (it never takes input). */
     val unlockToast: UnlockToastState? = null,
+    /** Settings ▸ Theme ▸ Profile customization while it is open. */
+    val avatarEditor: AvatarEditorState? = null,
+    /** Games ▸ RetroAchievements while it is open. */
+    val raHub: RaHubState? = null,
+    /** RetroAchievements numbers of the focused game, for the badge in the bottom corner. */
+    val telemetry: GameTelemetry? = null,
 ) {
     val focused: XmbNode? get() = items.getOrNull(focusedIndex)
+
+    /** [telemetry] when it belongs to the focused row (it trails the cursor by a moment). */
+    val focusedTelemetry: GameTelemetry?
+        get() = telemetry?.takeIf { it.gameId == (focused?.action as? NodeAction.LaunchGame)?.gameId }
     val depth: Int get() = breadcrumb.size
 }
 
@@ -141,6 +154,9 @@ private data class Transient(
     val waveEditor: WaveEditorState? = null,
     val achievements: AchievementsViewState? = null,
     val unlockToast: UnlockToastState? = null,
+    val avatarEditor: AvatarEditorState? = null,
+    val raHub: RaHubState? = null,
+    val telemetry: GameTelemetry? = null,
 )
 
 class XmbViewModel(
@@ -299,6 +315,9 @@ class XmbViewModel(
             waveEditor = tr.waveEditor,
             achievements = tr.achievements,
             unlockToast = tr.unlockToast,
+            avatarEditor = tr.avatarEditor,
+            raHub = tr.raHub,
+            telemetry = tr.telemetry,
         )
     }.stateIn(viewModelScope, SharingStarted.Eagerly, XmbUiState(coldBoot = coldBoot))
 
@@ -365,8 +384,10 @@ class XmbViewModel(
         transient.value.nameEntry?.let { return nameEntryAction(it, action) }
         if (action == NavAction.MEDIA) return toggleMediaControls()
         transient.value.waveEditor?.let { return waveEditorAction(it, action) }
+        transient.value.avatarEditor?.let { return avatarEditorAction(it, action) }
         transient.value.achievements?.let { return achievementsAction(it, action) }
         transient.value.profileCard?.let { return profileCardAction(it, action) }
+        transient.value.raHub?.let { return raHubAction(it, action) }
         transient.value.info?.let { return infoAction(it, action) }
         transient.value.details?.let { return detailsAction(it, action) }
         if (media.onAction(action)) return
@@ -375,7 +396,7 @@ class XmbViewModel(
         if (transient.value.avatarFocused) return avatarAction(action)
         val ui = current()
         when (action) {
-            // Up from the top of a category root climbs into the status bar, onto the avatar.
+            // Up from the top of a category root climbs into the status bar: the avatar opens its mini-HUD.
             NavAction.UP -> if (ui.depth == 0 && ui.focusedIndex == 0) focusAvatar() else moveCursor(-1)
             NavAction.DOWN -> moveCursor(+1)
             NavAction.LEFT -> if (ui.depth > 0) back() else moveCategory(-1)
@@ -409,7 +430,7 @@ class XmbViewModel(
                 transient.update {
                     it.copy(
                         optionsMenu = null, info = null, details = null, profileCard = null, avatarFocused = false,
-                        waveEditor = null, achievements = null,
+                        waveEditor = null, achievements = null, avatarEditor = null, raHub = null,
                     )
                 }
             }
@@ -434,29 +455,48 @@ class XmbViewModel(
     private val profiles = container.profiles
     private var profileJob: Job? = null
 
+    /** Expands the avatar into its mini-HUD (the avatar "has the focus" while the HUD is open). */
     private fun focusAvatar() {
         sounds.play(UiSound.MOVE)
         transient.update { it.copy(avatarFocused = true) }
+        if (profiles.current.linked && profiles.isStale()) refreshProfile(quiet = true)
+    }
+
+    /** Collapses the mini-HUD back into the avatar (Back, Down, or a tap outside it). */
+    fun closeAvatarHud() {
+        if (transient.value.avatarFocused) {
+            sounds.play(UiSound.MOVE)
+            transient.update { it.copy(avatarFocused = false) }
+        }
     }
 
     private fun avatarAction(action: NavAction) {
         when (action) {
-            NavAction.CONFIRM, NavAction.START -> openProfileCard()
-            NavAction.DOWN, NavAction.BACK -> {
-                sounds.play(UiSound.MOVE)
-                transient.update { it.copy(avatarFocused = false) }
+            // The HUD stays in place: Confirm refreshes it, or starts linking when there is no account.
+            NavAction.CONFIRM, NavAction.START -> {
+                sounds.play(UiSound.ENTER)
+                if (profiles.current.linked) {
+                    refreshProfile(quiet = false)
+                } else {
+                    transient.update { it.copy(avatarFocused = false) }
+                    promptRetroAchievements()
+                }
             }
+            NavAction.DOWN, NavAction.BACK -> closeAvatarHud()
             NavAction.LEFT, NavAction.RIGHT, NavAction.PREV_CATEGORY, NavAction.NEXT_CATEGORY -> {
                 transient.update { it.copy(avatarFocused = false) }
                 moveCategory(if (action == NavAction.LEFT || action == NavAction.PREV_CATEGORY) -1 else +1)
             }
+            // Account management (unlink, link another) lives on the full User Card.
             NavAction.OPTIONS -> openProfileCard()
             NavAction.UP, NavAction.MEDIA -> Unit
         }
     }
 
-    /** Touch: tap the avatar. */
-    fun onAvatarTapped() = openProfileCard()
+    /** Touch: tap the avatar to expand its mini-HUD, tap it again to collapse. */
+    fun onAvatarTapped() {
+        if (transient.value.avatarFocused) closeAvatarHud() else focusAvatar()
+    }
 
     private fun openProfileCard() {
         sounds.play(UiSound.OPTION)
@@ -655,6 +695,112 @@ class XmbViewModel(
         val row = WaveEditor.rows.getOrNull(index) ?: return
         if (editor.index != index) transient.update { it.copy(waveEditor = editor.copy(index = index)) }
         settingsStore.update { WaveEditor.setFraction(row, it, fraction) }
+    }
+
+    // endregion
+
+    // region Profile customization (avatar ring and glow)
+
+    private fun openAvatarStyle() {
+        transient.update { it.copy(avatarEditor = AvatarEditorState(), optionsMenu = null) }
+    }
+
+    private fun avatarEditorAction(editor: AvatarEditorState, action: NavAction) =
+        applyAvatarOutcome(editor, AvatarEditor.onAction(editor, action, settingsStore.current.avatarStyle))
+
+    private fun applyAvatarOutcome(before: AvatarEditorState, outcome: AvatarEditorOutcome) {
+        when {
+            outcome.close -> return closeAvatarStyle()
+            outcome.promptColor -> {
+                sounds.play(UiSound.ENTER)
+                emit(UiEffect.PromptText(TextPrompt.AvatarBorderColor(settingsStore.current.avatarStyle.borderColorHex)))
+            }
+            outcome.blocked -> refuse()
+            outcome.style != null -> {
+                settingsStore.update { AvatarEditor.apply(it, outcome.style) }
+                sounds.play(UiSound.MOVE)
+            }
+            outcome.state != before -> sounds.play(UiSound.MOVE)
+        }
+        if (outcome.state != before) transient.update { it.copy(avatarEditor = outcome.state) }
+    }
+
+    fun closeAvatarStyle() {
+        if (transient.value.avatarEditor != null) {
+            sounds.play(UiSound.BACK)
+            transient.update { it.copy(avatarEditor = null) }
+        }
+    }
+
+    /** Touch: tap a row to focus it; tapping the focused row acts like Confirm. */
+    fun onAvatarRowTapped(index: Int) {
+        val editor = transient.value.avatarEditor ?: return
+        if (index == editor.index) {
+            avatarEditorAction(editor, NavAction.CONFIRM)
+        } else if (index in AvatarEditor.rows.indices) {
+            sounds.play(UiSound.MOVE)
+            transient.update { it.copy(avatarEditor = editor.copy(index = index)) }
+        }
+    }
+
+    /** Touch: a slider dragged or tapped at [fraction] of its track. */
+    fun onAvatarSliderChanged(index: Int, fraction: Float) {
+        val editor = transient.value.avatarEditor ?: return
+        val row = AvatarEditor.rows.getOrNull(index) ?: return
+        if (editor.index != index) transient.update { it.copy(avatarEditor = editor.copy(index = index)) }
+        settingsStore.update { AvatarEditor.apply(it, AvatarEditor.setFraction(row, it.avatarStyle, fraction)) }
+    }
+
+    // endregion
+
+    // region RetroAchievements dashboard (Games ▸ RetroAchievements)
+
+    private var raHubJob: Job? = null
+
+    private fun openRaHub() {
+        transient.update { it.copy(raHub = RaHubState(artVersion = container.assets.version.value), optionsMenu = null) }
+        loadRaSummary()
+        if (profiles.current.linked && profiles.isStale()) refreshProfile(quiet = true)
+    }
+
+    /** Library-wide progress from what is cached in the Xross folder; never the network. */
+    private fun loadRaSummary() {
+        raHubJob?.cancel()
+        raHubJob = viewModelScope.launch {
+            val summary = container.achievements.librarySummary(container.games.games.first())
+            transient.update { t -> t.copy(raHub = t.raHub?.copy(summary = summary)) }
+        }
+    }
+
+    private fun raHubAction(hub: RaHubState, action: NavAction) {
+        val outcome = RaHub.onAction(hub, action)
+        when (outcome.effect) {
+            RaHubEffect.Close -> return closeRaHub()
+            RaHubEffect.Primary -> {
+                sounds.play(UiSound.ENTER)
+                if (profiles.current.linked) {
+                    refreshProfile(quiet = false)
+                    loadRaSummary()
+                } else {
+                    transient.update { it.copy(raHub = null) }
+                    promptRetroAchievements()
+                }
+                return
+            }
+            RaHubEffect.None -> Unit
+        }
+        if (outcome.state != hub) {
+            sounds.play(UiSound.MOVE)
+            transient.update { it.copy(raHub = outcome.state) }
+        }
+    }
+
+    fun closeRaHub() {
+        raHubJob?.cancel()
+        if (transient.value.raHub != null) {
+            sounds.play(UiSound.BACK)
+            transient.update { it.copy(raHub = null) }
+        }
     }
 
     // endregion
@@ -955,6 +1101,13 @@ class XmbViewModel(
                 }
                 toast(if (value.isEmpty()) "Automatic title restored" else "Title changed")
             }
+            is TextPrompt.AvatarBorderColor -> {
+                if (value.isEmpty()) return
+                val color = dev.xross.launcher.theme.AvatarStyleLimits.normalizeColor(value)
+                    ?: return fail("That isn't a hex color — use #RRGGBB, like #FFB5C5")
+                settingsStore.update { AvatarEditor.apply(it, it.avatarStyle.copy(borderColorHex = color)) }
+                toast("Avatar ring color: $color")
+            }
             is TextPrompt.MatchQuery -> {
                 if (value.isEmpty()) return
                 datWork {
@@ -981,8 +1134,16 @@ class XmbViewModel(
 
     private var detailsJob: Job? = null
 
-    private fun showDetails(gameId: Long) {
+    /** Game ids of the list Details pages through: the search results while searching, else the open list. */
+    private fun detailsSiblings(): List<Long> {
+        val rows = transient.value.search?.results ?: current().items
+        return rows.mapNotNull { (it.action as? NodeAction.LaunchGame)?.gameId }
+    }
+
+    /** Opens Details for [gameId]; [direction] is ±1 when paging from a neighbour (it picks the slide). */
+    private fun showDetails(gameId: Long, direction: Int = 0) {
         detailsJob?.cancel()
+        val (position, count) = DetailsPager.position(detailsSiblings(), gameId)
         detailsJob = viewModelScope.launch {
             val details = withContext(Dispatchers.IO) {
                 val game = container.games.get(gameId) ?: return@withContext null
@@ -992,8 +1153,8 @@ class XmbViewModel(
                     container.database.metadata().get(gameId),
                     container.assets.version.value,
                 )
-            } ?: return@launch
-            sounds.play(UiSound.ENTER)
+            }?.copy(position = position, count = count, pageDirection = direction) ?: return@launch
+            sounds.play(if (direction == 0) UiSound.ENTER else UiSound.MOVE)
             transient.update { it.copy(details = details) }
             if (details.achievementsSupported) {
                 val game = container.games.get(gameId) ?: return@launch
@@ -1001,6 +1162,31 @@ class XmbViewModel(
                 transient.update { t -> t.copy(details = t.details?.takeIf { it.gameId == gameId }?.copy(achievements = result)) }
             }
         }
+    }
+
+    /** L1/R1 or Left/Right on Details: the previous or next game of the list, without leaving the screen. */
+    private fun pageDetails(details: GameDetailsState, delta: Int) {
+        val next = DetailsPager.neighbor(detailsSiblings(), details.gameId, delta) ?: return refuse()
+        // The list cursor follows, so Back lands on the game that was on screen.
+        val search = transient.value.search
+        if (search != null) {
+            val i = search.results.indexOfFirst { (it.action as? NodeAction.LaunchGame)?.gameId == next }
+            if (i >= 0) transient.update { it.copy(search = it.search?.copy(resultIndex = i)) }
+        } else {
+            val ui = current()
+            val i = ui.items.indexOfFirst { (it.action as? NodeAction.LaunchGame)?.gameId == next }
+            if (i >= 0 && i != ui.focusedIndex) {
+                val category = categories[nav.value.categoryIndex]
+                nav.value = nav.value.moveCursor(category.id, category.title, i - ui.focusedIndex, ui.items.size)
+            }
+        }
+        showDetails(next, direction = delta)
+    }
+
+    /** Touch: the achievements summary on Details. */
+    fun onDetailsAchievementsTapped() {
+        val details = transient.value.details ?: return
+        if (details.achievementsSupported) showAchievements(details.gameId)
     }
 
     private fun detailsAction(details: GameDetailsState, action: NavAction) {
@@ -1013,13 +1199,15 @@ class XmbViewModel(
                 transient.update { it.copy(details = null) }
                 launchGame(details.gameId)
             }
-            NavAction.BACK, NavAction.LEFT -> closeDetails()
+            NavAction.BACK -> closeDetails()
             NavAction.OPTIONS -> {
                 closeDetails()
-                current().items.firstOrNull { (it.action as? NodeAction.LaunchGame)?.gameId == details.gameId }?.let(::openOptions)
+                (transient.value.search?.results ?: current().items)
+                    .firstOrNull { (it.action as? NodeAction.LaunchGame)?.gameId == details.gameId }?.let(::openOptions)
             }
-            NavAction.RIGHT -> if (details.achievementsSupported) showAchievements(details.gameId) else refuse()
-            NavAction.PREV_CATEGORY, NavAction.NEXT_CATEGORY, NavAction.MEDIA -> Unit
+            NavAction.LEFT, NavAction.PREV_CATEGORY -> pageDetails(details, -1)
+            NavAction.RIGHT, NavAction.NEXT_CATEGORY -> pageDetails(details, +1)
+            NavAction.MEDIA -> Unit
         }
     }
 
@@ -1887,6 +2075,8 @@ class XmbViewModel(
             is Command.CycleEmulator -> cycleEmulator(command.platformId)
             Command.ToggleWave -> settingsStore.update { it.copy(waveEnabled = !it.waveEnabled) }
             Command.OpenWaveSettings -> openWaveSettings()
+            Command.OpenAvatarStyle -> openAvatarStyle()
+            Command.OpenRaHub -> openRaHub()
             Command.CycleTheme -> settingsStore.update {
                 // The theme pack's own colors join the cycle when the active pack has them.
                 val names = XrossTheme.entries.map { t -> t.name } +
@@ -2139,6 +2329,25 @@ class XmbViewModel(
                 transient.value.achievements?.let { refreshAchievements(it.gameId, quiet = true) }
             }
         }
+        // RetroAchievements badge for the focused game: what is cached at once, then a fresh copy
+        // once the cursor has rested on it (so scrolling a list never queues a request per row).
+        viewModelScope.launch {
+            state.map { (it.focused?.action as? NodeAction.LaunchGame)?.gameId }.distinctUntilChanged().collectLatest { id ->
+                if (transient.value.telemetry != null) transient.update { it.copy(telemetry = null) }
+                if (id == null || !profiles.current.linked) return@collectLatest
+                delay(TELEMETRY_PEEK_MS)
+                val game = container.games.get(id) ?: return@collectLatest
+                if (dev.xross.launcher.profile.RaConsoles.of(game.platformId) == null) return@collectLatest
+                GameTelemetry.of(id, container.achievements.peek(game))?.let { known -> transient.update { it.copy(telemetry = known) } }
+                delay(TELEMETRY_LOAD_MS)
+                when (val fresh = container.achievements.load(game)) {
+                    is dev.xross.launcher.profile.AchievementsState.Ready,
+                    dev.xross.launcher.profile.AchievementsState.NoMatch,
+                    -> transient.update { it.copy(telemetry = GameTelemetry.of(id, fresh)) }
+                    else -> Unit // offline or refused: keep what the Xross folder had
+                }
+            }
+        }
         refreshEnvironment()
         // Avatar and profile from the Xross folder first (instant, offline), then the network if stale.
         viewModelScope.launch {
@@ -2158,6 +2367,8 @@ class XmbViewModel(
         private const val GAMEBOOT_HANDOFF_MS = 1100L
         internal const val UNLOCK_TOAST_MS = 4_500L
         private const val UNLOCK_TOAST_GAP_MS = 350L
+        private const val TELEMETRY_PEEK_MS = 250L
+        private const val TELEMETRY_LOAD_MS = 450L
         private val GRID_MOVES = setOf(NavAction.LEFT, NavAction.RIGHT, NavAction.UP, NavAction.DOWN)
         private const val VOLUME_SETTLE_MS = 1200L
         private const val SEARCH_DEBOUNCE_MS = 140L
