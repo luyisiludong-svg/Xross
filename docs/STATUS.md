@@ -25,7 +25,8 @@ configurations on the emulator, live scraping runs, and a full feature pass on a
 A55** (Android 16, 120 Hz) on 2026-11-11 (§3.8). The on-device smoke test passed with 57 checks
 before Steps 1–2; it has since been updated for the new menu rows and features (§3.2) but not
 re-run. No physical controller, gaming handheld or real emulator install has been tested yet,
-and the portable folder and library organization haven't run on a device (§3.9, §3.10).
+and the portable folder and library organization passed a device run on the Galaxy A55 as an
+upgrade of a real install (§3.11); SD card, Android 9/10 and handhelds are still untested.
 
 ---
 
@@ -363,6 +364,49 @@ replaced while open. Verified with Robolectric only.
 | Custom Photo/Video folders | `photo.customFolders` / `video.customFolders`. MediaStore queried with `_data LIKE '<folder>/%'`; a breadth-first walk (8 levels, 20,000 files, no symlinks) adds files MediaStore skips. Walked files get negative ids and FileProvider URIs; their thumbnails are decoded here (EXIF-rotated photos, a video frame) |
 | Art in `Xross/media` | `<kind>/<system>/<rom stem>.<ext>`. Stems lose `\ / : * ? " < > \|` and control characters, trailing dots and spaces, reserved device names are prefixed, and length is capped at 200. On a clash within a system the oldest game keeps the plain name and the others get `[<first 8 of UUID>]`. Lookups try a few names × 4 extensions (a handful of `stat` calls). Prune deletes only art of games that left the library |
 | Moving the old cache | After the library first loads, `noBackupFilesDir/assets/<uuid>/…` is copied file by file into the new layout in the background; the old copy is still found until moved; art already in place wins |
+
+### 3.11 Device run: Milestones 1–3 on the Galaxy A55 (2026-11-11)
+
+Samsung Galaxy A55 (SM-A556B, Android 16, 120 Hz), internal storage only, no controller, no
+emulators installed. The new build was installed **over the existing install** (12 arcade sets,
+2 3DS images, scraped art, settings from the earlier pass), so the upgrade paths ran on real data.
+Driven with adb key events (the same codes a controller sends) and checked through the
+accessibility tree, the files on the device and screenshots. `smoke.sh` was **not** run: it
+deletes `/sdcard/ROMs` and clears the app's data, and this phone holds the earlier test library.
+
+| Area | Check | Result |
+| --- | --- | --- |
+| Upgrade | SharedPreferences → `config/settings.json`, `controllers.json`, `systems.json` | ✅ Non-default values carried over (Original theme, 45% deadzone, 100% effects volume, remembered `ROMs` folder); old preferences cleared after the files were written |
+| Upgrade | Private art cache → `Xross/media` | ✅ All 41 files moved to `capsules/`, `heroes/`, `wheels/` under `arcade/` and `n3ds/`, named after the ROMs; old cache removed; box art, hero banner and logo still shown on rows and in Details |
+| Xross folder | Layout and `.nomedia` | ✅ `config/ data/ dats/ media/ roms/ themes/`; `.nomedia` in `media/` and `themes/`; 0 MediaStore images under `Xross/` |
+| Credentials | Not in config files | ✅ No account, password or key in any of the three files |
+| Backup | On leaving Xross / Back up library now | ✅ `data/xross.db` appeared seconds after Home; rollback-journal header, `integrity_check` ok, schema v5, 14 games and 14 metadata rows, no `-wal`/`-shm` beside it; "Last backup" time updates |
+| Restore | Settings ▸ System ▸ Restore library backup… | ✅ Confirm menu, then a new process; staged copy applied before Room opened it; library and favorite intact |
+| Outside edits | `photo.customFolders` edited with adb, then Xross resumed | ✅ Picked up on resume |
+| Custom Photo folder | A folder with `.nomedia` (unknown to MediaStore) | ✅ Photo showed only that folder (1 photo); the viewer opened it at full size through its FileProvider URI; "Show all photos again" restored all 2,138 photos |
+| Base ROMs folder | Create system folders | ✅ 22 folders in `Xross/roms`; a second run reports them all present; a ROM dropped into `gba/` is picked up by Rescan (+1) and dropped when removed (−1) |
+| Apps | Hide, Hidden apps, Hide system apps | ✅ Hidden app gone from Apps and stored in `apps.hidden`; shown again from Hidden apps; Hide system apps hides 22 preinstalled apps and is reflected in the file |
+| Apps | Folders | ✅ Move to folder ▸ Tools puts a Tools folder at the top of Apps; New folder… opens the gamepad keyboard, "MY GAMES" is saved as "My Games"; Remove all app folders clears them |
+| All Games | Platform folders setting | ✅ Classic layout lists Nintendo 3DS and Arcade at the top of Games; switching back restores All Games |
+| Deadzone | Off — hardware only | ✅ 45 → 55 → Off (`stickDeadzone: 0.0`) → … → 45% |
+| Media shortcut | Select, Guide | ✅ With nothing playing: "Nothing is playing" toast. With music: Select opens and closes Now Playing from Games; a held Guide (`--longpress KEYCODE_BUTTON_MODE`) opens it; a Guide tap does nothing |
+| Mini-player | Paused line | ✅ Present ~20 s after pausing, gone at ~34 s, back with ♪ on resume |
+| Launching | No emulator installed | ✅ "No emulator for 3DS — install Azahar"; Xross stays in front |
+| Search | Typing "ZEL" | ✅ 1 game, The Legend of Zelda Ocarina of Time 3D |
+
+Performance (`profiling` build, installed over the debug build with data kept):
+
+| Measure | Result |
+| --- | --- |
+| Cold start (`am start -W`) | 1,050 ms on the first start after install, then 457 ms and 377 ms |
+| Frames: Apps list (60 steps down and up), arcade list with art, category switches | 686 frames, 1.46% janky, p50 13 ms, p90/p95 18 ms, p99 23 ms, 0 missed vsync, 0 slow bitmap uploads |
+| Memory in front | 211 MB PSS |
+| Memory in the background (8 s after Home) | 122 MB PSS, 0% CPU (target ≤ 150 MB). Higher than the 83 MB measured earlier, likely because the music session and a 72-song queue had been loaded during this run |
+
+Not covered: moving the Xross folder to an SD card or USB drive (no removable drive), a
+controller, launching a real emulator, Android 9/10, the restore offer on a genuinely clean
+install, video folders, and picking folders through the system folder picker (folders were set
+by editing `settings.json`).
 
 ---
 
