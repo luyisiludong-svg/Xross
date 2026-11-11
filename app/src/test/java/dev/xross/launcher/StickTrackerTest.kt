@@ -60,6 +60,25 @@ class StickTrackerTest {
         assertEquals(NavAction.RIGHT, t.update(0.8f, 0.1f, 16))
     }
 
+    @Test fun zeroDeadzoneReliesOnTheHardwareFlatZoneOnly() {
+        // "Off — hardware only": GamepadHandler has already zeroed samples inside the driver's
+        // flat zone, so anything that reaches the tracker is a real push, however small.
+        assertEquals(NavAction.RIGHT, StickTracker.direction(0.05f, 0f, 0f))
+        assertEquals(NavAction.UP, StickTracker.direction(0.01f, -0.04f, 0f))
+        // A centred stick still reads as nothing.
+        assertNull(StickTracker.direction(0f, 0f, 0f))
+        // The axial deadzone still applies on its own.
+        assertNull(StickTracker.direction(0.05f, 0.05f, 0f, axialDeadzone = 0.1f))
+    }
+
+    @Test fun zeroDeadzoneTrackerPressesAndReleases() {
+        val t = StickTracker(deadzone = 0f)
+        assertEquals(NavAction.DOWN, t.update(0f, 0.08f, 0))
+        assertNull(t.update(0f, 0f, 16)) // back to the flat zone: released
+        assertNull(t.current)
+        assertEquals(NavAction.LEFT, t.update(-0.1f, 0f, 400))
+    }
+
     @Test fun deliberateReversalAfterWindowCounts() {
         val t = StickTracker(deadzone = 0.35f, snapbackWindowMs = 70)
         t.update(0.9f, 0f, 0)

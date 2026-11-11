@@ -35,6 +35,7 @@ object KeyMapper {
             KeyEvent.KEYCODE_BUTTON_R1,
             KeyEvent.KEYCODE_PAGE_DOWN -> NavAction.NEXT_CATEGORY
             KeyEvent.KEYCODE_BUTTON_START -> NavAction.START
+            KeyEvent.KEYCODE_BUTTON_SELECT -> NavAction.MEDIA
 
             // Keyboards, TV remotes, and handheld system keys.
             KeyEvent.KEYCODE_DPAD_CENTER,

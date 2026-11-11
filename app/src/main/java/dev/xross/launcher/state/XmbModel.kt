@@ -66,6 +66,7 @@ sealed interface Command {
     data object CycleSlideshowInterval : Command
     data object ToggleResumeMusicAfterGames : Command
     data object ToggleVideoLoop : Command
+    data object ToggleAllGamesFolder : Command
     data class ShowGameInfo(val gameId: Long) : Command
     data object ToggleButtonHints : Command
     data object CycleAxialDeadzone : Command

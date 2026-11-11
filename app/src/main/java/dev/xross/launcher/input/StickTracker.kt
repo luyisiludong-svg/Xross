@@ -14,6 +14,8 @@ import kotlin.math.hypot
  *    up/down/left/right, and stops a worn stick from drifting along one axis. 0 disables it.
  *  - **Radial** ([deadzone]): the length of the (axial-filtered) vector must reach the threshold,
  *    so the dead area is a circle and diagonals need the same travel as cardinal directions.
+ *    0 turns it off ("hardware only"): any sample outside the driver's flat zone, which
+ *    [GamepadHandler] has already zeroed, counts. An exactly centred stick never does.
  *
  * Pure and time-injected so it can be unit-tested.
  */

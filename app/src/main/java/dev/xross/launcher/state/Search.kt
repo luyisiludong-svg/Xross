@@ -115,6 +115,7 @@ data class SearchState(
         NavAction.PREV_CATEGORY -> SearchOutcome(backspace())
         NavAction.NEXT_CATEGORY, NavAction.START -> SearchOutcome(toResults())
         NavAction.BACK -> SearchOutcome(this, SearchEffect.Close)
+        NavAction.MEDIA -> SearchOutcome(this)
     }
 
     private fun press(key: Key): SearchState = when (key.kind) {
@@ -135,7 +136,7 @@ data class SearchState(
         NavAction.OPTIONS ->
             SearchOutcome(this, focusedResult?.let { SearchEffect.Options(it) } ?: SearchEffect.None)
         NavAction.LEFT, NavAction.BACK, NavAction.PREV_CATEGORY -> SearchOutcome(copy(focus = SearchFocus.KEYS))
-        NavAction.RIGHT, NavAction.NEXT_CATEGORY -> SearchOutcome(this)
+        NavAction.RIGHT, NavAction.NEXT_CATEGORY, NavAction.MEDIA -> SearchOutcome(this)
     }
 
     companion object {

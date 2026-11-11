@@ -90,6 +90,7 @@ class MenuTree(private val s: MenuSnapshot) {
             .sortedByDescending { it.lastPlayed }.take(30).map { gameNode(it, showPlatform = true) }
         key == FAVORITES -> s.games.filter { it.favorite }.map { gameNode(it, showPlatform = true) }
         key == ANDROID_GAMES -> androidGames.map(::appNode)
+        key == ALL_GAMES -> platformFolders()
         key.startsWith(PLATFORM_PREFIX) ->
             gamesByPlatform[key.removePrefix(PLATFORM_PREFIX)].orEmpty().map { gameNode(it, showPlatform = false) }
         key == LIBRARY -> librarySettings()
@@ -116,11 +117,11 @@ class MenuTree(private val s: MenuSnapshot) {
         }
         val favorites = s.games.count { it.favorite }
         if (favorites > 0) add(folder(FAVORITES, "Favorites", GlyphKey.FAVORITES, countLabel(favorites)))
-        for (platform in PlatformRegistry.all) {
-            val count = gamesByPlatform[platform.id]?.size ?: 0
-            if (count > 0) {
-                add(folder(PLATFORM_PREFIX + platform.id, platform.name, GlyphKey.PLATFORM, countLabel(count)))
-            }
+        val platforms = platformFolders()
+        when {
+            platforms.isEmpty() -> Unit
+            s.settings.allGamesFolder -> add(folder(ALL_GAMES, "All Games", GlyphKey.GAMES, allGamesSummary(platforms.size)))
+            else -> addAll(platforms)
         }
         if (androidGames.isNotEmpty()) {
             add(folder(ANDROID_GAMES, "Android Games", GlyphKey.HANDHELD, countLabel(androidGames.size)))
@@ -136,6 +137,21 @@ class MenuTree(private val s: MenuSnapshot) {
                 ),
             )
         }
+    }
+
+    /**
+     * One folder per platform that has games, in [PlatformRegistry] order. Shown inside All Games,
+     * or at the top level of Games when [XrossSettings.allGamesFolder] is off. The All Games list
+     * is built either way, so a navigation stack saved before the setting changed still resolves.
+     */
+    private fun platformFolders(): List<XmbNode> = PlatformRegistry.all.mapNotNull { platform ->
+        val count = gamesByPlatform[platform.id]?.size ?: 0
+        if (count == 0) null else folder(PLATFORM_PREFIX + platform.id, platform.name, GlyphKey.PLATFORM, countLabel(count))
+    }
+
+    private fun allGamesSummary(platforms: Int): String {
+        val systems = if (platforms == 1) "1 system" else "$platforms systems"
+        return "$systems · ${countLabel(s.games.size)}"
     }
 
     private fun gameNode(game: GameEntity, showPlatform: Boolean): XmbNode {
@@ -469,7 +485,7 @@ class MenuTree(private val s: MenuSnapshot) {
         setting(
             "ctl:deadzone",
             "Analog stick deadzone",
-            "${(s.settings.deadzone * 100).toInt()}%",
+            deadzoneLabel(s.settings.deadzone),
             GlyphKey.CONTROLS,
             Command.CycleDeadzone,
         ),
@@ -562,6 +578,13 @@ class MenuTree(private val s: MenuSnapshot) {
             GlyphKey.DISPLAY,
             Command.ToggleButtonHints,
         ),
+        setting(
+            "disp:allgames",
+            "Platform folders",
+            if (s.settings.allGamesFolder) "Inside All Games" else "At the top of Games (classic)",
+            GlyphKey.GAMES,
+            Command.ToggleAllGamesFolder,
+        ),
     )
 
     private fun soundSettings() = listOf(
@@ -627,6 +650,7 @@ class MenuTree(private val s: MenuSnapshot) {
         const val RECENT = "collection:recent"
         const val FAVORITES = "collection:favorites"
         const val ANDROID_GAMES = "collection:android-games"
+        const val ALL_GAMES = "collection:all-games"
         const val PLATFORM_PREFIX = "platform:"
         const val LIBRARY = "settings:library"
         const val DATS = "settings:dats"
@@ -649,6 +673,10 @@ class MenuTree(private val s: MenuSnapshot) {
         const val MEDIA_SETTINGS = "settings:media"
         private val DISC_EXTENSIONS = setOf("iso", "cue", "chd", "cso", "rvz", "gcz", "wbfs", "cdi", "gdi", "pbp", "m3u")
         const val SYSTEM = "settings:system"
+
+        /** "Off — hardware only" for 0 (the driver's own centre zone is all that applies), "35%" otherwise. */
+        fun deadzoneLabel(deadzone: Float): String =
+            if (deadzone <= 0f) "Off — hardware only" else "${Math.round(deadzone * 100)}%"
 
         private fun countLabel(n: Int) = if (n == 1) "1 title" else "$n titles"
 

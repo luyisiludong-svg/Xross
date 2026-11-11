@@ -44,6 +44,7 @@ data class RemapSession(
             NavAction.UP, NavAction.DOWN, NavAction.LEFT, NavAction.RIGHT,
             NavAction.CONFIRM, NavAction.BACK, NavAction.OPTIONS,
             NavAction.PREV_CATEGORY, NavAction.NEXT_CATEGORY,
+            NavAction.MEDIA,
         )
 
         fun label(action: NavAction) = when (action) {
@@ -57,6 +58,7 @@ data class RemapSession(
             NavAction.PREV_CATEGORY -> "Previous category (L1)"
             NavAction.NEXT_CATEGORY -> "Next category (R1)"
             NavAction.START -> "Start"
+            NavAction.MEDIA -> "Media controls (Select)"
         }
     }
 }

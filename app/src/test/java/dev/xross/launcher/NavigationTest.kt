@@ -1,6 +1,7 @@
 package dev.xross.launcher
 
 import dev.xross.launcher.data.GameEntity
+import dev.xross.launcher.data.XrossSettings
 import dev.xross.launcher.launch.GameLauncher
 import dev.xross.launcher.state.Categories
 import dev.xross.launcher.state.Frame
@@ -37,7 +38,9 @@ class NavigationTest {
             GameEntity(2, "/r/snes/b.sfc", "snes", "B", "b.sfc", 10, 0, lastPlayed = 5),
             GameEntity(3, "/r/gba/c.gba", "gba", "C", "c.gba", 10, 0),
         )
-        val tree = MenuTree(MenuSnapshot(games = games, storageGranted = true))
+        // Classic flat layout: platform folders sit directly in Games.
+        val flat = XrossSettings(allGamesFolder = false)
+        val tree = MenuTree(MenuSnapshot(games = games, storageGranted = true, settings = flat))
         val root = tree.list(Categories.rootKey(Categories.GAMES)).map { it.title }
         assertEquals(listOf("Search", "Recently Played", "Favorites", "Super Nintendo", "Game Boy Advance"), root)
         val snes = tree.list("platform:snes")

@@ -21,6 +21,15 @@ class MenuSettingsTest {
         assertEquals(listOf("Library", "Controls", "Emulators", "Theme", "Sound", "Media", "System"), titles)
     }
 
+    @Test fun deadzoneRowOffersHardwareOnly() {
+        fun row(deadzone: Float) = MenuTree(MenuSnapshot(settings = XrossSettings(deadzone = deadzone)))
+            .list(MenuTree.CONTROLS).single { it.id == "ctl:deadzone" }.subtitle
+        assertEquals("Off — hardware only", row(0f))
+        assertEquals("15%", row(0.15f))
+        assertEquals("35%", row(0.35f))
+        assertEquals("55%", row(0.55f))
+    }
+
     @Test fun soundSettingsReflectState() {
         val s = XrossSettings(soundEffects = false, soundVolume = 0.5f, bootSound = true, gameBootSound = false)
         val items = MenuTree(MenuSnapshot(settings = s)).list(MenuTree.SOUND).associate { it.title to it.subtitle }

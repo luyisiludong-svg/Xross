@@ -103,8 +103,12 @@ class XmbViewModelTest {
             )
         }
         val vm = viewModel(container = container)
-        vm.await("the SNES folder") { s -> s.items.any { it.title == "Super Nintendo" } }
+        // Platforms are grouped under All Games, which the Games root focuses first (below Search).
+        vm.await("the All Games folder") { s -> s.items.any { it.title == "All Games" } }
+        assertEquals("All Games", vm.state.value.focused?.title)
+        vm.press(NavAction.CONFIRM)
         assertEquals("Super Nintendo", vm.state.value.focused?.title)
+        assertEquals(listOf("All Games"), vm.state.value.breadcrumb)
         vm.press(NavAction.CONFIRM)
         assertEquals("Chrono Trigger", vm.state.value.focused?.title)
 
@@ -129,7 +133,7 @@ class XmbViewModelTest {
         vm.press(NavAction.BACK)
         assertNull(vm.state.value.info)
         // Back only closed the sheet: still inside the platform list.
-        assertEquals(listOf("Super Nintendo"), vm.state.value.breadcrumb)
+        assertEquals(listOf("All Games", "Super Nintendo"), vm.state.value.breadcrumb)
     }
 
     @Test fun remapWizardSavesAProfileForTheControllerUsed() {
@@ -168,6 +172,32 @@ class XmbViewModelTest {
         assertEquals(profile.remap, vm.inputConfig.remapFor(pad.key))
         assertTrue(vm.inputConfig.remapFor(other.key).isEmpty())
         vm.await("the saved controller row") { s -> s.items.any { it.id == "ctl:profile:054c:0ce6" } }
+    }
+
+    @Test fun deadzoneCyclesThroughHardwareOnly() {
+        val container = AppContainer(context)
+        val vm = viewModel(container = container)
+        vm.press(NavAction.PREV_CATEGORY, times = 6) // Settings is the first category
+        vm.await("the Settings root") { s -> s.items.any { it.title == "Controls" } }
+        vm.press(NavAction.DOWN, times = vm.state.value.items.indexOfFirst { it.title == "Controls" } - vm.state.value.focusedIndex)
+        vm.press(NavAction.CONFIRM)
+        vm.await("the Controls list") { s -> s.items.any { it.id == "ctl:deadzone" } }
+        val row = vm.state.value.items.indexOfFirst { it.id == "ctl:deadzone" }
+        vm.press(NavAction.DOWN, times = row - vm.state.value.focusedIndex)
+        assertEquals(0.35f, container.settings.current.deadzone)
+        vm.press(NavAction.CONFIRM, times = 3) // 45% → 55% → off
+        assertEquals(0f, container.settings.current.deadzone)
+        vm.await("the hardware-only label") { s -> s.focused?.subtitle == "Off — hardware only" }
+        assertEquals(0f, vm.inputConfig.deadzone)
+        vm.press(NavAction.CONFIRM)
+        assertEquals(0.15f, container.settings.current.deadzone)
+    }
+
+    @Test fun mediaButtonWithNothingPlayingExplainsItself() {
+        val vm = viewModel()
+        vm.press(NavAction.MEDIA)
+        assertNull(vm.state.value.overlay)
+        assertEquals("Nothing is playing — choose music in the Music category", vm.state.value.toast)
     }
 
     @Test fun buttonHintSettingReachesTheUiState() {
