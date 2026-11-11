@@ -4,6 +4,7 @@ import dev.xross.launcher.data.AppEntry
 import dev.xross.launcher.data.GameEntity
 import dev.xross.launcher.data.XrossSettings
 import dev.xross.launcher.input.ConfirmLayout
+import dev.xross.launcher.input.ControllerKey
 import dev.xross.launcher.launch.EmulatorRegistry
 import dev.xross.launcher.launch.GameLauncher
 import dev.xross.launcher.storage.EmulatorOption
@@ -185,6 +186,22 @@ class MenuTree(private val s: MenuSnapshot) {
             val launches = if (game.playCount == 1) "1 time" else "${game.playCount} times"
             add(MenuOption("Played", detail = "$played · $launches"))
         }
+        add(MenuOption("Information", detail = "File, size, fingerprints and playtime", command = Command.ShowGameInfo(game.id)))
+    }
+
+    /**
+     * The emulator [game] would launch with, as shown on the Information screen:
+     * "DuckStation · this game only" for an override, the platform choice otherwise.
+     */
+    fun emulatorSummary(game: GameEntity): String? {
+        val platform = PlatformRegistry.byId(game.platformId) ?: return null
+        if (platform.emulators.isEmpty()) return null
+        val override = platform.emulators.firstOrNull { it.key == game.emulatorOverride }
+        if (override != null) return "${emulatorLabel(override)} · this game only"
+        val choice = s.settings.emulatorChoice[platform.id]
+        val resolved = GameLauncher.resolveOption(platform, choice, s.installedEmulators)
+        val shown = resolved ?: platform.emulators.firstOrNull { it.key == choice } ?: platform.emulators.first()
+        return emulatorLabel(shown) + if (resolved == null) " (not installed)" else ""
     }
 
     private fun emulatorLabel(option: EmulatorOption): String =
@@ -283,15 +300,67 @@ class MenuTree(private val s: MenuSnapshot) {
             GlyphKey.CONTROLS,
             Command.CycleDeadzone,
         ),
-        setting("ctl:remap", "Remap buttons…", "Press each button when asked", GlyphKey.CONTROLS, Command.StartRemap),
+        setting(
+            "ctl:axial",
+            "Axial deadzone",
+            if (s.settings.axialDeadzone <= 0f) "Off — radial only" else "${(s.settings.axialDeadzone * 100).toInt()}% per axis",
+            GlyphKey.CONTROLS,
+            Command.CycleAxialDeadzone,
+        ),
+        setting(
+            "ctl:remap",
+            "Remap buttons…",
+            "Saved for the controller you press first; other pads keep theirs",
+            GlyphKey.CONTROLS,
+            Command.StartRemap,
+        ),
         setting(
             "ctl:reset",
-            "Reset button mapping",
-            if (s.settings.keyRemap.isEmpty()) "Using defaults" else "${s.settings.keyRemap.size} custom bindings",
+            "Reset all button mappings",
+            mappingSummary(),
             GlyphKey.REFRESH,
             Command.ResetRemap,
         ),
-    )
+    ) + controllerProfileRows()
+
+    private fun mappingSummary(): String {
+        val profiles = s.settings.controllerProfiles.size
+        val global = s.settings.keyRemap.isNotEmpty()
+        if (profiles == 0 && !global) return "Using defaults"
+        return buildList {
+            if (profiles > 0) add(if (profiles == 1) "1 controller" else "$profiles controllers")
+            if (global) add("default mapping changed")
+        }.joinToString(" · ")
+    }
+
+    /** One row per controller model with its own mapping; Options ▸ Reset removes just that one. */
+    private fun controllerProfileRows(): List<XmbNode> = buildList {
+        if (s.settings.keyRemap.isNotEmpty()) {
+            add(
+                XmbNode(
+                    id = "ctl:profile:global",
+                    title = "Default mapping",
+                    subtitle = "${bindingCount(s.settings.keyRemap.size)} · keyboards and other controllers",
+                    icon = NodeIcon.Glyph(GlyphKey.CONTROLS),
+                    menu = listOf(MenuOption("Reset to defaults", command = Command.ResetGlobalRemap)),
+                ),
+            )
+        }
+        for ((id, profile) in s.settings.controllerProfiles.entries.sortedBy { it.value.name.lowercase(Locale.ROOT) }) {
+            val key = ControllerKey.parse(id)
+            add(
+                XmbNode(
+                    id = "ctl:profile:$id",
+                    title = profile.name.ifBlank { "Controller ${key?.display ?: id}" },
+                    subtitle = bindingCount(profile.remap.size) + (key?.let { " · ${it.display}" } ?: ""),
+                    icon = NodeIcon.Glyph(GlyphKey.CONTROLS),
+                    menu = listOf(MenuOption("Reset this controller", command = Command.ResetControllerProfile(id))),
+                ),
+            )
+        }
+    }
+
+    private fun bindingCount(n: Int) = if (n == 1) "1 custom binding" else "$n custom bindings"
 
     private fun emulatorSettings() = PlatformRegistry.all.map { platform ->
         val option = GameLauncher.resolveOption(platform, s.settings.emulatorChoice[platform.id], s.installedEmulators)
@@ -310,9 +379,16 @@ class MenuTree(private val s: MenuSnapshot) {
     }
 
     private fun displaySettings() = listOf(
-        setting("disp:theme", "Theme color", XrossTheme.byName(s.settings.theme).label, GlyphKey.DISPLAY, Command.CycleTheme),
+        setting("disp:theme", "Theme color", themeLabel(XrossTheme.byName(s.settings.theme)), GlyphKey.DISPLAY, Command.CycleTheme),
         setting("disp:wave", "Wave background", onOff(s.settings.waveEnabled), GlyphKey.DISPLAY, Command.ToggleWave),
         setting("disp:speed", "Wave speed", "${s.settings.waveSpeed}x", GlyphKey.DISPLAY, Command.CycleWaveSpeed),
+        setting(
+            "disp:hints",
+            "Button hints",
+            if (s.settings.showButtonHints) "Shown in the corner of the home menu" else "Hidden",
+            GlyphKey.DISPLAY,
+            Command.ToggleButtonHints,
+        ),
     )
 
     private fun soundSettings() = listOf(
@@ -349,10 +425,13 @@ class MenuTree(private val s: MenuSnapshot) {
     private val mountedRoots by lazy { s.mountedRoots.mapTo(HashSet()) { it.trimEnd('/') } }
 
     /** True when the file's volume (SD card, USB drive) is currently unplugged. */
-    private fun isOffline(path: String): Boolean =
+    fun isOffline(path: String): Boolean =
         mountedRoots.isNotEmpty() && StorageVolumes.volumeRootOf(path)?.let { it !in mountedRoots } ?: false
 
     private fun onOff(on: Boolean) = if (on) "On" else "Off"
+
+    private fun themeLabel(theme: XrossTheme) =
+        if (theme.dynamic) "${theme.label} · changes every month" else theme.label
 
     private fun fingerprintSummary(status: FingerprintStatus): String {
         val st = status.stats ?: return "Counting…"

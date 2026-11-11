@@ -13,8 +13,12 @@ import kotlinx.coroutines.launch
 interface InputSink {
     fun onAction(action: NavAction)
 
-    /** Called with every fresh key press before mapping. Return true to consume it (remap capture). */
-    fun onRawKeyDown(keyCode: Int): Boolean = false
+    /**
+     * Called with every fresh key press before mapping. Return true to consume it (remap capture).
+     * [controller] is the identified controller model it came from, or null (keyboards without
+     * IDs, virtual and injected input).
+     */
+    fun onRawKeyDown(keyCode: Int, controller: ConnectedController?): Boolean = false
 
     fun onControllerUsed(family: ControllerFamily) {}
 }
@@ -22,8 +26,14 @@ interface InputSink {
 data class InputConfig(
     val confirm: ConfirmLayout = ConfirmLayout.AUTO,
     val deadzone: Float = 0.35f,
+    /** Global mapping, used for any device without its own entry in [profiles]. */
     val remap: Map<Int, NavAction> = emptyMap(),
-)
+    val axialDeadzone: Float = 0f,
+    /** [ControllerKey.id] → per-controller mapping. */
+    val profiles: Map<String, ControllerProfile> = emptyMap(),
+) {
+    fun remapFor(controller: ControllerKey?): Map<Int, NavAction> = remapFor(controller, profiles, remap)
+}
 
 /**
  * Gamepad abstraction layer: turns Android key and joystick events into [NavAction]s.
@@ -43,14 +53,17 @@ class GamepadHandler(
 
     fun onKeyEvent(event: KeyEvent): Boolean {
         val cfg = config()
-        val family = familyOf(event.device)
+        val device = event.device
+        val family = familyOf(device)
         val confirm = cfg.confirm.resolve(family)
-        val action = KeyMapper.map(event.keyCode, confirm, cfg.remap)
+        val key = device?.let { ControllerKey.of(it.vendorId, it.productId) }
+        val action = KeyMapper.map(event.keyCode, confirm, cfg.remapFor(key))
         val isFreshPress = event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0
 
         if (isFreshPress) {
             reportFamily(family)
-            if (sink.onRawKeyDown(event.keyCode)) return true
+            val controller = key?.let { ConnectedController(it, device.name.orEmpty()) }
+            if (sink.onRawKeyDown(event.keyCode, controller)) return true
         }
         if (action == null) return false
 
@@ -68,7 +81,9 @@ class GamepadHandler(
         if (!isJoystick || event.action != MotionEvent.ACTION_MOVE) return false
 
         reportFamily(familyOf(event.device))
-        stick.deadzone = config().deadzone
+        val cfg = config()
+        stick.deadzone = cfg.deadzone
+        stick.axialDeadzone = cfg.axialDeadzone
         val now = event.eventTime
 
         val stickPress = stick.update(
@@ -124,7 +139,7 @@ class GamepadHandler(
     private fun centered(event: MotionEvent, axis: Int): Float {
         val range = event.device?.getMotionRange(axis, event.source) ?: return 0f
         val value = event.getAxisValue(axis)
-        // Hardware flat zone; our own radial deadzone is applied on top.
+        // Hardware flat zone; our own axial and radial deadzones are applied on top.
         return if (kotlin.math.abs(value) > range.flat) value else 0f
     }
 

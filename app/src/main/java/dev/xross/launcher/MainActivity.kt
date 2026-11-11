@@ -39,6 +39,7 @@ import dev.xross.launcher.state.UiEffect
 import dev.xross.launcher.storage.VolumeMonitor
 import dev.xross.launcher.state.XmbViewModel
 import dev.xross.launcher.theme.XrossTheme
+import dev.xross.launcher.theme.rememberThemePalette
 import dev.xross.launcher.ui.WaveBackground
 import dev.xross.launcher.ui.XmbScreen
 import kotlinx.coroutines.launch
@@ -116,7 +117,7 @@ class MainActivity : ComponentActivity() {
                 WaveBackground(
                     enabled = state.waveEnabled && !fullscreenMedia,
                     speed = state.waveSpeed,
-                    theme = XrossTheme.byName(state.theme),
+                    palette = rememberThemePalette(XrossTheme.byName(state.theme)),
                 )
                 XmbScreen(
                     state = state,
@@ -133,6 +134,8 @@ class MainActivity : ComponentActivity() {
                     onCloseOptions = viewModel::closeOptions,
                     onSearchKeyTap = viewModel::onSearchKeyTapped,
                     onSearchResultTap = viewModel::onSearchResultTapped,
+                    onInfoRowTap = viewModel::onInfoRowTapped,
+                    onCloseInfo = viewModel::closeInfo,
                 )
             }
         }
