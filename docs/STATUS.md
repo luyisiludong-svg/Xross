@@ -14,17 +14,18 @@ Legend: ✅ done and verified · ◐ partial · ❌ not started · 🧪 verified
 | Phase 1 (Alpha): XMB navigation, gamepad layer, library, emulator dispatch, wave shader | ✅ complete |
 | Phase 1b (hardening): hot-swap, USB-OTG, playtime, Options menu, per-game emulator, 6 more emulators, per-controller mappings, axial deadzone, 0% deadzone | ✅ done; real-handheld testing and a Baseline Profile remain (§6) |
 | Visual front end from `assets/examples` (icons, themes, glow, status bar, sounds) | ✅ plus the Original monthly theme, busy indicator, optional button hints, Information screen |
-| Phase 2 (metadata, media hub, theme packs, on-screen controller and keyboard) | ◐ fingerprinting, media hub, gamepad search, DAT verification, scrapers, art, Details screen, manual matching and video snaps done (§2, §3); portable `Xross/` folder with JSON config and database backup, All Games, media controls shortcut and mini-player hide done (§3.9); library organization (hidden apps, app folders, base ROMs folder, custom Photo/Video folders, art in `Xross/media`) done (§3.10); ScreenScraper awaits developer credentials; theme packs and on-screen controller not started |
-| Phase 3 (dual screen, hot-swap, RetroAchievements, Web Portal, FTPS) | ❌ (two prerequisites done; see §6) |
+| Phase 2 (metadata, media hub, theme packs, on-screen controller and keyboard) | ◐ fingerprinting, media hub, gamepad search, DAT verification, scrapers, art, Details screen, manual matching and video snaps done (§2, §3); portable `Xross/` folder with JSON config and database backup, All Games, media controls shortcut and mini-player hide done (§3.9); library organization (hidden apps, app folders, base ROMs folder, custom Photo/Video folders, art in `Xross/media`) done (§3.10); ScreenScraper verified live with developer credentials (§3.13); theme packs, wave shader settings and the focused-game background done (§3.13); on-screen controller not started |
+| Phase 3 (dual screen, hot-swap, RetroAchievements, Web Portal, FTPS) | ◐ RetroAchievements account linking, status bar avatar and User Card (§3.12), per-game achievement lists and unlock toasts (§3.13) done; two prerequisites done; the rest not started (§6) |
 | Phase 4 (onboarding, triage, profiling, plugin API) | ◐ app triage and performance work started |
 
-**Verification:** 320 JVM/Robolectric unit tests (318 run by default, 0 failures; 2 opt-in tests
+**Verification:** 391 JVM/Robolectric unit tests (387 run by default, 0 failures; 4 opt-in tests
 call the real services), end-to-end launch tests against stub builds of eleven emulators, a
 hot-swap test with a real removable volume, frame-pacing measurements across 12 display
 configurations on the emulator, live scraping runs, and a full feature pass on a **Samsung Galaxy
-A55** (Android 16, 120 Hz) on 2026-11-11 (§3.8). The on-device smoke test passed with 57 checks
-before Steps 1–2; it has since been updated for the new menu rows and features (§3.2) but not
-re-run. No physical controller, gaming handheld or real emulator install has been tested yet,
+A55** (Android 16, 120 Hz) on 2026-11-11 (§3.8). The updated on-device smoke test ran on the
+Galaxy A55 on 2026-11-11: 75 of 86 checks pass, and the 11 failures are Photo/Music checks that
+need a device without its own media (§3.13). ScreenScraper and RetroAchievements sign-in ran
+live; frame pacing on the A55 is 0.63% janky with 82.9 MB PSS in the background (§3.13). No physical controller, gaming handheld or real emulator install has been tested yet,
 and the portable folder and library organization passed a device run on the Galaxy A55 as an
 upgrade of a real install (§3.11); SD card, Android 9/10 and handhelds are still untested.
 
@@ -80,19 +81,21 @@ upgrade of a real install (§3.11); SD card, Android 9/10 and handhelds are stil
 | Azahar, Eden, Flycast, M64Plus FZ, melonDS, ScummVM | ✅ 🧪 | Recipes from ES-DE's Android rules; new 3DS, Switch and ScummVM platforms |
 | Sudachi, Vita3K, others | ❌ | Sudachi is no longer in ES-DE's rules; no verified launch contract |
 
-### 3.3 Metadata & achievements — ◐ metadata done, achievements not started
+### 3.3 Metadata & achievements — ✅ metadata done; achievements done, Web API live run pending
 
 | Feature | State | Notes |
 | --- | --- | --- |
 | Hasheous (hash identification, no account) | ✅ 📱 | `POST /api/v1/Lookup/ByHash`; arcade sets send their largest ROM chip and the set name picks between games that share it |
 | SteamGridDB (capsules, hero banners, logos) | ✅ 📱 | Free per-user API key; autocomplete search by the best known title |
-| ScreenScraper (descriptions, box art, logos, screenshots, video snaps) | ✅ 🧪 | Follows the API page (English guide: `docs/SCREENSCRAPER_API.md`): file hashes plus size, name search for files too large to hash, and the mandatory quota handling. Waiting for developer credentials; tested against canned responses only |
+| ScreenScraper (descriptions, box art, logos, screenshots, video snaps) | ✅ | Follows the API page (English guide: `docs/SCREENSCRAPER_API.md`): file hashes plus size, name search for files too large to hash, and the mandatory quota handling. Live run 2026-11-11 with developer credentials only (§3.13) |
 | Throttled batch scraper | ✅ 📱 | Per-service pacing, back-off on 429, daily-quota stop, retry after a day on failure; only while Xross is in front; opt-in and Wi-Fi only by default |
 | Asset cache | ✅ 🧪 | `Xross/media/<kind>/<system>/<rom stem>.<ext>` since 2026-11-11 (§3.10); atomic writes; files accepted only if their bytes are PNG, JPEG, WebP or MP4; art of removed games pruned. The earlier private UUID cache (verified on the Galaxy A55) is moved over once |
 | Game Details screen | ✅ 📱 | Background art (or the playing snap), box art, logo, release facts, rating, playtime, scrollable description |
 | Manual match and override tool | ✅ 📱 | Options ▸ Metadata: Edit title, Find match (results from every service), Scrape again, Use automatic match |
 | Language priority list | ◐ | One region and one language setting |
-| RetroAchievements | ❌ | Phase 3 |
+| RetroAchievements account and profile | ✅ 🧪 | Settings ▸ Accounts link dialog, status bar avatar, User Card (§3.12). Tested against canned API responses only; no live account yet |
+| RetroAchievements game achievements | ✅ 🧪 | Options ▸ Achievements and a Details summary: badge grid (locked greyed), titles, descriptions, points, hardcore/softcore and dates, completion bar. ROMs matched by RetroAchievements' hash per system, title only for disc systems or unfingerprinted ROMs. Recorded answers only until a Web API key is in `.env` (§3.13) |
+| RetroAchievements unlock toasts | ✅ 🧪 | After a game session (and any profile refresh) new unlocks queue as top-right toasts with the trophy sound; drawn only, never take input |
 
 Google Play and web-search scraping are dropped (see `FEASIBILITY.md`). Dusklight/TwilitRealm is
 parked until an API is documented.
@@ -106,22 +109,23 @@ parked until an API is documented.
 | Music player as a background service | ✅ | Media3 ExoPlayer + MediaSession: notification, headset and lock-screen controls; albums, artists, shuffle, repeat |
 | BGM mode: music pauses for games and resumes after | ✅ | Settings ▸ Media; also pauses for videos |
 | Video player with controller playback and scrubbing | ✅ | Seek 10 s / 60 s, previous/next, loop toggle, auto-hiding on-screen display |
-| Video snap previews on focused games | ✅ 🧪 | Full-bleed behind the menu after 1.2 s on a game; music ducked to 20%; decoder released when focus moves. Needs ScreenScraper snaps to try on a device |
+| Focused-game background | ✅ 🧪 | Hero art (or a screenshot) crossfades in after 250 ms; the video snap fades in over it after 1.2 s with a 300 ms audio ramp, music ducked to 20%; the wave's GL loop stops while either covers the screen; decoder released when focus moves |
 | Wave background (GLSL ES 3.0) | ✅ | Glossy sheets plus strands, AA crests, dithering, vsync-snapped time, reduced-res target |
 | Wave parameters: speed | ✅ | 0.5×–2× |
-| Wave parameters: line count, turbulence, thickness, custom gradients | ❌ | Shader is ready for uniforms; no UI yet |
+| Wave parameters: line count, turbulence, thickness, custom gradients | ✅ | `uLines`, `uTurb`, `uThick` uniforms plus 7 tint presets and a custom gradient; Settings ▸ Theme ▸ Wave settings with sliders over the live wave; `display.wave*` in `settings.json` |
 | Color themes | ✅ 📱 | Lavender, Crimson, Sapphire, Emerald, Amber, Rose, Midnight, and Original: a color per month, crossfaded over the three days either side of a month change |
 | Busy indicator | ✅ 📱 | Ring of dots by the hint pill while scanning, fingerprinting, importing DATs or scraping |
 | Hide the button-hint pill | ✅ 📱 | Settings ▸ Theme ▸ Button hints |
 | Day/night color shift | ✅ | Brightness follows the time of day |
 | Battery-level color blending | ❌ | Battery level is already read for the status bar |
-| Coldboot: fade-in + startup sound | ✅ | Once per process start; can be turned off |
+| Coldboot: fade-in + startup sound | ✅ | Once per process start, `01. opening.wav` (was the coldboot cue); can be turned off |
 | Custom boot animations | ❌ | |
 | UI sound effects + volume, game-start cue | ✅ | SoundPool for short effects, MediaPlayer for long cues |
 | BGM and video-snap volume sliders | ◐ | Music uses system media volume; separate sliders not yet |
-| Loadable sound packs / theme packs | ❌ | The sounds and icons are built in for now |
-| Icons from the design SVGs | ✅ | `tools/icons/svg_icons.py` → 28 VectorDrawables |
-| Custom fonts, UI scale slider (50–150%) | ❌ | Layout already scales automatically (§4) |
+| Loadable sound packs / theme packs | ✅ | `Xross/themes/<id>/` (theme.json, fonts, icons, sounds); the bundled icons and sounds are the built-in Default pack in `assets/themes/default` |
+| Icons from the design SVGs | ✅ | `tools/icons/svg_icons.py` → 29 SVGs in the Default pack, read by `SvgIcon` at runtime |
+| Custom fonts | ✅ | One .ttf/.otf per theme pack, applied to all launcher text |
+| UI scale slider (50–150%) | ❌ | Layout already scales automatically (§4) |
 | Aspect-ratio overrides, status-bar mode options | ❌ | Currently immersive (system bars hidden) |
 
 ### 3.5 Device integration & form factors
@@ -145,8 +149,8 @@ HTTPS Xross Portal (Ktor CIO), FTPS (Apache FtpServer), auth, uploads, library e
 
 ## 3. Test results
 
-### 3.1 Unit tests — 320 tests, 0 failures
-`./gradlew :app:testDebugUnitTest` (JVM + Robolectric on SDK 35): 318 run by default, 2 opt-in live
+### 3.1 Unit tests — 391 tests, 0 failures
+`./gradlew :app:testDebugUnitTest` (JVM + Robolectric on SDK 35): 387 run by default, 4 opt-in live
 tests skip unless `-PliveScrape=true`. The table below lists the original suites; later suites
 are listed after it.
 
@@ -196,7 +200,18 @@ Added for Milestone 3 (35 tests):
 
 `ScrapeOrchestratorTest`'s two asset-cache tests were rewritten for the new layout (same count).
 
-### 3.2 Device smoke test — 57/57 passed before Steps 1–2; updated, not re-run
+Added for the status bar profile and floating mini player (29 tests, 2026-11-11):
+
+| Suite | Tests | Covers |
+| --- | --- | --- |
+| `RetroAchievementsClientTest` | 7 | `API_GetUserProfile` / `GetUserSummary` / `GetUserRecentAchievements` parsing (canonical name, points, RetroPoints, RetroRatio, rank, newest-first badges, relative media paths), numbers sent as strings and nulls, key only in the `y` parameter, error mapping (401/403, empty answer, 404, 429, HTML, offline) with no key in messages, images fetched only from retroachievements.org over HTTPS |
+| `ProfileRepositoryTest` | 8 | The key stays in `CredentialStore`: absent from `settings.json`, every file in the Xross folder and the old settings preferences; profile cache and `media/avatars/<user>.png` written; offline start served from disk with no request; a failed refresh or avatar download keeps the cache; no avatar → placeholder; refused key keeps the linked account; unlink removes key, cache and avatar; staleness; safe file names |
+| `MiniPlayerCardTest` | 8 | Hidden with nothing loaded, shown while playing; paused: shown at 29.999 s, hidden at 30 s; resume and track change bring it back and restart the countdown; repeated identical updates don't extend it; covering hides it without resetting the timer; stop hides it at once |
+| `ProfileCardTest` | 6 | User Card buttons (linked / not linked), movement, Close, two-press Unlink; Settings ▸ Accounts rows; Up from the top of a category focuses the avatar, Confirm opens the card, Back / tap closes it; Up inside a list still moves the cursor |
+
+`MenuSettingsTest`'s list of Settings sections now includes Accounts (same count).
+
+### 3.2 Device smoke test — 75/86 on the Galaxy A55 (2026-11-11; the 11 failures are Photo/Music checks that need a device without its own media, §3.13)
 `tools/device-tests/smoke.sh` resets the app, seeds ROMs, and drives the UI with key events.
 It checks screen content through the accessibility tree. On 2026-11-11 its key counts were
 updated (Options menu, Controls, All Games) and it gained checks for Details/Metadata, the
@@ -365,6 +380,36 @@ replaced while open. Verified with Robolectric only.
 | Art in `Xross/media` | `<kind>/<system>/<rom stem>.<ext>`. Stems lose `\ / : * ? " < > \|` and control characters, trailing dots and spaces, reserved device names are prefixed, and length is capped at 200. On a clash within a system the oldest game keeps the plain name and the others get `[<first 8 of UUID>]`. Lookups try a few names × 4 extensions (a handful of `stat` calls). Prune deletes only art of games that left the library |
 | Moving the old cache | After the library first loads, `noBackupFilesDir/assets/<uuid>/…` is copied file by file into the new layout in the background; the old copy is still found until moved; art already in place wins |
 
+### 3.12 Status bar profile and floating mini player (2026-11-11)
+
+Unit-tested (§3.1), then run on the **Galaxy A55** (debug build installed over the existing data,
+2026-11-11):
+
+| Check | Result |
+| --- | --- |
+| Status bar avatar | ✅ Silhouette placeholder before the clock; Up from Search focuses it (white ring); Down returns |
+| User Card (not linked) | ✅ Opens on Confirm: "Guest", "No RetroAchievements account linked", Link account… / Close, Enter/Esc hints |
+| Link dialog | ✅ Opens from the card. In landscape the keyboard used to take the whole screen and hide the dialog; the fields now ask for no full-screen editor and the dialog scrolls, so the key field comes into view above the keyboard |
+| Mini player card | ✅ After Shuffle all: album art, bold title, artist cut with "…", ▶ glyph, above the hint pill; stays when switching Music → Games |
+| Long press | ✅ Pauses (glyph turns ❚❚) |
+| 30 s hide | ✅ Still shown 25 s after pausing, gone at 36 s; back at once on resume (media play key) |
+| Crashes | None in logcat |
+
+Not covered on the device: linking a real account (no test account; the API host for images,
+`media.retroachievements.org`, is therefore unconfirmed), the avatar download, the User Card with
+profile data, tapping the card to open Now Playing, and a long title scrolling.
+
+| Feature | How it works |
+| --- | --- |
+| Linking | Settings ▸ Accounts ▸ RetroAchievements account… opens one system dialog (user name, masked Web API key). The pair is checked with `API_GetUserProfile` first and saved only if it works, so a typo never replaces a working account. An empty key keeps the saved one for the same user; an empty name unlinks |
+| Secrets | The key is stored only in `CredentialStore` (`xross_credentials`, app-private, excluded from cloud backup and device transfer), next to the scraper accounts. It is sent only as the `y` parameter to `retroachievements.org`, never logged, never put in an error message. Not encrypted at rest yet |
+| Profile cache | `Xross/data/retroachievements.json`: user name, avatar path, points, RetroPoints, RetroRatio, rank, recent unlocks, fetch time. Read at startup, so the profile shows offline; refreshed in the background when older than 6 h (on start and on resume), and from the User Card or Settings |
+| Rank and unlocks | Rank comes from `API_GetUserSummary` (`g=0&a=0`) and the last 30 days of unlocks from `API_GetUserRecentAchievements`; if either fails the profile still updates without it |
+| Avatar | `Xross/media/avatars/<user>.png`, downloaded to a `.part` file and swapped in atomically, only from `*.retroachievements.org` over HTTPS. A failed download keeps the old picture; with none the silhouette vector shows. "Clear downloaded artwork" leaves avatars alone |
+| Status bar | 32 dp round avatar before the clock and battery. Up from the first row of a category root moves the focus onto it (ring and breathing glow); Confirm or △ opens the User Card, Down or Back returns, Left/Right switch category. Tapping it opens the card too |
+| User Card | Avatar, name, rank "#4,616 of 45,654", points, RetroPoints, RetroRatio, softcore points, motto, up to four recent unlocks, last update. Buttons: Refresh · Unlink (press twice) · Close, or Link account… · Close when nothing is linked |
+| Mini player card | `MiniPlayerCard` at the root of `XmbScreen` (outside the menu fade), bottom-right, 16 dp from the edges and 8 dp above the measured button-hint row. Album art is the track's embedded cover through MediaStore (the same source Now Playing uses), with a music-note fallback. Hidden under full-screen media, Search, Details, Information, Options, the name keyboard, the User Card, remapping and the game start. `MiniPlayerVisibility` runs the 30 s pause timer |
+
 ### 3.11 Device run: Milestones 1–3 on the Galaxy A55 (2026-11-11)
 
 Samsung Galaxy A55 (SM-A556B, Android 16, 120 Hz), internal storage only, no controller, no
@@ -409,6 +454,57 @@ install, video folders, and picking folders through the system folder picker (fo
 by editing `settings.json`).
 
 ---
+
+### 3.13 Live services, achievements, theme packs and wave settings (2026-11-11)
+
+**Unit tests added (42; suite 349 → 391):**
+
+| Suite | Tests | Covers |
+| --- | --- | --- |
+| `AchievementsTest` | 15 | `API_GetGameInfoAndUserProgress` and `API_GetGameList` parsing (map or empty-array achievements, display order, hardcore dates, completion, points, lower-cased hashes); the key only in `y` and only to retroachievements.org; matching per system (full MD5, header-less NES/SNES, arcade set-name MD5, exact title for disc systems, hacks and subsets excluded, an unlisted hash never falls back to the title); repository caches in `Xross/data/ra` with no key in any file, console list reuse, offline copy, NotLinked / Unsupported / NoMatch, re-match after the file changes, badges in `media/ra/badges` under `.nomedia`, clear on unlink; badge-grid navigation |
+| `UnlockToastTest` | 3 | Only unlocks newer than the watermark are news (never an account's history), the watermark persists in `retroachievements.json` (no key) so a restart doesn't repeat toasts, one-at-a-time queue without duplicates |
+| `ThemePackTest` | 11 | Default pack has every icon and sound; fixed audio roles (`cursor.wav` for D-pad moves, `01. opening.wav` at startup, `system_ng.wav` for errors; no `snd_error`/`coldboot` in the APK); folder pack discovery; partial packs inherit sounds, gains and icons; case-insensitive lookups; PNG icons downsampled; palettes; path traversal refused; runtime fallback to Default; `.nomedia` in `themes/`; SVG reader (viewBox, translate, black backdrops dropped, basic shapes, junk rejected) |
+| `WaveSettingsTest` | 9 | Wave uniforms round-trip through `settings.json`, per-field clamping, editor rows and drift-free steps, blocked ends, tint cycling, reset to pack defaults, slider fractions, presets and custom gradient, Theme rows, backdrop timing (250 ms / 1.2 s / 300 ms ramp) |
+| `XmbViewModelTest` | +2 | Wave settings panel driven by D-pad on the real view model, saved to `settings.json`; refused actions leave the menu unchanged |
+| `RetroAchievementsLiveTest` | 2 (opt-in) | Account sign-in; with a Web API key, linking, avatar, an arcade game's achievements and badges, no key on disk |
+| Others updated | — | `OptionsMenuTest` (Achievements row), `MenuSettingsTest` (Theme pack row first), `ConfigCodecTest` (speed clamp 0.5–2.0), `ScreenScraperLiveTest` (developer credentials alone, media cached through `AssetCache`) |
+
+**Live services** (`-PliveScrape=true`, `.env` credentials):
+
+| Service | Result |
+| --- | --- |
+| ScreenScraper | Developer credentials only (no user account in `.env`, so the account check is skipped). 5 of 6 samples identified (3 arcade sets by hash, 2 of 3 3DS games by name search; *Ocarina of Time 3D* not found by name); all 5 with descriptions; box art and video snaps for all 5 cached through `AssetCache` into `media/3dboxes/<system>/` and `media/snaps/<system>/` with `.nomedia` written first; quota block read (10 of 10,000 requests, 0 of 1,000 not-found), pacing held at 1.2 s; 26.8 s for the run |
+| SteamGridDB | 8 of 8 samples got art |
+| RetroAchievements | The `.env` account signs in (`dorequest.php?r=login2`, POST body; token never printed). `.env` holds the account password, not a Web API key, so linking, profile, achievement lists and badges ran against recorded answers only. Add `RETROACHIEVEMENTS_WEB_API_KEY` to run them live |
+
+**Galaxy A55 (Android 16, 120 Hz), debug build installed, `MANAGE_EXTERNAL_STORAGE` granted:**
+
+| Check | Result |
+| --- | --- |
+| Icons from the Default pack's SVGs, avatar ring, wave | ✅ Rendered (screenshot check) |
+| Smoke test | ◐ 75 of 86. The 11 failures are all in Photo and Music: they expect the seeded `XrossSmoke` media to be the only media, and this phone has its own photos and music library. Every library, Options, Achievements, Search, Settings, Theme pack, Wave settings, secrets, deadzone, remap, rescan, video and touch check passed |
+| Theme pack from `Xross/themes` | ✅ (smoke) found after "Look for new packs", palette and wave defaults applied, back to Default |
+| Wave settings panel | ✅ (smoke) sliders change the live wave; values in `settings.json` |
+| Achievements screen | ✅ (smoke) opens from Options, asks to link when no account is linked |
+| Secrets | ✅ (smoke) no account names, passwords or keys in `Xross/config/*.json` |
+| Frame pacing, profiling build, 30 s of category switches and list scrolling | ✅ 0.63% janky (23 of 3,629 frames; target ≤ 1.5%); p50 13 ms, p99 22 ms; GL thread p50 8.3 ms, p95 ≤ 10.6 ms at 120 Hz |
+| Memory | ✅ 82.9 MB PSS in the background (target ≤ 150 MB); 180–185 MB in front with the media hub loaded |
+| Idle CPU in front | ◐ 100–130% of the 8-core total, the same as the previous commit measured the same way (A/B on the profiling build): the UI redraws about 85 times a second for the focus pulse and the wave renders continuously. The new GL pause only applies while hero art or a snap covers the screen; this library had no scraped art to show it |
+
+**Bugs found and fixed on the device:**
+
+1. **One Back popped two levels** for `KEYCODE_BACK` (many controllers' and remotes' back
+   button): with predictive back (target SDK 36), the key reached both the gamepad handler and the
+   back callback. The callback now ignores a back within 400 ms of a consumed `KEYCODE_BACK`.
+   Gamepad B and the back gesture were not affected.
+2. **`smoke.sh` was out of date:** Up at the top of a category root now focuses the status-bar
+   avatar, so `top` needs a Down afterwards; settings in `Xross/config` survive `pm clear` and
+   leaked between runs (now moved to `/sdcard/Xross-smoke-backup/` first); the Default mapping
+   row's subtitle shows only when focused.
+
+**Not verified on hardware:** an unlock toast after a real emulator session, achievement lists
+from the live Web API, hero art and video snaps behind the menu on a scraped library (the smoke
+library has no scraped art), the audio ramp, a custom font from a pack.
 
 ## 4. Display matrix & performance
 
@@ -499,6 +595,9 @@ Unisoc T618) before calling it final.**
    session. Time in another app reached from the emulator, or with the device asleep, counts.
 8. **Search matches word prefixes only** ("tri" finds "Chrono Trigger", "rono" does not), and
    the on-screen keyboard is Latin letters and digits.
+9. **The RetroAchievements Web API key is not encrypted at rest.** It is in app-private
+   preferences excluded from backups, like the scraper passwords, but a rooted device can read it.
+   `API_GetUserSummary`, used only for the rank, is documented as slow.
 
 ---
 
@@ -528,14 +627,15 @@ Unisoc T618) before calling it final.**
       background job that pauses while a game runs
 - [x] DAT import (No-Intro / Redump Logiqx XML) → exact titles, regions and revisions offline
 - [ ] Per-track hashing for `.cue`/`.gdi` (Redump matches tracks, not sheets)
-- [x] Scrapers: ScreenScraper (built; awaits dev credentials), SteamGridDB (user key), Hasheous;
+- [x] Scrapers: ScreenScraper (verified live 2026-11-11), SteamGridDB (user key), Hasheous;
       throttled batch scraper; disk asset cache (now `Xross/media`, §3.10)
 - [ ] Language priority list (one region and one language today)
 - [x] Game detail view (box art, description, release info) and manual match/override tool
 - [x] Gamepad virtual keyboard and search overlay on the FTS4 index (Games ▸ Search)
 - [x] Media hub: photo viewer (zoom/pan, slideshow, wallpaper), music player as a background
       service with BGM mode, video player
-- [x] Video snap previews on focused games (untested with real snaps; ScreenScraper only)
+- [x] Focused-game background: hero art after 250 ms, video snap after 1.2 s with an audio ramp,
+      wave paused while covered
 - [x] Portable `Xross/` folder: `config/` JSON (settings, controllers, systems) with atomic writes
       and SharedPreferences migration, `data/xross.db` backup and restore, `.nomedia` in
       `media/` and `themes/`; `GameLauncher` interface (§3.9)
@@ -543,9 +643,10 @@ Unisoc T618) before calling it final.**
 - [x] Hide apps, app folders, base ROMs folder with Create system folders, custom Photo/Video
       folders, scraped art in `Xross/media` (§3.10)
 - [ ] Separate BGM / UI / video-snap volume sliders
-- [ ] Theme packs: loadable icons, sounds (cursor/confirm/back/error/boot), fonts, palettes and
-      wave parameters (line count, turbulence, thickness); move bundled assets into a pack
-- [ ] UI scale slider, custom fonts, status-bar mode options
+- [x] Theme packs: loadable icons, sounds (cursor/confirm/back/error/boot), fonts, palettes and
+      wave parameters (line count, turbulence, thickness); bundled assets moved into a Default pack
+- [ ] An original or open-licensed Default pack (today's still resembles PS3/PSP assets)
+- [ ] UI scale slider, status-bar mode options
 - [ ] On-screen controller overlay for screen-only devices
 
 ### Phase 3 — Hardware integration & network services (RC)
@@ -553,7 +654,9 @@ Unisoc T618) before calling it final.**
       music, telemetry), screen-swap hotkey, per-screen orientation
 - [ ] Dock detection via `DisplayManager` (resolution switching already works live)
 - [ ] `autorun.inf` manifest parsing (parse-only), volume labels and drive icons
-- [ ] RetroAchievements: login with encrypted token, progress in game details, unlock toasts
+- [x] RetroAchievements: account linking (key kept out of the Xross folder), status bar avatar, User Card (§3.12)
+- [x] RetroAchievements: per-game achievement lists and unlock toasts (§3.13)
+- [ ] RetroAchievements: encrypt the stored key (Keystore); live run with a Web API key
 - [ ] HTTPS Xross Portal (Ktor CIO): PIN auth, ROM/BIOS upload, library editing, diagnostics
 - [ ] FTPS server (Apache FtpServer) with TLS; idle CPU < 3%
 

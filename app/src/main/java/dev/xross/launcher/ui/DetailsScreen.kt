@@ -57,7 +57,9 @@ internal fun DetailsScreen(
     backGlyph: String,
     optionsGlyph: String,
     loadArt: suspend (String, List<ArtKind>, Int) -> ImageBitmap?,
+    loadBadge: suspend (String, Int) -> ImageBitmap? = { _, _ -> null },
     onPlay: () -> Unit,
+    onAchievements: () -> Unit = {},
     onDismiss: () -> Unit,
 ) {
     var shown by remember { mutableStateOf(details) }
@@ -147,6 +149,10 @@ internal fun DetailsScreen(
                             Text(value, style = shadowed(m.subtitleSize.sp()), maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                     }
+                    if (d.achievementsSupported) {
+                        Spacer(Modifier.height((m.s * 0.025f).dp()))
+                        AchievementsSummary(d.achievements, m, loadBadge, onAchievements)
+                    }
                     Spacer(Modifier.height((m.s * 0.03f).dp()))
                     val synopsis = d.synopsis ?: if (d.scraped) {
                         "No description available. ScreenScraper provides descriptions once it is set up."
@@ -166,6 +172,9 @@ internal fun DetailsScreen(
                     Spacer(Modifier.height((m.s * 0.03f).dp()))
                     Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                         Box(Modifier.clickable(onClick = onPlay)) { Hint(confirmGlyph, "Play", m.subtitleSize.sp()) }
+                        if (d.achievementsSupported) {
+                            Box(Modifier.clickable(onClick = onAchievements)) { Hint("▶", "Achievements", m.subtitleSize.sp()) }
+                        }
                         Hint(optionsGlyph, "Options", m.subtitleSize.sp())
                         Hint(backGlyph, "Back", m.subtitleSize.sp())
                         if (d.synopsis != null) Hint("↕", "Scroll", m.subtitleSize.sp())
@@ -187,3 +196,72 @@ private fun rememberArt(
     px: Int,
     version: Long,
 ) = produceState<ImageBitmap?>(null, uuid, kinds, px, version) { value = loadArt(uuid, kinds, px) }
+
+/**
+ * The game's RetroAchievements progress on the Details screen, after the reference game card:
+ * trophy, earned / total in amber, a progress bar and the latest unlocked badges. Tap (or ▶)
+ * opens the full Achievements screen.
+ */
+@Composable
+private fun AchievementsSummary(
+    state: dev.xross.launcher.profile.AchievementsState?,
+    m: XmbMetrics,
+    loadBadge: suspend (String, Int) -> ImageBitmap?,
+    onOpen: () -> Unit,
+) {
+    val density = LocalDensity.current
+    fun Float.dp() = with(density) { this@dp.toDp() }
+    fun Float.sp() = with(density) { this@sp.toSp() }
+    val shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp)
+    Column(
+        Modifier
+            .width((m.width * 0.46f).dp())
+            .frostedGlass(shape, strength = 0.8f)
+            .iridescentBorder(shape, width = 1.dp, alpha = 0.45f)
+            .clickable(onClick = onOpen)
+            .padding(horizontal = 12.dp, vertical = 9.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Image(
+                glyphPainter(dev.xross.launcher.state.GlyphKey.TROPHY),
+                contentDescription = null,
+                colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(Pastel.Amber),
+                modifier = Modifier.height((m.subtitleSize * 1.2f).dp()).width((m.subtitleSize * 1.2f).dp()),
+            )
+            Spacer(Modifier.width(8.dp))
+            when (state) {
+                is dev.xross.launcher.profile.AchievementsState.Ready -> {
+                    TrophyCount(state.progress.unlocked, state.progress.total, m.subtitleSize.sp())
+                    Spacer(Modifier.width(10.dp))
+                    ProgressBar(state.progress.completion, Modifier.weight(1f), height = 7.dp)
+                }
+                else -> Text(
+                    when (state) {
+                        null -> "Checking RetroAchievements…"
+                        dev.xross.launcher.profile.AchievementsState.NotLinked -> "Link RetroAchievements in Settings ▸ Accounts"
+                        dev.xross.launcher.profile.AchievementsState.NoMatch -> "This file isn't recognized by RetroAchievements"
+                        is dev.xross.launcher.profile.AchievementsState.Unsupported -> "No achievements for this system"
+                        is dev.xross.launcher.profile.AchievementsState.Failed -> state.reason
+                        is dev.xross.launcher.profile.AchievementsState.Ready -> ""
+                    },
+                    style = shadowed((m.subtitleSize * 0.9f).sp(), color = TextDim),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+        val ready = state as? dev.xross.launcher.profile.AchievementsState.Ready
+        val recent = ready?.progress?.ordered()?.filter { it.unlocked }?.take(7).orEmpty()
+        if (recent.isNotEmpty()) {
+            Spacer(Modifier.height(7.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                val size = (m.s * 0.075f)
+                for (a in recent) {
+                    val px = size.toInt()
+                    val image by produceState<ImageBitmap?>(null, a.badgeName, px) { value = loadBadge(a.badgeName, px) }
+                    BadgeThumb(image, unlocked = true, size = size.dp())
+                }
+            }
+        }
+    }
+}

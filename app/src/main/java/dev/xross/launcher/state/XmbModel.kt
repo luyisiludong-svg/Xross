@@ -29,7 +29,7 @@ enum class GlyphKey {
     SETTINGS, GAMES, APPS, PHOTO, MUSIC, VIDEO, ALBUM, ARTIST, SHUFFLE, SEARCH,
     PLATFORM, GAME_CART, GAME_DISC, FAVORITES, RECENT, HANDHELD, FOLDER, STORAGE,
     CONTROLS, EMULATORS, DISPLAY, SOUND, SYSTEM,
-    ADD, REFRESH, HOME, INFO, DOWNLOAD, NETWORK,
+    ADD, REFRESH, HOME, INFO, DOWNLOAD, NETWORK, USERS, TROPHY,
 }
 
 sealed interface Command {
@@ -44,8 +44,11 @@ sealed interface Command {
     data object ResetRemap : Command
     data class CycleEmulator(val platformId: String) : Command
     data object ToggleWave : Command
-    data object CycleWaveSpeed : Command
+    data object OpenWaveSettings : Command
     data object CycleTheme : Command
+    data object CycleThemePack : Command
+    data class SetThemePack(val id: String) : Command
+    data object ReloadThemePacks : Command
     data object ToggleSoundEffects : Command
     data object CycleSoundVolume : Command
     data object ToggleBootSound : Command
@@ -119,8 +122,14 @@ sealed interface Command {
     data object CheckScreenScraperAccount : Command
     data object EditSteamGridDbKey : Command
     data object ClearArtwork : Command
+    // Accounts: RetroAchievements
+    data object LinkRetroAchievements : Command
+    data object RefreshRetroAchievements : Command
+    data object OpenProfileCard : Command
     // Per game
     data class ShowDetails(val gameId: Long) : Command
+    /** The game's RetroAchievements list (badges, points, progress). */
+    data class ShowAchievements(val gameId: Long) : Command
     data class EditTitle(val gameId: Long) : Command
     data class FindMatch(val gameId: Long) : Command
     data class ChooseMatch(val gameId: Long, val provider: dev.xross.launcher.scrape.ProviderId, val id: String) : Command

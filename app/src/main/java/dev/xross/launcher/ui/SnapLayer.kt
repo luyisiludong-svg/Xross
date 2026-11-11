@@ -43,7 +43,7 @@ internal fun SnapDriver(
     snap: SnapPlayer,
     videoFile: suspend (String) -> File?,
     volume: Float,
-    delayMs: Long = 1_200,
+    delayMs: Long = BackdropTiming.VIDEO_DELAY_MS,
 ) {
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val resumed by lifecycle.currentStateFlow.collectAsStateWithLifecycle()
@@ -58,9 +58,12 @@ internal fun SnapDriver(
     DisposableEffect(Unit) { onDispose { snap.stop() } }
 }
 
-/** The playing snap, cropped to fill its box, fading in once the first frame is ready. */
+/**
+ * The playing snap, cropped to fill its box, fading in over [BackdropTiming.VIDEO_FADE_MS] once
+ * the first frame is ready. [onCovering] reports when it is fully opaque.
+ */
 @Composable
-internal fun SnapVideo(player: ExoPlayer, modifier: Modifier = Modifier, scrim: Float = 0f) {
+internal fun SnapVideo(player: ExoPlayer, modifier: Modifier = Modifier, scrim: Float = 0f, onCovering: (Boolean) -> Unit = {}) {
     var videoSize by remember(player) { mutableStateOf(player.videoSize) }
     var ready by remember(player) { mutableStateOf(false) }
     DisposableEffect(player) {
@@ -71,7 +74,11 @@ internal fun SnapVideo(player: ExoPlayer, modifier: Modifier = Modifier, scrim: 
         player.addListener(listener)
         onDispose { player.removeListener(listener) }
     }
-    val alpha by animateFloatAsState(if (ready) 1f else 0f, tween(450), label = "snap")
+    val alpha by animateFloatAsState(if (ready) 1f else 0f, tween(BackdropTiming.VIDEO_FADE_MS), label = "snap")
+    val covering = ready && BackdropTiming.covers(0f, alpha)
+    val report by androidx.compose.runtime.rememberUpdatedState(onCovering)
+    LaunchedEffect(covering) { report(covering) }
+    DisposableEffect(Unit) { onDispose { report(false) } }
     BoxWithConstraints(modifier.clipToBounds().graphicsLayer { this.alpha = alpha }, contentAlignment = Alignment.Center) {
         val aspect = if (videoSize.width > 0 && videoSize.height > 0) {
             videoSize.width * videoSize.pixelWidthHeightRatio / videoSize.height

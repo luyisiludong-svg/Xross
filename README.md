@@ -32,12 +32,14 @@ Everything you'd want to back up or carry to another device lives in one folder,
 ```
 Xross/
   config/   settings.json, controllers.json, systems.json (hand-editable; picked up on resume)
-  data/     xross.db, a backup snapshot of the library database
+  data/     xross.db, a backup snapshot of the library database;
+            retroachievements.json and ra/ (public profile, game lists and progress caches)
   dats/     No-Intro / Redump / MAME DATs to import
   media/    scraped art and videos (has a .nomedia, so it stays out of Photo and Video):
-            covers/ 3dboxes/ heroes/ wheels/ screenshots/ capsules/ snaps/, each <system>/<rom name>.<ext>
+            covers/ 3dboxes/ heroes/ wheels/ screenshots/ capsules/ snaps/, each <system>/<rom name>.<ext>;
+            avatars/<user>.png and ra/badges/<badge>.png for RetroAchievements
   roms/     the default base ROMs folder, one folder per system
-  themes/   theme packs (has a .nomedia)
+  themes/   theme packs, one folder each (has a .nomedia; see "Theme packs" below)
 ```
 
 * **Moving it to an SD card or USB drive:** **Settings ▸ System ▸ Xross folder** steps through the
@@ -51,8 +53,9 @@ Xross/
   seconds after you leave Xross (when something changed) or with **Settings ▸ System ▸ Back up
   library now**. On a fresh install with an existing backup, Games and Settings ▸ System offer
   **Restore library backup**; Xross restarts to apply it.
-* **Accounts stay private.** ScreenScraper and SteamGridDB credentials are never written to
-  `config/`; they stay in app storage.
+* **Accounts stay private.** ScreenScraper and SteamGridDB credentials and the RetroAchievements
+  Web API key are never written to `config/` or anywhere else in `Xross/`; they stay in app-private
+  storage (`CredentialStore`), excluded from backups.
 * **Art is named like ES-DE's** (`media/covers/snes/Super Mario World (USA).png`), so it survives
   a library rebuild and ES-DE media copied into `media/` is used as is. Names are cleaned for
   FAT32/exFAT cards. Art from earlier versions is moved here once, in the background.
@@ -79,6 +82,14 @@ on screens 600 dp and wider.
 * **Per game:** **Options ▸ Details** (or → on a game), **Options ▸ Metadata** to edit the title,
   find the right match by name, scrape again or go back to the automatic match, and
   **Options ▸ Information** for the file, hashes, DAT match and playtime.
+* **RetroAchievements:** **Settings ▸ Accounts** links your account with your user name and Web
+  API key (retroachievements.org ▸ Settings ▸ Keys). The status bar shows your avatar; the User
+  Card (Up from the top of a category, or tap the avatar) shows rank, points and recent unlocks.
+  **Options ▸ Achievements** on a game (or → on the Details screen) opens its badge grid with
+  progress, points and unlock dates. Games are matched by ROM hash the way RetroAchievements
+  hashes them (header-less for NES/SNES/PC Engine, set name for arcade); disc systems and games
+  not fingerprinted yet are matched by exact title. Achievements unlocked in an emulator show as
+  unlock toasts when you come back to Xross.
 * **Credentials for builds:** copy [`.env.example`](.env.example) to `.env` (git-ignored). The build
   reads ScreenScraper developer credentials from it. Debug builds only also pre-fill your
   SteamGridDB key and ScreenScraper account in Settings. An English guide to ScreenScraper's API
@@ -97,11 +108,13 @@ on screens 600 dp and wider.
 | Scraping and art | Done. Hasheous, SteamGridDB and ScreenScraper with per-service pacing and quotas; art cached on disk per game; box art on game rows; Details screen; manual match and title override; video snaps behind the menu. ScreenScraper awaits developer credentials |
 | Emulator dispatch | Done. RetroArch (per-platform core), DuckStation, NetherSX2, Dolphin, PPSSPP, Azahar, Eden, Flycast, M64Plus FZ, melonDS and ScummVM, chosen per platform or per game. ROMs go out as a path extra plus a `content://` URI with a read grant. Verified with stand-ins only |
 | Media hub | Done. Photo viewer (zoom, pan, slideshow, wallpaper), background music player with media-session controls, video player; music pauses for games and videos |
-| Wave background | Done. GLSL ES 3.0 ribbon shader with day/night palette and adjustable speed. Pauses whenever the launcher isn't in front |
+| Wave background | Done. GLSL ES 3.0 ribbon shader with day/night palette; speed, ribbon lines, turbulence, thickness and color presets as live uniforms (Settings ▸ Theme ▸ Wave settings). Pauses whenever the launcher isn't in front or game art covers it |
+| Theme packs | Done. `Xross/themes/<id>/` with `theme.json`, fonts, SVG/PNG icons and sounds; the bundled icons and sounds are the built-in Default pack |
+| RetroAchievements | Done. Account linking, status bar avatar, User Card, per-game achievement lists, unlock toasts. Live sign-in checked; Web API features tested against recorded answers until a Web API key is in `.env` |
 | Library organization | Done. Hide apps (Options ▸ Hide, Settings ▸ Apps ▸ Hidden apps, Hide system apps), app folders (Emulators, Streaming, Tools or your own name, with emulators suggested), base ROMs folder with Create system folders, and custom Photo/Video folders that also find files MediaStore skips. Not yet tested on a device |
 | Extras | Android apps (games sorted into Games ▸ Android Games), 8 color themes including Original (a color per month), busy indicator, optional button hints, Information screen, can be set as the HOME launcher, Android TV leanback entry |
 | XMB fidelity | Closer. The home menu's layout, motion, navigation, status bar and options panel match the XMB, and games show their own box art; an XMB-style typeface and cursor sound, a still-image background per game, and Resume/Quit Game are missing |
-| Not started | Theme packs and shader settings, on-screen controller, dual screen, RetroAchievements, Xross Portal, FTPS |
+| Not started | On-screen controller, dual screen, Xross Portal, FTPS |
 
 [`Roadmap.md`](Roadmap.md) summarizes what is done, what is left, and the order of the remaining
 work. [`docs/XMB_FIDELITY.md`](docs/XMB_FIDELITY.md) compares Xross with the real XMB, using the
@@ -112,20 +125,21 @@ PS3 and PSP instruction manuals in `assets/docs` as the reference. Feature-by-fe
 ## Testing
 
 ```bash
-./gradlew :app:testDebugUnitTest                  # 320 JVM + Robolectric tests (2 live tests skip)
+./gradlew :app:testDebugUnitTest                  # JVM + Robolectric tests (live tests skip; count in docs/STATUS.md)
 ./gradlew :app:testDebugUnitTest --tests '*ScreenScraperLiveTest*' -PliveScrape=true   # real API calls, uses .env and localTestMedia/Roms/
+./gradlew :app:testDebugUnitTest --tests '*RetroAchievementsLiveTest*' -PliveScrape=true
 ./gradlew :app:installDebug :emulator-stub:installRetroarchDebug
 tools/device-tests/smoke.sh                       # on-device smoke test (see warning below)
 ./gradlew :app:assembleProfiling                  # R8-optimized build for frame timing
 ```
 
 The live tests call Hasheous, SteamGridDB and ScreenScraper for a few files in the git-ignored
-`localTestMedia/Roms/` folder (`ARCADE/` and `3DS/` subfolders). Each runs only when its
-credentials are in `.env`. `localTestMedia/` (ROMs, music and video for local testing) is never
+`localTestMedia/Roms/` folder (`ARCADE/` and `3DS/` subfolders), and RetroAchievements. Each runs
+only when its credentials are in `.env`: ScreenScraper works with the developer credentials alone
+(a user account raises the quota); RetroAchievements checks `RETROACHIEVEMENT_USER` /
+`RETROACHIEVEMENT_USER_PASSWORD` sign in, and with `RETROACHIEVEMENTS_WEB_API_KEY` also links the
+profile and loads a game's achievements. `localTestMedia/` (ROMs, music and video for local testing) is never
 committed.
-
-> **`smoke.sh` hasn't been re-run since its last update.** Its key counts now match the current
-> Options menu, Controls rows and All Games folder, but it hasn't been run on an emulator since.
 
 > **`smoke.sh` is for a throwaway emulator.** It clears Xross's data and runs
 > `rm -rf /sdcard/ROMs` (plus `XrossSmoke` folders under Pictures, Music and Movies) to seed its
@@ -140,18 +154,91 @@ launch intent they receive. Never install them alongside real emulators.
 
 ## Look and sound
 
-* **Icons** come from `assets/icons` (the design SVGs). `tools/icons/svg_icons.py` splits the
-  icon sheets and converts the ones listed in `tools/icons/icon_map.txt` into
-  `res/drawable/xmb_*.xml`. To change an icon, edit the map and run:
+* **Default theme pack**: the bundled icons and sounds live in `app/src/main/assets/themes/default/`
+  (`theme.json`, `icons/*.svg`, `sounds/*.wav`), kept apart from the app code so they can be
+  swapped as a whole. The icons come from `assets/icons` (the design SVGs):
+  `tools/icons/svg_icons.py` splits the icon sheets and writes the ones listed in
+  `tools/icons/icon_map.txt` as pack SVGs. To change an icon, edit the map and run:
 
   ```bash
   python3 tools/icons/svg_icons.py list assets/icons /tmp/icons   # previews every icon id
-  python3 tools/icons/svg_icons.py build assets/icons tools/icons/icon_map.txt app/src/main/res/drawable
+  python3 tools/icons/svg_icons.py build assets/icons tools/icons/icon_map.txt app/src/main/assets/themes/default/icons
   ```
-* **Themes**: Lavender, Crimson, Sapphire, Emerald, Amber, Rose, Midnight, and Original, which
-  changes color with the month (Settings ▸ Theme). The same section hides the button-hint pill.
-* **Sounds**: `app/src/main/assets/sounds`, mapped in `audio/UiSounds.kt`. Settings ▸ Sound
-  toggles effects, volume, the startup cue and the game-start cue.
+* **Color themes**: Lavender, Crimson, Sapphire, Emerald, Amber, Rose, Midnight, Original (a color
+  per month), plus "Theme pack" when the active pack has its own palette (Settings ▸ Theme). The
+  same section hides the button-hint pill.
+* **Sounds** (`audio/UiSounds.kt`), from the active theme pack:
+
+  | Event | Pack file |
+  | --- | --- |
+  | Every D-pad step, horizontal and vertical (cursor and category moves) | `cursor.wav` |
+  | Opening a list or running an item | `confirm.wav` (Default: `cursor.wav`) |
+  | Back | `back.wav` |
+  | Options menu | `option.wav` (Default: `cursor.wav`) |
+  | A setting saved, an action that worked | `ok.wav` |
+  | Errors and actions that aren't allowed (Options on a row without a menu, Confirm on an information row, a slider at its end) | `system_ng.wav` |
+  | Achievement unlocked | `trophy.wav` |
+  | Startup, with the fade-in | `01. opening.wav` |
+  | Game start | `gameboot.wav` |
+
+  Settings ▸ Sound toggles effects, volume, the startup sound and the game-start sound.
+* **Wave settings** (Settings ▸ Theme ▸ Wave settings): sliders for the shader uniforms, previewed
+  live behind the panel and saved in `settings.json` under `display`:
+
+  | Setting | `settings.json` key | Range | Default |
+  | --- | --- | --- | --- |
+  | Speed | `waveSpeed` | 0.5–2.0× | 1.0 |
+  | Ribbon lines | `waveLines` | 0–12 | 5 |
+  | Turbulence (amplitude) | `waveTurbulence` | 0–2× | 1.0 |
+  | Ribbon thickness | `waveThickness` | 0.5–3× | 1.0 |
+  | Colors | `waveTint` | `THEME`, `AURORA`, `SUNSET`, `OCEAN`, `SAKURA`, `PASTEL`, `MONO`, `CUSTOM` | `THEME` |
+  | Custom gradient | `waveColors` `{top, bottom, wave}` | `#RRGGBB` | Lavender |
+
+  **Reset to theme defaults** restores the active pack's `wave` values.
+* **Focused game background**: resting on a scraped game crossfades its hero art (or a screenshot)
+  in after 250 ms; its video snap fades in over it after 1.2 s, with the snap's sound ramping up
+  over 300 ms while music stays ducked. The wave stops rendering while art or video covers it.
+
+### Theme packs
+
+Drop a folder into `Xross/themes/` and pick it with **Settings ▸ Theme ▸ Theme pack** (press
+Confirm to step through packs, or Options ▸ Look for new packs after copying one in):
+
+```
+Xross/themes/<theme_id>/
+├── theme.json      name, author, version, palette, wave defaults (all optional except name)
+├── fonts/          one .ttf/.otf used for all launcher text
+├── icons/          <icon id>.svg / .png / .webp, e.g. settings.svg, games.png
+└── sounds/         cursor.wav, confirm.wav, back.wav, option.wav, ok.wav, system_ng.wav,
+                    trophy.wav, 01. opening.wav, gameboot.wav
+```
+
+```json
+{
+  "name": "Sakura",
+  "author": "you",
+  "version": "1.0",
+  "palette": { "top": "#2E0A22", "bottom": "#B04C8E", "wave": "#FFC6EA", "glow": "#FFE6F4" },
+  "wave": { "speed": 0.8, "lineCount": 7, "turbulence": 1.2, "ribbonThickness": 1.4 },
+  "font": "fonts/Rounded.ttf",
+  "sounds": { "cursor": "tick.wav" },
+  "soundGains": { "cursor": 0.6 },
+  "icons": { "album": "disc.svg" }
+}
+```
+
+* Anything a pack leaves out (a sound, an icon, the font) comes from the Default pack, so a pack
+  can be as small as one `theme.json` and a font.
+* Icon ids are the lower-case glyph names: `settings`, `games`, `apps`, `photo`, `music`, `video`,
+  `album`, `artist`, `shuffle`, `search`, `platform`, `game_cart`, `game_disc`, `favorites`,
+  `recent`, `handheld`, `folder`, `storage`, `controls`, `emulators`, `display`, `sound`, `system`,
+  `add`, `refresh`, `home`, `info`, `download`, `network`, `users`, `trophy`. Icons are drawn as
+  white silhouettes with the XMB gloss, so color doesn't matter. SVGs may use paths, rects,
+  circles, ellipses and polygons with translate/scale transforms; black fills are treated as a
+  backdrop and dropped. PNG/WebP icons are scaled to 256 px.
+* File names are matched without regard to case, and a pack can't reach files outside its
+  folder. A pack with its own `palette` switches the color theme to it; its `wave` values become
+  the wave settings.
 * **Media**: Settings ▸ Media sets the slideshow interval, whether music resumes after a game or
   stops, video looping, and which folders Photo and Video show (all of them by default).
 * **Apps**: Options (△ / Y) on an app hides it or moves it into a folder; Settings ▸ Apps lists

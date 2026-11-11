@@ -55,6 +55,31 @@ data class MenuSnapshot(
     val portable: PortableSetup = PortableSetup(),
     /** Base ROMs folder in use (resolved from the setting). */
     val baseRomsFolder: String = "",
+    /** The linked RetroAchievements account, for Settings ▸ Accounts. */
+    val accounts: AccountsSetup = AccountsSetup(),
+    /** Theme packs found and the active one, for Settings ▸ Theme. */
+    val themes: ThemeSetup = ThemeSetup(),
+)
+
+/** What Settings ▸ Theme shows about theme packs. */
+data class ThemeSetup(
+    /** (id, name) of every pack, Default first. */
+    val packs: List<Pair<String, String>> = listOf(dev.xross.launcher.theme.pack.ThemePackLoader.DEFAULT_ID to "Default"),
+    val activeId: String = dev.xross.launcher.theme.pack.ThemePackLoader.DEFAULT_ID,
+    val activeName: String = "Default",
+    val activeAuthor: String = "",
+    /** The active pack brings its own colors (the "Theme pack" color option). */
+    val packPalette: Boolean = false,
+    /** Problems loading the active pack, shown under its row. */
+    val problems: List<String> = emptyList(),
+)
+
+/** What Settings ▸ Accounts shows (public profile data only, never the Web API key). */
+data class AccountsSetup(
+    val retroAchievementsUser: String = "",
+    val retroAchievementsLinked: Boolean = false,
+    val retroAchievementsPoints: Long? = null,
+    val retroAchievementsRank: Int? = null,
 )
 
 /** What Settings ▸ System shows about the Xross folder and the database backup. */
@@ -123,6 +148,7 @@ class MenuTree(private val s: MenuSnapshot) {
         key == SOUND -> soundSettings()
         key == MEDIA_SETTINGS -> mediaSettings()
         key == SYSTEM -> systemSettings()
+        key == ACCOUNTS -> accountSettings()
         key == APPS_SETTINGS -> appSettings()
         key == HIDDEN_APPS -> hiddenAppRows()
         key == PHOTO_FOLDERS -> mediaFolderRows(MediaFolderKind.PHOTO)
@@ -225,6 +251,15 @@ class MenuTree(private val s: MenuSnapshot) {
     private fun gameMenu(game: GameEntity, platform: Platform?): List<MenuOption> = buildList {
         add(MenuOption("Play", command = Command.LaunchGame(game.id)))
         add(MenuOption("Details", detail = "Box art, description and release info", command = Command.ShowDetails(game.id)))
+        if (dev.xross.launcher.profile.RaConsoles.of(game.platformId) != null) {
+            add(
+                MenuOption(
+                    "Achievements",
+                    detail = if (s.accounts.retroAchievementsLinked) "Badges, points and progress" else "Link RetroAchievements in Settings ▸ Accounts",
+                    command = Command.ShowAchievements(game.id),
+                ),
+            )
+        }
         add(
             MenuOption(
                 if (game.favorite) "Remove from favorites" else "Add to favorites",
@@ -438,12 +473,43 @@ class MenuTree(private val s: MenuSnapshot) {
         folder(LIBRARY, "Library", GlyphKey.STORAGE, "ROM folders and scanning"),
         folder(CONTROLS, "Controls", GlyphKey.CONTROLS, "Buttons, layout and stick"),
         folder(EMULATORS, "Emulators", GlyphKey.EMULATORS, "${s.installedEmulators.size} detected"),
-        folder(DISPLAY, "Theme", GlyphKey.DISPLAY, "${XrossTheme.byName(s.settings.theme).label} · wave background"),
+        folder(DISPLAY, "Theme", GlyphKey.DISPLAY, "${s.themes.activeName} pack · ${themeColorLabel().substringBefore(" ·")} · wave background"),
         folder(SOUND, "Sound", GlyphKey.SOUND, if (s.settings.soundEffects) "Effects on" else "Effects off"),
         folder(MEDIA_SETTINGS, "Media", GlyphKey.MUSIC, "Slideshow, music and video playback"),
         folder(APPS_SETTINGS, "Apps", GlyphKey.APPS, appsSummary()),
+        folder(ACCOUNTS, "Accounts", GlyphKey.USERS, accountsSummary()),
         folder(SYSTEM, "System", GlyphKey.SYSTEM, "Version ${s.versionName}"),
     )
+
+    private fun accountsSummary(): String {
+        val a = s.accounts
+        return if (a.retroAchievementsLinked) "RetroAchievements · ${a.retroAchievementsUser}" else "RetroAchievements profile"
+    }
+
+    /** Settings ▸ Accounts. */
+    private fun accountSettings(): List<XmbNode> = buildList {
+        val a = s.accounts
+        val number = java.text.NumberFormat.getIntegerInstance()
+        add(
+            setting(
+                "acct:ra", "RetroAchievements account…",
+                if (a.retroAchievementsLinked) {
+                    listOfNotNull(
+                        "Linked as ${a.retroAchievementsUser}",
+                        a.retroAchievementsPoints?.let { "${number.format(it)} points" },
+                        a.retroAchievementsRank?.let { "rank #${number.format(it)}" },
+                    ).joinToString(" · ")
+                } else {
+                    "Link with your user name and Web API key (retroachievements.org ▸ Settings ▸ Keys)"
+                },
+                GlyphKey.TROPHY, Command.LinkRetroAchievements,
+            ),
+        )
+        if (a.retroAchievementsLinked) {
+            add(setting("acct:card", "User Card", "Profile picture, rank, points and recent unlocks", GlyphKey.USERS, Command.OpenProfileCard))
+            add(setting("acct:refresh", "Refresh profile", "Fetch points, rank and avatar again", GlyphKey.REFRESH, Command.RefreshRetroAchievements))
+        }
+    }
 
     private fun appsSummary(): String {
         val hidden = s.settings.hiddenApps.size
@@ -752,9 +818,22 @@ class MenuTree(private val s: MenuSnapshot) {
     }
 
     private fun displaySettings() = listOf(
-        setting("disp:theme", "Theme color", themeLabel(XrossTheme.byName(s.settings.theme)), GlyphKey.DISPLAY, Command.CycleTheme),
+        XmbNode(
+            id = "disp:pack",
+            title = "Theme pack",
+            subtitle = themePackSummary(),
+            icon = NodeIcon.Glyph(GlyphKey.DISPLAY),
+            action = NodeAction.Run(Command.CycleThemePack),
+            menu = buildList {
+                for ((id, name) in s.themes.packs) {
+                    add(MenuOption(name, command = Command.SetThemePack(id), selected = id == s.themes.activeId))
+                }
+                add(MenuOption("Look for new packs", detail = "Rescan Xross/themes", command = Command.ReloadThemePacks))
+            },
+        ),
+        setting("disp:theme", "Theme color", themeColorLabel(), GlyphKey.DISPLAY, Command.CycleTheme),
         setting("disp:wave", "Wave background", onOff(s.settings.waveEnabled), GlyphKey.DISPLAY, Command.ToggleWave),
-        setting("disp:speed", "Wave speed", "${s.settings.waveSpeed}x", GlyphKey.DISPLAY, Command.CycleWaveSpeed),
+        setting("disp:wavesettings", "Wave settings", waveSummary(), GlyphKey.DISPLAY, Command.OpenWaveSettings),
         setting(
             "disp:hints",
             "Button hints",
@@ -878,6 +957,27 @@ class MenuTree(private val s: MenuSnapshot) {
     private fun themeLabel(theme: XrossTheme) =
         if (theme.dynamic) "${theme.label} · changes every month" else theme.label
 
+    private fun themeColorLabel(): String =
+        if (s.settings.theme == dev.xross.launcher.theme.PACK_THEME && s.themes.packPalette) {
+            "Theme pack · ${s.themes.activeName}"
+        } else {
+            themeLabel(XrossTheme.byName(s.settings.theme))
+        }
+
+    private fun themePackSummary(): String = buildString {
+        append(s.themes.activeName)
+        if (s.themes.activeAuthor.isNotBlank()) append(" by ${s.themes.activeAuthor}")
+        val others = s.themes.packs.size - 1
+        append(if (others == 0) " · add packs to Xross/themes" else " · ${s.themes.packs.size} packs")
+        s.themes.problems.firstOrNull()?.let { append(" · $it") }
+    }
+
+    private fun waveSummary(): String {
+        val st = s.settings
+        val tint = dev.xross.launcher.theme.WaveTint.byName(st.waveTint).label
+        return "${formatDecimal(st.waveSpeed)}× · ${st.waveLineCount} lines · $tint"
+    }
+
     private fun fingerprintSummary(status: FingerprintStatus): String {
         val st = status.stats ?: return "Counting…"
         if (status.current != null) {
@@ -927,6 +1027,7 @@ class MenuTree(private val s: MenuSnapshot) {
         const val APP_FOLDER_PREFIX = "apps:folder:"
         private val DISC_EXTENSIONS = setOf("iso", "cue", "chd", "cso", "rvz", "gcz", "wbfs", "cdi", "gdi", "pbp", "m3u")
         const val SYSTEM = "settings:system"
+        const val ACCOUNTS = "settings:accounts"
 
         /** "Off — hardware only" for 0 (the driver's own centre zone is all that applies), "35%" otherwise. */
         fun deadzoneLabel(deadzone: Float): String =
@@ -935,6 +1036,12 @@ class MenuTree(private val s: MenuSnapshot) {
         private fun countLabel(n: Int) = if (n == 1) "1 title" else "$n titles"
 
         /** "45 min", "2 h 15 min", "120 h"; null under a minute (nothing worth showing). */
+        /** "1.5", "2", "0.8": one decimal, none when whole. */
+        fun formatDecimal(v: Float): String {
+            val r = kotlin.math.round(v * 10f) / 10f
+            return if (r % 1f == 0f) r.toInt().toString() else String.format(Locale.ROOT, "%.1f", r)
+        }
+
         fun formatPlaytime(ms: Long): String? {
             val minutes = ms / 60_000
             return when {

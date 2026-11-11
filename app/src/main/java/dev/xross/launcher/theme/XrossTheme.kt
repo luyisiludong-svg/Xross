@@ -51,6 +51,13 @@ enum class XrossTheme(
     }
 }
 
+/** [dev.xross.launcher.data.XrossSettings.theme] value for "the theme pack's own colors". */
+const val PACK_THEME = "PACK"
+
+/** The palette for a theme setting: the pack's own when [themeName] is [PACK_THEME] and it has one. */
+fun paletteFor(themeName: String, packPalette: ThemePalette?, date: LocalDate = LocalDate.now()): ThemePalette =
+    if (themeName == PACK_THEME && packPalette != null) packPalette else XrossTheme.byName(themeName).palette(date)
+
 fun Int.rgb(): FloatArray = floatArrayOf(
     ((this shr 16) and 0xFF) / 255f,
     ((this shr 8) and 0xFF) / 255f,

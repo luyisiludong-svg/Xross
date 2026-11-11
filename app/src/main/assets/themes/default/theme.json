@@ -1,0 +1,24 @@
+{
+  "name": "Default",
+  "author": "Xross",
+  "version": "1.0",
+  "description": "The built-in look: XMB-style glyphs and console UI sounds. Packs in Xross/themes/ replace any part of it.",
+  "wave": { "speed": 1.0, "lineCount": 5, "turbulence": 1.0, "ribbonThickness": 1.0 },
+  "sounds": {
+    "cursor": "cursor.wav",
+    "confirm": "cursor.wav",
+    "option": "cursor.wav",
+    "back": "back.wav",
+    "ok": "ok.wav",
+    "system_ng": "system_ng.wav",
+    "trophy": "trophy.wav",
+    "opening": "01. opening.wav",
+    "gameboot": "gameboot.wav"
+  },
+  "soundGains": { "cursor": 0.55, "ok": 0.8, "system_ng": 0.8 },
+  "icons": {
+    "album": "game_disc.svg",
+    "artist": "users.svg",
+    "shuffle": "refresh.svg"
+  }
+}

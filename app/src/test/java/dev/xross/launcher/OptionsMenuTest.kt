@@ -85,16 +85,18 @@ class OptionsMenuTest {
     @Test fun gameMenuOffersPlayFavoriteEmulatorAndHistory() {
         val game = GameEntity(7, "/r/psx/a.chd", "psx", "Vagrant Story", "a.chd", 10, 0, playCount = 3, playTimeMs = 135 * 60_000L)
         val menu = gameMenu(game, installed = setOf("duckstation", "retroarch"))
-        assertEquals(listOf("Play", "Details", "Add to favorites", "Emulator", "Played", "Metadata", "Information"), menu.map { it.label })
+        // Systems with RetroAchievements also get Achievements, right after Details.
+        assertEquals(listOf("Play", "Details", "Achievements", "Add to favorites", "Emulator", "Played", "Metadata", "Information"), menu.map { it.label })
         assertEquals(Command.LaunchGame(7), menu[0].command)
         assertEquals(Command.ShowDetails(7), menu[1].command)
-        assertEquals(Command.ToggleFavorite(7), menu[2].command)
-        assertEquals("DuckStation", menu[3].detail)
-        assertEquals("2 h 15 min · 3 times", menu[4].detail)
-        assertEquals(listOf(Command.EditTitle(7), Command.FindMatch(7), Command.Rescrape(7)), menu[5].submenu.map { it.command })
-        assertEquals(Command.ShowGameInfo(7), menu[6].command)
+        assertEquals(Command.ShowAchievements(7), menu[2].command)
+        assertEquals(Command.ToggleFavorite(7), menu[3].command)
+        assertEquals("DuckStation", menu[4].detail)
+        assertEquals("2 h 15 min · 3 times", menu[5].detail)
+        assertEquals(listOf(Command.EditTitle(7), Command.FindMatch(7), Command.Rescrape(7)), menu[6].submenu.map { it.command })
+        assertEquals(Command.ShowGameInfo(7), menu[7].command)
 
-        val choices = menu[3].submenu
+        val choices = menu[4].submenu
         assertEquals(listOf("Platform default", "DuckStation", "RetroArch · swanstation", "RetroArch · pcsx_rearmed"), choices.map { it.label })
         assertEquals(Command.SetGameEmulator(7, null), choices[0].command)
         assertEquals(Command.SetGameEmulator(7, "retroarch:swanstation"), choices[2].command)
@@ -104,14 +106,14 @@ class OptionsMenuTest {
     @Test fun overrideIsShownAndMarkedAndMissingEmulatorsAreFlagged() {
         val game = GameEntity(7, "/r/psx/a.chd", "psx", "Vagrant Story", "a.chd", 10, 0, favorite = true, emulatorOverride = "retroarch:swanstation")
         val menu = gameMenu(game, installed = setOf("retroarch"))
-        assertEquals("Remove from favorites", menu[2].label)
-        assertEquals("RetroArch · swanstation · this game only", menu[3].detail)
-        val choices = menu[3].submenu
+        assertEquals("Remove from favorites", menu[3].label)
+        assertEquals("RetroArch · swanstation · this game only", menu[4].detail)
+        val choices = menu[4].submenu
         assertEquals(listOf(false, false, true, false), choices.map { it.selected })
         assertEquals("Not installed", choices[1].detail) // DuckStation
         assertEquals("RetroArch · swanstation", choices[0].detail) // what the platform default resolves to
         // No sessions yet: no history row, but Information is always there.
-        assertEquals(listOf("Play", "Details", "Remove from favorites", "Emulator", "Metadata", "Information"), menu.map { it.label })
+        assertEquals(listOf("Play", "Details", "Achievements", "Remove from favorites", "Emulator", "Metadata", "Information"), menu.map { it.label })
     }
 
     // endregion
