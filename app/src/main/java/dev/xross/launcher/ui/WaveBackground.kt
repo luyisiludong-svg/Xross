@@ -17,17 +17,19 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import dev.xross.launcher.theme.ThemePalette
 import kotlin.math.roundToInt
 
 /**
- * GL wave background. The render loop is paused whenever the activity is paused (screen off,
- * emulator in front), so it costs nothing while a game runs.
+ * GL wave background. The render loop stops whenever the activity is paused (screen off,
+ * emulator in front), so it costs nothing while a game runs, and while [paused] is set: something
+ * opaque (focused-game hero art, a video snap, a full-screen photo) covers the whole screen. A
+ * pause keeps the GL surface and context, so resuming is instant.
  */
 @Composable
-fun WaveBackground(enabled: Boolean, speed: Float, palette: ThemePalette, modifier: Modifier = Modifier) {
+fun WaveBackground(enabled: Boolean, params: WaveParams, paused: Boolean = false, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val supported = remember { supportsGles3(context) }
+    val palette = params.palette
     if (!enabled || !supported) {
         Box(modifier.fillMaxSize().background(Brush.verticalGradient(listOf(palette.topColor, palette.bottomColor))))
         return
@@ -39,7 +41,6 @@ fun WaveBackground(enabled: Boolean, speed: Float, palette: ThemePalette, modifi
             .defaultDisplay.refreshRate
         WaveRenderer(refreshRateHz = hz)
     }
-    val params = remember(speed, palette) { WaveParams(speed = speed, palette = palette) }
     renderer.params = params
 
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -59,6 +60,10 @@ fun WaveBackground(enabled: Boolean, speed: Float, palette: ThemePalette, modifi
             }
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
         }
+    }
+    // Covered: stop drawing frames (the GL thread sleeps) but keep the surface.
+    androidx.compose.runtime.LaunchedEffect(view, paused) {
+        view.renderMode = if (paused) GLSurfaceView.RENDERMODE_WHEN_DIRTY else GLSurfaceView.RENDERMODE_CONTINUOUSLY
     }
     DisposableEffect(lifecycle, view) {
         val observer = LifecycleEventObserver { _, event ->

@@ -31,3 +31,14 @@ internal fun millisUntilNextDay(now: LocalDateTime): Long {
     val next = now.toLocalDate().plusDays(1).atStartOfDay().plusSeconds(1)
     return Duration.between(now, next).toMillis().coerceAtLeast(1_000L)
 }
+
+/**
+ * [rememberThemePalette] for a theme setting value, which may be [PACK_THEME]: then the active
+ * theme pack's palette ([packPalette]) when it has one.
+ */
+@Composable
+fun rememberActivePalette(themeName: String, packPalette: ThemePalette?): ThemePalette {
+    val theme = XrossTheme.byName(themeName)
+    val dated = rememberThemePalette(theme)
+    return if (themeName == PACK_THEME && packPalette != null) packPalette else dated
+}

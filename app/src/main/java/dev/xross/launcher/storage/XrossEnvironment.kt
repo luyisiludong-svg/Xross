@@ -15,9 +15,10 @@ import java.io.IOException
  * ```
  * Xross/
  *   config/   settings.json, controllers.json, systems.json
- *   data/     xross.db (a backup snapshot; the live database stays in app-private storage)
+ *   data/     xross.db (a backup snapshot; the live database stays in app-private storage),
+ *             retroachievements.json (public profile cache; the API key is never here)
  *   dats/     No-Intro / Redump DATs
- *   media/    scraped art and videos (.nomedia)
+ *   media/    scraped art and videos, avatars/<user>.png (.nomedia)
  *   roms/     optional ROM library, one folder per system
  *   themes/   themes and sounds (.nomedia)
  * ```
@@ -40,6 +41,12 @@ data class XrossLayout(val root: File, val portable: Boolean) {
 
     /** Backup snapshot of the library database. */
     val databaseBackup: File get() = File(data, "xross.db")
+
+    /** Cached RetroAchievements avatars, `<username>.png`. */
+    val avatars: File get() = File(media, "avatars")
+
+    /** Public RetroAchievements profile cache (no API key), shown offline. */
+    val profileCache: File get() = File(data, "retroachievements.json")
 
     companion object {
         const val CONFIG = "config"

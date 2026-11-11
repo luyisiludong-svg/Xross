@@ -1,39 +1,45 @@
 package dev.xross.launcher.ui
 
-import androidx.annotation.DrawableRes
-import dev.xross.launcher.R
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.painter.BitmapPainter
+import androidx.compose.ui.graphics.painter.ColorPainter
+import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
+import androidx.compose.ui.text.font.FontFamily
 import dev.xross.launcher.state.GlyphKey
+import dev.xross.launcher.theme.pack.LoadedTheme
+import dev.xross.launcher.theme.pack.ThemeIcon
 
-/** Generated from assets/icons by tools/icons/svg_icons.py (see tools/icons/icon_map.txt). */
-@DrawableRes
-fun GlyphKey.drawable(): Int = when (this) {
-    GlyphKey.SETTINGS -> R.drawable.xmb_settings
-    GlyphKey.GAMES -> R.drawable.xmb_games
-    GlyphKey.APPS -> R.drawable.xmb_apps
-    GlyphKey.PHOTO -> R.drawable.xmb_photo
-    GlyphKey.MUSIC -> R.drawable.xmb_music
-    GlyphKey.VIDEO -> R.drawable.xmb_video
-    GlyphKey.ALBUM -> R.drawable.xmb_game_disc
-    GlyphKey.ARTIST -> R.drawable.xmb_users
-    GlyphKey.SHUFFLE -> R.drawable.xmb_refresh
-    GlyphKey.SEARCH -> R.drawable.xmb_search
-    GlyphKey.PLATFORM -> R.drawable.xmb_platform
-    GlyphKey.GAME_CART -> R.drawable.xmb_game_cart
-    GlyphKey.GAME_DISC -> R.drawable.xmb_game_disc
-    GlyphKey.FAVORITES -> R.drawable.xmb_favorites
-    GlyphKey.RECENT -> R.drawable.xmb_recent
-    GlyphKey.HANDHELD -> R.drawable.xmb_handheld
-    GlyphKey.FOLDER -> R.drawable.xmb_folder
-    GlyphKey.STORAGE -> R.drawable.xmb_storage
-    GlyphKey.CONTROLS -> R.drawable.xmb_controls
-    GlyphKey.EMULATORS -> R.drawable.xmb_emulators
-    GlyphKey.DISPLAY -> R.drawable.xmb_display
-    GlyphKey.SOUND -> R.drawable.xmb_sound
-    GlyphKey.SYSTEM -> R.drawable.xmb_system
-    GlyphKey.ADD -> R.drawable.xmb_add
-    GlyphKey.REFRESH -> R.drawable.xmb_refresh
-    GlyphKey.HOME -> R.drawable.xmb_home
-    GlyphKey.INFO -> R.drawable.xmb_info
-    GlyphKey.DOWNLOAD -> R.drawable.xmb_download
-    GlyphKey.NETWORK -> R.drawable.xmb_network
+/** The active theme pack, provided at the root of the UI (see MainActivity). */
+val LocalThemePack = staticCompositionLocalOf<LoadedTheme?> { null }
+
+/**
+ * The theme pack's typeface for all launcher text. Snapshot state rather than a composition
+ * local because [shadowed] builds styles outside composable scope; reads during composition are
+ * still tracked, so switching packs redraws text.
+ */
+object ThemeTypography {
+    var family: FontFamily? by mutableStateOf(null)
+}
+
+private val Blank = ColorPainter(Color.Transparent)
+
+/**
+ * The icon for [key] from the active theme pack: an SVG drawn as a vector, or a PNG/WebP bitmap.
+ * Packs that lack an icon inherit the Default pack's (generated from assets/icons by
+ * tools/icons/svg_icons.py), so every key resolves while a pack is active.
+ */
+@Composable
+fun glyphPainter(key: GlyphKey): Painter {
+    return when (val icon = LocalThemePack.current?.icons?.get(key)) {
+        is ThemeIcon.Vector -> rememberVectorPainter(icon.image)
+        is ThemeIcon.Bitmap -> remember(icon) { BitmapPainter(icon.image) }
+        null -> Blank
+    }
 }

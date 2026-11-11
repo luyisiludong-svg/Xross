@@ -129,7 +129,7 @@ class ConfigCodecTest {
         assertEquals(0.95f, s.deadzone)
         assertEquals(0f, s.axialDeadzone)
         assertEquals("LAVENDER", s.theme)
-        assertEquals(4f, s.waveSpeed)
+        assertEquals(2f, s.waveSpeed) // the wave speed range is 0.5×–2×
         assertEquals(1f, s.soundVolume)
         assertEquals(1, s.slideshowSeconds)
         assertEquals("us", s.scrapeRegion)

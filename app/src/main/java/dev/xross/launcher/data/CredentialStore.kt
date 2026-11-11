@@ -11,8 +11,15 @@ data class ScraperAccounts(
     val screenScraperUser: String = "",
     val screenScraperPassword: String = "",
     val steamGridDbKey: String = "",
+    /** RetroAchievements user name. Public; the profile cache in the Xross folder repeats it. */
+    val retroAchievementsUser: String = "",
+    /** RetroAchievements Web API key. Secret: never written anywhere but this store. */
+    val retroAchievementsKey: String = "",
 ) {
-    override fun toString() = "ScraperAccounts(screenScraperUser=$screenScraperUser, secrets=<hidden>)"
+    val retroAchievementsLinked: Boolean get() = retroAchievementsUser.isNotBlank() && retroAchievementsKey.isNotBlank()
+
+    override fun toString() =
+        "ScraperAccounts(screenScraperUser=$screenScraperUser, retroAchievementsUser=$retroAchievementsUser, secrets=<hidden>)"
 }
 
 /**
@@ -34,6 +41,8 @@ class CredentialStore(context: Context) {
             putString(KEY_SS_USER, next.screenScraperUser)
             putString(KEY_SS_PASSWORD, next.screenScraperPassword)
             putString(KEY_SGDB, next.steamGridDbKey)
+            putString(KEY_RA_USER, next.retroAchievementsUser)
+            putString(KEY_RA_KEY, next.retroAchievementsKey)
         }
         _accounts.value = next
     }
@@ -42,6 +51,8 @@ class CredentialStore(context: Context) {
         screenScraperUser = prefs.getString(KEY_SS_USER, null).orEmpty(),
         screenScraperPassword = prefs.getString(KEY_SS_PASSWORD, null).orEmpty(),
         steamGridDbKey = prefs.getString(KEY_SGDB, null).orEmpty(),
+        retroAchievementsUser = prefs.getString(KEY_RA_USER, null).orEmpty(),
+        retroAchievementsKey = prefs.getString(KEY_RA_KEY, null).orEmpty(),
     )
 
     companion object {
@@ -50,5 +61,7 @@ class CredentialStore(context: Context) {
         private const val KEY_SS_USER = "screenscraper_user"
         private const val KEY_SS_PASSWORD = "screenscraper_password"
         private const val KEY_SGDB = "steamgriddb_key"
+        private const val KEY_RA_USER = "retroachievements_user"
+        private const val KEY_RA_KEY = "retroachievements_web_api_key"
     }
 }
