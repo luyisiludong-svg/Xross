@@ -67,6 +67,12 @@ sealed interface Command {
     data object ToggleResumeMusicAfterGames : Command
     data object ToggleVideoLoop : Command
     data object ToggleAllGamesFolder : Command
+    /** Moves the Xross folder to the next mounted volume (primary storage, SD card, …). */
+    data object CycleXrossVolume : Command
+    data object BackupNow : Command
+    /** Asks before replacing the library with the backup in the Xross folder. */
+    data object ConfirmRestore : Command
+    data object RestoreBackup : Command
     data class ShowGameInfo(val gameId: Long) : Command
     data object ToggleButtonHints : Command
     data object CycleAxialDeadzone : Command

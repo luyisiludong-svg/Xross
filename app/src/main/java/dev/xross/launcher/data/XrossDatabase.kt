@@ -17,7 +17,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         DatRomEntity::class,
         GameMetadataEntity::class,
     ],
-    version = 5,
+    version = XrossDatabase.VERSION,
     exportSchema = true,
     autoMigrations = [AutoMigration(from = 1, to = 2)], // v2: game_hashes
 )
@@ -28,6 +28,9 @@ abstract class XrossDatabase : RoomDatabase() {
     abstract fun metadata(): MetadataDao
 
     companion object {
+        const val NAME = "xross.db"
+        const val VERSION = 5
+
         /** v3: accumulated playtime per game. */
         val MIGRATION_2_3 = object : Migration(2, 3) {
             override fun migrate(db: SupportSQLiteDatabase) {
@@ -98,9 +101,15 @@ abstract class XrossDatabase : RoomDatabase() {
         /** Every hand-written migration, in order. No destructive fallback: an upgrade never drops data. */
         val MIGRATIONS = arrayOf<Migration>(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
 
-        fun create(context: Context): XrossDatabase =
-            Room.databaseBuilder(context, XrossDatabase::class.java, "xross.db")
+        /**
+         * Opens the live database (app-private storage only; see [DatabaseBackupManager] for the
+         * copy in the Xross folder). A restore staged by the previous run is applied first.
+         */
+        fun create(context: Context): XrossDatabase {
+            DatabaseBackupManager.applyStagedRestore(context)
+            return Room.databaseBuilder(context, XrossDatabase::class.java, NAME)
                 .addMigrations(*MIGRATIONS)
                 .build()
+        }
     }
 }

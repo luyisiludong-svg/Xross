@@ -17,7 +17,7 @@ import org.robolectric.RobolectricTestRunner
 import java.io.File
 
 /**
- * Real calls to the metadata services, against the ROMs in the git-ignored `Roms/` folder.
+ * Real calls to the metadata services, against the ROMs in the git-ignored `localTestMedia/Roms/` folder.
  * Opt-in and skipped by default:
  *
  *     ./gradlew :app:testDebugUnitTest --tests '*ScreenScraperLiveTest*' -PliveScrape=true
@@ -54,7 +54,7 @@ class ScreenScraperLiveTest {
         if (account is AccountCheck.Failed) return@runBlocking
 
         val samples = listOf("ARCADE" to "arcade", "3DS" to "n3ds").flatMap { (dir, platform) ->
-            File(root, "Roms/$dir").listFiles().orEmpty().filter { it.isFile }.sortedBy { it.name }.take(3).map { it to platform }
+            File(root, "localTestMedia/Roms/$dir").listFiles().orEmpty().filter { it.isFile }.sortedBy { it.name }.take(3).map { it to platform }
         }
         for ((file, platform) in samples) {
             val hashes = FileHash.of(file, maxBytes = 256L shl 20) // 3DS images are too big: name search
@@ -91,9 +91,9 @@ class ScreenScraperLiveTest {
         val sgdb = dev.xross.launcher.scrape.providers.SteamGridDbProvider(http, { key!! })
 
         val samples = listOf("ARCADE" to "arcade", "3DS" to "n3ds").flatMap { (dir, platform) ->
-            File(root, "Roms/$dir").listFiles().orEmpty().filter { it.isFile }.sortedBy { it.name }.take(4).map { it to platform }
+            File(root, "localTestMedia/Roms/$dir").listFiles().orEmpty().filter { it.isFile }.sortedBy { it.name }.take(4).map { it to platform }
         }
-        assumeTrue("no ROMs in Roms/", samples.isNotEmpty())
+        assumeTrue("no ROMs in localTestMedia/Roms/", samples.isNotEmpty())
         val out = java.nio.file.Files.createTempDirectory("xross-live").toFile()
         var withArt = 0
         for ((file, platform) in samples) {

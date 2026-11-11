@@ -1,12 +1,8 @@
 package dev.xross.launcher.state
 
-import android.Manifest
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.net.Uri
-import android.os.Build
-import android.os.Environment
 import android.provider.Settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -25,8 +21,9 @@ import dev.xross.launcher.input.resolve
 import dev.xross.launcher.launch.GameLauncher
 import dev.xross.launcher.launch.LaunchPlan
 import dev.xross.launcher.storage.PlatformRegistry
+import dev.xross.launcher.storage.StorageAccess
+import dev.xross.launcher.storage.StorageVolumes
 import dev.xross.launcher.storage.VolumeEvent
-import dev.xross.launcher.storage.XrossPaths
 import dev.xross.launcher.scrape.ProviderId
 import dev.xross.launcher.scrape.ScrapeProgress
 import dev.xross.launcher.theme.XrossTheme
@@ -57,6 +54,12 @@ sealed interface UiEffect {
     data class PromptText(val prompt: TextPrompt) : UiEffect
     data object RequestStorageAccess : UiEffect
     data class SetWallpaper(val uri: Uri) : UiEffect
+
+    /** Start a game; the activity hands the plan to [dev.xross.launcher.launch.GameLauncher.start]. */
+    data class Launch(val plan: LaunchPlan.Ready) : UiEffect
+
+    /** Restart the process (a restored library database is applied on the next start). */
+    data object RestartApp : UiEffect
 }
 
 data class XmbUiState(
@@ -186,7 +189,7 @@ class XmbViewModel(
                 apps = apps,
                 settings = settings,
                 media = mediaLib,
-                datFolder = XrossPaths.datFolder(settings.datFolder).absolutePath,
+                datFolder = datFolder(settings.datFolder).absolutePath,
             ),
         )
     }
@@ -677,7 +680,7 @@ class XmbViewModel(
             toast("Grant All files access first")
             return
         }
-        val dir = XrossPaths.datFolder(settingsStore.current.datFolder)
+        val dir = datFolder(settingsStore.current.datFolder)
         datWork {
             withContext(Dispatchers.IO) { dir.mkdirs() }
             val result = container.dats.importFolder(dir)
@@ -890,7 +893,127 @@ class XmbViewModel(
         refreshFolders()
         if (granted && (firstLoad || !wasGranted)) rescan(quiet = firstLoad)
         onAppsChanged()
+        viewModelScope.launch { syncXrossFolder(firstLoad) }
     }
+
+    // region Xross folder and backups
+
+    /**
+     * Follows the Xross folder: once shared storage can be written it moves out of app storage,
+     * and config already there (an SD card from another device, a reinstall) is adopted. Config
+     * files edited outside Xross are picked up. On a clean install a backup found in the folder
+     * is offered for restore.
+     */
+    private suspend fun syncXrossFolder(firstLoad: Boolean) {
+        val moved = withContext(Dispatchers.IO) {
+            val changed = container.environment.refresh()
+            if (changed) settingsStore.relocate(container.environment.current) else settingsStore.reloadIfChanged()
+            changed
+        }
+        publishPortable()
+        if (firstLoad || moved) {
+            val restorable = container.backups.findRestorable()
+            env.update { it.copy(portable = it.portable.copy(restorable = restorable)) }
+            if (restorable != null && container.backups.announceOnce(restorable)) {
+                toast("Found a library backup with ${countOf(restorable.games, "game")} — restore it from Games")
+            }
+        }
+    }
+
+    private suspend fun publishPortable() {
+        val layout = container.environment.current
+        val onDisk = container.backups.currentBackup()
+        env.update {
+            it.copy(portable = it.portable.copy(root = layout.root.absolutePath, portable = layout.portable, backupOnDisk = onDisk))
+        }
+    }
+
+    private fun cycleXrossVolume() {
+        val layout = container.environment.current
+        if (!layout.portable) {
+            emit(UiEffect.RequestStorageAccess)
+            return
+        }
+        viewModelScope.launch {
+            val volumes = withContext(Dispatchers.IO) { container.volumes.volumes() }.sortedByDescending { it.primary }
+            if (volumes.size < 2) {
+                toast("No other drive is connected")
+                return@launch
+            }
+            val currentVolume = StorageVolumes.volumeRootOf(layout.root.absolutePath)
+            val index = volumes.indexOfFirst { it.root.path.trimEnd('/') == currentVolume }
+            val next = volumes[(index + 1) % volumes.size]
+            val moved = withContext(Dispatchers.IO) {
+                container.environment.chooseVolume(if (next.primary) null else next.root).also { changed ->
+                    if (changed) settingsStore.relocate(container.environment.current)
+                }
+            }
+            val now = container.environment.current
+            if (moved && now.root.absolutePath.startsWith(next.root.path)) {
+                sounds.play(UiSound.OK)
+                toast("Xross folder: ${now.root.absolutePath}")
+                container.backups.backupNow()
+            } else {
+                sounds.play(UiSound.ERROR)
+                toast("${next.label} can't be written; the Xross folder stays at ${now.root.absolutePath}")
+            }
+            publishPortable()
+        }
+    }
+
+    /** The DAT folder setting, or `dats/` in the Xross folder in use. */
+    private fun datFolder(setting: String): File =
+        if (setting.isBlank()) container.environment.current.dats else File(setting)
+
+    private fun backupToRestore(): dev.xross.launcher.data.BackupInfo? =
+        env.value.portable.restorable ?: env.value.portable.backupOnDisk
+
+    private fun confirmRestore() {
+        val backup = backupToRestore() ?: return toast("No library backup in the Xross folder")
+        sounds.play(UiSound.OPTION)
+        val option = MenuOption(
+            "Replace library and restart",
+            detail = "${countOf(backup.games, "game")} · saved ${MenuTree.formatTime(backup.modifiedAt)}",
+            command = Command.RestoreBackup,
+        )
+        transient.update { it.copy(optionsMenu = OptionsMenuState.open("Restore library backup", listOf(option))) }
+    }
+
+    private fun restoreBackup() {
+        val backup = backupToRestore() ?: return
+        viewModelScope.launch {
+            fingerprints.stop()
+            container.scraper.stop()
+            withContext(Dispatchers.IO) { settingsStore.flush() }
+            when (val result = container.backups.stageRestore(backup)) {
+                is dev.xross.launcher.data.BackupResult.Done -> {
+                    sounds.play(UiSound.OK)
+                    toast("Restoring ${countOf(result.info.games, "game")}…")
+                    delay(RESTART_DELAY_MS)
+                    emit(UiEffect.RestartApp)
+                }
+                is dev.xross.launcher.data.BackupResult.Skipped -> toast(result.reason)
+                is dev.xross.launcher.data.BackupResult.Failed -> {
+                    sounds.play(UiSound.ERROR)
+                    toast("Restore failed: ${result.reason}")
+                }
+            }
+        }
+    }
+
+    private var backupJob: Job? = null
+
+    /** The launcher is no longer visible: back up the library shortly after, if it changed. */
+    fun onStopped() {
+        backupJob?.cancel()
+        backupJob = viewModelScope.launch {
+            delay(BACKUP_DELAY_MS)
+            container.backups.backupIfChanged()
+            publishPortable()
+        }
+    }
+
+    // endregion
 
     fun onAppsChanged() {
         viewModelScope.launch {
@@ -1094,7 +1217,7 @@ class XmbViewModel(
                 }
                 delay(GAMEBOOT_HANDOFF_MS)
                 container.sessions.arm(game.id)
-                emit(UiEffect.StartActivity(plan.intent))
+                emit(UiEffect.Launch(plan))
                 delay(600)
                 transient.update { it.copy(booting = null) }
             }
@@ -1103,6 +1226,14 @@ class XmbViewModel(
                 toast(plan.message)
             }
         }
+    }
+
+    /** The emulator couldn't be started after all (uninstalled meanwhile, refused the URI). */
+    fun onLaunchFailed(message: String) {
+        container.sessions.disarm()
+        transient.update { it.copy(booting = null) }
+        sounds.play(UiSound.ERROR)
+        toast(message)
     }
 
     private fun run(command: Command) {
@@ -1255,6 +1386,23 @@ class XmbViewModel(
             Command.ToggleResumeMusicAfterGames -> settingsStore.update { it.copy(resumeMusicAfterGames = !it.resumeMusicAfterGames) }
             Command.ToggleVideoLoop -> settingsStore.update { it.copy(videoLoop = !it.videoLoop) }
             Command.ToggleAllGamesFolder -> settingsStore.update { it.copy(allGamesFolder = !it.allGamesFolder) }
+            Command.CycleXrossVolume -> cycleXrossVolume()
+            Command.BackupNow -> viewModelScope.launch {
+                when (val result = container.backups.backupNow()) {
+                    is dev.xross.launcher.data.BackupResult.Done -> {
+                        sounds.play(UiSound.OK)
+                        toast("Library backed up (${countOf(result.info.games, "game")})")
+                    }
+                    is dev.xross.launcher.data.BackupResult.Skipped -> toast(result.reason)
+                    is dev.xross.launcher.data.BackupResult.Failed -> {
+                        sounds.play(UiSound.ERROR)
+                        toast("Backup failed: ${result.reason}")
+                    }
+                }
+                publishPortable()
+            }
+            Command.ConfirmRestore -> confirmRestore()
+            Command.RestoreBackup -> restoreBackup()
             is Command.LaunchGame -> launchGame(command.gameId)
             Command.OpenSearch -> transient.update { it.copy(search = SearchState()) }
             is Command.SetGameEmulator -> viewModelScope.launch {
@@ -1299,6 +1447,10 @@ class XmbViewModel(
     // state declared throughout the class (a property declared below it would still be null).
     init {
         container.media.watch(viewModelScope)
+        container.backups.watch()
+        viewModelScope.launch {
+            container.backups.status.collect { status -> env.update { it.copy(portable = it.portable.copy(backup = status)) } }
+        }
         viewModelScope.launch {
             settingsStore.settings.collect {
                 sounds.enabled = it.soundEffects
@@ -1324,16 +1476,14 @@ class XmbViewModel(
         private const val GAMEBOOT_HANDOFF_MS = 1100L
         private const val VOLUME_SETTLE_MS = 1200L
         private const val SEARCH_DEBOUNCE_MS = 140L
+        private const val BACKUP_DELAY_MS = 4_000L
+        private const val RESTART_DELAY_MS = 900L
+
+        private fun countOf(n: Int, noun: String) = if (n == 1) "1 $noun" else "$n ${noun}s"
         internal const val NOTHING_PLAYING = "Nothing is playing — choose music in the Music category"
 
         /** All files access on Android 11+, the legacy read permission before that. */
-        fun hasStorageAccess(context: Context): Boolean =
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                Environment.isExternalStorageManager()
-            } else {
-                context.checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) ==
-                    PackageManager.PERMISSION_GRANTED
-            }
+        fun hasStorageAccess(context: Context): Boolean = StorageAccess.canRead(context)
 
         private fun gamesVerified(n: Int) = if (n == 1) "1 game verified" else "$n games verified"
 

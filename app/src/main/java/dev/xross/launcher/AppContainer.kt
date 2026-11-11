@@ -22,7 +22,10 @@ import dev.xross.launcher.data.PlaySessionTracker
 import dev.xross.launcher.data.PrefsSessionStore
 import dev.xross.launcher.data.SettingsStore
 import dev.xross.launcher.data.XrossDatabase
+import dev.xross.launcher.data.DatabaseBackupManager
+import dev.xross.launcher.launch.AndroidIntentGameLauncher
 import dev.xross.launcher.launch.GameLauncher
+import dev.xross.launcher.storage.XrossEnvironment
 import dev.xross.launcher.media.MediaRepository
 import dev.xross.launcher.media.MusicPlayer
 import dev.xross.launcher.media.SnapPlayer
@@ -36,9 +39,14 @@ class AppContainer(context: Context) {
     val database: XrossDatabase by lazy { XrossDatabase.create(appContext) }
     val games: GameRepository by lazy { GameRepository(database.games()) }
     val apps: AppRepository by lazy { AppRepository(appContext) }
-    val settings: SettingsStore by lazy { SettingsStore(appContext) }
+    /** The portable Xross folder (config, database backup, DATs, media, themes). */
+    val environment: XrossEnvironment by lazy { XrossEnvironment(appContext) }
+    val settings: SettingsStore by lazy { SettingsStore(appContext, environment) }
+    val backups: DatabaseBackupManager by lazy {
+        DatabaseBackupManager(appContext, database = { database }, layout = { environment.current })
+    }
     val volumes: StorageVolumes by lazy { StorageVolumes(appContext) }
-    val launcher: GameLauncher by lazy { GameLauncher(appContext) }
+    val launcher: GameLauncher by lazy { AndroidIntentGameLauncher(appContext) }
     val sounds: UiSounds by lazy { UiSounds(appContext) }
     val sessions: PlaySessionTracker by lazy { PlaySessionTracker(PrefsSessionStore(appContext)) }
     val media: MediaRepository by lazy { MediaRepository(appContext) }

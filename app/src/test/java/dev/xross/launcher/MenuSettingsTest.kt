@@ -21,6 +21,31 @@ class MenuSettingsTest {
         assertEquals(listOf("Library", "Controls", "Emulators", "Theme", "Sound", "Media", "System"), titles)
     }
 
+    @Test fun systemSettingsShowTheXrossFolderAndBackup() {
+        fun rows(p: dev.xross.launcher.state.PortableSetup) =
+            MenuTree(MenuSnapshot(portable = p)).list(MenuTree.SYSTEM).associateBy { it.id }
+        val internal = rows(dev.xross.launcher.state.PortableSetup(root = "/data/user/0/dev.xross.launcher/files/Xross", portable = false))
+        assertEquals("In app storage until All files access is granted — press to grant", internal.getValue("sys:folder").subtitle)
+        assertTrue(internal.getValue("sys:backup").subtitle!!.startsWith("Needs All files access"))
+        assertTrue("sys:restore" !in internal)
+
+        val backup = dev.xross.launcher.data.BackupInfo(java.io.File("/storage/emulated/0/Xross/data/xross.db"), 42, 5, 0L, 1024)
+        val shared = rows(dev.xross.launcher.state.PortableSetup(root = "/storage/emulated/0/Xross", portable = true, backupOnDisk = backup))
+        assertEquals("/storage/emulated/0/Xross · press to use another drive", shared.getValue("sys:folder").subtitle)
+        assertEquals(NodeAction.Run(Command.BackupNow), shared.getValue("sys:backup").action)
+        assertTrue(shared.getValue("sys:restore").subtitle!!.startsWith("42 games · saved "))
+        assertEquals(NodeAction.Run(Command.ConfirmRestore), shared.getValue("sys:restore").action)
+    }
+
+    @Test fun cleanInstallOffersTheBackupInGames() {
+        val backup = dev.xross.launcher.data.BackupInfo(java.io.File("/storage/emulated/0/Xross/data/xross.db"), 3, 5, 0L, 1024)
+        val root = MenuTree(MenuSnapshot(storageGranted = true, portable = dev.xross.launcher.state.PortableSetup(portable = true, restorable = backup)))
+            .list("root:games")
+        assertEquals(listOf("Restore library backup", "No games found"), root.map { it.title })
+        assertEquals("3 games found in the Xross folder", root.first().subtitle)
+        assertEquals(NodeAction.Run(Command.ConfirmRestore), root.first().action)
+    }
+
     @Test fun deadzoneRowOffersHardwareOnly() {
         fun row(deadzone: Float) = MenuTree(MenuSnapshot(settings = XrossSettings(deadzone = deadzone)))
             .list(MenuTree.CONTROLS).single { it.id == "ctl:deadzone" }.subtitle

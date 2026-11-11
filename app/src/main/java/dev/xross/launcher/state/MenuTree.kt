@@ -49,6 +49,21 @@ data class MenuSnapshot(
     val datFolder: String = "",
     /** Which metadata services can run. */
     val scraperSetup: ScraperSetup = ScraperSetup(),
+    /** Where the Xross folder is, and the library backup in it. */
+    val portable: PortableSetup = PortableSetup(),
+)
+
+/** What Settings ▸ System shows about the Xross folder and the database backup. */
+data class PortableSetup(
+    /** Path of the Xross folder in use; empty until known. */
+    val root: String = "",
+    /** False while the folder is in app storage because shared storage can't be written yet. */
+    val portable: Boolean = false,
+    val backup: dev.xross.launcher.data.BackupStatus = dev.xross.launcher.data.BackupStatus(),
+    /** The snapshot currently in `Xross/data/`, if any. */
+    val backupOnDisk: dev.xross.launcher.data.BackupInfo? = null,
+    /** Set on a clean install when the Xross folder holds a backup with games. */
+    val restorable: dev.xross.launcher.data.BackupInfo? = null,
 )
 
 /** What the Metadata settings need to know about service accounts (never the secrets). */
@@ -127,6 +142,17 @@ class MenuTree(private val s: MenuSnapshot) {
             add(folder(ANDROID_GAMES, "Android Games", GlyphKey.HANDHELD, countLabel(androidGames.size)))
         }
         if (s.games.isEmpty()) {
+            s.portable.restorable?.let { backup ->
+                add(
+                    XmbNode(
+                        id = "games:restore",
+                        title = "Restore library backup",
+                        subtitle = "${countOf(backup.games, "game")} found in the Xross folder",
+                        icon = NodeIcon.Glyph(GlyphKey.REFRESH),
+                        action = NodeAction.Run(Command.ConfirmRestore),
+                    ),
+                )
+            }
             add(
                 XmbNode(
                     id = "games:empty",
@@ -594,11 +620,41 @@ class MenuTree(private val s: MenuSnapshot) {
         setting("snd:gameboot", "Game start sound", onOff(s.settings.gameBootSound), GlyphKey.SOUND, Command.ToggleGameBootSound),
     )
 
-    private fun systemSettings() = listOf(
-        XmbNode("sys:version", "Xross", "Version ${s.versionName}", NodeIcon.Glyph(GlyphKey.INFO)),
-        setting("sys:home", "Set as home app", "Choose Xross as the default launcher", GlyphKey.HOME, Command.OpenHomeSettings),
-        setting("sys:android", "Android settings", null, GlyphKey.SETTINGS, Command.OpenAndroidSettings),
-    )
+    private fun systemSettings() = buildList {
+        add(XmbNode("sys:version", "Xross", "Version ${s.versionName}", NodeIcon.Glyph(GlyphKey.INFO)))
+        add(setting("sys:home", "Set as home app", "Choose Xross as the default launcher", GlyphKey.HOME, Command.OpenHomeSettings))
+        val p = s.portable
+        add(
+            setting(
+                "sys:folder", "Xross folder",
+                when {
+                    p.root.isEmpty() -> "Checking…"
+                    p.portable -> "${p.root} · press to use another drive"
+                    else -> "In app storage until All files access is granted — press to grant"
+                },
+                GlyphKey.STORAGE, Command.CycleXrossVolume,
+            ),
+        )
+        add(setting("sys:backup", "Back up library now", backupSummary(p), GlyphKey.DOWNLOAD, Command.BackupNow))
+        p.backupOnDisk?.let { backup ->
+            add(
+                setting(
+                    "sys:restore", "Restore library backup…",
+                    "${countOf(backup.games, "game")} · saved ${formatTime(backup.modifiedAt)}",
+                    GlyphKey.REFRESH, Command.ConfirmRestore,
+                ),
+            )
+        }
+        add(setting("sys:android", "Android settings", null, GlyphKey.SETTINGS, Command.OpenAndroidSettings))
+    }
+
+    private fun backupSummary(p: PortableSetup): String = when {
+        p.backup.running -> "Backing up…"
+        !p.portable -> "Needs All files access (copies the library to Xross/data/)"
+        p.backup.message != null -> p.backup.message
+        p.backup.lastBackupAt != null -> "Last backup ${formatTime(p.backup.lastBackupAt)} · also on leaving Xross"
+        else -> "Copies the library to Xross/data/xross.db; also on leaving Xross"
+    }
 
     private fun folder(key: String, title: String, glyph: GlyphKey, subtitle: String?) =
         XmbNode(key, title, subtitle, NodeIcon.Glyph(glyph), NodeAction.OpenList(key))
@@ -690,6 +746,10 @@ class MenuTree(private val s: MenuSnapshot) {
                 else -> "${minutes / 60} h ${minutes % 60} min"
             }
         }
+
+        /** "12 Nov 2026, 14:05" in the device's locale. */
+        fun formatTime(epochMs: Long): String =
+            java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT).format(java.util.Date(epochMs))
 
         fun formatSize(bytes: Long): String = when {
             bytes >= 1L shl 30 -> String.format(Locale.ROOT, "%.1f GB", bytes / (1L shl 30).toDouble())
