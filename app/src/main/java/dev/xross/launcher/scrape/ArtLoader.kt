@@ -32,6 +32,12 @@ class ArtLoader(private val cache: AssetCache, maxBytes: Int = defaultBudget()) 
 
     fun file(uuid: String, kind: ArtKind): File? = cache.file(uuid, kind)
 
+    /**
+     * Drops decoded art. Called when Xross's UI is hidden (a game or another app is in front) or
+     * the system is short of memory; rows decode again from disk when they next appear.
+     */
+    fun trim() = memory.evictAll()
+
     private fun decode(file: File, maxPx: Int): ImageBitmap? {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeFile(file.path, bounds)

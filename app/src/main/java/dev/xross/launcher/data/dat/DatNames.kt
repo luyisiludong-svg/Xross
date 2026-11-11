@@ -55,13 +55,13 @@ object DatNames {
     }
 
     /**
-     * Title for a DAT game. MAME-style DATs name games by set ("sf2") and put the real title in
-     * the description; No-Intro and Redump use the same text for both.
+     * Title for a DAT game. MAME-style DATs name games by set ("sf2", "amidar") and put the real
+     * title in the description ("Amidar"); No-Intro and Redump use the same text for both. So the
+     * description wins whenever it says something different, even by case alone.
      */
     fun bestTitle(gameName: String, description: String?): NameTags {
-        val useDescription = description != null && description.isNotBlank() &&
-            (gameName.none { it == ' ' } && description.contains(' '))
-        return parse(if (useDescription) description!! else gameName)
+        val useDescription = !description.isNullOrBlank() && description.trim() != gameName.trim()
+        return parse(if (useDescription) description!!.trim() else gameName)
     }
 
     /**
