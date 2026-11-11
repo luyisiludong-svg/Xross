@@ -42,6 +42,7 @@ import dev.xross.launcher.input.ConfirmLayout
 import dev.xross.launcher.input.ControllerFamily
 import dev.xross.launcher.state.Key
 import dev.xross.launcher.state.KeyKind
+import dev.xross.launcher.state.NameEntry
 import dev.xross.launcher.state.SearchFocus
 import dev.xross.launcher.state.SearchKeyboard
 import dev.xross.launcher.state.SearchState
@@ -127,8 +128,60 @@ internal fun SearchOverlay(
     }
 }
 
+/**
+ * Typing a short name (a new app folder) with the gamepad keyboard: the Search keyboard and
+ * field, with a title and a Done key instead of results.
+ */
 @Composable
-private fun QueryField(search: SearchState, m: XmbMetrics) {
+internal fun NameEntryOverlay(
+    entry: NameEntry,
+    m: XmbMetrics,
+    pulse: () -> Float,
+    family: ControllerFamily,
+    confirm: ConfirmLayout,
+    onKeyTap: (Int, Int) -> Unit,
+) {
+    val density = LocalDensity.current
+    fun Float.dp(): Dp = with(density) { this@dp.toDp() }
+    fun Float.sp() = with(density) { this@sp.toSp() }
+    val margin = m.s * 0.05f
+    val width = minOf(m.width - margin * 2, m.s * 1.25f)
+
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(Color(0xA6000000))
+            .clickable(remember { MutableInteractionSource() }, indication = null) {}
+            .padding(margin.dp()),
+    ) {
+        Column(Modifier.align(Alignment.Center).width(width.dp())) {
+            Text(entry.title, style = shadowed(m.subtitleSize.sp(), color = TextDim), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Spacer(Modifier.height((m.s * 0.02f).dp()))
+            QueryField(entry.keys, m, placeholder = "Folder name")
+            Spacer(Modifier.height((m.s * 0.03f).dp()))
+            KeyGrid(entry.keys, m, width, pulse, onKeyTap, doneLabel = "Done")
+        }
+        val confirmGlyph = if (confirm == ConfirmLayout.EAST) family.east else family.south
+        val backGlyph = if (confirm == ConfirmLayout.EAST) family.south else family.east
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .clip(RoundedCornerShape(50))
+                .background(Color(0x40000000))
+                .padding(horizontal = 10.dp, vertical = 4.dp),
+        ) {
+            Hint(confirmGlyph, "Type", m.subtitleSize.sp())
+            Hint(family.north, "Space", m.subtitleSize.sp())
+            Hint("L1", "Delete", m.subtitleSize.sp())
+            Hint("R1", "Done", m.subtitleSize.sp())
+            Hint(backGlyph, "Cancel", m.subtitleSize.sp())
+        }
+    }
+}
+
+@Composable
+private fun QueryField(search: SearchState, m: XmbMetrics, placeholder: String = "Search games") {
     val density = LocalDensity.current
     val caret by rememberInfiniteTransition(label = "caret").animateFloat(
         initialValue = 1f,
@@ -139,7 +192,7 @@ private fun QueryField(search: SearchState, m: XmbMetrics) {
     Column {
         Row(verticalAlignment = Alignment.Bottom) {
             Text(
-                search.query.ifEmpty { "Search games" },
+                search.query.ifEmpty { placeholder },
                 style = shadowed(with(density) { (m.titleSize * 1.25f).toSp() }, color = if (search.query.isEmpty()) TextDim else TextBright),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -173,6 +226,7 @@ private fun KeyGrid(
     widthPx: Float,
     pulse: () -> Float,
     onKeyTap: (Int, Int) -> Unit,
+    doneLabel: String = "Results",
 ) {
     val density = LocalDensity.current
     val gap = m.s * 0.012f
@@ -186,7 +240,7 @@ private fun KeyGrid(
                 for (key in row) {
                     val focused = key === focusedKey && rowIndex == search.row
                     KeyCap(
-                        key = key,
+                        key = if (key.kind == KeyKind.DONE) key.copy(label = doneLabel) else key,
                         focused = focused,
                         pulse = pulse,
                         width = with(density) { (cell * key.span + gap * (key.span - 1)).toDp() },

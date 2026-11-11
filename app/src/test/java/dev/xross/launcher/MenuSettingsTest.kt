@@ -18,7 +18,7 @@ import org.junit.Test
 class MenuSettingsTest {
     @Test fun settingsRootListsEverySection() {
         val titles = MenuTree(MenuSnapshot()).list("root:settings").map { it.title }
-        assertEquals(listOf("Library", "Controls", "Emulators", "Theme", "Sound", "Media", "System"), titles)
+        assertEquals(listOf("Library", "Controls", "Emulators", "Theme", "Sound", "Media", "Apps", "System"), titles)
     }
 
     @Test fun systemSettingsShowTheXrossFolderAndBackup() {

@@ -70,8 +70,13 @@ class AppContainer(context: Context) {
         }
     }
 
-    /** Downloaded art, outside backups (re-scrapeable, large). */
-    val assets: AssetCache by lazy { AssetCache(java.io.File(appContext.noBackupFilesDir, "assets")) }
+    /**
+     * Downloaded art in `Xross/media/<kind>/<system>/<rom stem>.<ext>`, following the Xross folder.
+     * The private cache of earlier versions is moved there once (see [AssetCache.migrateLegacy]).
+     */
+    val assets: AssetCache by lazy {
+        AssetCache(root = { environment.current.media }, legacyRoot = java.io.File(appContext.noBackupFilesDir, "assets"))
+    }
     val art: ArtLoader by lazy { ArtLoader(assets) }
     val snaps: SnapPlayer by lazy { SnapPlayer(appContext, music) }
     private val http: HttpClient by lazy { UrlConnectionHttp("Xross/${BuildConfig.VERSION_NAME} (Android)") }

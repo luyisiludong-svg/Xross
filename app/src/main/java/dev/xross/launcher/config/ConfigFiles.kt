@@ -32,9 +32,14 @@ data class SettingsFile(
     val sound: Sound = Sound(),
     val media: Media = Media(),
     val metadata: Metadata = Metadata(),
+    val apps: Apps = Apps(),
+    val photo: MediaFolders = MediaFolders(),
+    val video: MediaFolders = MediaFolders(),
 ) {
     @Serializable
     data class Library(
+        /** Home of the library; empty = `roms/` in the Xross folder. Scanned like an added folder. */
+        val baseRomsFolder: String = D.baseRomsFolder,
         val romFolders: List<String> = D.romFolders,
         val autoDetectFolders: Boolean = D.autoDetectFolders,
         val knownAutoFolders: List<String> = D.knownAutoFolders,
@@ -74,6 +79,19 @@ data class SettingsFile(
         val resumeMusicAfterGames: Boolean = D.resumeMusicAfterGames,
         val loopVideos: Boolean = D.videoLoop,
     )
+
+    @Serializable
+    data class Apps(
+        /** Package names hidden from Apps and Games ▸ Android Games. */
+        val hidden: List<String> = D.hiddenApps.toList(),
+        val hideSystemApps: Boolean = D.hideSystemApps,
+        /** Package name → folder name in Apps. */
+        val folders: Map<String, String> = D.appFolders,
+    )
+
+    /** Empty [customFolders]: every photo or video MediaStore knows. Otherwise only these folders. */
+    @Serializable
+    data class MediaFolders(val customFolders: List<String> = emptyList())
 
     @Serializable
     data class Metadata(
@@ -164,7 +182,7 @@ object ConfigCodec {
     // region settings.json
 
     fun settingsFile(s: XrossSettings) = SettingsFile(
-        library = SettingsFile.Library(s.romFolders, s.autoDetectFolders, s.knownAutoFolders, s.hashLargeImages, s.datFolder),
+        library = SettingsFile.Library(s.baseRomsFolder, s.romFolders, s.autoDetectFolders, s.knownAutoFolders, s.hashLargeImages, s.datFolder),
         controls = SettingsFile.Controls(s.confirmLayout.name, s.deadzone, s.axialDeadzone),
         display = SettingsFile.Display(s.theme, s.waveEnabled, s.waveSpeed, s.showButtonHints, s.allGamesFolder),
         sound = SettingsFile.Sound(s.soundEffects, s.soundVolume, s.bootSound, s.gameBootSound),
@@ -172,10 +190,14 @@ object ConfigCodec {
         metadata = SettingsFile.Metadata(
             s.scrapeAutomatically, s.scrapeWifiOnly, s.scrapeVideos, s.scrapeRegion, s.scrapeLanguage, s.hasheousEnabled,
         ),
+        apps = SettingsFile.Apps(s.hiddenApps.sorted(), s.hideSystemApps, s.appFolders.toSortedMap()),
+        photo = SettingsFile.MediaFolders(s.photoFolders),
+        video = SettingsFile.MediaFolders(s.videoFolders),
     )
 
     /** Applies settings.json onto [base], keeping [base]'s mappings and systems. Out-of-range numbers are clamped. */
     fun applySettings(base: XrossSettings, f: SettingsFile): XrossSettings = base.copy(
+        baseRomsFolder = f.library.baseRomsFolder.trim(),
         romFolders = f.library.romFolders.filter { it.isNotBlank() }.distinct(),
         autoDetectFolders = f.library.autoDetectFolders,
         knownAutoFolders = f.library.knownAutoFolders.filter { it.isNotBlank() }.distinct(),
@@ -203,7 +225,17 @@ object ConfigCodec {
         scrapeRegion = f.metadata.region.ifBlank { D.scrapeRegion },
         scrapeLanguage = f.metadata.language.ifBlank { D.scrapeLanguage },
         hasheousEnabled = f.metadata.hasheous,
+        hiddenApps = f.apps.hidden.map { it.trim() }.filter { it.isNotEmpty() }.toSet(),
+        hideSystemApps = f.apps.hideSystemApps,
+        appFolders = f.apps.folders.mapNotNull { (pkg, folder) ->
+            val name = dev.xross.launcher.state.AppFolders.normalizeName(folder) ?: return@mapNotNull null
+            pkg.trim().takeIf { it.isNotEmpty() }?.let { it to name }
+        }.toMap(),
+        photoFolders = cleanFolders(f.photo.customFolders),
+        videoFolders = cleanFolders(f.video.customFolders),
     )
+
+    private fun cleanFolders(paths: List<String>) = paths.map { it.trim().trimEnd('/') }.filter { it.isNotEmpty() }.distinct()
 
     fun encodeSettings(s: XrossSettings): String = json.encodeToString(SettingsFile.serializer(), settingsFile(s)) + "\n"
 

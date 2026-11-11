@@ -197,36 +197,52 @@ class ScrapeOrchestratorTest {
 
     private val uuid = "123e4567-e89b-42d3-a456-426614174000"
 
-    @Test fun cacheStoresAtomicallyAndRejectsBadNames() = runBlocking {
-        val root = tmp.newFolder("cache")
+    private fun libraryGame(id: Long, uuid: String, file: String = "Chrono Trigger (USA).sfc", platform: String = "snes") =
+        GameEntity(id = id, path = "/r/$platform/$file", platformId = platform, title = file, fileName = file, sizeBytes = 1, lastModified = 0, uuid = uuid)
+
+    @Test fun cacheStoresAtomicallyInThePortableLayoutAndRejectsBadNames() = runBlocking {
+        val root = tmp.newFolder("media")
         val cache = AssetCache(root)
+        cache.setLibrary(listOf(libraryGame(1, uuid)))
         val v0 = cache.version.value
         cache.store(uuid, ArtKind.BOX_2D, "png") { it.writeBytes(png) }
-        assertEquals(File(root, "$uuid/box2d.png"), cache.file(uuid, ArtKind.BOX_2D))
+        assertEquals(File(root, "covers/snes/Chrono Trigger (USA).png"), cache.file(uuid, ArtKind.BOX_2D))
         assertTrue(cache.version.value > v0)
+        assertTrue("media folder gets a .nomedia", File(root, ".nomedia").isFile)
         // Replacing with another format leaves exactly one file for the kind.
         cache.store(uuid, ArtKind.BOX_2D, "jpg") { it.writeBytes(png) }
-        assertEquals(listOf("box2d.jpg"), File(root, uuid).list()!!.toList())
+        assertEquals(listOf("Chrono Trigger (USA).jpg"), File(root, "covers/snes").list()!!.toList())
         // A failed write leaves nothing behind.
         runCatching { cache.store(uuid, ArtKind.HERO, "png") { error("network died") } }
         assertNull(cache.file(uuid, ArtKind.HERO))
-        assertEquals(listOf("box2d.jpg"), File(root, uuid).list()!!.toList())
+        assertTrue(File(root, "heroes/snes").list().orEmpty().isEmpty())
 
         assertTrue(runCatching { cache.store("../escape", ArtKind.HERO, "png") { } }.isFailure)
         assertTrue(runCatching { cache.store(uuid, ArtKind.HERO, "sh") { } }.isFailure)
         assertNull(cache.file("../../etc", ArtKind.HERO))
+        // Games the index doesn't know can't write anywhere.
+        assertTrue(runCatching { cache.store("00000000-0000-4000-8000-000000000000", ArtKind.HERO, "png") { } }.isFailure)
     }
 
-    @Test fun pruneDropsGamesThatAreGone() = runBlocking {
-        val cache = AssetCache(tmp.newFolder("cache"))
+    @Test fun pruneDropsGamesThatAreGoneButKeepsUnknownFiles() = runBlocking {
+        val root = tmp.newFolder("media")
+        val cache = AssetCache(root)
         val other = "00000000-0000-4000-8000-000000000000"
+        cache.setLibrary(listOf(libraryGame(1, uuid), libraryGame(2, other, file = "EarthBound (USA).sfc")))
         cache.store(uuid, ArtKind.BOX_2D, "png") { it.writeBytes(png) }
         cache.store(other, ArtKind.BOX_2D, "png") { it.writeBytes(png) }
+        // Media copied in by hand (ES-DE) for a game that isn't in the library.
+        val dropped = File(root, "covers/snes/Secret of Mana (USA).png").apply { writeBytes(png) }
+
+        cache.setLibrary(listOf(libraryGame(1, uuid))) // EarthBound was deleted
         assertEquals(png.size.toLong(), cache.prune(setOf(uuid)))
         assertNotNull(cache.file(uuid, ArtKind.BOX_2D))
         assertNull(cache.file(other, ArtKind.BOX_2D))
-        assertEquals(png.size.toLong(), cache.clear())
+        assertTrue(dropped.isFile)
+
+        assertEquals(png.size.toLong() * 2, cache.clear())
         assertNull(cache.file(uuid, ArtKind.BOX_2D))
+        assertTrue(File(root, ".nomedia").isFile) // clear empties the kind folders, not the media folder
     }
 
     @Test fun sniffTrustsBytesNotServers() {

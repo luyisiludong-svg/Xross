@@ -24,7 +24,7 @@ with stub emulators · 📱 verified on a real device
 | --- | --- | --- |
 | **Phase 1 — Alpha** | XMB navigation, gamepad layer, ROM library, emulator launching, wave background | ✅ Complete |
 | **Phase 1b — Alpha hardening** | Hot-swap, USB-OTG, playtime, Options menu, per-game emulator, more emulators | ◐ Features done, including per-controller mappings, the axial deadzone and a 0% ("hardware only") deadzone; real-handheld testing and a Baseline Profile remain |
-| **Phase 2 — Beta** | Metadata, media hub, theme packs, on-screen controller and keyboard, portable `Xross/` folder, library organization | ◐ Fingerprinting, media hub, gamepad search, DAT verification, scrapers, Details screen and video snaps done (ScreenScraper awaits developer credentials). The portable `Xross/` folder landed on 2026-11-11: JSON config, database backup and restore, `.nomedia`, and the `GameLauncher` interface. All Games, the media controls shortcut and the 30 s mini-player hide are done too. Art in `Xross/media`, app hiding and folders, the base ROMs folder, custom media folders, theme packs, the on-screen controller and wave settings are not started |
+| **Phase 2 — Beta** | Metadata, media hub, theme packs, on-screen controller and keyboard, portable `Xross/` folder, library organization | ◐ Fingerprinting, media hub, gamepad search, DAT verification, scrapers, Details screen and video snaps done (ScreenScraper awaits developer credentials). The portable `Xross/` folder landed on 2026-11-11: JSON config, database backup and restore, `.nomedia`, and the `GameLauncher` interface. All Games, the media controls shortcut and the 30 s mini-player hide are done too. Library organization followed: hidden apps, app folders, the base ROMs folder with Create system folders, custom Photo/Video folders, and scraped art moved to `Xross/media`. Theme packs, the on-screen controller and wave settings are not started |
 | **Phase 3 — Release candidate** | Dual screen, docking, RetroAchievements, Xross Portal, FTPS | ⬜ Not started (hot-swap and live resolution change, two prerequisites, are done) |
 | **Phase 4 — v1.0** | Onboarding, tuning, theme/plugin format, release | ◐ Performance work started (app triage moved to Phase 2 as app folders) |
 | **XMB fidelity** | Look and feel exactly like the XMB, plus Xross's extras | ◐ Home menu layout, motion and navigation match, and games now show their own box art; the typeface, sounds and several system behaviors don't match yet (§4.5) |
@@ -32,7 +32,8 @@ with stub emulators · 📱 verified on a real device
 **Codebase at a glance:** Kotlin + Jetpack Compose, one `:app` module, Room database at schema v5,
 22 platforms, 11 emulator launch recipes, 8 color themes (one follows the month), three metadata
 services (Hasheous, SteamGridDB, ScreenScraper), settings in three JSON files in `Xross/config/`
-(kotlinx.serialization), 285 unit tests (283 run by default plus 2 opt-in live-service tests), an
+(kotlinx.serialization), art in `Xross/media` in ES-DE's layout, 320 unit tests (318 run by default
+plus 2 opt-in live-service tests), an
 on-device smoke test (updated for the new rows, not yet re-run, §3), and test-only stand-ins for
 all 11 emulators.
 
@@ -76,6 +77,7 @@ ScreenScraper hasn't run live (it needs developer credentials).
 | Multiple volumes: internal, microSD, USB-OTG | ✅ 🧪 | |
 | Hot-swap (mount, unmount, eject, removal) | ✅ 🧪 | Debounced quiet rescan; deferred while a game runs; games on a removed drive stay listed as "Not connected" |
 | Favorites, Recently Played | ✅ | |
+| Base ROMs folder | ✅ | Settings ▸ Library ▸ Base ROMs folder… (default `Xross/roms`); always scanned, beside auto-detection and added folders. **Create system folders** makes the 22 system folders, named by ES-DE's ids |
 | "All Games" folder | ✅ | Games ▸ All Games holds the platform folders; Search, Recently Played, Favorites and Android Games stay at the top. Settings ▸ Theme ▸ Platform folders brings back the flat list |
 | Portable `Xross/` folder | ✅ 🧪 | `config/`, `data/`, `dats/`, `media/`, `roms/`, `themes/` on primary storage, or on an SD card or USB drive (Settings ▸ System ▸ Xross folder). App storage until shared storage can be written; config already in the folder is adopted. `.nomedia` in `media/` and `themes/` is created first |
 | Settings as JSON | ✅ 🧪 | `settings.json`, `controllers.json`, `systems.json`; atomic writes (`.tmp`, sync, rename) off the main thread; one-time migration from SharedPreferences; unreadable files kept as `.bad`; edits made outside Xross picked up on resume. Credentials stay in the private `CredentialStore` |
@@ -97,6 +99,8 @@ ScreenScraper hasn't run live (it needs developer credentials).
 | ROM access for emulators | ✅ | File path extra plus a `content://` URI with a read grant |
 | `GameLauncher` interface | ✅ | UI and repositories see launch plans only; Intents, `content://` grants and package queries live in `AndroidIntentGameLauncher`. A failed start no longer counts as playtime |
 | Android games and apps | ✅ | Games (`CATEGORY_GAME`) go to Games ▸ Android Games; everything else to Apps |
+| Hide apps | ✅ | Options ▸ Hide on any app in Apps or Games ▸ Android Games; Settings ▸ Apps ▸ Hidden apps shows them again (one by one or all); Hide system apps switch. Stored as `apps.hidden` in `settings.json` |
+| App folders | ✅ | Options ▸ Move to folder: Emulators, Streaming, Tools, folders already in use, or New folder… typed on the gamepad keyboard. Known emulator packages are suggested for Emulators, and a "Group emulators" row moves them all at once. Folders sit at the top of Apps while they hold an app |
 
 All 11 recipes are verified only against the test stand-ins, not real emulator installs.
 
@@ -110,6 +114,7 @@ All 11 recipes are verified only against the test stand-ins, not real emulator i
 | Background music pauses for games and videos | ✅ | Resumes when Xross is back in front |
 | Video player | ✅ | Seek, previous/next, loop, auto-hiding controls |
 | Clear empty state without storage access | ✅ 🧪 | Photo, Music and Video say "Storage access needed"; pressing the row opens the grant screen |
+| Custom Photo and Video folders | ✅ 🧪 | Settings ▸ Media ▸ Photo folders / Video folders. Empty = all of MediaStore; otherwise MediaStore filtered by path plus a direct walk for files it skips (`.nomedia` and hidden folders, unindexed drives), with thumbnails made by Xross. Reloads on resume and when a drive comes or goes |
 | Mini-player line hides after 30 s paused | ✅ | The corner "❚❚ Title — Artist" line fades out (0.9 s) and returns as soon as playback resumes |
 
 ### 2.5 Look and sound
@@ -156,7 +161,7 @@ All 11 recipes are verified only against the test stand-ins, not real emulator i
 | SteamGridDB art | ✅ 📱 | Capsule (600×900), hero banner and logo, by title; needs a free API key |
 | ScreenScraper | ✅ 🧪 | Descriptions, box art, logos, screenshots and video snaps; quota handling as the API requires. Built and unit-tested; not yet live (needs developer credentials) |
 | Background scraping | ✅ 📱 | Off until turned on, Wi-Fi only by default, paced per service, stops while a game runs |
-| Art cache keyed by game UUID | ✅ 📱 | On disk outside backups; files checked by their bytes; game rows show box art |
+| Art in `Xross/media/<kind>/<system>/<rom stem>.<ext>` | ✅ 🧪 | ES-DE-style names (`covers`, `3dboxes`, `heroes`, `wheels`, `screenshots`, `capsules`, `snaps`), FAT-safe and de-duplicated per system; media copied in from ES-DE is used as is and never pruned. The old private UUID cache moves over once in the background. The UUID cache was verified on the Galaxy A55; the new layout is unit-tested only |
 | Game Details screen | ✅ 📱 | Options ▸ Details or → on a game: background art, box art, logo, release facts, rating, playtime, description |
 | Manual match and title override | ✅ 📱 | Options ▸ Metadata: Edit title, Find match, Scrape again, Use automatic match |
 | Video snaps behind the menu | ✅ 🧪 | Plays after 1.2 s on a game, music ducked; untested with real snaps (ScreenScraper only) |
@@ -171,7 +176,9 @@ These are bugs or gaps in features that are already built, separate from the new
 | Issue | Impact | Fix |
 | --- | --- | --- |
 | No real-hardware validation of controllers, sticks, emulators or audio | Biggest risk to Beta | Phase 1b hardware pass (§4.1) |
-| `tools/device-tests/smoke.sh` hasn't been re-run | Counts were updated on 2026-11-11 for the Options menu (Details, Metadata), Controls (Axial deadzone), All Games and the 10-step remap wizard, and it gained checks for the new features; no emulator run yet | Re-run on an emulator |
+| `tools/device-tests/smoke.sh` hasn't been re-run | Counts were updated on 2026-11-11 for the Options menu (Details, Metadata), Controls (Axial deadzone), All Games, the 10-step remap wizard and the new Library rows, and it gained checks for the new features; no emulator run yet | Re-run on an emulator |
+| Library organization untested on a device | App hiding and folders, the base ROMs folder, custom media folders and art in `Xross/media` are unit- and Robolectric-tested only | Include in the next device pass, with an SD card |
+| Folder names are typed in capitals | The gamepad keyboard has no lower case; "MY TOOLS" is saved as "My Tools" and short words like "TV" stay capitals | Keyboard modes (§4.5) |
 | Portable folder untested on real storage | Atomic replace on FAT/exFAT cards, the restore-and-restart flow and the backup on Android 9 are unit-tested (Robolectric) only | Check on a device with an SD card, and on an Android 9 or 10 device |
 | Config writes are asynchronous | A crash within milliseconds of changing a setting can lose that one change | Acceptable; writes are flushed before restores and folder moves |
 | ScreenScraper can't run yet | No descriptions, box art from ScreenScraper, or video snaps | Request developer credentials on the ScreenScraper forum; put them in `.env` |
@@ -211,7 +218,7 @@ These are bugs or gaps in features that are already built, separate from the new
 | Hasheous matching ✅ 📱 | | Hash lookup, no account. Verified live on the Galaxy A55, including arcade sets |
 | Language priority list | Scrapers | ◐ One region and one language setting today; a full priority list (for example `es-ES, es, en-US, en`) is still to do |
 | Throttled background batch scraper ✅ | Scrapers | Per-service rate limits, quota handling, opt-in, Wi-Fi only by default; stops while a game runs |
-| Disk asset cache keyed by UUID ✅ | Scrapers | Atomic writes, content sniffing, pruning; outside backups |
+| Disk asset cache ✅ | Scrapers | Atomic writes, content sniffing, pruning. Moved from a private UUID cache to `Xross/media` (Milestone 3) |
 | Game detail view ✅ | Scrapers | Options ▸ Details or → on a game |
 | Manual match and override tool ✅ | Scrapers | Options ▸ Metadata: edit title, find match, scrape again, reset |
 | Video snap previews on focused games ✅ | Scraper snaps | Full-bleed behind the menu after 1.2 s; music ducked |
@@ -227,7 +234,7 @@ another device. Details and the reasons for each decision: `docs/BACKLOG_ASSESSM
 | Private bootstrap and settings mirror ✅ | — | `XrossEnvironment`: app storage until shared storage can be written; falls back to primary storage if the chosen drive is removed |
 | `config/settings.json`, `controllers.json`, `systems.json` ✅ | Bootstrap | kotlinx.serialization 1.8.1, schema version 1, atomic writes; one-time migration from SharedPreferences. **Credentials never go here**: they stay in private `CredentialStore`, since any app with All files access can read the folder (a test checks this). `systems.json` takes the emulator choice and extra folder names and extensions per system; its `builtIn` block is reference only |
 | `.nomedia` in `media/` and `themes/` ✅ | — | Created before anything else in those folders |
-| Move scraped art to `media/<kind>/<system_id>/<rom stem>.<ext>` | Config | ES-DE-style names survive a library rebuild and allow reusing ES-DE media; one-time move from the private asset cache. File names must be checked and FAT-safe |
+| Move scraped art to `media/<kind>/<system_id>/<rom stem>.<ext>` ✅ | Config | Done 2026-11-11 (§2.8). Names cleaned for FAT32/exFAT; clashes in one system (FAT ignores case; `Game.zip` vs `Game.7z`) get a UUID suffix; art follows the Xross folder when it moves |
 | Database backup at `data/xross.db` ✅ | Config | The live database stays private. `PRAGMA wal_checkpoint(TRUNCATE)`, then the file is copied while writers are held off (`BEGIN IMMEDIATE`), so it works on Android 9 (`VACUUM INTO` needs API 30). The copy is switched to rollback-journal mode, verified, and renamed into place. Offered for restore on a fresh install; the restore is applied on the next start, before Room opens the database |
 | `GameLauncher` behind an interface ✅ | — | `GameLauncher` interface plus `AndroidIntentGameLauncher`; desktop support isn't planned |
 
@@ -235,16 +242,16 @@ another device. Details and the reasons for each decision: `docs/BACKLOG_ASSESSM
 
 | Item | Depends on | Notes |
 | --- | --- | --- |
-| Hide apps | Settings JSON (recommended) | Options ▸ Hide on any app, also in Games ▸ Android Games; Settings ▸ Apps ▸ Hidden apps to unhide; Hide system apps switch |
-| App folders | Settings JSON (recommended) | Options ▸ Move to folder; preset names (Emulators, Streaming, Tools) so no typing is needed, custom names with the gamepad keyboard; Emulators folder suggested from `EmulatorRegistry`. Replaces Phase 4 "App triage UI" |
+| Hide apps ✅ | Settings JSON ✅ | Done 2026-11-11 (§2.3) |
+| App folders ✅ | Settings JSON ✅ | Done 2026-11-11 (§2.3). Replaces Phase 4 "App triage UI" |
 | "All Games" folder ✅ | — | Done 2026-11-11 (§2.2) |
-| Base ROMs folder | Portable folder for its default | The library's home folder and the upload target for the Portal and FTPS; **Create system folders** makes `<base>/<system_id>/` for all 22 platforms. Platform IDs already match ES-DE's; auto-detection of `ROMs/` and extra folders keep working |
+| Base ROMs folder ✅ | Portable folder ✅ | Done 2026-11-11 (§2.2). Still to come: the upload target for the Portal and FTPS |
 
 **Media hub**
 
 | Item | Depends on | Notes |
 | --- | --- | --- |
-| Custom Photo and Video folders | `.nomedia` in `Xross/media` | Per tab: empty list = all of MediaStore (today), otherwise only the chosen folders. MediaStore filtered by path where it indexes them; direct file walk with own thumbnails for folders it skips (`.nomedia`, hidden, some USB drives); rescans on resume and hot-swap |
+| Custom Photo and Video folders ✅ | `.nomedia` in `Xross/media` ✅ | Done 2026-11-11 (§2.4) |
 | Media controls shortcut ✅ | — | Done 2026-11-11 (§2.1). Not available over a running emulator |
 | Hide the paused mini player after 30 s ✅ | — | Done 2026-11-11 (§2.4) |
 
@@ -360,12 +367,12 @@ Real-hardware pass ──┬──▶ DAT import ✅ ─▶ Scrapers ✅ ─▶ 
                      ├──▶ Per-controller mappings, axial deadzone ✅ ──▶ 0% deadzone ✅
                      ├──▶ Baseline Profile                                Dual screen, docking
                      │                                                    FTPS (independent)
-                     └──▶ Settings JSON in Xross/ ✅ ─┬─▶ App hide and folders
-                                                      ├─▶ Custom Photo/Video folders
-                                                      ├─▶ Art moved to Xross/media
+                     └──▶ Settings JSON in Xross/ ✅ ─┬─▶ App hide and folders ✅
+                                                      ├─▶ Custom Photo/Video folders ✅
+                                                      ├─▶ Art moved to Xross/media ✅
                                                       ├─▶ Database backup ✅
                                                       ├─▶ Theme pack format (reads Xross/themes)
-                                                      └─▶ Base ROMs folder ─▶ Portal / FTPS upload target
+                                                      └─▶ Base ROMs folder ✅ ─▶ Portal / FTPS upload target
 
 Independent, any time: All Games folder ✅ · media controls shortcut ✅ · 30 s mini-player hide ✅ ·
 focused-game background (hero art, then video), which pairs with cutting idle CPU
@@ -396,8 +403,8 @@ focused-game background (hero art, then video), which pairs with cutting idle CP
 4. ✅ The portable folder: bootstrap, `settings.json`, `controllers.json`, `systems.json`,
    `.nomedia`, the database backup and the `GameLauncher` interface. Still to do: check it on a
    device with an SD card and on Android 9 or 10.
-5. On top of it: app hide and folders, custom Photo/Video folders, the base ROMs folder, and
-   moving art into `Xross/media`.
+5. ✅ On top of it: app hide and folders, custom Photo/Video folders, the base ROMs folder, and
+   art in `Xross/media`. Still to do: a device pass with an SD card.
 6. Step 3: theme pack format (in `Xross/themes`), with the bundled assets moved into a default
    pack, and shader settings. An XMB-style default font comes with it.
 7. Focused-game background (hero art, then video), together with pausing the wave under it and

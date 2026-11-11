@@ -165,6 +165,7 @@ fun XmbScreen(
     onCloseOptions: () -> Unit = {},
     onSearchKeyTap: (Int, Int) -> Unit = { _, _ -> },
     onSearchResultTap: (Int) -> Unit = {},
+    onNameKeyTap: (Int, Int) -> Unit = { _, _ -> },
     onInfoRowTap: (Int) -> Unit = {},
     onCloseInfo: () -> Unit = {},
     snap: SnapPlayer? = null,
@@ -220,7 +221,7 @@ fun XmbScreen(
 
         // The menu fades out under media screens so only one set of text and hints is visible.
         val menuAlpha by animateFloatAsState(
-            if (state.overlay == null && state.search == null && state.details == null) 1f else 0f,
+            if (state.overlay == null && state.search == null && state.nameEntry == null && state.details == null) 1f else 0f,
             tween(220),
             label = "menu",
         )
@@ -289,6 +290,17 @@ fun XmbScreen(
                 nowPlaying = state.nowPlaying,
                 loadThumb = loadThumb,
                 hints = { pairs -> OverlayHints(pairs, state, m.subtitleSize.sp()) },
+            )
+        }
+
+        state.nameEntry?.let { entry ->
+            NameEntryOverlay(
+                entry = entry,
+                m = m,
+                pulse = { pulse },
+                family = state.family,
+                confirm = state.confirm,
+                onKeyTap = onNameKeyTap,
             )
         }
 

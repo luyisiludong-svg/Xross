@@ -14,18 +14,18 @@ Legend: ✅ done and verified · ◐ partial · ❌ not started · 🧪 verified
 | Phase 1 (Alpha): XMB navigation, gamepad layer, library, emulator dispatch, wave shader | ✅ complete |
 | Phase 1b (hardening): hot-swap, USB-OTG, playtime, Options menu, per-game emulator, 6 more emulators, per-controller mappings, axial deadzone, 0% deadzone | ✅ done; real-handheld testing and a Baseline Profile remain (§6) |
 | Visual front end from `assets/examples` (icons, themes, glow, status bar, sounds) | ✅ plus the Original monthly theme, busy indicator, optional button hints, Information screen |
-| Phase 2 (metadata, media hub, theme packs, on-screen controller and keyboard) | ◐ fingerprinting, media hub, gamepad search, DAT verification, scrapers, art, Details screen, manual matching and video snaps done (§2, §3); portable `Xross/` folder with JSON config and database backup, All Games, media controls shortcut and mini-player hide done (§3.9); ScreenScraper awaits developer credentials; theme packs and on-screen controller not started |
+| Phase 2 (metadata, media hub, theme packs, on-screen controller and keyboard) | ◐ fingerprinting, media hub, gamepad search, DAT verification, scrapers, art, Details screen, manual matching and video snaps done (§2, §3); portable `Xross/` folder with JSON config and database backup, All Games, media controls shortcut and mini-player hide done (§3.9); library organization (hidden apps, app folders, base ROMs folder, custom Photo/Video folders, art in `Xross/media`) done (§3.10); ScreenScraper awaits developer credentials; theme packs and on-screen controller not started |
 | Phase 3 (dual screen, hot-swap, RetroAchievements, Web Portal, FTPS) | ❌ (two prerequisites done; see §6) |
 | Phase 4 (onboarding, triage, profiling, plugin API) | ◐ app triage and performance work started |
 
-**Verification:** 285 JVM/Robolectric unit tests (283 run by default, 0 failures; 2 opt-in tests
+**Verification:** 320 JVM/Robolectric unit tests (318 run by default, 0 failures; 2 opt-in tests
 call the real services), end-to-end launch tests against stub builds of eleven emulators, a
 hot-swap test with a real removable volume, frame-pacing measurements across 12 display
 configurations on the emulator, live scraping runs, and a full feature pass on a **Samsung Galaxy
 A55** (Android 16, 120 Hz) on 2026-11-11 (§3.8). The on-device smoke test passed with 57 checks
 before Steps 1–2; it has since been updated for the new menu rows and features (§3.2) but not
 re-run. No physical controller, gaming handheld or real emulator install has been tested yet,
-and the portable folder hasn't run on a device (§3.9).
+and the portable folder and library organization haven't run on a device (§3.9, §3.10).
 
 ---
 
@@ -87,7 +87,7 @@ and the portable folder hasn't run on a device (§3.9).
 | SteamGridDB (capsules, hero banners, logos) | ✅ 📱 | Free per-user API key; autocomplete search by the best known title |
 | ScreenScraper (descriptions, box art, logos, screenshots, video snaps) | ✅ 🧪 | Follows the API page (English guide: `docs/SCREENSCRAPER_API.md`): file hashes plus size, name search for files too large to hash, and the mandatory quota handling. Waiting for developer credentials; tested against canned responses only |
 | Throttled batch scraper | ✅ 📱 | Per-service pacing, back-off on 429, daily-quota stop, retry after a day on failure; only while Xross is in front; opt-in and Wi-Fi only by default |
-| Asset cache keyed by game UUID | ✅ 📱 | `noBackupFilesDir/assets/<uuid>/`; atomic writes; files accepted only if their bytes are PNG, JPEG, WebP or MP4; pruned when games go away |
+| Asset cache | ✅ 🧪 | `Xross/media/<kind>/<system>/<rom stem>.<ext>` since 2026-11-11 (§3.10); atomic writes; files accepted only if their bytes are PNG, JPEG, WebP or MP4; art of removed games pruned. The earlier private UUID cache (verified on the Galaxy A55) is moved over once |
 | Game Details screen | ✅ 📱 | Background art (or the playing snap), box art, logo, release facts, rating, playtime, scrollable description |
 | Manual match and override tool | ✅ 📱 | Options ▸ Metadata: Edit title, Find match (results from every service), Scrape again, Use automatic match |
 | Language priority list | ◐ | One region and one language setting |
@@ -132,6 +132,8 @@ parked until an API is documented.
 | Dual-screen (Presentation API, per-screen layouts, swap hotkey) | ❌ | Phase 3 |
 | HDMI/DisplayPort dock detection (`DisplayManager`) | ❌ | Phase 3 |
 | App triage: games (`CATEGORY_GAME`) to Games ▸ Android Games, others to Apps | ✅ | |
+| Hide apps, Hide system apps, Hidden apps screen | ✅ | Options ▸ Hide; Settings ▸ Apps |
+| App folders | ✅ | Options ▸ Move to folder (Emulators, Streaming, Tools or a typed name); emulators suggested for Emulators; "Group emulators" row |
 | Emulator detection among installed apps | ◐ | Installed check for known packages; not shown as a separate group |
 | Can be the HOME launcher; Android TV leanback entry | ✅ | |
 
@@ -142,8 +144,8 @@ HTTPS Xross Portal (Ktor CIO), FTPS (Apache FtpServer), auth, uploads, library e
 
 ## 3. Test results
 
-### 3.1 Unit tests — 285 tests, 0 failures
-`./gradlew :app:testDebugUnitTest` (JVM + Robolectric on SDK 35): 283 run by default, 2 opt-in live
+### 3.1 Unit tests — 320 tests, 0 failures
+`./gradlew :app:testDebugUnitTest` (JVM + Robolectric on SDK 35): 318 run by default, 2 opt-in live
 tests skip unless `-PliveScrape=true`. The table below lists the original suites; later suites
 are listed after it.
 
@@ -181,6 +183,17 @@ Added on 2026-11-11 (Milestones 1 and 2, 79 tests):
 | `DatabaseBackupManagerTest` | 9 | Snapshot in `Xross/data`, WAL contents included, backup only after changes, restore offer and staged restore, invalid files |
 | `GameLauncherTest` | 6 | Plans, `content://` grant inside the launcher, foreign plans refused, test doubles |
 | Others extended | 8 | `StickTrackerTest` (0% deadzone), `MenuSettingsTest` (deadzone label, System rows, restore row), `SettingsStoreTest`, `XmbViewModelTest` (deadzone cycle, media button) |
+
+Added for Milestone 3 (35 tests):
+
+| Suite | Tests | Covers |
+| --- | --- | --- |
+| `AppFoldersTest` | 13 | Hiding (Apps, Android Games, system apps), Hidden apps screen, folders and their order, emulator suggestion and Group emulators, Move to folder menu, folder name tidying, the name keyboard |
+| `PortableMediaTest` | 10 | FAT-safe names, clashes per system, ES-DE folder layout, reusing ES-DE media, art following the Xross folder, the one-time move from the private cache |
+| `LibraryOrganizationTest` | 11 | Create system folders (22, idempotent, failures), base folder in the scan plan and Library rows, media folder filter and walk (`.nomedia`, hidden, limits), synthetic ids, custom folders in the media library, Media settings rows |
+| `PortableSettingsTest` | +1 | `apps.hidden`, app folders, base ROMs folder and `photo/video.customFolders` in `settings.json` |
+
+`ScrapeOrchestratorTest`'s two asset-cache tests were rewritten for the new layout (same count).
 
 ### 3.2 Device smoke test — 57/57 passed before Steps 1–2; updated, not re-run
 `tools/device-tests/smoke.sh` resets the app, seeds ROMs, and drives the UI with key events.
@@ -340,6 +353,17 @@ changed, or from Settings ▸ System ▸ Back up library now. Restores are copie
 database and applied on the next start, before Room opens it; the live database is never
 replaced while open. Verified with Robolectric only.
 
+### 3.10 Library organization (Milestone 3)
+
+| Feature | How it works |
+| --- | --- |
+| Hidden apps | Package names in `settings.json` `apps.hidden`; filtered from Apps and Games ▸ Android Games. "Hide system apps" uses `ApplicationInfo.FLAG_SYSTEM` (updated system apps included) |
+| App folders | `apps.folders` maps package → folder. Presets need no typing; other names come from the gamepad keyboard (capitals only, tidied to title case except short acronyms) |
+| Base ROMs folder | `library.baseRomsFolder`; empty means `roms/` in the Xross folder. Scanned first; auto-detected and added folders unchanged. Create system folders makes `<base>/<id>/` for the 22 systems and never touches existing files |
+| Custom Photo/Video folders | `photo.customFolders` / `video.customFolders`. MediaStore queried with `_data LIKE '<folder>/%'`; a breadth-first walk (8 levels, 20,000 files, no symlinks) adds files MediaStore skips. Walked files get negative ids and FileProvider URIs; their thumbnails are decoded here (EXIF-rotated photos, a video frame) |
+| Art in `Xross/media` | `<kind>/<system>/<rom stem>.<ext>`. Stems lose `\ / : * ? " < > \|` and control characters, trailing dots and spaces, reserved device names are prefixed, and length is capped at 200. On a clash within a system the oldest game keeps the plain name and the others get `[<first 8 of UUID>]`. Lookups try a few names × 4 extensions (a handful of `stat` calls). Prune deletes only art of games that left the library |
+| Moving the old cache | After the library first loads, `noBackupFilesDir/assets/<uuid>/…` is copied file by file into the new layout in the background; the old copy is still found until moved; art already in place wins |
+
 ---
 
 ## 4. Display matrix & performance
@@ -458,21 +482,22 @@ Unisoc T618) before calling it final.**
 ### Phase 2 — Metadata, customization & media (Beta)
 - [x] Archive-aware fingerprinting (zip/7z/CHD headers) and CRC32/MD5/SHA-1 hashing in a
       background job that pauses while a game runs
-- [ ] DAT import (No-Intro / Redump Logiqx XML) → exact titles, regions and revisions offline
+- [x] DAT import (No-Intro / Redump Logiqx XML) → exact titles, regions and revisions offline
 - [ ] Per-track hashing for `.cue`/`.gdi` (Redump matches tracks, not sheets)
-- [ ] Scrapers: ScreenScraper (dev credentials), SteamGridDB (user key), Hasheous; language
-      priority list; throttled batch scraper; disk asset cache keyed by UUID
-- [ ] Game detail view (box art, description, release info) and manual match/override tool
+- [x] Scrapers: ScreenScraper (built; awaits dev credentials), SteamGridDB (user key), Hasheous;
+      throttled batch scraper; disk asset cache (now `Xross/media`, §3.10)
+- [ ] Language priority list (one region and one language today)
+- [x] Game detail view (box art, description, release info) and manual match/override tool
 - [x] Gamepad virtual keyboard and search overlay on the FTS4 index (Games ▸ Search)
 - [x] Media hub: photo viewer (zoom/pan, slideshow, wallpaper), music player as a background
       service with BGM mode, video player
-- [ ] Video snap previews on focused games (after the scraper provides snaps)
+- [x] Video snap previews on focused games (untested with real snaps; ScreenScraper only)
 - [x] Portable `Xross/` folder: `config/` JSON (settings, controllers, systems) with atomic writes
       and SharedPreferences migration, `data/xross.db` backup and restore, `.nomedia` in
       `media/` and `themes/`; `GameLauncher` interface (§3.9)
 - [x] All Games folder, media controls shortcut, mini-player hide after 30 s paused
-- [ ] Hide apps, app folders, base ROMs folder with Create system folders, custom Photo/Video
-      folders, scraped art in `Xross/media`
+- [x] Hide apps, app folders, base ROMs folder with Create system folders, custom Photo/Video
+      folders, scraped art in `Xross/media` (§3.10)
 - [ ] Separate BGM / UI / video-snap volume sliders
 - [ ] Theme packs: loadable icons, sounds (cursor/confirm/back/error/boot), fonts, palettes and
       wave parameters (line count, turbulence, thickness); move bundled assets into a pack
@@ -490,7 +515,7 @@ Unisoc T618) before calling it final.**
 
 ### Phase 4 — Production launch & ecosystem (v1.0)
 - [ ] First-run onboarding: storage access, folder discovery, emulator detection, first scrape
-- [ ] App triage UI: Emulators vs Games vs Utilities groups
+- [x] App triage UI: replaced by app folders with a suggested Emulators folder (Phase 2)
 - [ ] Performance and thermal tuning on target hardware; input-latency measurement
 - [ ] Public theme/plugin format and documentation
 - [ ] Release signing, crash reporting (opt-in), Play/F-Droid compliance review

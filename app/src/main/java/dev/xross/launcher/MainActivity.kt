@@ -70,6 +70,17 @@ class MainActivity : ComponentActivity() {
         viewModel.onDatFolderPicked(it)
     }
 
+    private val pickBaseRomsFolder = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) {
+        viewModel.onBaseRomsFolderPicked(it)
+    }
+
+    /** Which tab the media folder picker is choosing for; survives only while the picker is up. */
+    private var pendingMediaFolder = dev.xross.launcher.state.MediaFolderKind.PHOTO
+
+    private val pickMediaFolder = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) {
+        viewModel.onMediaFolderPicked(pendingMediaFolder, it)
+    }
+
     /** Android 9–10: read for the library, write for the portable Xross folder. */
     private val legacyStoragePermission =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
@@ -141,6 +152,7 @@ class MainActivity : ComponentActivity() {
                     onCloseOptions = viewModel::closeOptions,
                     onSearchKeyTap = viewModel::onSearchKeyTapped,
                     onSearchResultTap = viewModel::onSearchResultTapped,
+                    onNameKeyTap = viewModel::onNameKeyTapped,
                     onInfoRowTap = viewModel::onInfoRowTapped,
                     onCloseInfo = viewModel::closeInfo,
                     snap = container.snaps,
@@ -210,6 +222,11 @@ class MainActivity : ComponentActivity() {
             is UiEffect.StartActivity -> safeStart(effect.intent)
             UiEffect.PickFolder -> runCatching { pickFolder.launch(null) }
             UiEffect.PickDatFolder -> runCatching { pickDatFolder.launch(null) }
+            UiEffect.PickBaseRomsFolder -> runCatching { pickBaseRomsFolder.launch(null) }
+            is UiEffect.PickMediaFolder -> {
+                pendingMediaFolder = effect.kind
+                runCatching { pickMediaFolder.launch(null) }
+            }
             UiEffect.RequestStorageAccess -> requestStorageAccess()
             is UiEffect.SetWallpaper -> setWallpaper(effect.uri)
             is UiEffect.PromptText -> promptText(effect.prompt)

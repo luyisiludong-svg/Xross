@@ -56,6 +56,12 @@ class ConfigCodecTest {
         videoLoop = true,
         allGamesFolder = false,
         systemOverrides = mapOf("snes" to SystemOverride(extraFolders = setOf("SFC Hacks"), extraExtensions = setOf("bps"))),
+        hiddenApps = setOf("com.example.ads"),
+        hideSystemApps = true,
+        appFolders = mapOf("com.retroarch.aarch64" to "Emulators", "com.netflix.mediaclient" to "Streaming"),
+        baseRomsFolder = "/storage/1A2B-3C4D/ROMs",
+        photoFolders = listOf("/storage/emulated/0/Pictures/Shots"),
+        videoFolders = listOf("/storage/1A2B-3C4D/Movies", "/storage/emulated/0/Xross/media/snaps"),
     )
 
     private fun roundTrip(s: XrossSettings): XrossSettings {
@@ -73,7 +79,14 @@ class ConfigCodecTest {
 
     @Test fun settingsFileIsGroupedLikeTheSettingsMenu() {
         val root = Json.parseToJsonElement(ConfigCodec.encodeSettings(everything)).jsonObject
-        assertEquals(setOf("version", "library", "controls", "display", "sound", "media", "metadata"), root.keys)
+        assertEquals(
+            setOf("version", "library", "controls", "display", "sound", "media", "metadata", "apps", "photo", "video"),
+            root.keys,
+        )
+        val apps = root.getValue("apps").jsonObject
+        assertEquals("[\"com.example.ads\"]", apps.getValue("hidden").toString())
+        assertEquals("Emulators", apps.getValue("folders").jsonObject.getValue("com.retroarch.aarch64").jsonPrimitive.content)
+        assertEquals("[\"/storage/emulated/0/Pictures/Shots\"]", root.getValue("photo").jsonObject.getValue("customFolders").toString())
         assertEquals("EAST", root.getValue("controls").jsonObject.getValue("confirmButton").jsonPrimitive.content)
         assertEquals("0.0", root.getValue("controls").jsonObject.getValue("stickDeadzone").jsonPrimitive.content)
     }
