@@ -69,7 +69,7 @@ class FingerprintQueueTest {
     @Test fun queueFingerprintsRealFilesAndSkipsMissingOnes() = runBlocking {
         val rom = tmp.newFile("Game.sfc").apply { writeText("abc") }
         games.insertAll(listOf(game(1, rom.path, size = 3), game(2, "/storage/UNMOUNTED/x.sfc")))
-        val queue = FingerprintQueue(games, hashes) { FingerprintPolicy() }
+        val queue = FingerprintQueue(games, hashes, policy = { FingerprintPolicy() })
         queue.start(this)
         // start() launches on the queue's own thread; wait for it to drain.
         while (queue.current.value != null || hashes.get(1) == null) kotlinx.coroutines.delay(20)

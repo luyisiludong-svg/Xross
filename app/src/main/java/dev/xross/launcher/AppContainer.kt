@@ -3,15 +3,32 @@ package dev.xross.launcher
 import android.content.Context
 import dev.xross.launcher.audio.UiSounds
 import dev.xross.launcher.data.AppRepository
+import dev.xross.launcher.data.CredentialStore
+import dev.xross.launcher.data.DatRepository
+import dev.xross.launcher.scrape.ArtLoader
+import dev.xross.launcher.scrape.AssetCache
+import dev.xross.launcher.scrape.HttpClient
+import dev.xross.launcher.scrape.Network
+import dev.xross.launcher.scrape.ScrapeOrchestrator
+import dev.xross.launcher.scrape.ScrapePrefs
+import dev.xross.launcher.scrape.UrlConnectionHttp
+import dev.xross.launcher.scrape.providers.HasheousProvider
+import dev.xross.launcher.scrape.providers.ScreenScraperCredentials
+import dev.xross.launcher.scrape.providers.ScreenScraperProvider
+import dev.xross.launcher.scrape.providers.SteamGridDbProvider
 import dev.xross.launcher.data.FingerprintQueue
 import dev.xross.launcher.data.GameRepository
 import dev.xross.launcher.data.PlaySessionTracker
 import dev.xross.launcher.data.PrefsSessionStore
 import dev.xross.launcher.data.SettingsStore
 import dev.xross.launcher.data.XrossDatabase
+import dev.xross.launcher.data.DatabaseBackupManager
+import dev.xross.launcher.launch.AndroidIntentGameLauncher
 import dev.xross.launcher.launch.GameLauncher
+import dev.xross.launcher.storage.XrossEnvironment
 import dev.xross.launcher.media.MediaRepository
 import dev.xross.launcher.media.MusicPlayer
+import dev.xross.launcher.media.SnapPlayer
 import dev.xross.launcher.storage.FingerprintPolicy
 import dev.xross.launcher.storage.StorageVolumes
 
@@ -22,16 +39,83 @@ class AppContainer(context: Context) {
     val database: XrossDatabase by lazy { XrossDatabase.create(appContext) }
     val games: GameRepository by lazy { GameRepository(database.games()) }
     val apps: AppRepository by lazy { AppRepository(appContext) }
-    val settings: SettingsStore by lazy { SettingsStore(appContext) }
+    /** The portable Xross folder (config, database backup, DATs, media, themes). */
+    val environment: XrossEnvironment by lazy { XrossEnvironment(appContext) }
+    val settings: SettingsStore by lazy { SettingsStore(appContext, environment) }
+    val backups: DatabaseBackupManager by lazy {
+        DatabaseBackupManager(appContext, database = { database }, layout = { environment.current })
+    }
     val volumes: StorageVolumes by lazy { StorageVolumes(appContext) }
-    val launcher: GameLauncher by lazy { GameLauncher(appContext) }
+    val launcher: GameLauncher by lazy { AndroidIntentGameLauncher(appContext) }
     val sounds: UiSounds by lazy { UiSounds(appContext) }
     val sessions: PlaySessionTracker by lazy { PlaySessionTracker(PrefsSessionStore(appContext)) }
     val media: MediaRepository by lazy { MediaRepository(appContext) }
     val music: MusicPlayer by lazy { MusicPlayer(appContext) }
-    val fingerprints: FingerprintQueue by lazy {
-        FingerprintQueue(database.games(), database.hashes()) {
-            FingerprintPolicy(hashLargeImages = settings.current.hashLargeImages)
+    val dats: DatRepository by lazy { DatRepository(database) }
+    val credentials: CredentialStore by lazy {
+        CredentialStore(appContext).also { store ->
+            // Debug builds only (release builds carry empty strings): the tester's accounts from .env,
+            // used only where nothing has been entered in Settings.
+            if (store.current.screenScraperUser.isBlank() && BuildConfig.DEBUG_SCREENSCRAPER_USER.isNotBlank()) {
+                store.update {
+                    it.copy(
+                        screenScraperUser = BuildConfig.DEBUG_SCREENSCRAPER_USER,
+                        screenScraperPassword = BuildConfig.DEBUG_SCREENSCRAPER_PASSWORD,
+                    )
+                }
+            }
+            if (store.current.steamGridDbKey.isBlank() && BuildConfig.DEBUG_STEAMGRIDDB_KEY.isNotBlank()) {
+                store.update { it.copy(steamGridDbKey = BuildConfig.DEBUG_STEAMGRIDDB_KEY) }
+            }
         }
+    }
+
+    /**
+     * Downloaded art in `Xross/media/<kind>/<system>/<rom stem>.<ext>`, following the Xross folder.
+     * The private cache of earlier versions is moved there once (see [AssetCache.migrateLegacy]).
+     */
+    val assets: AssetCache by lazy {
+        AssetCache(root = { environment.current.media }, legacyRoot = java.io.File(appContext.noBackupFilesDir, "assets"))
+    }
+    val art: ArtLoader by lazy { ArtLoader(assets) }
+    val snaps: SnapPlayer by lazy { SnapPlayer(appContext, music) }
+    private val http: HttpClient by lazy { UrlConnectionHttp("Xross/${BuildConfig.VERSION_NAME} (Android)") }
+
+    val screenScraper: ScreenScraperProvider by lazy {
+        ScreenScraperProvider(http, credentials = {
+            ScreenScraperCredentials(
+                devId = BuildConfig.SCREENSCRAPER_DEV_ID,
+                devPassword = BuildConfig.SCREENSCRAPER_DEV_PASSWORD,
+                softName = "Xross",
+                user = credentials.current.screenScraperUser,
+                password = credentials.current.screenScraperPassword,
+            )
+        })
+    }
+
+    val scraper: ScrapeOrchestrator by lazy {
+        ScrapeOrchestrator(
+            db = database,
+            cache = assets,
+            http = http,
+            providers = listOf(
+                HasheousProvider(http, enabled = { settings.current.hasheousEnabled }),
+                screenScraper,
+                SteamGridDbProvider(http, apiKey = { credentials.current.steamGridDbKey }),
+            ),
+            prefs = {
+                settings.current.let { ScrapePrefs(region = it.scrapeRegion, language = it.scrapeLanguage, videos = it.scrapeVideos) }
+            },
+            networkAllowed = { !settings.current.scrapeWifiOnly || Network.isUnmetered(appContext) },
+        )
+    }
+    val fingerprints: FingerprintQueue by lazy {
+        FingerprintQueue(
+            games = database.games(),
+            hashes = database.hashes(),
+            policy = { FingerprintPolicy(hashLargeImages = settings.current.hashLargeImages) },
+            // New fingerprints may now match an imported DAT.
+            onFinished = { dats.matchAll() },
+        )
     }
 }

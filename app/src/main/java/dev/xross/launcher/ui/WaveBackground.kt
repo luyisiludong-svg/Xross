@@ -17,7 +17,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import dev.xross.launcher.theme.XrossTheme
+import dev.xross.launcher.theme.ThemePalette
 import kotlin.math.roundToInt
 
 /**
@@ -25,11 +25,11 @@ import kotlin.math.roundToInt
  * emulator in front), so it costs nothing while a game runs.
  */
 @Composable
-fun WaveBackground(enabled: Boolean, speed: Float, theme: XrossTheme, modifier: Modifier = Modifier) {
+fun WaveBackground(enabled: Boolean, speed: Float, palette: ThemePalette, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val supported = remember { supportsGles3(context) }
     if (!enabled || !supported) {
-        Box(modifier.fillMaxSize().background(Brush.verticalGradient(listOf(theme.topColor, theme.bottomColor))))
+        Box(modifier.fillMaxSize().background(Brush.verticalGradient(listOf(palette.topColor, palette.bottomColor))))
         return
     }
 
@@ -39,7 +39,8 @@ fun WaveBackground(enabled: Boolean, speed: Float, theme: XrossTheme, modifier: 
             .defaultDisplay.refreshRate
         WaveRenderer(refreshRateHz = hz)
     }
-    renderer.params = WaveParams(speed = speed, theme = theme)
+    val params = remember(speed, palette) { WaveParams(speed = speed, palette = palette) }
+    renderer.params = params
 
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val view = remember {

@@ -5,6 +5,7 @@ import android.opengl.GLSurfaceView
 import android.os.SystemClock
 import android.util.Log
 import dev.xross.launcher.BuildConfig
+import dev.xross.launcher.theme.ThemePalette
 import dev.xross.launcher.theme.XrossTheme
 import dev.xross.launcher.theme.rgb
 import java.util.Calendar
@@ -18,8 +19,13 @@ import kotlin.math.roundToLong
 /** Tunables for the background; read every frame so changes apply live. */
 data class WaveParams(
     val speed: Float = 1f,
-    val theme: XrossTheme = XrossTheme.LAVENDER,
-)
+    val palette: ThemePalette = XrossTheme.LAVENDER.palette(),
+) {
+    // Converted once per parameter change, not per frame, so the GL loop allocates nothing.
+    internal val topRgb = palette.top.rgb()
+    internal val bottomRgb = palette.bottom.rgb()
+    internal val waveRgb = palette.wave.rgb()
+}
 
 /**
  * Full-screen GLSL ES 3.0 background: a theme gradient with broad, glossy light sheets and a few
@@ -92,9 +98,9 @@ class WaveRenderer(
         GLES30.glUniform2f(uRes, width.toFloat(), height.toFloat())
         // Wrap time so float precision never degrades on a launcher that runs for weeks.
         GLES30.glUniform1f(uTime, (time % 10_000.0).toFloat())
-        GLES30.glUniform3fv(uTop, 1, p.theme.top.rgb(), 0)
-        GLES30.glUniform3fv(uBottom, 1, p.theme.bottom.rgb(), 0)
-        GLES30.glUniform3fv(uWave, 1, p.theme.wave.rgb(), 0)
+        GLES30.glUniform3fv(uTop, 1, p.topRgb, 0)
+        GLES30.glUniform3fv(uBottom, 1, p.bottomRgb, 0)
+        GLES30.glUniform3fv(uWave, 1, p.waveRgb, 0)
         GLES30.glUniform1f(uBright, 0.8f + 0.2f * daylight)
         GLES30.glDrawArrays(GLES30.GL_TRIANGLES, 0, 3)
     }

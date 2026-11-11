@@ -4,6 +4,7 @@ import dev.xross.launcher.data.AppEntry
 import dev.xross.launcher.data.GameEntity
 import dev.xross.launcher.data.XrossSettings
 import dev.xross.launcher.input.ConfirmLayout
+import dev.xross.launcher.input.ControllerKey
 import dev.xross.launcher.launch.EmulatorRegistry
 import dev.xross.launcher.launch.GameLauncher
 import dev.xross.launcher.storage.EmulatorOption
@@ -18,6 +19,8 @@ data class FolderEntry(
     val autoDetected: Boolean,
     /** False while the folder's volume (SD card, USB drive) is unplugged. */
     val connected: Boolean = true,
+    /** The base ROMs folder (Settings ▸ Library ▸ Base ROMs folder). */
+    val base: Boolean = false,
 )
 
 /** Live fingerprinting status; kept out of [MenuSnapshot] so progress never rebuilds game lists. */
@@ -40,13 +43,49 @@ data class MenuSnapshot(
     val media: dev.xross.launcher.media.MediaLibrary = dev.xross.launcher.media.MediaLibrary(),
     /** Roots of mounted volumes; empty means "unknown", in which case nothing is marked offline. */
     val mountedRoots: List<String> = emptyList(),
+    /** Imported DATs with their match counts. */
+    val dats: List<dev.xross.launcher.data.DatSummary> = emptyList(),
+    /** gameId → DAT match, scraped fields and overrides. */
+    val metadata: Map<Long, dev.xross.launcher.data.GameMetadataEntity> = emptyMap(),
+    /** Folder DATs are imported from (resolved from the setting). */
+    val datFolder: String = "",
+    /** Which metadata services can run. */
+    val scraperSetup: ScraperSetup = ScraperSetup(),
+    /** Where the Xross folder is, and the library backup in it. */
+    val portable: PortableSetup = PortableSetup(),
+    /** Base ROMs folder in use (resolved from the setting). */
+    val baseRomsFolder: String = "",
+)
+
+/** What Settings ▸ System shows about the Xross folder and the database backup. */
+data class PortableSetup(
+    /** Path of the Xross folder in use; empty until known. */
+    val root: String = "",
+    /** False while the folder is in app storage because shared storage can't be written yet. */
+    val portable: Boolean = false,
+    val backup: dev.xross.launcher.data.BackupStatus = dev.xross.launcher.data.BackupStatus(),
+    /** The snapshot currently in `Xross/data/`, if any. */
+    val backupOnDisk: dev.xross.launcher.data.BackupInfo? = null,
+    /** Set on a clean install when the Xross folder holds a backup with games. */
+    val restorable: dev.xross.launcher.data.BackupInfo? = null,
+)
+
+/** What the Metadata settings need to know about service accounts (never the secrets). */
+data class ScraperSetup(
+    /** This build carries ScreenScraper developer credentials. */
+    val screenScraperAvailable: Boolean = false,
+    val screenScraperUser: String = "",
+    val steamGridDbKeySet: Boolean = false,
+    /** Last quota ScreenScraper reported ("120 of 20,000 requests today"), if any. */
+    val screenScraperQuota: String? = null,
 )
 
 /** Pure builder from a [MenuSnapshot] to XMB lists. */
 class MenuTree(private val s: MenuSnapshot) {
 
     private val gamesByPlatform by lazy { s.games.groupBy { it.platformId } }
-    private val androidGames by lazy { s.apps.filter { it.isGame } }
+    private val visibleApps by lazy { AppFolders.visible(s.apps, s.settings) }
+    private val androidGames by lazy { visibleApps.filter { it.isGame } }
 
     private val cache = HashMap<String, List<XmbNode>>()
 
@@ -61,7 +100,8 @@ class MenuTree(private val s: MenuSnapshot) {
 
     private fun build(key: String): List<XmbNode> = when {
         key == Categories.rootKey(Categories.GAMES) -> gamesRoot()
-        key == Categories.rootKey(Categories.APPS) -> s.apps.filterNot { it.isGame }.map(::appNode)
+        key == Categories.rootKey(Categories.APPS) -> appsRoot()
+        key.startsWith(APP_FOLDER_PREFIX) -> appFolder(key.removePrefix(APP_FOLDER_PREFIX))
         key == Categories.rootKey(Categories.SETTINGS) -> settingsRoot()
         key == Categories.rootKey(Categories.PHOTO) -> media.photoRoot()
         key == Categories.rootKey(Categories.VIDEO) -> media.videoRoot()
@@ -70,16 +110,23 @@ class MenuTree(private val s: MenuSnapshot) {
         key == RECENT -> s.games.filter { it.lastPlayed != null }
             .sortedByDescending { it.lastPlayed }.take(30).map { gameNode(it, showPlatform = true) }
         key == FAVORITES -> s.games.filter { it.favorite }.map { gameNode(it, showPlatform = true) }
-        key == ANDROID_GAMES -> androidGames.map(::appNode)
+        key == ANDROID_GAMES -> androidGames.map { appNode(it, inGames = true) }
+        key == ALL_GAMES -> platformFolders()
         key.startsWith(PLATFORM_PREFIX) ->
             gamesByPlatform[key.removePrefix(PLATFORM_PREFIX)].orEmpty().map { gameNode(it, showPlatform = false) }
         key == LIBRARY -> librarySettings()
+        key == DATS -> datSettings()
+        key == METADATA -> metadataSettings(dev.xross.launcher.scrape.ScrapeProgress())
         key == CONTROLS -> controlSettings()
         key == EMULATORS -> emulatorSettings()
         key == DISPLAY -> displaySettings()
         key == SOUND -> soundSettings()
         key == MEDIA_SETTINGS -> mediaSettings()
         key == SYSTEM -> systemSettings()
+        key == APPS_SETTINGS -> appSettings()
+        key == HIDDEN_APPS -> hiddenAppRows()
+        key == PHOTO_FOLDERS -> mediaFolderRows(MediaFolderKind.PHOTO)
+        key == VIDEO_FOLDERS -> mediaFolderRows(MediaFolderKind.VIDEO)
         else -> emptyList()
     }
 
@@ -95,16 +142,27 @@ class MenuTree(private val s: MenuSnapshot) {
         }
         val favorites = s.games.count { it.favorite }
         if (favorites > 0) add(folder(FAVORITES, "Favorites", GlyphKey.FAVORITES, countLabel(favorites)))
-        for (platform in PlatformRegistry.all) {
-            val count = gamesByPlatform[platform.id]?.size ?: 0
-            if (count > 0) {
-                add(folder(PLATFORM_PREFIX + platform.id, platform.name, GlyphKey.PLATFORM, countLabel(count)))
-            }
+        val platforms = platformFolders()
+        when {
+            platforms.isEmpty() -> Unit
+            s.settings.allGamesFolder -> add(folder(ALL_GAMES, "All Games", GlyphKey.GAMES, allGamesSummary(platforms.size)))
+            else -> addAll(platforms)
         }
         if (androidGames.isNotEmpty()) {
             add(folder(ANDROID_GAMES, "Android Games", GlyphKey.HANDHELD, countLabel(androidGames.size)))
         }
         if (s.games.isEmpty()) {
+            s.portable.restorable?.let { backup ->
+                add(
+                    XmbNode(
+                        id = "games:restore",
+                        title = "Restore library backup",
+                        subtitle = "${countOf(backup.games, "game")} found in the Xross folder",
+                        icon = NodeIcon.Glyph(GlyphKey.REFRESH),
+                        action = NodeAction.Run(Command.ConfirmRestore),
+                    ),
+                )
+            }
             add(
                 XmbNode(
                     id = "games:empty",
@@ -117,12 +175,28 @@ class MenuTree(private val s: MenuSnapshot) {
         }
     }
 
+    /**
+     * One folder per platform that has games, in [PlatformRegistry] order. Shown inside All Games,
+     * or at the top level of Games when [XrossSettings.allGamesFolder] is off. The All Games list
+     * is built either way, so a navigation stack saved before the setting changed still resolves.
+     */
+    private fun platformFolders(): List<XmbNode> = PlatformRegistry.all.mapNotNull { platform ->
+        val count = gamesByPlatform[platform.id]?.size ?: 0
+        if (count == 0) null else folder(PLATFORM_PREFIX + platform.id, platform.name, GlyphKey.PLATFORM, countLabel(count))
+    }
+
+    private fun allGamesSummary(platforms: Int): String {
+        val systems = if (platforms == 1) "1 system" else "$platforms systems"
+        return "$systems · ${countLabel(s.games.size)}"
+    }
+
     private fun gameNode(game: GameEntity, showPlatform: Boolean): XmbNode {
         val platform = PlatformRegistry.byId(game.platformId)
         val parts = buildList {
             if (isOffline(game.path)) add("Not connected")
             if (game.favorite) add("★")
             if (showPlatform && platform != null) add(platform.shortName)
+            s.metadata[game.id]?.region?.let { add(it) }
             // Skip the extension when it only repeats the platform ("GBA · GBA").
             val ext = game.fileName.substringAfterLast('.', "").uppercase(Locale.ROOT)
             if (!(showPlatform && ext == platform?.shortName?.uppercase(Locale.ROOT))) add(ext)
@@ -133,15 +207,24 @@ class MenuTree(private val s: MenuSnapshot) {
             id = "game:${game.id}",
             title = game.title,
             subtitle = parts.filter { it.isNotEmpty() }.joinToString(" · "),
-            icon = NodeIcon.Glyph(if (platform?.isDiscBased == true || game.isDiscImage()) GlyphKey.GAME_DISC else GlyphKey.GAME_CART),
+            icon = gameIcon(game, platform),
             action = NodeAction.LaunchGame(game.id),
             menu = gameMenu(game, platform),
         )
     }
 
+    private fun gameIcon(game: GameEntity, platform: Platform?): NodeIcon {
+        val glyph = if (platform?.isDiscBased == true || game.isDiscImage()) GlyphKey.GAME_DISC else GlyphKey.GAME_CART
+        val meta = s.metadata[game.id]
+        // Only games a service has identified can have art; others skip the cache lookup.
+        if (meta?.scrapeStatus != dev.xross.launcher.scrape.ScrapeStatus.OK.name) return NodeIcon.Glyph(glyph)
+        return NodeIcon.Art(game.uuid, ICON_ART, glyph, meta.scrapedAt ?: 0L)
+    }
+
     /** Options menu for a game: play, favorite, per-game emulator, and its play history. */
     private fun gameMenu(game: GameEntity, platform: Platform?): List<MenuOption> = buildList {
         add(MenuOption("Play", command = Command.LaunchGame(game.id)))
+        add(MenuOption("Details", detail = "Box art, description and release info", command = Command.ShowDetails(game.id)))
         add(
             MenuOption(
                 if (game.favorite) "Remove from favorites" else "Add to favorites",
@@ -185,18 +268,171 @@ class MenuTree(private val s: MenuSnapshot) {
             val launches = if (game.playCount == 1) "1 time" else "${game.playCount} times"
             add(MenuOption("Played", detail = "$played · $launches"))
         }
+        add(MenuOption("Metadata", detail = metadataDetail(game), submenu = metadataMenu(game)))
+        add(MenuOption("Information", detail = "File, size, fingerprints and playtime", command = Command.ShowGameInfo(game.id)))
+    }
+
+    private fun metadataDetail(game: GameEntity): String {
+        val meta = s.metadata[game.id]
+        return when {
+            meta?.locked == true -> "Set manually"
+            meta?.matchKind != null && meta.scrapeStatus == "OK" -> "Verified · scraped"
+            meta?.matchKind != null -> "Verified by DAT"
+            meta?.scrapeStatus == "OK" -> "Scraped"
+            meta?.scrapeStatus == "NOT_FOUND" -> "Not found online"
+            else -> "Not scraped yet"
+        }
+    }
+
+    private fun metadataMenu(game: GameEntity): List<MenuOption> = buildList {
+        val meta = s.metadata[game.id]
+        add(MenuOption("Edit title…", detail = meta?.titleOverride ?: "Use your own name for this game", command = Command.EditTitle(game.id)))
+        add(MenuOption("Find match…", detail = "Search by name when the automatic match is wrong", command = Command.FindMatch(game.id)))
+        add(MenuOption("Scrape again", detail = "Refresh text and art for this game", command = Command.Rescrape(game.id)))
+        if (meta?.locked == true || meta?.titleOverride != null) {
+            add(MenuOption("Use automatic match", detail = "Forget the manual title and match", command = Command.ResetMetadata(game.id)))
+        }
+    }
+
+    /**
+     * The emulator [game] would launch with, as shown on the Information screen:
+     * "DuckStation · this game only" for an override, the platform choice otherwise.
+     */
+    fun emulatorSummary(game: GameEntity): String? {
+        val platform = PlatformRegistry.byId(game.platformId) ?: return null
+        if (platform.emulators.isEmpty()) return null
+        val override = platform.emulators.firstOrNull { it.key == game.emulatorOverride }
+        if (override != null) return "${emulatorLabel(override)} · this game only"
+        val choice = s.settings.emulatorChoice[platform.id]
+        val resolved = GameLauncher.resolveOption(platform, choice, s.installedEmulators)
+        val shown = resolved ?: platform.emulators.firstOrNull { it.key == choice } ?: platform.emulators.first()
+        return emulatorLabel(shown) + if (resolved == null) " (not installed)" else ""
     }
 
     private fun emulatorLabel(option: EmulatorOption): String =
         (EmulatorRegistry.byId(option.emulatorId)?.name ?: option.emulatorId) + (option.core?.let { " · $it" } ?: "")
 
-    private fun appNode(app: AppEntry) = XmbNode(
+    private fun appNode(app: AppEntry, inGames: Boolean = false) = XmbNode(
         id = "app:${app.packageName}/${app.activityName}",
         title = app.label,
         subtitle = app.packageName,
         icon = NodeIcon.App(app.packageName),
         action = NodeAction.LaunchApp(app.packageName, app.activityName),
+        menu = appMenu(app, inGames),
     )
+
+    // region Apps
+
+    /**
+     * Apps: a "Group emulators" suggestion while installed emulators sit loose, then folders
+     * (presets first), then the apps that aren't in one.
+     */
+    private fun appsRoot(): List<XmbNode> = buildList {
+        val apps = visibleApps.filterNot { it.isGame }
+        val folders = s.settings.appFolders
+        val loose = AppFolders.ungroupedEmulators(s.apps, s.settings)
+        if (loose.isNotEmpty()) {
+            add(
+                setting(
+                    "apps:group-emulators", "Group emulators",
+                    "Move ${countOf(loose.size, "emulator")} into an Emulators folder",
+                    GlyphKey.EMULATORS, Command.GroupEmulators,
+                ),
+            )
+        }
+        val inFolders = apps.filter { it.packageName in folders }
+        for (name in AppFolders.folderNames(inFolders.map { folders.getValue(it.packageName) })) {
+            val count = inFolders.count { folders[it.packageName] == name }
+            add(folder(APP_FOLDER_PREFIX + name, name, if (name == AppFolders.EMULATORS) GlyphKey.EMULATORS else GlyphKey.FOLDER, countOf(count, "app")))
+        }
+        addAll(apps.filter { it.packageName !in folders }.map { appNode(it) })
+    }
+
+    private fun appFolder(name: String): List<XmbNode> =
+        visibleApps.filter { !it.isGame && s.settings.appFolders[it.packageName] == name }.map { appNode(it) }
+
+    /** Options for an app: open, move to a folder (Apps only), hide. */
+    private fun appMenu(app: AppEntry, inGames: Boolean): List<MenuOption> = buildList {
+        add(MenuOption("Open", command = Command.LaunchApp(app.packageName, app.activityName)))
+        if (!inGames) {
+            val current = s.settings.appFolders[app.packageName]
+            val suggested = AppFolders.suggestedFolder(app.packageName)
+            val names = AppFolders.offeredNames(s.settings).let { all -> listOfNotNull(suggested) + all.filter { it != suggested } }
+            add(
+                MenuOption(
+                    "Move to folder",
+                    detail = current ?: suggested?.let { "Suggested: $it" } ?: "Not in a folder",
+                    submenu = buildList {
+                        for (name in names) {
+                            add(
+                                MenuOption(
+                                    name,
+                                    detail = if (name == suggested && name != current) "Suggested" else null,
+                                    command = Command.MoveAppToFolder(app.packageName, name),
+                                    selected = name == current,
+                                ),
+                            )
+                        }
+                        add(MenuOption("New folder…", detail = "Name it with the keyboard", command = Command.NewAppFolder(app.packageName)))
+                        if (current != null) add(MenuOption("Remove from folder", command = Command.MoveAppToFolder(app.packageName, null)))
+                    },
+                ),
+            )
+        }
+        add(MenuOption("Hide", detail = "Settings ▸ Apps ▸ Hidden apps shows it again", command = Command.HideApp(app.packageName)))
+    }
+
+    /** Settings ▸ Apps. */
+    private fun appSettings(): List<XmbNode> = buildList {
+        val st = s.settings
+        val hidden = hiddenApps()
+        add(folder(HIDDEN_APPS, "Hidden apps", GlyphKey.APPS, if (hidden.isEmpty()) "None" else countOf(hidden.size, "app")))
+        add(
+            setting(
+                "apps:system", "Hide system apps",
+                if (st.hideSystemApps) "On — preinstalled apps are hidden" else "Off",
+                GlyphKey.APPS, Command.ToggleHideSystemApps,
+            ),
+        )
+        val loose = AppFolders.ungroupedEmulators(s.apps, st)
+        if (loose.isNotEmpty()) {
+            add(setting("apps:group", "Group emulators", "Move ${countOf(loose.size, "emulator")} into Emulators", GlyphKey.EMULATORS, Command.GroupEmulators))
+        }
+        if (st.appFolders.isNotEmpty()) {
+            val folders = AppFolders.folderNames(st.appFolders.values)
+            add(setting("apps:clear-folders", "Remove all app folders", folders.joinToString(", "), GlyphKey.REFRESH, Command.ClearAppFolders))
+        }
+    }
+
+    /** Apps hidden one by one, plus (when on) system apps; packages no longer installed included. */
+    private fun hiddenApps(): List<Pair<String, AppEntry?>> {
+        val byPackage = s.apps.groupBy { it.packageName }
+        val explicit = s.settings.hiddenApps.map { it to byPackage[it]?.firstOrNull() }
+        return explicit.sortedBy { (pkg, app) -> (app?.label ?: pkg).lowercase(Locale.ROOT) }
+    }
+
+    private fun hiddenAppRows(): List<XmbNode> = buildList {
+        val hidden = hiddenApps()
+        if (hidden.size > 1) add(setting("hidden:all", "Show all hidden apps", countOf(hidden.size, "app"), GlyphKey.REFRESH, Command.UnhideAllApps))
+        for ((pkg, app) in hidden) {
+            add(
+                XmbNode(
+                    id = "hidden:$pkg",
+                    title = app?.label ?: pkg,
+                    subtitle = if (app == null) "Not installed · press to forget" else "Hidden · press to show again",
+                    icon = if (app != null) NodeIcon.App(pkg) else NodeIcon.Glyph(GlyphKey.APPS),
+                    action = NodeAction.Run(Command.UnhideApp(pkg)),
+                ),
+            )
+        }
+        if (s.settings.hideSystemApps) {
+            val system = s.apps.count { it.isSystem && it.packageName !in s.settings.hiddenApps }
+            add(XmbNode("hidden:system", "System apps", "${countOf(system, "app")} hidden by Hide system apps", NodeIcon.Glyph(GlyphKey.INFO)))
+        }
+        if (isEmpty()) add(XmbNode("hidden:none", "No hidden apps", "Options ▸ Hide on any app hides it", NodeIcon.Glyph(GlyphKey.INFO)))
+    }
+
+    // endregion
 
     private fun settingsRoot() = listOf(
         folder(LIBRARY, "Library", GlyphKey.STORAGE, "ROM folders and scanning"),
@@ -205,8 +441,19 @@ class MenuTree(private val s: MenuSnapshot) {
         folder(DISPLAY, "Theme", GlyphKey.DISPLAY, "${XrossTheme.byName(s.settings.theme).label} · wave background"),
         folder(SOUND, "Sound", GlyphKey.SOUND, if (s.settings.soundEffects) "Effects on" else "Effects off"),
         folder(MEDIA_SETTINGS, "Media", GlyphKey.MUSIC, "Slideshow, music and video playback"),
+        folder(APPS_SETTINGS, "Apps", GlyphKey.APPS, appsSummary()),
         folder(SYSTEM, "System", GlyphKey.SYSTEM, "Version ${s.versionName}"),
     )
+
+    private fun appsSummary(): String {
+        val hidden = s.settings.hiddenApps.size
+        val folders = s.settings.appFolders.values.toSet().size
+        return buildList {
+            add(if (hidden == 0) "No hidden apps" else "${countOf(hidden, "app")} hidden")
+            if (folders > 0) add(countOf(folders, "folder"))
+            if (s.settings.hideSystemApps) add("system apps hidden")
+        }.joinToString(" · ")
+    }
 
     /** Library settings with live fingerprint rows. Not cached: it's small and changes while hashing. */
     fun library(status: FingerprintStatus): List<XmbNode> = librarySettings(status)
@@ -222,8 +469,33 @@ class MenuTree(private val s: MenuSnapshot) {
             ),
         )
         add(setting("lib:add", "Add ROM folder…", "Pick a folder with system subfolders (snes/, psx/…)", GlyphKey.ADD, Command.AddFolder))
+        add(
+            XmbNode(
+                id = "lib:base",
+                title = "Base ROMs folder…",
+                subtitle = s.baseRomsFolder.ifEmpty { "Xross/roms" } + if (s.settings.baseRomsFolder.isEmpty()) " (default)" else "",
+                icon = NodeIcon.Glyph(GlyphKey.FOLDER),
+                action = NodeAction.Run(Command.PickBaseRomsFolder),
+                menu = buildList {
+                    add(MenuOption("Choose another folder…", command = Command.PickBaseRomsFolder))
+                    if (s.settings.baseRomsFolder.isNotEmpty()) {
+                        add(MenuOption("Use the default", detail = "roms/ in the Xross folder", command = Command.ResetBaseRomsFolder))
+                    }
+                    add(MenuOption("Create system folders", detail = "One folder per system", command = Command.CreateSystemFolders))
+                },
+            ),
+        )
+        add(
+            setting(
+                "lib:sysfolders", "Create system folders",
+                "Makes ${PlatformRegistry.builtIn.size} folders (snes/, psx/, …) in the base ROMs folder",
+                GlyphKey.ADD, Command.CreateSystemFolders,
+            ),
+        )
         add(setting("lib:rescan", "Rescan library", s.scanStatus ?: "${s.games.size} games", GlyphKey.REFRESH, Command.Rescan))
         add(setting("lib:fingerprints", "Game fingerprints", fingerprintSummary(status), GlyphKey.STORAGE, Command.RecheckFingerprints))
+        add(folder(DATS, "DAT files", GlyphKey.INFO, datSummary()))
+        add(folder(METADATA, "Metadata & artwork", GlyphKey.DOWNLOAD, scrapeSummary()))
         add(
             setting(
                 "lib:hashlarge",
@@ -251,10 +523,10 @@ class MenuTree(private val s: MenuSnapshot) {
                 XmbNode(
                     id = "lib:folder:${folder.path}",
                     title = folder.path,
-                    subtitle = (if (folder.autoDetected) "Auto-detected" else "Added by you") +
+                    subtitle = (if (folder.base) "Base ROMs folder" else if (folder.autoDetected) "Auto-detected" else "Added by you") +
                         if (folder.connected) "" else " · not connected",
                     icon = NodeIcon.Glyph(GlyphKey.FOLDER),
-                    menu = if (folder.autoDetected) {
+                    menu = if (folder.autoDetected || folder.base) {
                         emptyList()
                     } else {
                         listOf(MenuOption("Remove from library", command = Command.RemoveFolder(folder.path)))
@@ -263,6 +535,124 @@ class MenuTree(private val s: MenuSnapshot) {
             )
         }
     }
+
+    private fun verifiedCount() = s.metadata.values.count { it.matchKind != null }
+
+    private fun datSummary(): String = when {
+        s.dats.isEmpty() -> "Verify titles offline with No-Intro and Redump DATs"
+        else -> "${countOf(s.dats.size, "DAT")} · ${verifiedCount()} of ${s.games.size} games verified"
+    }
+
+    /** Settings ▸ Library ▸ DAT files: import, folder, re-check, and one row per imported DAT. */
+    private fun datSettings(): List<XmbNode> = buildList {
+        add(
+            setting(
+                "dat:import",
+                "Import DATs",
+                "From ${s.datFolder} — .dat, .xml or .zip",
+                GlyphKey.REFRESH,
+                Command.ImportDats,
+            ),
+        )
+        add(setting("dat:folder", "DAT folder…", s.datFolder, GlyphKey.FOLDER, Command.PickDatFolder))
+        if (s.dats.isNotEmpty()) {
+            add(
+                setting(
+                    "dat:match",
+                    "Verify library",
+                    "${verifiedCount()} of ${s.games.size} games match a DAT entry",
+                    GlyphKey.STORAGE,
+                    Command.MatchDats,
+                ),
+            )
+        }
+        for (dat in s.dats) {
+            val parts = buildList {
+                dat.source?.let { add(it) }
+                dat.version?.let { add(it) }
+                add(countOf(dat.gameCount, "game"))
+                add("${dat.matched} in your library")
+            }
+            add(
+                XmbNode(
+                    id = "dat:file:${dat.id}",
+                    title = dat.name,
+                    subtitle = parts.joinToString(" · "),
+                    icon = NodeIcon.Glyph(GlyphKey.INFO),
+                    menu = listOf(
+                        MenuOption("File", detail = dat.path),
+                        MenuOption("Remove DAT", detail = "Forget its entries; the file stays", command = Command.RemoveDat(dat.id)),
+                    ),
+                ),
+            )
+        }
+    }
+
+    private fun scrapeSummary(): String {
+        val scraped = s.metadata.values.count { it.scrapeStatus == "OK" }
+        return if (scraped == 0) "Descriptions, box art and videos" else "$scraped of ${s.games.size} games scraped"
+    }
+
+    /** Settings ▸ Library ▸ Metadata & artwork, with the live scrape progress. Not cached. */
+    fun metadataSettings(progress: dev.xross.launcher.scrape.ScrapeProgress): List<XmbNode> = buildList {
+        val st = s.settings
+        val setup = s.scraperSetup
+        val now = when {
+            progress.running && progress.current != null -> "Scraping ${progress.done + 1} of ${progress.total} · ${progress.current}"
+            progress.running -> "Starting…"
+            progress.message != null -> progress.message
+            else -> scrapeSummary()
+        }
+        add(setting("meta:now", "Scrape library now", now, GlyphKey.DOWNLOAD, Command.ScrapeNow))
+        add(
+            setting(
+                "meta:auto", "Scrape automatically",
+                if (st.scrapeAutomatically) "On — new games are scraped while Xross is open" else "Off — only when you ask",
+                GlyphKey.REFRESH, Command.ToggleScrapeAutomatically,
+            ),
+        )
+        add(setting("meta:wifi", "Wi-Fi only", onOff(st.scrapeWifiOnly), GlyphKey.NETWORK, Command.ToggleScrapeWifiOnly))
+        add(setting("meta:videos", "Video snaps", if (st.scrapeVideos) "On — up to 40 MB per game" else "Off", GlyphKey.VIDEO, Command.ToggleScrapeVideos))
+        add(setting("meta:region", "Region", REGION_LABELS[st.scrapeRegion] ?: st.scrapeRegion, GlyphKey.NETWORK, Command.CycleScrapeRegion))
+        add(setting("meta:language", "Language", LANGUAGE_LABELS[st.scrapeLanguage] ?: st.scrapeLanguage, GlyphKey.NETWORK, Command.CycleScrapeLanguage))
+        add(
+            setting(
+                "meta:hasheous", "Hasheous",
+                if (st.hasheousEnabled) "On — exact identification by fingerprint, no account" else "Off",
+                GlyphKey.INFO, Command.ToggleHasheous,
+            ),
+        )
+        add(
+            setting(
+                "meta:ss", "ScreenScraper account…",
+                when {
+                    !setup.screenScraperAvailable -> "Unavailable in this build (no developer credentials)"
+                    setup.screenScraperUser.isNotBlank() -> "Signed in as ${setup.screenScraperUser}"
+                    else -> "Optional — your own account raises the daily quota"
+                },
+                GlyphKey.INFO, Command.EditScreenScraperAccount,
+            ),
+        )
+        if (setup.screenScraperAvailable) {
+            add(
+                setting(
+                    "meta:sscheck", "Check ScreenScraper account",
+                    setup.screenScraperQuota ?: "Sign in and show today's quota",
+                    GlyphKey.NETWORK, Command.CheckScreenScraperAccount,
+                ),
+            )
+        }
+        add(
+            setting(
+                "meta:sgdb", "SteamGridDB API key…",
+                if (setup.steamGridDbKeySet) "Set — hero banners, capsules and logos" else "Needed for hero banners — free key at steamgriddb.com",
+                GlyphKey.INFO, Command.EditSteamGridDbKey,
+            ),
+        )
+        add(setting("meta:clear", "Clear downloaded artwork", "Empties Xross/media (covers, heroes, wheels, snaps…); art downloads again on the next scrape", GlyphKey.STORAGE, Command.ClearArtwork))
+    }
+
+    private fun countOf(n: Int, noun: String) = if (n == 1) "1 $noun" else "${java.text.NumberFormat.getIntegerInstance().format(n)} ${noun}s"
 
     private fun controlSettings() = listOf(
         setting(
@@ -279,19 +669,71 @@ class MenuTree(private val s: MenuSnapshot) {
         setting(
             "ctl:deadzone",
             "Analog stick deadzone",
-            "${(s.settings.deadzone * 100).toInt()}%",
+            deadzoneLabel(s.settings.deadzone),
             GlyphKey.CONTROLS,
             Command.CycleDeadzone,
         ),
-        setting("ctl:remap", "Remap buttons…", "Press each button when asked", GlyphKey.CONTROLS, Command.StartRemap),
+        setting(
+            "ctl:axial",
+            "Axial deadzone",
+            if (s.settings.axialDeadzone <= 0f) "Off — radial only" else "${(s.settings.axialDeadzone * 100).toInt()}% per axis",
+            GlyphKey.CONTROLS,
+            Command.CycleAxialDeadzone,
+        ),
+        setting(
+            "ctl:remap",
+            "Remap buttons…",
+            "Saved for the controller you press first; other pads keep theirs",
+            GlyphKey.CONTROLS,
+            Command.StartRemap,
+        ),
         setting(
             "ctl:reset",
-            "Reset button mapping",
-            if (s.settings.keyRemap.isEmpty()) "Using defaults" else "${s.settings.keyRemap.size} custom bindings",
+            "Reset all button mappings",
+            mappingSummary(),
             GlyphKey.REFRESH,
             Command.ResetRemap,
         ),
-    )
+    ) + controllerProfileRows()
+
+    private fun mappingSummary(): String {
+        val profiles = s.settings.controllerProfiles.size
+        val global = s.settings.keyRemap.isNotEmpty()
+        if (profiles == 0 && !global) return "Using defaults"
+        return buildList {
+            if (profiles > 0) add(if (profiles == 1) "1 controller" else "$profiles controllers")
+            if (global) add("default mapping changed")
+        }.joinToString(" · ")
+    }
+
+    /** One row per controller model with its own mapping; Options ▸ Reset removes just that one. */
+    private fun controllerProfileRows(): List<XmbNode> = buildList {
+        if (s.settings.keyRemap.isNotEmpty()) {
+            add(
+                XmbNode(
+                    id = "ctl:profile:global",
+                    title = "Default mapping",
+                    subtitle = "${bindingCount(s.settings.keyRemap.size)} · keyboards and other controllers",
+                    icon = NodeIcon.Glyph(GlyphKey.CONTROLS),
+                    menu = listOf(MenuOption("Reset to defaults", command = Command.ResetGlobalRemap)),
+                ),
+            )
+        }
+        for ((id, profile) in s.settings.controllerProfiles.entries.sortedBy { it.value.name.lowercase(Locale.ROOT) }) {
+            val key = ControllerKey.parse(id)
+            add(
+                XmbNode(
+                    id = "ctl:profile:$id",
+                    title = profile.name.ifBlank { "Controller ${key?.display ?: id}" },
+                    subtitle = bindingCount(profile.remap.size) + (key?.let { " · ${it.display}" } ?: ""),
+                    icon = NodeIcon.Glyph(GlyphKey.CONTROLS),
+                    menu = listOf(MenuOption("Reset this controller", command = Command.ResetControllerProfile(id))),
+                ),
+            )
+        }
+    }
+
+    private fun bindingCount(n: Int) = if (n == 1) "1 custom binding" else "$n custom bindings"
 
     private fun emulatorSettings() = PlatformRegistry.all.map { platform ->
         val option = GameLauncher.resolveOption(platform, s.settings.emulatorChoice[platform.id], s.installedEmulators)
@@ -310,9 +752,23 @@ class MenuTree(private val s: MenuSnapshot) {
     }
 
     private fun displaySettings() = listOf(
-        setting("disp:theme", "Theme color", XrossTheme.byName(s.settings.theme).label, GlyphKey.DISPLAY, Command.CycleTheme),
+        setting("disp:theme", "Theme color", themeLabel(XrossTheme.byName(s.settings.theme)), GlyphKey.DISPLAY, Command.CycleTheme),
         setting("disp:wave", "Wave background", onOff(s.settings.waveEnabled), GlyphKey.DISPLAY, Command.ToggleWave),
         setting("disp:speed", "Wave speed", "${s.settings.waveSpeed}x", GlyphKey.DISPLAY, Command.CycleWaveSpeed),
+        setting(
+            "disp:hints",
+            "Button hints",
+            if (s.settings.showButtonHints) "Shown in the corner of the home menu" else "Hidden",
+            GlyphKey.DISPLAY,
+            Command.ToggleButtonHints,
+        ),
+        setting(
+            "disp:allgames",
+            "Platform folders",
+            if (s.settings.allGamesFolder) "Inside All Games" else "At the top of Games (classic)",
+            GlyphKey.GAMES,
+            Command.ToggleAllGamesFolder,
+        ),
     )
 
     private fun soundSettings() = listOf(
@@ -322,11 +778,41 @@ class MenuTree(private val s: MenuSnapshot) {
         setting("snd:gameboot", "Game start sound", onOff(s.settings.gameBootSound), GlyphKey.SOUND, Command.ToggleGameBootSound),
     )
 
-    private fun systemSettings() = listOf(
-        XmbNode("sys:version", "Xross", "Version ${s.versionName}", NodeIcon.Glyph(GlyphKey.INFO)),
-        setting("sys:home", "Set as home app", "Choose Xross as the default launcher", GlyphKey.HOME, Command.OpenHomeSettings),
-        setting("sys:android", "Android settings", null, GlyphKey.SETTINGS, Command.OpenAndroidSettings),
-    )
+    private fun systemSettings() = buildList {
+        add(XmbNode("sys:version", "Xross", "Version ${s.versionName}", NodeIcon.Glyph(GlyphKey.INFO)))
+        add(setting("sys:home", "Set as home app", "Choose Xross as the default launcher", GlyphKey.HOME, Command.OpenHomeSettings))
+        val p = s.portable
+        add(
+            setting(
+                "sys:folder", "Xross folder",
+                when {
+                    p.root.isEmpty() -> "Checking…"
+                    p.portable -> "${p.root} · press to use another drive"
+                    else -> "In app storage until All files access is granted — press to grant"
+                },
+                GlyphKey.STORAGE, Command.CycleXrossVolume,
+            ),
+        )
+        add(setting("sys:backup", "Back up library now", backupSummary(p), GlyphKey.DOWNLOAD, Command.BackupNow))
+        p.backupOnDisk?.let { backup ->
+            add(
+                setting(
+                    "sys:restore", "Restore library backup…",
+                    "${countOf(backup.games, "game")} · saved ${formatTime(backup.modifiedAt)}",
+                    GlyphKey.REFRESH, Command.ConfirmRestore,
+                ),
+            )
+        }
+        add(setting("sys:android", "Android settings", null, GlyphKey.SETTINGS, Command.OpenAndroidSettings))
+    }
+
+    private fun backupSummary(p: PortableSetup): String = when {
+        p.backup.running -> "Backing up…"
+        !p.portable -> "Needs All files access (copies the library to Xross/data/)"
+        p.backup.message != null -> p.backup.message
+        p.backup.lastBackupAt != null -> "Last backup ${formatTime(p.backup.lastBackupAt)} · also on leaving Xross"
+        else -> "Copies the library to Xross/data/xross.db; also on leaving Xross"
+    }
 
     private fun folder(key: String, title: String, glyph: GlyphKey, subtitle: String?) =
         XmbNode(key, title, subtitle, NodeIcon.Glyph(glyph), NodeAction.OpenList(key))
@@ -344,15 +830,53 @@ class MenuTree(private val s: MenuSnapshot) {
             Command.ToggleResumeMusicAfterGames,
         ),
         setting("med:loop", "Loop videos", onOff(s.settings.videoLoop), GlyphKey.VIDEO, Command.ToggleVideoLoop),
+        folder(PHOTO_FOLDERS, "Photo folders", GlyphKey.PHOTO, mediaFoldersSummary(s.settings.photoFolders, "photos")),
+        folder(VIDEO_FOLDERS, "Video folders", GlyphKey.VIDEO, mediaFoldersSummary(s.settings.videoFolders, "videos")),
     )
+
+    private fun mediaFoldersSummary(folders: List<String>, noun: String) =
+        if (folders.isEmpty()) "All $noun on this device" else "Only " + countOf(folders.size, "folder")
+
+    /** Settings ▸ Media ▸ Photo / Video folders. */
+    private fun mediaFolderRows(kind: MediaFolderKind): List<XmbNode> = buildList {
+        val folders = if (kind == MediaFolderKind.PHOTO) s.settings.photoFolders else s.settings.videoFolders
+        val glyph = if (kind == MediaFolderKind.PHOTO) GlyphKey.PHOTO else GlyphKey.VIDEO
+        val noun = if (kind == MediaFolderKind.PHOTO) "photos" else "videos"
+        add(
+            setting(
+                "medfolders:${kind.name}:add", "Add folder…",
+                "${kind.label} then shows only the folders listed here",
+                GlyphKey.ADD, Command.AddMediaFolder(kind),
+            ),
+        )
+        if (folders.isEmpty()) {
+            add(XmbNode("medfolders:${kind.name}:all", "All $noun", "Everything Android has indexed (MediaStore)", NodeIcon.Glyph(glyph)))
+        } else {
+            add(setting("medfolders:${kind.name}:clear", "Show all $noun again", "Forget the folders below", GlyphKey.REFRESH, Command.ClearMediaFolders(kind)))
+            for (path in folders) {
+                add(
+                    XmbNode(
+                        id = "medfolders:${kind.name}:$path",
+                        title = path,
+                        subtitle = (if (isOffline(path)) "Not connected · " else "") + "Indexed and unindexed files, including .nomedia folders",
+                        icon = NodeIcon.Glyph(GlyphKey.FOLDER),
+                        menu = listOf(MenuOption("Remove folder", command = Command.RemoveMediaFolder(kind, path))),
+                    ),
+                )
+            }
+        }
+    }
 
     private val mountedRoots by lazy { s.mountedRoots.mapTo(HashSet()) { it.trimEnd('/') } }
 
     /** True when the file's volume (SD card, USB drive) is currently unplugged. */
-    private fun isOffline(path: String): Boolean =
+    fun isOffline(path: String): Boolean =
         mountedRoots.isNotEmpty() && StorageVolumes.volumeRootOf(path)?.let { it !in mountedRoots } ?: false
 
     private fun onOff(on: Boolean) = if (on) "On" else "Off"
+
+    private fun themeLabel(theme: XrossTheme) =
+        if (theme.dynamic) "${theme.label} · changes every month" else theme.label
 
     private fun fingerprintSummary(status: FingerprintStatus): String {
         val st = status.stats ?: return "Counting…"
@@ -375,15 +899,38 @@ class MenuTree(private val s: MenuSnapshot) {
         const val RECENT = "collection:recent"
         const val FAVORITES = "collection:favorites"
         const val ANDROID_GAMES = "collection:android-games"
+        const val ALL_GAMES = "collection:all-games"
         const val PLATFORM_PREFIX = "platform:"
         const val LIBRARY = "settings:library"
+        const val DATS = "settings:dats"
+        const val METADATA = "settings:metadata"
+
+        /** Row icons prefer the box, then a capsule. */
+        val ICON_ART = listOf(dev.xross.launcher.scrape.ArtKind.BOX_3D, dev.xross.launcher.scrape.ArtKind.BOX_2D, dev.xross.launcher.scrape.ArtKind.GRID)
+
+        val REGIONS = listOf("us", "eu", "jp", "wor")
+        val REGION_LABELS = mapOf("us" to "USA", "eu" to "Europe", "jp" to "Japan", "wor" to "World")
+        val LANGUAGES = listOf("en", "fr", "de", "es", "it", "pt", "ja")
+        val LANGUAGE_LABELS = mapOf(
+            "en" to "English", "fr" to "Français", "de" to "Deutsch", "es" to "Español",
+            "it" to "Italiano", "pt" to "Português", "ja" to "日本語",
+        )
         const val CONTROLS = "settings:controls"
         const val EMULATORS = "settings:emulators"
         const val DISPLAY = "settings:display"
         const val SOUND = "settings:sound"
         const val MEDIA_SETTINGS = "settings:media"
+        const val APPS_SETTINGS = "settings:apps"
+        const val HIDDEN_APPS = "settings:apps:hidden"
+        const val PHOTO_FOLDERS = "settings:media:photo-folders"
+        const val VIDEO_FOLDERS = "settings:media:video-folders"
+        const val APP_FOLDER_PREFIX = "apps:folder:"
         private val DISC_EXTENSIONS = setOf("iso", "cue", "chd", "cso", "rvz", "gcz", "wbfs", "cdi", "gdi", "pbp", "m3u")
         const val SYSTEM = "settings:system"
+
+        /** "Off — hardware only" for 0 (the driver's own centre zone is all that applies), "35%" otherwise. */
+        fun deadzoneLabel(deadzone: Float): String =
+            if (deadzone <= 0f) "Off — hardware only" else "${Math.round(deadzone * 100)}%"
 
         private fun countLabel(n: Int) = if (n == 1) "1 title" else "$n titles"
 
@@ -397,6 +944,10 @@ class MenuTree(private val s: MenuSnapshot) {
                 else -> "${minutes / 60} h ${minutes % 60} min"
             }
         }
+
+        /** "12 Nov 2026, 14:05" in the device's locale. */
+        fun formatTime(epochMs: Long): String =
+            java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT).format(java.util.Date(epochMs))
 
         fun formatSize(bytes: Long): String = when {
             bytes >= 1L shl 30 -> String.format(Locale.ROOT, "%.1f GB", bytes / (1L shl 30).toDouble())

@@ -13,17 +13,25 @@ import dev.xross.launcher.storage.StorageVolumes
 object LibraryFolders {
     data class Plan(val folders: List<FolderEntry>, val knownAuto: List<String>)
 
+    /**
+     * [base] is the base ROMs folder (null when unknown). It is always scanned, like a folder the
+     * user added, and comes first; auto-detection and added folders keep working beside it.
+     */
     fun plan(
         custom: List<String>,
         discovered: List<String>,
         knownAuto: List<String>,
         mountedRoots: List<String>,
         autoDetect: Boolean,
+        base: String? = null,
     ): Plan {
         val mounted = mountedRoots.mapTo(HashSet()) { it.trimEnd('/') }
         fun connected(path: String) = StorageVolumes.volumeRootOf(path)?.let { it in mounted } ?: true
 
-        val customEntries = custom.map { FolderEntry(it, autoDetected = false, connected = connected(it)) }
+        val baseEntry = base?.takeIf { it.isNotBlank() }?.let { FolderEntry(it.trimEnd('/'), autoDetected = false, connected = connected(it), base = true) }
+        val customEntries = listOfNotNull(baseEntry) +
+            custom.filterNot { baseEntry != null && it.trimEnd('/') == baseEntry.path }
+                .map { FolderEntry(it, autoDetected = false, connected = connected(it)) }
         if (!autoDetect) return Plan(customEntries, knownAuto)
 
         // Offline volumes keep their remembered folders; mounted ones are re-derived from discovery.

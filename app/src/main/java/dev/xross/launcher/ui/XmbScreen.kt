@@ -44,6 +44,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -84,6 +85,7 @@ import dev.xross.launcher.input.ConfirmLayout
 import dev.xross.launcher.media.MusicPlayer
 import dev.xross.launcher.media.ThumbKind
 import dev.xross.launcher.state.MediaOverlayController
+import dev.xross.launcher.state.MiniPlayerLine
 import dev.xross.launcher.input.NavAction
 import dev.xross.launcher.state.NodeAction
 import dev.xross.launcher.state.NodeIcon
@@ -91,7 +93,12 @@ import dev.xross.launcher.state.RemapSession
 import dev.xross.launcher.state.XmbCategory
 import dev.xross.launcher.state.XmbNode
 import dev.xross.launcher.state.XmbUiState
+import dev.xross.launcher.media.SnapPlayer
+import dev.xross.launcher.scrape.ArtKind
+import dev.xross.launcher.theme.ThemePalette
 import dev.xross.launcher.theme.XrossTheme
+import dev.xross.launcher.theme.rememberThemePalette
+import kotlinx.coroutines.delay
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.floor
@@ -146,6 +153,7 @@ fun XmbScreen(
     state: XmbUiState,
     loadAppIcon: suspend (String) -> ImageBitmap?,
     loadThumb: suspend (ThumbKind, Long, Int) -> ImageBitmap?,
+    loadArt: suspend (String, List<ArtKind>, Int) -> ImageBitmap?,
     media: MediaOverlayController,
     music: MusicPlayer,
     onAction: (NavAction) -> Unit,
@@ -157,8 +165,16 @@ fun XmbScreen(
     onCloseOptions: () -> Unit = {},
     onSearchKeyTap: (Int, Int) -> Unit = { _, _ -> },
     onSearchResultTap: (Int) -> Unit = {},
+    onNameKeyTap: (Int, Int) -> Unit = { _, _ -> },
+    onInfoRowTap: (Int) -> Unit = {},
+    onCloseInfo: () -> Unit = {},
+    snap: SnapPlayer? = null,
+    videoFile: suspend (String) -> java.io.File? = { null },
+    snapVolume: Float = 0.75f,
+    onPlayDetails: () -> Unit = {},
+    onCloseDetails: () -> Unit = {},
 ) {
-    val theme = XrossTheme.byName(state.theme)
+    val palette = rememberThemePalette(XrossTheme.byName(state.theme))
 
     // Slow "breathing" glow shared by everything that is focused.
     val pulse by rememberInfiniteTransition(label = "glow").animateFloat(
@@ -185,12 +201,27 @@ fun XmbScreen(
         fun Float.sp(): TextUnit = with(density) { this@sp.toSp() }
         fun Float.dp(): Dp = with(density) { this@dp.toDp() }
 
+        // Video snap of the focused game (or the open Details game), full-bleed behind the menu.
+        if (snap != null) {
+            val focusedArt = (state.focused?.icon as? NodeIcon.Art)?.uuid
+            val quiet = state.overlay == null && state.search == null && state.optionsMenu == null &&
+                state.info == null && state.booting == null && state.remap == null
+            SnapDriver(
+                uuid = state.details?.uuid ?: focusedArt.takeIf { quiet },
+                snap = snap,
+                videoFile = videoFile,
+                volume = snapVolume,
+            )
+            val playing by snap.player.collectAsState()
+            playing?.let { SnapVideo(it, Modifier.fillMaxSize(), scrim = 0.55f) }
+        }
+
         val catPos by animateFloatAsState(state.categoryIndex.toFloat(), NavSpring, label = "category")
         val depth by animateFloatAsState(state.depth.coerceAtMost(1).toFloat(), NavSpring, label = "depth")
 
         // The menu fades out under media screens so only one set of text and hints is visible.
         val menuAlpha by animateFloatAsState(
-            if (state.overlay == null && state.search == null) 1f else 0f,
+            if (state.overlay == null && state.search == null && state.nameEntry == null && state.details == null) 1f else 0f,
             tween(220),
             label = "menu",
         )
@@ -205,18 +236,27 @@ fun XmbScreen(
             pulse = { pulse },
             onCategoryTap = onCategoryTap,
         )
-        ItemColumn(state, m, { pulse }, loadAppIcon, loadThumb, onItemTap, onItemLongPress)
+        ItemColumn(state, m, { pulse }, loadAppIcon, loadThumb, loadArt, onItemTap, onItemLongPress)
 
-        // Mini "now playing" indicator while browsing.
+        // Mini "now playing" indicator while browsing; fades out after 30 s paused.
+        val np = state.nowPlaying
+        var pausedTimedOut by remember { mutableStateOf(false) }
+        val timePause = MiniPlayerLine.shouldTime(np)
+        LaunchedEffect(timePause) {
+            pausedTimedOut = false
+            if (timePause) {
+                delay(MiniPlayerLine.PAUSED_HIDE_MS)
+                pausedTimedOut = true
+            }
+        }
         AnimatedVisibility(
-            visible = state.nowPlaying.song != null && state.overlay == null,
-            enter = fadeIn(),
-            exit = fadeOut(),
+            visible = MiniPlayerLine.visible(np, overlayOpen = state.overlay != null, pausedTimedOut = pausedTimedOut),
+            enter = fadeIn(tween(MiniPlayerLine.FADE_IN_MS)),
+            exit = fadeOut(tween(MiniPlayerLine.FADE_OUT_MS)),
             modifier = Modifier.align(Alignment.TopStart).padding(top = (m.s * 0.04f).dp(), start = (m.width * 0.025f).dp()),
         ) {
-            val np = state.nowPlaying
             var last by remember { mutableStateOf("") }
-            np.song?.let { last = "${if (np.isPlaying) "♪" else "❚❚"}  ${it.title} — ${it.artist}" }
+            MiniPlayerLine.text(np)?.let { last = it }
             Text(
                 last,
                 style = shadowed(m.subtitleSize.sp(), color = TextDim),
@@ -232,11 +272,14 @@ fun XmbScreen(
                 .align(Alignment.TopEnd)
                 .padding(top = (m.s * 0.04f).dp(), end = (m.width * 0.025f).dp()),
         )
-        ButtonHints(
-            state,
-            m.subtitleSize.sp(),
-            Modifier.align(Alignment.BottomEnd).padding((m.s * 0.04f).dp()),
-        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.align(Alignment.BottomEnd).padding((m.s * 0.04f).dp()),
+        ) {
+            BusyIndicator(busy = state.busy, size = (m.subtitleSize * 1.5f).dp())
+            if (state.showButtonHints) ButtonHints(state, m.subtitleSize.sp(), Modifier)
+        }
         }
 
         state.overlay?.let { overlay ->
@@ -247,6 +290,17 @@ fun XmbScreen(
                 nowPlaying = state.nowPlaying,
                 loadThumb = loadThumb,
                 hints = { pairs -> OverlayHints(pairs, state, m.subtitleSize.sp()) },
+            )
+        }
+
+        state.nameEntry?.let { entry ->
+            NameEntryOverlay(
+                entry = entry,
+                m = m,
+                pulse = { pulse },
+                family = state.family,
+                confirm = state.confirm,
+                onKeyTap = onNameKeyTap,
             )
         }
 
@@ -272,8 +326,28 @@ fun XmbScreen(
             onDismiss = onCloseOptions,
         )
 
+        DetailsScreen(
+            details = state.details,
+            m = m,
+            snapPlaying = snap?.player?.collectAsState()?.value != null,
+            confirmGlyph = if (state.confirm == ConfirmLayout.EAST) state.family.east else state.family.south,
+            backGlyph = if (state.confirm == ConfirmLayout.EAST) state.family.south else state.family.east,
+            optionsGlyph = state.family.north,
+            loadArt = loadArt,
+            onPlay = onPlayDetails,
+            onDismiss = onCloseDetails,
+        )
+
+        InfoPanel(
+            info = state.info,
+            m = m,
+            backGlyph = if (state.confirm == ConfirmLayout.EAST) state.family.south else state.family.east,
+            onRowTap = onInfoRowTap,
+            onDismiss = onCloseInfo,
+        )
+
         state.remap?.let { RemapOverlay(it, m, onCancelRemap) }
-        state.booting?.let { GameBootOverlay(it, theme, m) }
+        state.booting?.let { GameBootOverlay(it, palette, m) }
 
         // Toasts sit above every overlay (search, Options, media) so feedback is never hidden.
         AnimatedVisibility(
@@ -383,6 +457,7 @@ private fun ItemColumn(
     pulse: () -> Float,
     loadAppIcon: suspend (String) -> ImageBitmap?,
     loadThumb: suspend (ThumbKind, Long, Int) -> ImageBitmap?,
+    loadArt: suspend (String, List<ArtKind>, Int) -> ImageBitmap?,
     onItemTap: (Int) -> Unit,
     onItemLongPress: (Int) -> Unit,
 ) {
@@ -455,6 +530,7 @@ private fun ItemColumn(
                 pulse = pulse,
                 loadAppIcon = loadAppIcon,
                 loadThumb = loadThumb,
+                loadArt = loadArt,
                 modifier = rowModifier,
             )
         }
@@ -478,6 +554,7 @@ private fun ItemRow(
     pulse: () -> Float,
     loadAppIcon: suspend (String) -> ImageBitmap?,
     loadThumb: suspend (ThumbKind, Long, Int) -> ImageBitmap?,
+    loadArt: suspend (String, List<ArtKind>, Int) -> ImageBitmap?,
     modifier: Modifier,
 ) {
     val density = LocalDensity.current
@@ -495,6 +572,7 @@ private fun ItemRow(
                 )
                 is NodeIcon.App -> AppIcon(icon.packageName, iconSize, focus, m.itemFocusScale, loadAppIcon)
                 is NodeIcon.Thumb -> ThumbIcon(icon, iconSize, focus, m.itemFocusScale, glow = { if (isFocused) pulse() * focus() else 0f }, loadThumb)
+                is NodeIcon.Art -> ArtIcon(icon, iconSize, focus, m.itemFocusScale, glow = { if (isFocused) pulse() * focus() else 0f }, loadArt)
             }
         }
         Spacer(Modifier.width(with(density) { (m.textGap + m.itemIcon * (m.itemFocusScale - 1f) / 2).toDp() }))
@@ -633,6 +711,60 @@ private fun BlurredCopy(
         contentAlignment = Alignment.Center,
     ) {
         Image(painter, contentDescription = null, colorFilter = ColorFilter.tint(tint), modifier = Modifier.size(size))
+    }
+}
+
+/**
+ * Scraped box art as a game's icon. The platform glyph shows until the art is decoded, then the
+ * art crossfades in over it (and the glyph out), so a row never pops.
+ */
+@Composable
+private fun ArtIcon(
+    icon: NodeIcon.Art,
+    size: Dp,
+    focus: () -> Float,
+    focusScale: Float,
+    glow: () -> Float,
+    loadArt: suspend (String, List<ArtKind>, Int) -> ImageBitmap?,
+) {
+    val px = with(LocalDensity.current) { (size * focusScale * 1.4f).roundToPx() }
+    val bitmap by produceState<ImageBitmap?>(null, icon.uuid, icon.version) { value = loadArt(icon.uuid, icon.kinds, px) }
+    val shown by animateFloatAsState(if (bitmap != null) 1f else 0f, tween(320), label = "art")
+    Box(Modifier.size(size), contentAlignment = Alignment.Center) {
+        if (shown < 1f) {
+            Box(Modifier.fadeAlpha { 1f - shown }) {
+                XmbIcon(painterResource(icon.fallback.drawable()), size, focus, focusScale, glow)
+            }
+        }
+        val image = bitmap ?: return@Box
+        Box(
+            Modifier
+                .size(size)
+                .graphicsLayer {
+                    val s = 1f + (focusScale - 1f) * focus()
+                    scaleX = s
+                    scaleY = s
+                    alpha = shown
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .graphicsLayer { alpha = glow(); scaleX = 1.6f; scaleY = 1.6f }
+                    .drawBehind { drawCircle(Brush.radialGradient(0f to Color.White.copy(alpha = 0.3f), 1f to Color.Transparent)) },
+            )
+            // Exactly the glyph's footprint, so tall capsules and wide boxes never reach the
+            // neighbouring rows (the focus scale is applied by the layer above, as for glyphs).
+            Image(
+                image,
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier
+                    .size(size)
+                    .shadow(6.dp, RoundedCornerShape(3.dp), clip = false),
+            )
+        }
     }
 }
 
@@ -846,7 +978,9 @@ private fun RemapOverlay(session: RemapSession, m: XmbMetrics, onCancel: () -> U
             .clickable(remember { MutableInteractionSource() }, indication = null, onClick = onCancel),
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("Remap buttons  ${session.progress}", style = shadowed(with(density) { m.subtitleSize.toSp() }, TextDim))
+            val device = session.controller?.name?.ifBlank { null }
+                ?: if (session.deviceChosen) "Default mapping" else "Press a button on the controller to remap"
+            Text("Remap buttons  ${session.progress}  ·  $device", style = shadowed(with(density) { m.subtitleSize.toSp() }, TextDim))
             Spacer(Modifier.height(10.dp))
             GlowText(
                 "Press the button for: " + (session.target?.let(RemapSession::label) ?: ""),
@@ -861,7 +995,7 @@ private fun RemapOverlay(session: RemapSession, m: XmbMetrics, onCancel: () -> U
 
 /** Game start transition: a bright bloom washes over the screen while the start cue plays. */
 @Composable
-private fun GameBootOverlay(title: String, theme: XrossTheme, m: XmbMetrics) {
+private fun GameBootOverlay(title: String, palette: ThemePalette, m: XmbMetrics) {
     val progress = remember(title) { Animatable(0f) }
     LaunchedEffect(title) { progress.animateTo(1f, tween(900, easing = FastOutSlowInEasing)) }
     val density = LocalDensity.current
@@ -875,8 +1009,8 @@ private fun GameBootOverlay(title: String, theme: XrossTheme, m: XmbMetrics) {
                 drawRect(Color.Black.copy(alpha = 0.92f * (p * 1.6f).coerceAtMost(1f)))
                 drawCircle(
                     Brush.radialGradient(
-                        0f to theme.glowColor.copy(alpha = 0.85f * p),
-                        0.6f to theme.glowColor.copy(alpha = 0.25f * p),
+                        0f to palette.glowColor.copy(alpha = 0.85f * p),
+                        0.6f to palette.glowColor.copy(alpha = 0.25f * p),
                         1f to Color.Transparent,
                         center = center,
                         radius = size.maxDimension * (0.2f + 0.6f * p),

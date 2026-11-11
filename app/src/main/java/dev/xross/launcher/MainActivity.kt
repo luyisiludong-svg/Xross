@@ -34,11 +34,13 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import dev.xross.launcher.input.GamepadHandler
 import dev.xross.launcher.input.NavAction
+import dev.xross.launcher.launch.LaunchResult
 import dev.xross.launcher.state.MediaOverlay
 import dev.xross.launcher.state.UiEffect
 import dev.xross.launcher.storage.VolumeMonitor
 import dev.xross.launcher.state.XmbViewModel
 import dev.xross.launcher.theme.XrossTheme
+import dev.xross.launcher.theme.rememberThemePalette
 import dev.xross.launcher.ui.WaveBackground
 import dev.xross.launcher.ui.XmbScreen
 import kotlinx.coroutines.launch
@@ -64,8 +66,24 @@ class MainActivity : ComponentActivity() {
         viewModel.onFolderPicked(it)
     }
 
+    private val pickDatFolder = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) {
+        viewModel.onDatFolderPicked(it)
+    }
+
+    private val pickBaseRomsFolder = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) {
+        viewModel.onBaseRomsFolderPicked(it)
+    }
+
+    /** Which tab the media folder picker is choosing for; survives only while the picker is up. */
+    private var pendingMediaFolder = dev.xross.launcher.state.MediaFolderKind.PHOTO
+
+    private val pickMediaFolder = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) {
+        viewModel.onMediaFolderPicked(pendingMediaFolder, it)
+    }
+
+    /** Android 9–10: read for the library, write for the portable Xross folder. */
     private val legacyStoragePermission =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) {
+        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
             viewModel.refreshEnvironment()
         }
 
@@ -116,12 +134,13 @@ class MainActivity : ComponentActivity() {
                 WaveBackground(
                     enabled = state.waveEnabled && !fullscreenMedia,
                     speed = state.waveSpeed,
-                    theme = XrossTheme.byName(state.theme),
+                    palette = rememberThemePalette(XrossTheme.byName(state.theme)),
                 )
                 XmbScreen(
                     state = state,
                     loadAppIcon = { pkg -> container.apps.icon(pkg, ICON_PX) },
                     loadThumb = { kind, id, px -> container.media.thumbnail(kind, id, px) },
+                    loadArt = { uuid, kinds, px -> container.art.load(uuid, kinds, px) },
                     media = viewModel.media,
                     music = container.music,
                     onAction = viewModel::onAction,
@@ -133,6 +152,18 @@ class MainActivity : ComponentActivity() {
                     onCloseOptions = viewModel::closeOptions,
                     onSearchKeyTap = viewModel::onSearchKeyTapped,
                     onSearchResultTap = viewModel::onSearchResultTapped,
+                    onNameKeyTap = viewModel::onNameKeyTapped,
+                    onInfoRowTap = viewModel::onInfoRowTapped,
+                    onCloseInfo = viewModel::closeInfo,
+                    snap = container.snaps,
+                    videoFile = { uuid ->
+                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                            container.assets.file(uuid, dev.xross.launcher.scrape.ArtKind.VIDEO)
+                        }
+                    },
+                    snapVolume = container.settings.current.soundVolume,
+                    onPlayDetails = { viewModel.onAction(NavAction.CONFIRM) },
+                    onCloseDetails = viewModel::closeDetails,
                 )
             }
         }
@@ -169,6 +200,11 @@ class MainActivity : ComponentActivity() {
         super.onPause()
     }
 
+    override fun onStop() {
+        viewModel.onStopped()
+        super.onStop()
+    }
+
     override fun onDestroy() {
         unregisterReceiver(packageReceiver)
         volumeMonitor.unregister(this)
@@ -185,9 +221,67 @@ class MainActivity : ComponentActivity() {
         when (effect) {
             is UiEffect.StartActivity -> safeStart(effect.intent)
             UiEffect.PickFolder -> runCatching { pickFolder.launch(null) }
+            UiEffect.PickDatFolder -> runCatching { pickDatFolder.launch(null) }
+            UiEffect.PickBaseRomsFolder -> runCatching { pickBaseRomsFolder.launch(null) }
+            is UiEffect.PickMediaFolder -> {
+                pendingMediaFolder = effect.kind
+                runCatching { pickMediaFolder.launch(null) }
+            }
             UiEffect.RequestStorageAccess -> requestStorageAccess()
             is UiEffect.SetWallpaper -> setWallpaper(effect.uri)
+            is UiEffect.PromptText -> promptText(effect.prompt)
+            is UiEffect.Launch -> when (val result = container.launcher.start(effect.plan, this)) {
+                LaunchResult.Started -> Unit
+                is LaunchResult.Failed -> viewModel.onLaunchFailed(result.message)
+            }
+            UiEffect.RestartApp -> restartApp()
         }
+    }
+
+    /**
+     * Relaunches Xross in a fresh process, so a restored library database replaces the live one
+     * before Room opens it. As the home app, the system would bring it back anyway.
+     */
+    private fun restartApp() {
+        val relaunch = Intent(this, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+        startActivity(relaunch)
+        finishAffinity()
+        Runtime.getRuntime().exit(0)
+    }
+
+    /**
+     * A system text dialog (works with touch, hardware keyboards and the device's IME; the D-pad
+     * moves between the field and the buttons). Secrets are masked and never pre-filled.
+     */
+    private fun promptText(prompt: dev.xross.launcher.state.TextPrompt) {
+        val input = android.widget.EditText(this).apply {
+            setSingleLine()
+            setText(prompt.initial)
+            setSelection(text.length)
+            hint = prompt.hint
+            inputType = if (prompt.secret) {
+                android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+            } else {
+                android.text.InputType.TYPE_CLASS_TEXT
+            }
+        }
+        val pad = (20 * resources.displayMetrics.density).toInt()
+        val frame = android.widget.FrameLayout(this).apply {
+            setPadding(pad, pad / 2, pad, 0)
+            addView(input)
+        }
+        android.app.AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle(prompt.title)
+            .setView(frame)
+            .setPositiveButton(android.R.string.ok) { _, _ -> viewModel.onTextEntered(prompt, input.text.toString()) }
+            .setNegativeButton(android.R.string.cancel, null)
+            .create()
+            .apply {
+                window?.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE)
+                setOnDismissListener { hideSystemBars() }
+            }
+            .show()
     }
 
     /** System crop-and-set screen (it doubles as confirmation); falls back to "Set picture as". */
@@ -211,7 +305,9 @@ class MainActivity : ComponentActivity() {
             )
             if (!safeStart(perApp)) safeStart(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
         } else {
-            legacyStoragePermission.launch(Manifest.permission.READ_EXTERNAL_STORAGE)
+            legacyStoragePermission.launch(
+                arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_EXTERNAL_STORAGE),
+            )
         }
     }
 

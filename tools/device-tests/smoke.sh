@@ -56,6 +56,12 @@ home() { # Games category root, cursor on the first collection (just below Searc
   category 4
   key KEYCODE_DPAD_DOWN
 }
+# Games root rows below Search: [Recently Played] [Favorites] All Games [Android Games].
+all_games() { # all_games <collections above it>: open All Games (the platform folders)
+  home
+  [ "${1:-0}" -gt 0 ] && key $(for _ in $(seq "$1"); do printf 'KEYCODE_DPAD_DOWN '; done)
+  key KEYCODE_DPAD_CENTER
+}
 
 echo "== Setup"
 adb shell pm clear "$PKG" >/dev/null
@@ -88,9 +94,12 @@ adb shell am start -n "$PKG/.MainActivity" >/dev/null
 pause 4
 
 echo "== Library and navigation"
+expect "All Games" "platforms are grouped in All Games"
+expect "3 systems" "All Games counts the detected platforms"
+expect_not "Recently Played" "no Recently Played before anything is launched"
+key KEYCODE_DPAD_CENTER
 expect "Super Nintendo" "auto-detected /sdcard/ROMs and listed platforms"
 expect "Game Boy Advance" "second platform listed"
-expect_not "Recently Played" "no Recently Played before anything is launched"
 key KEYCODE_DPAD_CENTER
 expect "Chrono Trigger" "entering a platform lists its games (titles cleaned)"
 expect "Super Metroid" "all games in the platform are listed"
@@ -98,28 +107,32 @@ key KEYCODE_BACK
 key $(for _ in $(seq 2); do printf 'KEYCODE_DPAD_DOWN '; done) KEYCODE_DPAD_CENTER
 expect "Vagrant Story" "cue sheet listed"
 expect "CUE" "the .bin track is hidden behind its .cue (focused entry is the .cue)"
-key KEYCODE_BACK
+key KEYCODE_BACK KEYCODE_BACK
 
 echo "== Favorites"
-home
+# Game Options menu rows: Play, Details, Add to favorites, Emulator, (Played), Metadata, Information.
+all_games
 key KEYCODE_DPAD_CENTER
 expect "Options" "Options hint is shown for a game"
 key KEYCODE_BUTTON_Y
 expect "Add to favorites" "Options button opens the game's menu"
-key KEYCODE_DPAD_DOWN KEYCODE_DPAD_CENTER
+expect "Details" "Options menu offers Details"
+expect "Metadata" "Options menu offers Metadata"
+key KEYCODE_DPAD_DOWN KEYCODE_DPAD_DOWN KEYCODE_DPAD_CENTER
 pause 0.6
 key KEYCODE_BUTTON_Y
 expect "Remove from favorites" "menu toggles favorite"
 
 echo "== Per-game emulator"
-key KEYCODE_DPAD_DOWN KEYCODE_DPAD_DOWN KEYCODE_DPAD_CENTER
+key KEYCODE_DPAD_DOWN KEYCODE_DPAD_DOWN KEYCODE_DPAD_DOWN KEYCODE_DPAD_CENTER
 expect "Platform default" "Emulator submenu lists the platform default"
 key KEYCODE_DPAD_DOWN KEYCODE_DPAD_CENTER
 pause 0.6
 key KEYCODE_BUTTON_Y
 expect "this game only" "per-game emulator override is saved and shown"
-key KEYCODE_BACK
-key KEYCODE_BACK
+key KEYCODE_BACK      # close the menu
+key KEYCODE_BACK      # platform list → All Games
+key KEYCODE_BACK      # All Games → Games root
 top
 expect "Favorites" "Favorites collection appears in Games"
 
@@ -138,7 +151,7 @@ expect "Find a game by name" "Back returns to the keys, then closes search"
 echo "== Categories"
 home
 key KEYCODE_BUTTON_R1
-expect_not "Super Nintendo" "R1 moves to the Apps category"
+expect_not "All Games" "R1 moves to the Apps category"
 key $(for _ in $(seq 5); do printf 'KEYCODE_BUTTON_L1 '; done)
 expect "Library" "L1 moves to Settings"
 key $(for _ in $(seq 4); do printf 'KEYCODE_DPAD_DOWN '; done)
@@ -154,34 +167,53 @@ expect "Crimson" "Theme color cycles"
 key KEYCODE_DPAD_DOWN KEYCODE_DPAD_CENTER
 expect "Off" "Wave background toggles off"
 key KEYCODE_DPAD_CENTER
+# Theme rows: Theme color, Wave background, Wave speed, Button hints, Platform folders.
+key KEYCODE_DPAD_DOWN KEYCODE_DPAD_DOWN KEYCODE_DPAD_DOWN
+expect "Inside All Games" "Platform folders setting shows the All Games layout"
+key KEYCODE_DPAD_CENTER
+expect "At the top of Games (classic)" "Platform folders toggles to the classic layout"
+key KEYCODE_DPAD_CENTER
+expect "Inside All Games" "Platform folders toggles back"
 key KEYCODE_BACK KEYCODE_DPAD_DOWN KEYCODE_DPAD_CENTER
 expect "Effects volume" "Sound section opens"
 key KEYCODE_DPAD_DOWN KEYCODE_DPAD_CENTER
 expect "100%" "Effects volume cycles"
 key KEYCODE_BACK
 
-echo "== Button remapping"
+echo "== Analog stick deadzone"
+# Controls rows: Confirm button, Analog stick deadzone, Axial deadzone, Remap buttons…, Reset all.
 top
 key KEYCODE_DPAD_DOWN KEYCODE_DPAD_CENTER
+key KEYCODE_DPAD_DOWN
+expect "35%" "deadzone starts at 35%"
+# 35% → 45% → 55% → Off → 15% → 25% → 35%
+key KEYCODE_DPAD_CENTER KEYCODE_DPAD_CENTER KEYCODE_DPAD_CENTER
+expect "Off — hardware only" "deadzone can be turned off (hardware flat zone only)"
+key KEYCODE_DPAD_CENTER KEYCODE_DPAD_CENTER KEYCODE_DPAD_CENTER
+expect "35%" "deadzone cycles back to 35%"
+
+echo "== Button remapping"
 key KEYCODE_DPAD_DOWN KEYCODE_DPAD_DOWN KEYCODE_DPAD_CENTER
 expect "Press the button for: Up" "remap wizard starts"
-for k in DPAD_UP DPAD_DOWN DPAD_LEFT DPAD_RIGHT BUTTON_X BUTTON_B BUTTON_Y BUTTON_L1 BUTTON_R1; do
+for k in DPAD_UP DPAD_DOWN DPAD_LEFT DPAD_RIGHT BUTTON_X BUTTON_B BUTTON_Y BUTTON_L1 BUTTON_R1 BUTTON_SELECT; do
   adb shell input keyevent "KEYCODE_$k"
 done
 pause 0.6
-expect "Buttons remapped" "wizard completes after nine buttons"
+expect "Buttons remapped" "wizard completes after ten buttons (last: media controls)"
 key KEYCODE_DPAD_DOWN
-expect "9 custom bindings" "bindings are saved"
+expect "10 custom bindings" "bindings are saved"
 key KEYCODE_BUTTON_X
 pause 0.5
 expect "Using defaults" "remapped X confirms (it ran Reset button mapping)"
 
 echo "== Rescan"
+# Library rows: All files access, Add ROM folder…, Base ROMs folder…, Create system folders, Rescan library, …
 key KEYCODE_BACK
 top
 key KEYCODE_DPAD_CENTER
+expect "Base ROMs folder" "Library shows the base ROMs folder"
 adb shell 'echo x > "/sdcard/ROMs/gba/Metroid Fusion (USA).gba"'
-key KEYCODE_DPAD_DOWN KEYCODE_DPAD_DOWN KEYCODE_DPAD_CENTER
+key $(for _ in $(seq 4); do printf 'KEYCODE_DPAD_DOWN '; done) KEYCODE_DPAD_CENTER
 pause 1.2
 expect "+1" "rescan picks up a new file"
 adb shell 'rm "/sdcard/ROMs/gba/Metroid Fusion (USA).gba"'
@@ -229,6 +261,15 @@ if [ "$MEDIA" -eq 1 ]; then
   key KEYCODE_DPAD_RIGHT
   expect "Smoke Song 2" "right skips to the next track"
   key KEYCODE_BACK
+  expect_not "Track 2 of 2" "Back closes Now Playing"
+
+  echo "== Media controls shortcut"
+  category 4
+  key KEYCODE_BUTTON_SELECT
+  expect "Track 2 of 2" "Select opens Now Playing from another category"
+  key KEYCODE_BUTTON_SELECT
+  expect_not "Track 2 of 2" "Select closes Now Playing again"
+  expect "Smoke Song 2" "mini-player line shows while music plays"
 
   echo "== Video"
   category 3
@@ -244,19 +285,19 @@ if [ "$MEDIA" -eq 1 ]; then
 fi
 
 echo "== Touch"
-home
+home # Games root: Search, Favorites, All Games
 # Swipes are placed relative to the screen (root node bounds from the accessibility dump).
 read -r SW SH < <(adb shell cat /sdcard/xross-ui.xml | grep -o 'bounds="\[0,0\]\[[0-9]*,[0-9]*\]"' | head -1 | sed 's/.*\]\[\([0-9]*\),\([0-9]*\)\]"/\1 \2/')
 SW=${SW:-2400}; SH=${SH:-1080}
 adb shell input swipe $((SW * 58 / 100)) $((SH * 55 / 100)) $((SW * 30 / 100)) $((SH * 55 / 100)) 200
 pause 0.6
-expect_not "Super Nintendo" "swipe left moves to the next category"
+expect_not "All Games" "swipe left moves to the next category"
 adb shell input swipe $((SW * 30 / 100)) $((SH * 55 / 100)) $((SW * 58 / 100)) $((SH * 55 / 100)) 200
 pause 0.6
-expect "Super Nintendo" "swipe right comes back (one category per swipe)"
+expect "All Games" "swipe right comes back (one category per swipe)"
 adb shell input swipe $((SW * 42 / 100)) $((SH * 65 / 100)) $((SW * 42 / 100)) $((SH * 28 / 100)) 250
 pause 0.6
-expect "Game Boy Advance" "vertical drag scrolls the list"
+expect "All Games" "vertical drag scrolls the list"
 
 if adb shell pm list packages | grep -q com.retroarch.aarch64; then
   echo "== Launch (RetroArch stub)"

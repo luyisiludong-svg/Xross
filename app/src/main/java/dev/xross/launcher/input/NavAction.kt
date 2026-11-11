@@ -11,7 +11,10 @@ enum class NavAction {
     OPTIONS,
     PREV_CATEGORY,
     NEXT_CATEGORY,
-    START;
+    START,
+
+    /** Show or hide the Now Playing controls from anywhere in the XMB (Select by default). */
+    MEDIA;
 
     val isDirectional: Boolean
         get() = this == UP || this == DOWN || this == LEFT || this == RIGHT

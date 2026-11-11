@@ -90,7 +90,12 @@ Test the built-in pad, plus any of DualSense, Switch Pro and Xbox controllers yo
 - [ ] Confirm/cancel: with Settings ▸ Controls ▸ Confirm button on **Auto**, Nintendo pads
       confirm with the right-hand button, others with the bottom one
 - [ ] Button symbols in the bottom-right hints match the controller (✕○△ / A B Y)
-- [ ] Settings ▸ Controls ▸ Remap buttons works, and Reset button mapping restores defaults
+- [ ] Settings ▸ Controls ▸ Remap buttons works (10 steps, the last is the media controls
+      button), and Reset all button mappings restores defaults
+- [ ] Analog stick deadzone **Off — hardware only**: the stick still has no drift in menus
+      (if it does, the controller's own flat zone is too small; pick 15%)
+- [ ] **Select** opens Now Playing from any category while music plays and closes it again;
+      holding **Guide** for half a second does the same, if the handheld lets the key through
 - [ ] Touch: one horizontal swipe moves one category; vertical drag scrolls; tap selects
 
 If a button does nothing, this shows the raw key codes the device sends (press the button while
@@ -166,13 +171,45 @@ Check by eye and ear:
 - [ ] **Options menu:** △ / Y (or long-press) on a game opens Play / Favorite / Emulator; setting
       an emulator there applies to that game only
 - [ ] **Search:** Games ▸ Search; type with the D-pad (△ / Y = space, L1 = delete, R1 = results)
+- [ ] **All Games:** platforms are inside Games ▸ All Games; Settings ▸ Theme ▸ Platform folders
+      switches back to the flat list
+- [ ] **Base ROMs folder:** Settings ▸ Library ▸ Create system folders makes `Xross/roms/snes`,
+      `psx`, … (22 folders); a ROM copied into one of them shows up after Rescan library
+
+## 6a. The Xross folder
+
+- [ ] After the first start with All files access, `/sdcard/Xross/` has `config/`, `data/`,
+      `dats/`, `media/`, `roms/`, `themes/`, with a `.nomedia` in `media/` and `themes/`
+- [ ] `config/settings.json`, `controllers.json` and `systems.json` exist; no account name,
+      password or API key appears in them
+- [ ] Edit `config/settings.json` on a PC (for example `"wave": false`), copy it back, and
+      return to Xross: the change applies
+- [ ] Leave Xross for a few seconds: `data/xross.db` appears, and **Settings ▸ System ▸ Back up
+      library now** updates its time
+- [ ] Scraped art is in `media/covers/<system>/`, `media/heroes/<system>/`, … named after the
+      ROM, and none of it shows up in Photo or Video
+- [ ] With an SD card: **Settings ▸ System ▸ Xross folder** moves the folder to the card and
+      back; settings and art come along
+- [ ] After a reinstall (or on a second device with the same card), Games offers **Restore
+      library backup**; restoring restarts Xross with the old library
+
+## 6b. Apps
+
+- [ ] Options ▸ Hide on an app removes it from Apps; Settings ▸ Apps ▸ Hidden apps brings it back
+- [ ] Settings ▸ Apps ▸ Hide system apps hides preinstalled apps
+- [ ] Options ▸ Move to folder ▸ Emulators (suggested for emulators) and ▸ New folder… (typed on
+      the gamepad keyboard) create folders at the top of Apps
 
 ## 7. Photo, Music and Video
 
 - [ ] Photo, Music and Video show your device's pictures, songs (with album art) and videos
+- [ ] Settings ▸ Media ▸ Photo folders ▸ Add folder…: Photo then shows only that folder,
+      including pictures in a folder with a `.nomedia` file; "Show all photos again" undoes it
 - [ ] Photo viewer: L1/R1 zoom, D-pad pans without showing black edges, Start runs a
       slideshow, Options opens the system "Set wallpaper" screen
 - [ ] Music keeps playing while you browse and shows a media notification; headset buttons work
+- [ ] Pausing music for 30 s fades the "❚❚ Title" line in the top-left corner; resuming
+      brings it back
 - [ ] Starting a game pauses music; it resumes when you come back
       (Settings ▸ Media ▸ Music while playing games)
 - [ ] Video: smooth playback at the file's aspect ratio; ←/→ and L1/R1 seek; music pauses during

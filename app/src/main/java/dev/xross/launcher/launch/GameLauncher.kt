@@ -1,65 +1,42 @@
 package dev.xross.launcher.launch
 
-import android.content.Context
-import android.content.Intent
-import android.webkit.MimeTypeMap
-import androidx.core.content.FileProvider
+import android.app.Activity
 import dev.xross.launcher.data.GameEntity
 import dev.xross.launcher.storage.EmulatorOption
 import dev.xross.launcher.storage.Platform
-import dev.xross.launcher.storage.PlatformRegistry
-import java.io.File
 
+/** What [GameLauncher.plan] decided for a game. */
 sealed interface LaunchPlan {
-    data class Ready(val intent: Intent, val emulatorName: String) : LaunchPlan
+    /** Ready to start with [emulatorName]; [target] is only meaningful to the launcher that made it. */
+    data class Ready(val emulatorName: String, val target: LaunchTarget) : LaunchPlan
     data class Failed(val message: String) : LaunchPlan
 }
 
-/** Emulator dispatch layer: picks the emulator for a game and builds its intent. */
-class GameLauncher(private val context: Context) {
+/**
+ * Launcher-specific description of what to start (for [AndroidIntentGameLauncher], an Intent with
+ * its URI grants). Opaque to UI and repository code.
+ */
+interface LaunchTarget
 
-    fun installedPackage(def: EmulatorDef): String? = def.packages.firstOrNull { isInstalled(it) }
+sealed interface LaunchResult {
+    data object Started : LaunchResult
+    data class Failed(val message: String) : LaunchResult
+}
 
-    fun installedEmulatorIds(): Set<String> =
-        EmulatorRegistry.all.filter { installedPackage(it) != null }.mapTo(HashSet()) { it.id }
+/**
+ * Emulator dispatch: which emulators are installed, which one a game launches with, and starting
+ * it. UI and repository code only see [LaunchPlan]s; how a launch reaches the emulator (Intents,
+ * `content://` grants, package queries) stays in the implementation.
+ */
+interface GameLauncher {
+    /** [EmulatorDef.id]s of the emulators installed on this device. */
+    fun installedEmulatorIds(): Set<String>
 
-    fun plan(game: GameEntity, choiceKey: String?): LaunchPlan {
-        val platform = PlatformRegistry.byId(game.platformId)
-            ?: return LaunchPlan.Failed("Unknown platform ${game.platformId}")
-        val file = File(game.path)
-        if (!file.exists()) return LaunchPlan.Failed("File not found — is the storage mounted?")
+    /** Picks the emulator for [game] ([choiceKey]: the platform's chosen [EmulatorOption.key]). */
+    fun plan(game: GameEntity, choiceKey: String?): LaunchPlan
 
-        val uri = runCatching {
-            FileProvider.getUriForFile(context, "${context.packageName}.files", file)
-        }.getOrElse { return LaunchPlan.Failed("Can't share ${file.name}") }
-        val knownMime = MimeTypeMap.getSingleton().getMimeTypeFromExtension(file.extension.lowercase())
-        val mime = knownMime ?: "application/octet-stream"
-
-        val option = resolveOption(platform, choiceKey, installedEmulatorIds(), game.emulatorOverride)
-        if (option == null) {
-            // Only fall back to "open with" for real MIME types: catch-all */* handlers (wallets,
-            // file managers) would otherwise claim every ROM as application/octet-stream.
-            val generic = knownMime?.let {
-                EmulatorRegistry.genericIntent(LaunchRequest(game.path, uri, it, packageName = "", core = null))
-            }
-            return if (generic?.resolveActivity(context.packageManager) != null) {
-                LaunchPlan.Ready(Intent.createChooser(generic, game.title).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), "system")
-            } else {
-                val wanted = platform.emulators.firstOrNull()?.let { EmulatorRegistry.byId(it.emulatorId)?.name }
-                LaunchPlan.Failed("No emulator for ${platform.shortName}" + (wanted?.let { " — install $it" } ?: ""))
-            }
-        }
-
-        val def = EmulatorRegistry.byId(option.emulatorId)
-            ?: return LaunchPlan.Failed("Unknown emulator ${option.emulatorId}")
-        val pkg = installedPackage(def)
-            ?: return LaunchPlan.Failed("${def.name} is not installed")
-        val intent = def.buildIntent(LaunchRequest(game.path, uri, mime, pkg, option.core))
-        return LaunchPlan.Ready(intent, def.name + (option.core?.let { " · $it" } ?: ""))
-    }
-
-    private fun isInstalled(pkg: String) =
-        runCatching { context.packageManager.getPackageInfo(pkg, 0) }.isSuccess
+    /** Starts a plan this launcher made, from the visible launcher screen. */
+    fun start(plan: LaunchPlan.Ready, host: Activity): LaunchResult
 
     companion object {
         /**
