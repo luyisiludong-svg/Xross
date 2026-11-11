@@ -1,4 +1,4 @@
-# Project Wave — Feasibility Assessment
+# Project Xross — Feasibility Assessment
 
 Reviewed against `project_scope.md` on 2026-11-09.
 

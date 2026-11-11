@@ -1,8 +1,8 @@
-# Project Scope & System Architecture: Project Wave (XMB Android Launcher)
+# Project Scope & System Architecture: Project Xross (XMB Android Launcher)
 
 ## 1. Executive Summary & Product Vision
 
-Project Wave is a dedicated front-end launcher and media interface for Android-based gaming handhelds, set-top boxes, and dual-screen devices. Built around the horizontal-category, vertical-item cross-media bar (XMB) paradigm, the launcher balances lightweight console aesthetics with the functional demands of high-capacity emulation libraries and native Android applications.
+Project Xross is a dedicated front-end launcher and media interface for Android-based gaming handhelds, set-top boxes, and dual-screen devices. Built around the horizontal-category, vertical-item cross-media bar (XMB) paradigm, the launcher balances lightweight console aesthetics with the functional demands of high-capacity emulation libraries and native Android applications.
 
 ```
        [Settings]   [Photos]   [Music]   [Video]   [Games]   [Apps]   [Network]
@@ -24,7 +24,7 @@ Project Wave is a dedicated front-end launcher and media interface for Android-b
 
 * **Controller-First, Touch-Complete**: Zero reliance on mouse pointers or standard touch controls, while maintaining 1:1 gesture parity for touchscreen hardware.
 * **Deterministic Emulation Dispatch**: Robust intent and URI schema orchestration across RetroArch cores and standalone Android emulators without file-permission failures.
-* **Zero-Friction Asset Management**: Frictionless on-device scraping paired with browser-accessible LAN administration (Wave Portal) and FTPS syncing.
+* **Zero-Friction Asset Management**: Frictionless on-device scraping paired with browser-accessible LAN administration (Xross Portal) and FTPS syncing.
 * **Hardware Adaptability**: First-class handling of single-screen, dual-screen, docked/undocked, and unconventional aspect ratios (1:1, 4:3, 3:2, 16:9).
 
 ---
@@ -100,7 +100,7 @@ Project Wave is a dedicated front-end launcher and media interface for Android-b
 
 
 ```ini
-[WaveLauncher]
+[XrossLauncher]
 Label=SanDisk 512GB Retro
 Icon=assets/storage_icon.png
 AutoScan=true
@@ -243,12 +243,12 @@ Designed to natively support dual-screen and folding hardware (e.g., Ayaneo Flip
 
 ```
   +-----------------------------------------------------------+
-  |                   WAVE RUNTIME DAEMON                     |
+  |                   XROSS RUNTIME DAEMON                    |
   +-----------------------------+-----------------------------+
                                 |
              +------------------+------------------+
              |                                     |
-   [HTTPS Wave Portal]                     [Encrypted FTPS]
+   [HTTPS Xross Portal]                    [Encrypted FTPS]
    (Port 8443 / Web UI)                    (Port 2121 / TLS)
              |                                     |
     Browser Access:                       Direct Client Sync:
@@ -259,7 +259,7 @@ Designed to natively support dual-screen and folding hardware (e.g., Ayaneo Flip
 
 ```
 
-#### HTTPS Wave Portal
+#### HTTPS Xross Portal
 
 * Local embedded web application accessible via LAN browser (`https://<device-ip>:8443`).
 * Built-in authentication (PIN or password set on device).
@@ -281,7 +281,7 @@ Designed to natively support dual-screen and folding hardware (e.g., Ayaneo Flip
 
 ```
                          +-----------------------------------+
-                         |         WaveApplication           |
+                         |         XrossApplication          |
                          +-----------------------------------+
                                            |
          +---------------------------------+---------------------------------+
@@ -329,7 +329,7 @@ Designed to natively support dual-screen and folding hardware (e.g., Ayaneo Flip
 ### 5.2 Memory Footprint & Resource Management
 
 * **Idle RAM Usage**: $\le 150\text{ MB}$ footprint in background state to avoid triggering Android low-memory killer (LMK) during execution of high-overhead emulators (e.g., Switch/PS2/Wii).
-* **Active Background Daemon Limits**: Under 3% CPU utilization when FTPS / Wave Portal servers are idle.
+* **Active Background Daemon Limits**: Under 3% CPU utilization when FTPS / Xross Portal servers are idle.
 * **Low-Power Screen Standby**: Instant suspension of GL wave rendering loops on device screen-off/lock.
 
 ---
@@ -357,7 +357,7 @@ Designed to natively support dual-screen and folding hardware (e.g., Ayaneo Flip
 * Multi-screen / Dual-screen Presentation API integration (split rendering, screen swapping).
 * Hot-swappable storage handling with dynamic external volume monitoring and `autorun.inf` execution.
 * Integrated RetroAchievements and Dusklight profile sync, progress tracking, and toast notifications.
-* Embedded HTTPS Wave Portal for local network management.
+* Embedded HTTPS Xross Portal for local network management.
 * Embedded FTPS file transfer service.
 
 ### Phase 4: Production Launch & Ecosystem (v1.0)

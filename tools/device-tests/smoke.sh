@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# End-to-end smoke test on a connected device/emulator (adb). Resets Wave's data, seeds test
+# End-to-end smoke test on a connected device/emulator (adb). Resets Xross's data, seeds test
 # ROMs under /sdcard/ROMs, then drives the launcher with key events and checks what is on
 # screen through the accessibility tree (uiautomator).
 #
@@ -7,17 +7,17 @@
 #   ./gradlew :emulator-stub:installRetroarchDebug   # optional: enables the launch check
 #   tools/device-tests/smoke.sh
 #
-# WARNING: clears Wave's app data and adds files under /sdcard/ROMs on the device.
+# WARNING: clears Xross's app data and adds files under /sdcard/ROMs on the device.
 set -u
-PKG=dev.wave.launcher
+PKG=dev.xross.launcher
 PASS=0
 FAIL=0
 
 pause() { adb shell sleep "${1:-0.4}"; }
 key() { adb shell input keyevent "$@"; pause; }
 ui() {
-  adb shell uiautomator dump /sdcard/wave-ui.xml >/dev/null 2>&1
-  adb shell cat /sdcard/wave-ui.xml | grep -o 'text="[^"]*"' | sed 's/^text="//; s/"$//'
+  adb shell uiautomator dump /sdcard/xross-ui.xml >/dev/null 2>&1
+  adb shell cat /sdcard/xross-ui.xml | grep -o 'text="[^"]*"' | sed 's/^text="//; s/"$//'
 }
 ok() { PASS=$((PASS + 1)); printf '  \033[32mPASS\033[0m %s\n' "$1"; }
 bad() { FAIL=$((FAIL + 1)); printf '  \033[31mFAIL\033[0m %s\n' "$1"; }
@@ -76,10 +76,10 @@ if command -v ffmpeg >/dev/null; then
       -metadata title="Smoke Song $n" -metadata artist="Smoke Artist" -metadata album="Smoke Album" -metadata track=$n "$tmp/Smoke Song $n.mp3"
   done
   ffmpeg -loglevel error -y -f lavfi -i testsrc2=size=640x360:rate=30:duration=8 -c:v libx264 -pix_fmt yuv420p "$tmp/Smoke Clip.mp4"
-  adb shell 'rm -rf /sdcard/Pictures/WaveSmoke /sdcard/Music/WaveSmoke /sdcard/Movies/WaveSmoke; mkdir -p /sdcard/Pictures/WaveSmoke /sdcard/Music/WaveSmoke /sdcard/Movies/WaveSmoke'
-  adb push "$tmp"/*.png /sdcard/Pictures/WaveSmoke/ >/dev/null
-  adb push "$tmp"/*.mp3 /sdcard/Music/WaveSmoke/ >/dev/null
-  adb push "$tmp"/*.mp4 /sdcard/Movies/WaveSmoke/ >/dev/null
+  adb shell 'rm -rf /sdcard/Pictures/XrossSmoke /sdcard/Music/XrossSmoke /sdcard/Movies/XrossSmoke; mkdir -p /sdcard/Pictures/XrossSmoke /sdcard/Music/XrossSmoke /sdcard/Movies/XrossSmoke'
+  adb push "$tmp"/*.png /sdcard/Pictures/XrossSmoke/ >/dev/null
+  adb push "$tmp"/*.mp3 /sdcard/Music/XrossSmoke/ >/dev/null
+  adb push "$tmp"/*.mp4 /sdcard/Movies/XrossSmoke/ >/dev/null
   adb shell content call --method scan_volume --uri content://media --arg external_primary >/dev/null 2>&1
   rm -rf "$tmp"
   MEDIA=1
@@ -195,10 +195,10 @@ expect "identified by content" "background fingerprinting reports identified gam
 if [ "$MEDIA" -eq 1 ]; then
   echo "== Photo"
   category 1
-  # Folders are sorted by name and the device may hold others; step down until WaveSmoke is
+  # Folders are sorted by name and the device may hold others; step down until XrossSmoke is
   # focused (its "2 photos" subtitle only shows on the focused row).
-  for _ in $(seq 12); do screen | grep -q "WaveSmoke" && screen | grep -q "2 photos" && break; key KEYCODE_DPAD_DOWN; done
-  expect "WaveSmoke" "photo folders listed"
+  for _ in $(seq 12); do screen | grep -q "XrossSmoke" && screen | grep -q "2 photos" && break; key KEYCODE_DPAD_DOWN; done
+  expect "XrossSmoke" "photo folders listed"
   expect "2 photos" "the folder shows its photo count"
   key KEYCODE_DPAD_CENTER
   key KEYCODE_DPAD_CENTER
@@ -246,7 +246,7 @@ fi
 echo "== Touch"
 home
 # Swipes are placed relative to the screen (root node bounds from the accessibility dump).
-read -r SW SH < <(adb shell cat /sdcard/wave-ui.xml | grep -o 'bounds="\[0,0\]\[[0-9]*,[0-9]*\]"' | head -1 | sed 's/.*\]\[\([0-9]*\),\([0-9]*\)\]"/\1 \2/')
+read -r SW SH < <(adb shell cat /sdcard/xross-ui.xml | grep -o 'bounds="\[0,0\]\[[0-9]*,[0-9]*\]"' | head -1 | sed 's/.*\]\[\([0-9]*\),\([0-9]*\)\]"/\1 \2/')
 SW=${SW:-2400}; SH=${SH:-1080}
 adb shell input swipe $((SW * 58 / 100)) $((SH * 55 / 100)) $((SW * 30 / 100)) $((SH * 55 / 100)) 200
 pause 0.6
@@ -265,7 +265,7 @@ if adb shell pm list packages | grep -q com.retroarch.aarch64; then
   adb logcat -c
   key KEYCODE_DPAD_CENTER
   pause 2.5
-  log=$(adb logcat -d -s WaveStub:I)
+  log=$(adb logcat -d -s XrossStub:I)
   grep -q "extra.LIBRETRO=/data/data/com.retroarch.aarch64/cores/snes9x_libretro_android.so" <<<"$log" \
     && ok "RetroArch receives the snes9x core" || bad "RetroArch core extra"
   grep -q "uriRead=ok" <<<"$log" && ok "emulator can read the ROM through the granted URI" || bad "URI read grant"

@@ -1,9 +1,14 @@
-# Wave — XMB launcher for Android handhelds
+# Xross — XMB launcher for Android handhelds
 
 A controller-first launcher for Android handhelds in the style of the cross-media bar, built from
 [`project_scope.md`](project_scope.md). Phase 1 (Alpha) is complete and Phase 2 (Beta) is under
 way. The feasibility review and the decisions behind this build are in
 [`docs/FEASIBILITY.md`](docs/FEASIBILITY.md).
+
+Xross was called Wave until 2026-11-11. The application ID changed from `dev.wave.launcher` to
+`dev.xross.launcher`, so an older Wave install is a separate app: uninstall it by hand, since its
+settings and library don't carry over. Names in the code such as `WaveRenderer` or the
+"Wave background" setting refer to the background effect, not the product.
 
 ## Build and run
 
@@ -19,7 +24,7 @@ up automatically; add others with **Add ROM folder…**. Put games in platform s
 (`snes/`, `psx/`, `gba/`, …). See `PlatformRegistry` in `storage/Platform.kt` for every folder
 alias and extension.
 
-Wave runs in landscape and turns 180° with the device. Android 16 ignores the orientation lock
+Xross runs in landscape and turns 180° with the device. Android 16 ignores the orientation lock
 on screens 600 dp and wider.
 
 ## Status
@@ -35,10 +40,10 @@ on screens 600 dp and wider.
 | Wave background | Done. GLSL ES 3.0 ribbon shader with day/night palette and adjustable speed. Pauses whenever the launcher isn't in front |
 | Extras | Android apps (games sorted into Games ▸ Android Games), 7 color themes, can be set as the HOME launcher, Android TV leanback entry |
 | XMB fidelity | Not there yet. The home menu's layout, motion, navigation, status bar and options panel match the XMB; per-game icons and backgrounds, an XMB-style typeface and cursor sound, the monthly background color, Resume/Quit Game and the busy icon are missing |
-| Not started | Scrapers and DAT matching, theme packs, on-screen controller, dual screen, RetroAchievements, Wave Portal, FTPS |
+| Not started | Scrapers and DAT matching, theme packs, on-screen controller, dual screen, RetroAchievements, Xross Portal, FTPS |
 
 [`Roadmap.md`](Roadmap.md) summarizes what is done, what is left, and the order of the remaining
-work. [`docs/XMB_FIDELITY.md`](docs/XMB_FIDELITY.md) compares Wave with the real XMB, using the
+work. [`docs/XMB_FIDELITY.md`](docs/XMB_FIDELITY.md) compares Xross with the real XMB, using the
 PS3 and PSP instruction manuals in `assets/docs` as the reference. Feature-by-feature test results and device/performance measurements are in
 [`docs/STATUS.md`](docs/STATUS.md). Testing on a physical handheld is described in
 [`docs/HARDWARE_TESTING.md`](docs/HARDWARE_TESTING.md).
@@ -52,8 +57,8 @@ tools/device-tests/smoke.sh                       # on-device smoke test (see wa
 ./gradlew :app:assembleProfiling                  # R8-optimized build for frame timing
 ```
 
-> **`smoke.sh` is for a throwaway emulator.** It clears Wave's data and runs
-> `rm -rf /sdcard/ROMs` (plus `WaveSmoke` folders under Pictures, Music and Movies) to seed its
+> **`smoke.sh` is for a throwaway emulator.** It clears Xross's data and runs
+> `rm -rf /sdcard/ROMs` (plus `XrossSmoke` folders under Pictures, Music and Movies) to seed its
 > own test files. Never run it on a device that holds a real ROM collection.
 
 Measure smoothness only on the `profiling` build. The debug build is debuggable, and Compose runs
@@ -82,10 +87,10 @@ launch intent they receive. Never install them alongside real emulators.
 ## Layout
 
 ```
-app/src/main/java/dev/wave/launcher/
+app/src/main/java/dev/xross/launcher/
   input/    GamepadHandler, KeyMapper, StickTracker, ControllerFamily
   storage/  Platform (PlatformRegistry), RomScanner, Fingerprinter, StorageVolumes, VolumeMonitor
-  data/     Room (GameEntity, GameHashEntity, DAOs, WaveDatabase), GameRepository, AppRepository,
+  data/     Room (GameEntity, GameHashEntity, DAOs, XrossDatabase), GameRepository, AppRepository,
             FingerprintQueue, PlaySessionTracker, SettingsStore
   launch/   EmulatorRegistry (intent matrix), GameLauncher
   media/    MediaRepository (MediaStore), MusicPlayer, PlaybackService (Media3 session)
@@ -93,7 +98,7 @@ app/src/main/java/dev/wave/launcher/
             MediaOverlayController, XmbViewModel
   ui/       XmbScreen, MediaScreens, SearchOverlay, OptionsPanel, StatusBar,
             WaveBackground + WaveRenderer (GLSL), Glyphs
-  theme/    WaveTheme palettes
+  theme/    XrossTheme palettes
   audio/    UiSounds (SoundPool effects + streamed boot cues)
 app/schemas/         exported Room schemas (v1–v4) used by the migration tests
 docs/                feasibility review, implementation status, XMB fidelity, hardware testing guide

@@ -5,12 +5,12 @@ plugins {
 }
 
 android {
-    namespace = "dev.wave.launcher"
+    namespace = "dev.xross.launcher"
     compileSdk = 36
 
     defaultConfig {
         buildConfigField("boolean", "PERF_LOG", "false")
-        applicationId = "dev.wave.launcher"
+        applicationId = "dev.xross.launcher"
         minSdk = 28
         targetSdk = 36
         versionCode = 1

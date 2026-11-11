@@ -1,6 +1,6 @@
 # XMB Fidelity Assessment
 
-How close Wave is to the look and feel of the real XrossMediaBar, and what is still missing.
+How close Xross is to the look and feel of the real XrossMediaBar, and what is still missing.
 The goal from the scope is a launcher that feels **exactly like the XMB**, with extra features on
 top. Assessed **2026-11-11** against the code at `1c1788b`.
 
@@ -12,19 +12,19 @@ top. Assessed **2026-11-11** against the code at `1c1788b`.
 | PSP E1000 instruction manual, system software 6.50 (`assets/docs/ENUK_PSP-E1002_E1003-6.50.pdf`) | XMB and categories (pp. 16–17), multi-tap keyboard (pp. 20–21), Theme Settings color behavior (p. 29), power saving |
 | PSP Go instruction manual (`assets/docs/PSP-N1004_PSP Go_IM$en.pdf`) | XMB with busy icon (p. 24), categories (p. 25), Pause/Resume Game (p. 37), battery icon (p. 21) |
 | PSP home-menu screenshots (`assets/examples/main.*.jpg`, `PSP-BloodRed-Theme-4.webp`) | Proportions, typography, status bar, list layout |
-| Wave on a Galaxy A55 and the Android emulator (2026-11-10) | Current look and behavior |
+| Xross on a Galaxy A55 and the Android emulator (2026-11-10) | Current look and behavior |
 
 The manuals are hardware guides, so they describe the XMB's rules rather than its exact visuals.
 Visual comparisons come from the reference screenshots. They are Sony documents kept for reference
 only and must not ship in a release.
 
-**Legend:** ✅ matches the XMB · ◐ close or partial · ❌ missing · ➕ Wave extra (not in the XMB)
+**Legend:** ✅ matches the XMB · ◐ close or partial · ❌ missing · ➕ Xross extra (not in the XMB)
 
 ---
 
 ## Verdict
 
-**Not there yet, but the foundation is right.** Wave's home menu already reads as an XMB at a
+**Not there yet, but the foundation is right.** Xross's home menu already reads as an XMB at a
 glance: the horizontal category bar with one category visible to the left, the vertical item
 column, rows scrolling up past the bar, the enlarged and glowing focused icon, the title with a
 hairline and a focus-only subtitle, the date/time/battery status in the top right, the
@@ -33,18 +33,18 @@ right-hand options panel, and the flowing wave background all match the referenc
 The XMB feel breaks down in three places:
 
 1. **Content art.** On the XMB every game has its own icon, and focusing it changes the
-   background to the game's artwork, with its own audio. Wave shows the same disc or cartridge
+   background to the game's artwork, with its own audio. Xross shows the same disc or cartridge
    glyph for every game, so the Games category feels like a file list. This is the largest gap,
    and it depends on the scraper (Phase 2).
-2. **Typography and sound.** The XMB uses a distinctive rounded system typeface. Wave uses the
-   Android default font, which is the most visible difference in a side-by-side. Wave also has no
+2. **Typography and sound.** The XMB uses a distinctive rounded system typeface. Xross uses the
+   Android default font, which is the most visible difference in a side-by-side. Xross also has no
    dedicated cursor sound (moves reuse the options sound) and its error sound is silent.
 3. **System behaviors.** Several things the manuals describe are missing: the background color
    that changes by month (PSP) or by time, day and month (PS3), resuming or quitting the running
    game from the home menu, the busy icon while reading data, an Information screen in the
    options menu, the playback control panel, and the XMB's way of showing an opened folder.
 
-Wave also always shows a button-hint pill. That's a useful extra, but the XMB home menu has no
+Xross also always shows a button-hint pill. That's a useful extra, but the XMB home menu has no
 on-screen hints, so it should be possible to turn it off.
 
 | Area | Rating | Summary |
@@ -55,7 +55,7 @@ on-screen hints, so it should be possible to turn it off.
 | Content icons and backgrounds | ❌ | Generic glyphs for games; no per-game background or audio |
 | Typography | ❌ | Android default font |
 | Sound | ◐ | Boot, game-start, confirm, cancel; no distinct cursor sound; silent error sound |
-| Background and themes | ◐ | Wave and day/night brightness; no monthly color; no custom wallpaper |
+| Background and themes | ◐ | Xross and day/night brightness; no monthly color; no custom wallpaper |
 | Options menu | ◐ | Correct panel and behavior; no Information, Delete or sort options |
 | Media playback controls | ◐ | Direct button controls instead of the XMB control panel |
 | Game session (PS button) | ❌ | No Resume Game or Quit Game from the home menu |
@@ -66,7 +66,7 @@ on-screen hints, so it should be possible to turn it off.
 
 ## 1. Navigation and layout
 
-| XMB behavior | Source | Wave | State |
+| XMB behavior | Source | Xross | State |
 | --- | --- | --- | --- |
 | Left/right selects a category, up/down selects an item, confirm opens, cancel goes back | PS3 p. 11; PSP p. 16; PSP Go p. 24 | Same, plus L1/R1 and touch | ✅ |
 | Only the focused category shows its label | References | Same | ✅ |
@@ -81,7 +81,7 @@ on-screen hints, so it should be possible to turn it off.
 
 ## 2. Content presentation
 
-| XMB behavior | Source | Wave | State |
+| XMB behavior | Source | Xross | State |
 | --- | --- | --- | --- |
 | Each game has its own icon | References; an inserted game disc appears as its own icon (PS3 p. 24) | One disc or cartridge glyph for all games | ❌ needs scraper art |
 | Focusing a game fades the background to that game's artwork, sometimes with its own music | XMB behavior | No per-game background or audio | ❌ |
@@ -91,7 +91,7 @@ on-screen hints, so it should be possible to turn it off.
 
 ## 3. Look, typeface and themes
 
-| XMB behavior | Source | Wave | State |
+| XMB behavior | Source | Xross | State |
 | --- | --- | --- | --- |
 | Flowing wave background | References | GLSL ribbon shader with glossy sheets and strands | ✅ |
 | Background color changes automatically at the start of each month (PSP) | PSP p. 29; PSP Go p. 43 | User picks one of 7 fixed palettes | ❌ |
@@ -104,7 +104,7 @@ on-screen hints, so it should be possible to turn it off.
 
 ## 4. Sound
 
-| XMB behavior | Wave | State |
+| XMB behavior | Xross | State |
 | --- | --- | --- |
 | Boot chime | Startup sound once per process start | ✅ |
 | Game-start sound and animation | Game-start cue with a darken-and-bloom animation | ◐ |
@@ -114,7 +114,7 @@ on-screen hints, so it should be possible to turn it off.
 
 ## 5. Options menu, control panel and settings
 
-| XMB behavior | Source | Wave | State |
+| XMB behavior | Source | Xross | State |
 | --- | --- | --- | --- |
 | △ on any icon opens the options menu as a panel from the right | PS3 p. 11; PSP p. 17 | Same, with submenus; long-press on touch | ✅ |
 | Options include Information | PS3 p. 35; PSP p. 23 | Games show Play, favorite, emulator and playtime; no Information screen | ◐ |
@@ -125,22 +125,22 @@ on-screen hints, so it should be possible to turn it off.
 
 ## 6. Game session and system
 
-| XMB behavior | Source | Wave | State |
+| XMB behavior | Source | Xross | State |
 | --- | --- | --- | --- |
-| The PS button during a game returns to the home menu with Quit Game | PS3 p. 26; PSP p. 18 | Android's Home returns to Wave, but Wave doesn't know a game is running | ❌ |
+| The PS button during a game returns to the home menu with Quit Game | PS3 p. 26; PSP p. 18 | Android's Home returns to Xross, but Xross doesn't know a game is running | ❌ |
 | Pause Game, then Resume Game from the Game category | PSP Go p. 37 | No resume row; launching again relaunches through the emulator | ❌ |
 | Backlight auto-off, auto sleep, screensaver on an external display | PSP p. 29; PSP Go p. 43 | Left to Android; no screensaver when docked | ◐ |
-| Initial setup (language, time zone, date and time, user name) before the XMB | PS3 p. 15 | Android handles these; Wave's first-run onboarding is Phase 4 | ◐ by design |
+| Initial setup (language, time zone, date and time, user name) before the XMB | PS3 p. 15 | Android handles these; Xross's first-run onboarding is Phase 4 | ◐ by design |
 
 ## 7. On-screen keyboard
 
-| XMB behavior | Source | Wave | State |
+| XMB behavior | Source | Xross | State |
 | --- | --- | --- | --- |
 | PSP: phone-keypad multi-tap layout; SELECT cycles input modes (letters, accented letters, numbers, web shortcuts) | PSP pp. 20–21 | Not available | ❌ |
 | PS3: full keyboard with predictive text and a mini-size layout | PS3 p. 34 | 10-column grid, upper case only, no modes or prediction | ◐ |
 | Hardware keyboards type directly | PS3 p. 34 | Yes | ✅ |
 
-## 8. Wave extras beyond the XMB
+## 8. Xross extras beyond the XMB
 
 These are the "better features" and should stay, ideally without changing how the XMB looks by
 default: gamepad search over the whole library, favorites and Recently Played, playtime,
@@ -160,7 +160,7 @@ Ordered by how much each item adds to the XMB feel. The same items are tracked i
 | 1 | Per-game icons in the Games lists, with a background crossfade to the game's art on focus | Scraper and asset cache (Phase 2) | Large |
 | 2 | XMB-style typeface: bundle an open-licensed rounded sans as the default, allow a user-supplied font through theme packs | Theme pack loader for user fonts | Small (default font), Medium (loader) |
 | 3 | Monthly background color ("Original" theme that changes each month), with the existing day/night brightness | — | Small |
-| 4 | Resume Game / Quit Game row at the top of Games while an emulator launched by Wave is still running | — | Medium |
+| 4 | Resume Game / Quit Game row at the top of Games while an emulator launched by Xross is still running | — | Medium |
 | 5 | Busy icon (animated, bottom or top right) while scanning, fingerprinting or loading media | — | Small |
 | 6 | Setting to hide the button-hint pill, off by default in an "XMB classic" preset | — | Small |
 | 7 | Distinct cursor sound and a real error sound (user-supplied through sound packs) | Theme packs for distribution | Small |
@@ -177,7 +177,7 @@ Items 3, 5, 6 and 9 need no new dependencies and would move the feel noticeably 
 Item 1 matters most but waits on the scraper. Item 2 is the most visible single change on the
 home menu.
 
-**Licensing note.** The XMB's typeface, icons, sounds and theme assets belong to Sony. Wave
+**Licensing note.** The XMB's typeface, icons, sounds and theme assets belong to Sony. Xross
 should match the feel with original or open-licensed assets by default, and let users load their
 own through theme packs. The bundled sounds and icons already need replacing before any public
 release (see `Roadmap.md` §3).
