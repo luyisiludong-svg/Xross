@@ -44,13 +44,37 @@ class AppContainer(context: Context) {
     val media: MediaRepository by lazy { MediaRepository(appContext) }
     val music: MusicPlayer by lazy { MusicPlayer(appContext) }
     val dats: DatRepository by lazy { DatRepository(database) }
-    val credentials: CredentialStore by lazy { CredentialStore(appContext) }
+    val credentials: CredentialStore by lazy {
+        CredentialStore(appContext).also { store ->
+            // Debug builds only (release builds carry empty strings): the tester's account from .env.
+            if (store.current.screenScraperUser.isBlank() && BuildConfig.DEBUG_SCREENSCRAPER_USER.isNotBlank()) {
+                store.update {
+                    it.copy(
+                        screenScraperUser = BuildConfig.DEBUG_SCREENSCRAPER_USER,
+                        screenScraperPassword = BuildConfig.DEBUG_SCREENSCRAPER_PASSWORD,
+                    )
+                }
+            }
+        }
+    }
 
     /** Downloaded art, outside backups (re-scrapeable, large). */
     val assets: AssetCache by lazy { AssetCache(java.io.File(appContext.noBackupFilesDir, "assets")) }
     val art: ArtLoader by lazy { ArtLoader(assets) }
     val snaps: SnapPlayer by lazy { SnapPlayer(appContext, music) }
     private val http: HttpClient by lazy { UrlConnectionHttp("Xross/${BuildConfig.VERSION_NAME} (Android)") }
+
+    val screenScraper: ScreenScraperProvider by lazy {
+        ScreenScraperProvider(http, credentials = {
+            ScreenScraperCredentials(
+                devId = BuildConfig.SCREENSCRAPER_DEV_ID,
+                devPassword = BuildConfig.SCREENSCRAPER_DEV_PASSWORD,
+                softName = "Xross",
+                user = credentials.current.screenScraperUser,
+                password = credentials.current.screenScraperPassword,
+            )
+        })
+    }
 
     val scraper: ScrapeOrchestrator by lazy {
         ScrapeOrchestrator(
@@ -59,15 +83,7 @@ class AppContainer(context: Context) {
             http = http,
             providers = listOf(
                 HasheousProvider(http, enabled = { settings.current.hasheousEnabled }),
-                ScreenScraperProvider(http, credentials = {
-                    ScreenScraperCredentials(
-                        devId = BuildConfig.SCREENSCRAPER_DEV_ID,
-                        devPassword = BuildConfig.SCREENSCRAPER_DEV_PASSWORD,
-                        softName = "Xross",
-                        user = credentials.current.screenScraperUser,
-                        password = credentials.current.screenScraperPassword,
-                    )
-                }),
+                screenScraper,
                 SteamGridDbProvider(http, apiKey = { credentials.current.steamGridDbKey }),
             ),
             prefs = {

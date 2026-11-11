@@ -163,7 +163,7 @@ class XmbViewModel(
     }
 
     private val tree: StateFlow<MenuTree> = combine(
-        combine(env, meta, container.credentials.accounts) { e, m, accounts ->
+        combine(env, meta, container.credentials.accounts, container.screenScraper.quota) { e, m, accounts, quota ->
             e.copy(
                 dats = m.dats,
                 metadata = m.metadata,
@@ -171,6 +171,7 @@ class XmbViewModel(
                     screenScraperAvailable = BuildConfig.SCREENSCRAPER_DEV_ID.isNotBlank(),
                     screenScraperUser = accounts.screenScraperUser,
                     steamGridDbKeySet = accounts.steamGridDbKey.isNotBlank(),
+                    screenScraperQuota = quota?.let { q -> (q.user?.let { "$it · " } ?: "") + q.summary },
                 ),
             )
         },
@@ -1138,6 +1139,13 @@ class XmbViewModel(
                     emit(UiEffect.PromptText(TextPrompt.ScreenScraperUser(container.credentials.current.screenScraperUser)))
                 }
             Command.EditSteamGridDbKey -> emit(UiEffect.PromptText(TextPrompt.SteamGridDbKey))
+            Command.CheckScreenScraperAccount -> datWork {
+                when (val check = container.screenScraper.checkAccount()) {
+                    is dev.xross.launcher.scrape.providers.AccountCheck.Ok ->
+                        "Signed in" + (check.quota.user?.let { " as $it" } ?: "") + " · " + check.quota.summary
+                    is dev.xross.launcher.scrape.providers.AccountCheck.Failed -> check.reason
+                }
+            }
             Command.ClearArtwork -> viewModelScope.launch {
                 container.scraper.stop()
                 val freed = container.assets.clear()

@@ -162,6 +162,30 @@ class ScrapeOrchestratorTest {
         assertEquals("My Title", db.games().get(game.id)!!.title)
     }
 
+    @Test fun arcadeSetsSendTheZipsOwnHashes() = runBlocking {
+        val zip = tmp.newFile("1941.zip").apply { writeBytes(ByteArray(4096) { (it % 251).toByte() }) }
+        db.games().insertAll(listOf(GameEntity(path = zip.path, platformId = "arcade", title = "1941", fileName = "1941.zip", sizeBytes = zip.length(), lastModified = zip.lastModified())))
+        val game = db.games().getAll().single()
+        db.hashes().upsert(GameHashEntity.from(game, Fingerprint(HashSource.ARCHIVE_SET, detail = "12 files")))
+        val seen = Scripted(ProviderId.SCREENSCRAPER, { ProviderResult.NotFound })
+        orchestrator(AssetCache(tmp.newFolder("a")), seen).scrapeOne(game.id)
+        val request = seen.seen.single()
+        val expected = dev.xross.launcher.storage.FileHash.of(zip, Long.MAX_VALUE)!!
+        assertEquals(expected.crc32, request.crc32)
+        assertEquals(expected.sha1, request.sha1)
+        assertEquals("1941.zip", request.fileName)
+        assertEquals(4096L, request.sizeBytes)
+    }
+
+    @Test fun filesSkippedAsTooLargeAreScrapedByName() = runBlocking {
+        db.games().insertAll(listOf(GameEntity(path = "/r/3ds/zelda.cci", platformId = "n3ds", title = "Zelda", fileName = "zelda.cci", sizeBytes = 1L shl 31, lastModified = 1)))
+        val game = db.games().getAll().single()
+        db.hashes().upsert(GameHashEntity.from(game, Fingerprint.skipped(dev.xross.launcher.storage.SkipReason.LARGE)))
+        val seen = Scripted(ProviderId.SCREENSCRAPER, { ProviderResult.NotFound })
+        assertEquals(ScrapeStatus.NOT_FOUND, orchestrator(AssetCache(tmp.newFolder("a")), seen).scrapeOne(game.id))
+        assertFalse(seen.seen.single().hasHash)
+    }
+
     // region Asset cache
 
     private val uuid = "123e4567-e89b-42d3-a456-426614174000"

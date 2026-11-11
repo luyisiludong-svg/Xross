@@ -57,6 +57,8 @@ data class ScraperSetup(
     val screenScraperAvailable: Boolean = false,
     val screenScraperUser: String = "",
     val steamGridDbKeySet: Boolean = false,
+    /** Last quota ScreenScraper reported ("120 of 20,000 requests today"), if any. */
+    val screenScraperQuota: String? = null,
 )
 
 /** Pure builder from a [MenuSnapshot] to XMB lists. */
@@ -431,6 +433,15 @@ class MenuTree(private val s: MenuSnapshot) {
                 GlyphKey.INFO, Command.EditScreenScraperAccount,
             ),
         )
+        if (setup.screenScraperAvailable) {
+            add(
+                setting(
+                    "meta:sscheck", "Check ScreenScraper account",
+                    setup.screenScraperQuota ?: "Sign in and show today's quota",
+                    GlyphKey.NETWORK, Command.CheckScreenScraperAccount,
+                ),
+            )
+        }
         add(
             setting(
                 "meta:sgdb", "SteamGridDB API key…",

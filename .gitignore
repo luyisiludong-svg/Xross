@@ -6,3 +6,10 @@ local.properties
 .DS_Store
 captures/
 .kotlin/
+
+# Local secrets and test media
+.env
+Roms/
+# Saved while signed in to screenscraper.fr: contains account credentials.
+# English summary: docs/SCREENSCRAPER_API.md
+docs/SCREENSCRAPER_api_docs.pdf
