@@ -142,6 +142,33 @@ class MediaOverlayController(
         _overlay.value = MediaOverlay.NowPlaying
     }
 
+    /** What the media controls shortcut ([NavAction.MEDIA]) did. */
+    enum class NowPlayingToggle {
+        OPENED,
+        CLOSED,
+
+        /** No song is loaded, so there is nothing to control. */
+        NOTHING_PLAYING,
+
+        /** The photo viewer or video player is open; the shortcut leaves it alone. */
+        UNAVAILABLE,
+    }
+
+    /** Media controls shortcut: opens Now Playing over the XMB, or closes it when it is open. */
+    fun toggleNowPlaying(): NowPlayingToggle = when (_overlay.value) {
+        MediaOverlay.NowPlaying -> {
+            close()
+            NowPlayingToggle.CLOSED
+        }
+        null -> if (music.state.value.song == null) {
+            NowPlayingToggle.NOTHING_PLAYING
+        } else {
+            _overlay.value = MediaOverlay.NowPlaying
+            NowPlayingToggle.OPENED
+        }
+        else -> NowPlayingToggle.UNAVAILABLE
+    }
+
     fun close() {
         stopSlideshow()
         osdJob?.cancel()
@@ -191,6 +218,7 @@ class MediaOverlayController(
                 sounds.play(UiSound.OPTION)
                 setWallpaper(o.photo)
             }
+            NavAction.MEDIA -> Unit
             NavAction.BACK -> if (zoomed) {
                 _overlay.update { (it as? MediaOverlay.Photos)?.copy(zoom = 1f, panX = 0f, panY = 0f) ?: it }
             } else {
@@ -291,6 +319,7 @@ class MediaOverlayController(
                 close()
                 return
             }
+            NavAction.MEDIA -> return
         }
         showOsd()
     }
@@ -334,7 +363,7 @@ class MediaOverlayController(
                 toast(if (music.player.repeatMode == Player.REPEAT_MODE_ALL) "Repeat all" else "Repeat off")
             }
             NavAction.DOWN -> Unit
-            NavAction.BACK -> {
+            NavAction.BACK, NavAction.MEDIA -> {
                 sounds.play(UiSound.BACK)
                 close()
             }

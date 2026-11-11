@@ -310,6 +310,7 @@ class XmbViewModel(
 
     override fun onAction(action: NavAction) {
         if (transient.value.remap != null || transient.value.booting != null) return
+        if (action == NavAction.MEDIA) return toggleMediaControls()
         transient.value.info?.let { return infoAction(it, action) }
         transient.value.details?.let { return detailsAction(it, action) }
         if (media.onAction(action)) return
@@ -330,6 +331,27 @@ class XmbViewModel(
             NavAction.CONFIRM, NavAction.START -> ui.focused?.let(::activate)
             NavAction.BACK -> back()
             NavAction.OPTIONS -> ui.focused?.let(::openOptions)
+            NavAction.MEDIA -> Unit // handled above
+        }
+    }
+
+    /**
+     * Media controls shortcut (Select, or a long press of Guide): toggles Now Playing from the
+     * XMB, an open Options menu, Information or Details. Search keeps the button for itself, and
+     * the photo viewer and video player ignore it.
+     */
+    private fun toggleMediaControls() {
+        if (transient.value.search != null) return
+        when (media.toggleNowPlaying()) {
+            MediaOverlayController.NowPlayingToggle.OPENED -> {
+                sounds.play(UiSound.OPTION)
+                infoJob?.cancel()
+                detailsJob?.cancel()
+                transient.update { it.copy(optionsMenu = null, info = null, details = null) }
+            }
+            MediaOverlayController.NowPlayingToggle.CLOSED -> sounds.play(UiSound.BACK)
+            MediaOverlayController.NowPlayingToggle.NOTHING_PLAYING -> toast(NOTHING_PLAYING)
+            MediaOverlayController.NowPlayingToggle.UNAVAILABLE -> Unit
         }
     }
 
@@ -436,7 +458,7 @@ class XmbViewModel(
                 transient.update { it.copy(optionsMenu = menu.back()) }
             }
             NavAction.OPTIONS -> closeOptions()
-            NavAction.PREV_CATEGORY, NavAction.NEXT_CATEGORY -> Unit
+            NavAction.PREV_CATEGORY, NavAction.NEXT_CATEGORY, NavAction.MEDIA -> Unit
         }
     }
 
@@ -611,7 +633,7 @@ class XmbViewModel(
                 closeDetails()
                 current().items.firstOrNull { (it.action as? NodeAction.LaunchGame)?.gameId == details.gameId }?.let(::openOptions)
             }
-            NavAction.RIGHT, NavAction.PREV_CATEGORY, NavAction.NEXT_CATEGORY -> Unit
+            NavAction.RIGHT, NavAction.PREV_CATEGORY, NavAction.NEXT_CATEGORY, NavAction.MEDIA -> Unit
         }
     }
 
@@ -730,7 +752,7 @@ class XmbViewModel(
             NavAction.PREV_CATEGORY -> -INFO_PAGE
             NavAction.NEXT_CATEGORY -> INFO_PAGE
             NavAction.BACK, NavAction.CONFIRM, NavAction.OPTIONS, NavAction.START -> return closeInfo()
-            NavAction.LEFT, NavAction.RIGHT -> return
+            NavAction.LEFT, NavAction.RIGHT, NavAction.MEDIA -> return
         }
         val moved = info.move(delta)
         if (moved != info) {
@@ -1232,6 +1254,7 @@ class XmbViewModel(
             }
             Command.ToggleResumeMusicAfterGames -> settingsStore.update { it.copy(resumeMusicAfterGames = !it.resumeMusicAfterGames) }
             Command.ToggleVideoLoop -> settingsStore.update { it.copy(videoLoop = !it.videoLoop) }
+            Command.ToggleAllGamesFolder -> settingsStore.update { it.copy(allGamesFolder = !it.allGamesFolder) }
             is Command.LaunchGame -> launchGame(command.gameId)
             Command.OpenSearch -> transient.update { it.copy(search = SearchState()) }
             is Command.SetGameEmulator -> viewModelScope.launch {
@@ -1291,7 +1314,8 @@ class XmbViewModel(
     }
 
     companion object {
-        private val DEADZONES = listOf(0.15f, 0.25f, 0.35f, 0.45f, 0.55f)
+        /** 0 = "Off — hardware only": just the driver's flat zone (see [dev.xross.launcher.input.StickTracker]). */
+        internal val DEADZONES = listOf(0f, 0.15f, 0.25f, 0.35f, 0.45f, 0.55f)
         private val AXIAL_DEADZONES = listOf(0f, 0.1f, 0.2f, 0.3f)
         private const val INFO_PAGE = 5
         private val WAVE_SPEEDS = listOf(0.5f, 1f, 1.5f, 2f)
@@ -1300,6 +1324,7 @@ class XmbViewModel(
         private const val GAMEBOOT_HANDOFF_MS = 1100L
         private const val VOLUME_SETTLE_MS = 1200L
         private const val SEARCH_DEBOUNCE_MS = 140L
+        internal const val NOTHING_PLAYING = "Nothing is playing — choose music in the Music category"
 
         /** All files access on Android 11+, the legacy read permission before that. */
         fun hasStorageAccess(context: Context): Boolean =

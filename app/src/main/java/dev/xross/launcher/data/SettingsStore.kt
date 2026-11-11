@@ -58,6 +58,11 @@ data class XrossSettings(
     /** Pause music when a game starts and pick it up again on return. */
     val resumeMusicAfterGames: Boolean = true,
     val videoLoop: Boolean = false,
+    /**
+     * Platform folders live inside one "All Games" folder (true), or sit directly in the Games
+     * category next to Search and the collections (false: the classic, flatter PS3-style list).
+     */
+    val allGamesFolder: Boolean = true,
 )
 
 /** SharedPreferences-backed settings exposed as a StateFlow. */
@@ -107,6 +112,7 @@ class SettingsStore(context: Context) {
         slideshowSeconds = prefs.getInt(KEY_SLIDESHOW, 5),
         resumeMusicAfterGames = prefs.getBoolean(KEY_RESUME_MUSIC, true),
         videoLoop = prefs.getBoolean(KEY_VIDEO_LOOP, false),
+        allGamesFolder = prefs.getBoolean(KEY_ALL_GAMES_FOLDER, true),
     )
 
     private fun save(s: XrossSettings) = prefs.edit {
@@ -138,6 +144,7 @@ class SettingsStore(context: Context) {
         putInt(KEY_SLIDESHOW, s.slideshowSeconds)
         putBoolean(KEY_RESUME_MUSIC, s.resumeMusicAfterGames)
         putBoolean(KEY_VIDEO_LOOP, s.videoLoop)
+        putBoolean(KEY_ALL_GAMES_FOLDER, s.allGamesFolder)
     }
 
     internal companion object {
@@ -169,6 +176,7 @@ class SettingsStore(context: Context) {
         const val KEY_SLIDESHOW = "slideshow_seconds"
         const val KEY_RESUME_MUSIC = "resume_music_after_games"
         const val KEY_VIDEO_LOOP = "video_loop"
+        const val KEY_ALL_GAMES_FOLDER = "all_games_folder"
 
         // Keys and values here never contain '=' or newlines (ints, enum names, ids).
         fun encodeMap(map: Map<String, String>) = map.entries.joinToString("\n") { "${it.key}=${it.value}" }

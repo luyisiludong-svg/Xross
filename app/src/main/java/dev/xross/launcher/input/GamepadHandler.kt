@@ -48,6 +48,7 @@ class GamepadHandler(
 ) {
     private val stick = StickTracker()
     private val hat = StickTracker(deadzone = 0.5f, snapbackWindowMs = 0)
+    private val guideHold = LongPressDetector()
     private var repeatJob: Job? = null
     private var lastFamily: ControllerFamily? = null
 
@@ -65,6 +66,7 @@ class GamepadHandler(
             val controller = key?.let { ConnectedController(it, device.name.orEmpty()) }
             if (sink.onRawKeyDown(event.keyCode, controller)) return true
         }
+        if (action == null && event.keyCode == KeyEvent.KEYCODE_BUTTON_MODE) return onGuide(event)
         if (action == null) return false
 
         if (event.action == KeyEvent.ACTION_DOWN) {
@@ -106,7 +108,23 @@ class GamepadHandler(
         return true
     }
 
+    /**
+     * Guide/Home has no short-press action (the OS often claims it, and a tap is too easy to hit
+     * by accident); holding it opens the media controls, like Select. Remapping the key replaces
+     * this. Consumed either way so the press never falls through to the framework.
+     */
+    private fun onGuide(event: KeyEvent): Boolean {
+        val longPress = when (event.action) {
+            KeyEvent.ACTION_DOWN -> guideHold.onDown(event.eventTime, event.downTime, event.repeatCount)
+            KeyEvent.ACTION_UP -> guideHold.onUp(event.eventTime)
+            else -> false
+        }
+        if (longPress) sink.onAction(NavAction.MEDIA)
+        return true
+    }
+
     fun release() {
+        guideHold.reset()
         stopRepeat()
         stick.reset()
         hat.reset()

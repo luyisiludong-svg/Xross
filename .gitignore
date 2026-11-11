@@ -9,7 +9,10 @@ captures/
 
 # Local secrets and test media
 .env
-Roms/
+localTestMedia/
 # Saved while signed in to screenscraper.fr: contains account credentials.
 # English summary: docs/SCREENSCRAPER_API.md
 docs/SCREENSCRAPER_api_docs.pdf
+
+# Local reference material (screenshots, design docs), not part of the repo
+assets/docs/

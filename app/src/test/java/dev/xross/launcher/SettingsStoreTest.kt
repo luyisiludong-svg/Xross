@@ -17,6 +17,15 @@ import org.robolectric.RobolectricTestRunner
 class SettingsStoreTest {
     private val context: Context = ApplicationProvider.getApplicationContext()
 
+    @Test fun hardwareOnlyDeadzoneAndClassicGamesLayoutSurviveARestart() {
+        val store = SettingsStore(context)
+        assertTrue(store.current.allGamesFolder)
+        store.update { it.copy(deadzone = 0f, allGamesFolder = false) }
+        val reloaded = SettingsStore(context).current
+        assertEquals(0f, reloaded.deadzone)
+        assertEquals(false, reloaded.allGamesFolder)
+    }
+
     @Test fun everySettingSurvivesARestart() {
         val store = SettingsStore(context)
         store.update {

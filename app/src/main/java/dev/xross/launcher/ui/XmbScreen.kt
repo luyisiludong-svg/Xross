@@ -85,6 +85,7 @@ import dev.xross.launcher.input.ConfirmLayout
 import dev.xross.launcher.media.MusicPlayer
 import dev.xross.launcher.media.ThumbKind
 import dev.xross.launcher.state.MediaOverlayController
+import dev.xross.launcher.state.MiniPlayerLine
 import dev.xross.launcher.input.NavAction
 import dev.xross.launcher.state.NodeAction
 import dev.xross.launcher.state.NodeIcon
@@ -97,6 +98,7 @@ import dev.xross.launcher.scrape.ArtKind
 import dev.xross.launcher.theme.ThemePalette
 import dev.xross.launcher.theme.XrossTheme
 import dev.xross.launcher.theme.rememberThemePalette
+import kotlinx.coroutines.delay
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.floor
@@ -235,16 +237,25 @@ fun XmbScreen(
         )
         ItemColumn(state, m, { pulse }, loadAppIcon, loadThumb, loadArt, onItemTap, onItemLongPress)
 
-        // Mini "now playing" indicator while browsing.
+        // Mini "now playing" indicator while browsing; fades out after 30 s paused.
+        val np = state.nowPlaying
+        var pausedTimedOut by remember { mutableStateOf(false) }
+        val timePause = MiniPlayerLine.shouldTime(np)
+        LaunchedEffect(timePause) {
+            pausedTimedOut = false
+            if (timePause) {
+                delay(MiniPlayerLine.PAUSED_HIDE_MS)
+                pausedTimedOut = true
+            }
+        }
         AnimatedVisibility(
-            visible = state.nowPlaying.song != null && state.overlay == null,
-            enter = fadeIn(),
-            exit = fadeOut(),
+            visible = MiniPlayerLine.visible(np, overlayOpen = state.overlay != null, pausedTimedOut = pausedTimedOut),
+            enter = fadeIn(tween(MiniPlayerLine.FADE_IN_MS)),
+            exit = fadeOut(tween(MiniPlayerLine.FADE_OUT_MS)),
             modifier = Modifier.align(Alignment.TopStart).padding(top = (m.s * 0.04f).dp(), start = (m.width * 0.025f).dp()),
         ) {
-            val np = state.nowPlaying
             var last by remember { mutableStateOf("") }
-            np.song?.let { last = "${if (np.isPlaying) "♪" else "❚❚"}  ${it.title} — ${it.artist}" }
+            MiniPlayerLine.text(np)?.let { last = it }
             Text(
                 last,
                 style = shadowed(m.subtitleSize.sp(), color = TextDim),
