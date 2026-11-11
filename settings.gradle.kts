@@ -12,7 +12,7 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-rootProject.name = "Wave"
+rootProject.name = "Xross"
 include(":app")
 
 // Test-only emulator stand-ins (see tools/emulator-stub/build.gradle.kts).

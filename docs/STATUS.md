@@ -1,4 +1,4 @@
-# Project Wave — Implementation Status
+# Project Xross — Implementation Status
 
 Status of the codebase against [`project_scope.md`](../project_scope.md), as of **2026-11-10**. It covers what has been built, how it was verified, measured
 performance across device classes, known limitations, and the remaining work split into phases.
@@ -117,7 +117,7 @@ scraper, the review tool, and the asset cache. Google Play and web-search scrapi
 | Can be the HOME launcher; Android TV leanback entry | ✅ | |
 
 ### 3.6 Network daemons — ❌ not started
-HTTPS Wave Portal (Ktor CIO), FTPS (Apache FtpServer), auth, uploads, library editing.
+HTTPS Xross Portal (Ktor CIO), FTPS (Apache FtpServer), auth, uploads, library editing.
 
 ---
 
@@ -187,7 +187,7 @@ and activity name. Each stub logs the intent it receives and reads the ROM throu
 | ScummVM | `org.scummvm.scummvm/.SplashActivity` | `ACTION_MAIN`, data = game id from the `.scummvm` file | n/a (game id, not a file) |
 
 The six newer recipes come from ES-DE's published Android rules. ES-DE passes those emulators a
-storage-access-framework URI; Wave passes its FileProvider URI with a read grant. The stubs
+storage-access-framework URI; Xross passes its FileProvider URI with a read grant. The stubs
 confirm the intents are well-formed and the URI is readable, **not** that each real emulator
 accepts a FileProvider URI. That needs real installs.
 
@@ -209,7 +209,7 @@ How each file type is identified (`storage/Fingerprinter.kt`):
 | `.cue` `.gdi` `.m3u` | Skipped until per-track hashing exists |
 | Missing file (card removed) | Not recorded; retried next session |
 
-The queue (`data/FingerprintQueue.kt`) runs on one background-priority thread **only while Wave
+The queue (`data/FingerprintQueue.kt`) runs on one background-priority thread **only while Xross
 is in front**. It stops on pause and resumes on return, and it re-hashes a game only when its
 size or modification time changes. Results live in the `game_hashes` table (DB v2, automatic
 migration from v1).
@@ -241,7 +241,7 @@ Measured on the emulator (optimized build):
 | Check | Result |
 | --- | --- |
 | Music service | Foreground `mediaPlayback` service with a media notification; MediaSession reports PLAYING/PAUSED correctly |
-| Music during a game / video | Paused when the game or video starts, resumed when Wave is back in front |
+| Music during a game / video | Paused when the game or video starts, resumed when Xross is back in front |
 | Scrolling 300 photo thumbnails | 0 slow UI-thread frames, 0 slow bitmap uploads, p99 17 ms |
 | Memory | 58 MB PSS browsing photos; 60 MB with the music service while a game runs |
 | Wave background | Hidden (GL loop stopped) under the full-screen photo viewer and video player |
@@ -255,7 +255,7 @@ another app (immersive mode is re-applied on focus).
 
 | Feature | What was done | Result |
 | --- | --- | --- |
-| Hot-swap | Created a real public volume (`sm partition … public`), put a ROM on it, then unmounted / mounted / unmounted with Wave in front | Toasts "Virtual SD card removed — its games are kept" and "… connected"; rescans reported +1 then −0; the open search stayed open; the game stayed listed as "Not connected"; launching it says "File not found — is the storage mounted?" |
+| Hot-swap | Created a real public volume (`sm partition … public`), put a ROM on it, then unmounted / mounted / unmounted with Xross in front | Toasts "Virtual SD card removed — its games are kept" and "… connected"; rescans reported +1 then −0; the open search stayed open; the game stayed listed as "Not connected"; launching it says "File not found — is the storage mounted?" |
 | Playtime | Launched a game through the Flycast stub, stayed 66 s, returned | Row shows "Played 1 min"; Options menu shows "1 min · 2 times"; open search results refreshed by themselves |
 | Options menu | Opened on a game in landscape and portrait | Panel, submenu with ✓ on the active emulator, breadcrumb and hints render correctly |
 | Search | Typed with D-pad and hardware keys; moved to results | Word-prefix matches ("SU" → Golden **Su**n, **Su**per Metroid); correct hints per pane |
@@ -316,7 +316,7 @@ Layout fixes from this pass:
 | List enter | 280 ms slide + fade | |
 | Cold boot fade-in | 1.4 s after 350 ms | Once per process start |
 | Game start | 900 ms darken + bloom, hand-off at 1.1 s | Menu darkens before the bloom so titles don't overlap |
-| Wave | Time advances in whole vsync periods | GL thread holds 60 fps in every configuration |
+| Xross | Time advances in whole vsync periods | GL thread holds 60 fps in every configuration |
 
 Held-scroll measurements in a 3,000-game list (one key every 60 ms, release build):
 
@@ -411,7 +411,7 @@ Unisoc T618) before calling it final.**
 - [ ] Dock detection via `DisplayManager` (resolution switching already works live)
 - [ ] `autorun.inf` manifest parsing (parse-only), volume labels and drive icons
 - [ ] RetroAchievements: login with encrypted token, progress in game details, unlock toasts
-- [ ] HTTPS Wave Portal (Ktor CIO): PIN auth, ROM/BIOS upload, library editing, diagnostics
+- [ ] HTTPS Xross Portal (Ktor CIO): PIN auth, ROM/BIOS upload, library editing, diagnostics
 - [ ] FTPS server (Apache FtpServer) with TLS; idle CPU < 3%
 
 ### Phase 4 — Production launch & ecosystem (v1.0)
@@ -431,6 +431,6 @@ Unisoc T618) before calling it final.**
 ./gradlew :app:installDebug :emulator-stub:installRetroarchDebug
 tools/device-tests/smoke.sh                              # device smoke test (clears app data)
 ./gradlew :app:assembleProfiling                         # optimized build for frame timing
-adb shell dumpsys gfxinfo dev.wave.launcher              # UI frame stats
-adb logcat -s WaveFrames WaveScan                        # GL pacing + scan timing (debug/profiling)
+adb shell dumpsys gfxinfo dev.xross.launcher              # UI frame stats
+adb logcat -s WaveFrames XrossScan                        # GL pacing + scan timing (debug/profiling)
 ```

@@ -1,11 +1,11 @@
-# Testing Wave on real Android hardware
+# Testing Xross on real Android hardware
 
-How to install, exercise and measure Wave on a physical handheld, phone or TV box, and what to
+How to install, exercise and measure Xross on a physical handheld, phone or TV box, and what to
 send back when something is wrong. Feature status and emulator measurements are in
 [`STATUS.md`](STATUS.md).
 
 > **Don't run `tools/device-tests/smoke.sh` on a device that holds your real ROM collection.**
-> It runs `rm -rf /sdcard/ROMs` to seed its own test files and clears Wave's app data. It is
+> It runs `rm -rf /sdcard/ROMs` to seed its own test files and clears Xross's app data. It is
 > meant for a throwaway emulator.
 
 ## 1. Connect the device
@@ -29,7 +29,7 @@ adb pair <ip>:<pairing-port>
 adb connect <ip>:<port>
 ```
 
-## 2. Install Wave
+## 2. Install Xross
 
 | Build | Use it for | Command |
 | --- | --- | --- |
@@ -41,7 +41,7 @@ Both builds share the same signing key, so you can switch between them without u
 Grant storage access in the app (**Settings ▸ Library ▸ All files access**) or with:
 
 ```bash
-adb shell appops set --uid dev.wave.launcher MANAGE_EXTERNAL_STORAGE allow
+adb shell appops set --uid dev.xross.launcher MANAGE_EXTERNAL_STORAGE allow
 ```
 
 ## 3. Games and real emulators
@@ -49,10 +49,10 @@ adb shell appops set --uid dev.wave.launcher MANAGE_EXTERNAL_STORAGE allow
 - **ROMs:** put them in platform folders such as `ROMs/snes`, `ROMs/psx` or `ROMs/gc`, on
   internal storage or the SD card. Folders named `ROMs`, `Games`, `Emulation` or `Retro` at the
   root of any drive are found automatically; others can be added in Settings ▸ Library.
-- **RetroArch:** install it, open it, and download the cores Wave uses with
+- **RetroArch:** install it, open it, and download the cores Xross uses with
   **Online Updater ▸ Core Downloader**: `snes9x`, `mgba`, `fceumm`, `genesis_plus_gx`,
   `swanstation`, `mupen64plus_next_gles3`, `gambatte`, `melondsds`, `flycast`, `fbneo`.
-  Grant RetroArch storage access too. Wave launches the core at
+  Grant RetroArch storage access too. Xross launches the core at
   `/data/data/<package>/cores/<core>_libretro_android.so`, which only exists once that core is
   downloaded.
 - **Standalone emulators:** install DuckStation, Dolphin and PPSSPP from the Play Store;
@@ -66,7 +66,7 @@ adb shell appops set --uid dev.wave.launcher MANAGE_EXTERNAL_STORAGE allow
 
   (Likewise `com.github.stenzek.duckstation`, `xyz.aethersx2.android`,
   `org.dolphinemu.dolphinemu`, `org.ppsspp.ppsspp`, but only if `adb shell pm list packages`
-  shows that package is Wave's stand-in rather than the real emulator.)
+  shows that package is Xross's stand-in rather than the real emulator.)
 
 **Pass/fail for each emulator:** pick a game and press Confirm. The game must start directly. If
 the emulator opens to its own menu instead, the launch format doesn't match that emulator
@@ -105,32 +105,32 @@ adb shell getevent -lt
 Install the `profiling` build. Reset the frame counters:
 
 ```bash
-adb shell dumpsys gfxinfo dev.wave.launcher reset
+adb shell dumpsys gfxinfo dev.xross.launcher reset
 ```
 
 Use the launcher normally for about 30 seconds: scroll a large list, hold the D-pad, switch
 categories. Then read the interface frame stats:
 
 ```bash
-adb shell dumpsys gfxinfo dev.wave.launcher
+adb shell dumpsys gfxinfo dev.xross.launcher
 ```
 
 Wave background frame timing and library scan times:
 
 ```bash
-adb logcat -s WaveFrames WaveScan
+adb logcat -s WaveFrames XrossScan
 ```
 
 Cold start time (target under 2.5 s):
 
 ```bash
-adb shell am force-stop dev.wave.launcher && adb shell am start -W -n dev.wave.launcher/.MainActivity
+adb shell am force-stop dev.xross.launcher && adb shell am start -W -n dev.xross.launcher/.MainActivity
 ```
 
 Memory while a game runs: launch a game, then check that `TOTAL PSS` is 150 MB or less:
 
 ```bash
-adb shell dumpsys meminfo dev.wave.launcher
+adb shell dumpsys meminfo dev.xross.launcher
 ```
 
 | Measure | Good | Investigate |
@@ -152,13 +152,13 @@ Check by eye and ear:
 ## 6. Library and fingerprints
 
 - [ ] All your platforms appear under Games, with sensible titles
-- [ ] **Settings ▸ Library ▸ Game fingerprints** counts up while Wave is open and stops when a
+- [ ] **Settings ▸ Library ▸ Game fingerprints** counts up while Xross is open and stops when a
       game is running (it shows "Fingerprinting N of M · <title>" while working)
 - [ ] With a large library on an SD card, browsing stays smooth while fingerprinting runs
 - [ ] Optional: turn on **Fingerprint large disc images** and note how long one ISO takes; the
-      timing appears in `adb logcat -s WaveScan` with the `profiling` or `debug` build
+      timing appears in `adb logcat -s XrossScan` with the `profiling` or `debug` build
 
-- [ ] **Hot-swap:** with Wave open, pull the SD card (or USB drive). A toast names the drive, its
+- [ ] **Hot-swap:** with Xross open, pull the SD card (or USB drive). A toast names the drive, its
       games stay listed as "Not connected", and re-inserting it brings them back without
       restarting. Favorites and playtime on those games must survive.
 - [ ] **Playtime:** play a game for a couple of minutes, return, and check the row shows
@@ -180,7 +180,7 @@ Check by eye and ear:
 
 ## 8. Home screen
 
-**Settings ▸ System ▸ Set as home app** makes Wave the launcher. To undo it, use Android's
+**Settings ▸ System ▸ Set as home app** makes Xross the launcher. To undo it, use Android's
 **Settings ▸ Apps ▸ Default apps ▸ Home app**.
 
 ## 9. What to send back
@@ -188,15 +188,15 @@ Check by eye and ear:
 The device model and Android version, plus a log, a screenshot, and the `gfxinfo` output:
 
 ```bash
-adb logcat -d > wave-log.txt
+adb logcat -d > xross-log.txt
 ```
 
 ```bash
-adb exec-out screencap -p > wave-shot.png
+adb exec-out screencap -p > xross-shot.png
 ```
 
 ```bash
-adb shell dumpsys gfxinfo dev.wave.launcher > wave-gfxinfo.txt
+adb shell dumpsys gfxinfo dev.xross.launcher > xross-gfxinfo.txt
 ```
 
 For a controller problem, also include the `getevent -lt` output for the button.

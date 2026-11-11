@@ -2,7 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application android:label="Emulator stub" android:theme="@android:style/Theme.Material.NoActionBar">
         <activity android:name=".StubActivity" android:exported="false" />
-        <!-- Same component name the real emulator exposes, so Wave's explicit intent resolves. -->
+        <!-- Same component name the real emulator exposes, so Xross's explicit intent resolves. -->
         <activity-alias
             android:name="${entryActivity}"
             android:exported="true"

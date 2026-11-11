@@ -1,12 +1,12 @@
 // Test-only stand-in for real emulators. Each flavor installs under a real emulator's package
-// and activity name, logs the launch intent it receives (tag "WaveStub"), and checks that the
+// and activity name, logs the launch intent it receives (tag "XrossStub"), and checks that the
 // ROM is readable through the granted content:// URI. Never ship this.
 plugins {
     alias(libs.plugins.android.application)
 }
 
 android {
-    namespace = "dev.wave.stub"
+    namespace = "dev.xross.stub"
     compileSdk = 36
 
     defaultConfig {
