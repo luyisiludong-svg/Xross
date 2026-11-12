@@ -20,6 +20,7 @@ Legend: ✅ done and verified · ◐ partial · ❌ not started · 🧪 verified
 | Phase 2b.1 (customization engine): avatar mini-HUD, 16:9 game tiles, Details paging, playtime subtitle, game RA telemetry, profile customization, RetroAchievements dashboard | ✅ 🧪 unit- and view-model-tested; no device run yet (§3.15) |
 | Phase 2b.2 (Theme 2.0 foundation): v2 manifest, imports, surfaces, hot reload, layout block, motion, drill-down, variants, category and system overrides, `.xtheme` import | ✅ 🧪 on `feat/theme-2b2` (2026-11-12): unit tests, `smoke.sh` 139/139 and the 12-configuration display matrix on the API 37 emulator; not yet on a phone or handheld (§3.16–§3.18) |
 | Phase 2b.3 (color intelligence): game-art palette, `rules` context engine, circadian curve, battery tint, quick profiles | ✅ on `feat/theme-2b3` (2026-11-12): 499 unit tests; 171/171 on the API 37 emulator (§3.19, §3.20); on the **Galaxy A55 at 120 Hz** 160/171 (the 11 are seeded-media checks), game navigation 0.12–0.19% janky with game-art colors, GPU p50 6 ms; wheel-only art, Details as the source and a rule's layout patch checked on the device (§3.21). Idle CPU at rest is 16–21% (target < 10%) except under E-Ink (0%). Open items: [`PHASE_2B3_PENDING_TESTS.md`](PHASE_2B3_PENDING_TESTS.md) |
+| Phase 2b.4a (shader host & watchdog): multi-program GL host, public uniforms, `ASCII_MATRIX` / `BOKEH` / `STARFIELD` / `CRT` / `CUSTOM` presets, ahead-of-time compile, frame-budget watchdog, crash-loop canary | ✅ on `feat/theme-2b4` (2026-11-12): 535 unit tests, `validateShaders` (glslangValidator); `smoke.sh` 12/12 and the theme suite 88/88 on the API 37 emulator; `smoke.sh` 12/12 on the **Galaxy A55** (profiling build, timer-query watchdog): presets 1.3–3.0 ms GPU p90, a custom shader, hot reload, a compile error, the watchdog and crash recovery checked by hand on both (§3.22) |
 | Phase 3 (dual screen, hot-swap, RetroAchievements, Web Portal, FTPS) | ◐ RetroAchievements account linking, status bar avatar and User Card (§3.12), per-game achievement lists and unlock toasts (§3.13), live on the emulator and the Galaxy A55 (§3.14); hot-swap and live resolution change done; dual screen, docking, Portal and FTPS not started |
 | Phase 4 (onboarding, triage, profiling, plugin API) | ◐ app triage and performance work started |
 
@@ -159,7 +160,7 @@ HTTPS Xross Portal (Ktor CIO), FTPS (Apache FtpServer), auth, uploads, library e
 
 ## 3. Test results
 
-### 3.1 Unit tests — 464 tests, 0 failures (2026-11-12)
+### 3.1 Unit tests — 464 tests, 0 failures (2026-11-12; 535 on `feat/theme-2b4`, §3.22)
 `./gradlew :app:testDebugUnitTest` (JVM + Robolectric on SDK 35): 460 run by default, 4 opt-in live
 tests skip unless `-PliveScrape=true`. The 415 from Phase 2b.1 passed unchanged; the idle rest
 added `InactivityTrackerTest` (3 tests: timeout, input pushing it back, wave frame strides), and
@@ -913,6 +914,59 @@ top of Settings ▸ Theme, so the four new rows lower down weren't photographed.
 
 **Not covered:** a real battery going below 20% unplugged, an E-Ink panel, Android 9–11, a physical
 controller, and morphs between games with very different accents, judged by eye.
+
+### 3.22 Phase 2b.4a: shader host and watchdog (2026-11-12)
+
+`ui/WaveRenderer.kt` is now a multi-program host. Sources live in `assets/shaders/`: `prelude.glsl`
+declares the public uniforms (`uTime`, `uResolution`, `uColorTop`, `uColorBottom`, `uAccent`,
+`uGlow`, `uBatteryLevel`, `uAudioBass`, `uAudioBeat`, `uTransition`) and goes in front of every
+preset and of a pack's `shader.frag` unless that file has its own `#version`. A pack picks a
+program with `effects.shaderPreset` (alias `shader`) and `effects.shaderPath` in its base,
+variants, overrides and `rules`; the last layer wins.
+
+- **AOT compile:** every program a pack can show is compiled on the GL thread via `queueEvent`
+  when it loads (`KHR_parallel_shader_compile` is polled per frame where present). The program on
+  screen stays until the wanted one links, and a new program is first drawn into a 1×1 viewport.
+  The EGL context is now preserved across an activity pause, so returning from a game doesn't
+  recompile.
+- **Failures:** no `check()`; a compile/link error is `ShaderStatus.Failed`, the wave is drawn,
+  the driver's line is logged under `XrossShader` and a toast names the line in the user's file.
+- **Watchdog** (`FrameBudgetWatchdog`, pure): non-WAVE programs are timed for ~2 s on screen
+  (timer query, else `glFinish` every third frame); p90 over 60% of the active frame budget
+  retires the program for the session. A program far over budget goes sooner: 3 samples all over
+  4× the budget, or a median over 2× after 6.
+- **Canary** (`ShaderCanary`): `Xross/cache/shader_canary.tmp` holds a pack shader's key while it
+  compiles and until 120 frames in a row; at process start a leftover key goes to
+  `shader_blocked.txt` and isn't compiled again until the file's text changes.
+
+**Emulator (API 37, host GPU, no timer-query extension, so the `glFinish` path):**
+
+| Check | Result |
+|---|---|
+| Presets per category (Games BOKEH, Video CRT, Music STARFIELD, Photo ASCII_MATRIX) | ✅ all linked ahead of time; switching categories every 0.3 s reported each `Ready` at once; watchdog p90 2.8–6.0 ms of 10 ms (BOKEH with 26 orbs, before the change below) |
+| Pack `shader.frag` (Apps) | ✅ drawn; marker present for its first frames, gone after 120 |
+| Hot reload of `shader.frag` | ✅ new key compiled and shown without leaving Xross |
+| Compile error (`fx/broken.frag`) | ✅ wave shown; toast "Shader fx/broken.frag: line 3: 'glowColour' : undeclared identifier · showing the wave" |
+| Watchdog (`fx/slow.frag`, 6000-iteration loop) | ✅ tripped early at p90 56.5 ms; toast; wave shown; no marker left |
+| Crash recovery (marker planted, cold start) | ✅ toast "A theme shader stopped Xross last time"; key in `shader_blocked.txt`; never compiled; Apps shows the wave |
+| `smoke.sh` / theme suite | ✅ 12/12 (three runs; one earlier run had a single failure that was not captured and didn't recur) / 88/88 |
+
+**Galaxy A55 (Xclipse 530, 120 Hz panel paced to 60, profiling build; `GL_EXT_disjoint_timer_query`
+present, so the watchdog used GPU timer queries):** `smoke.sh` 12/12 (the phone's ROMs, app data
+and config were backed up first and restored after).
+
+| Check | Result |
+|---|---|
+| Presets, ahead of time | ✅ all linked at pack load; GPU p90 CRT 1.31 ms, ASCII_MATRIX 1.33 ms, STARFIELD 2.96 ms, BOKEH 2.90 ms, custom 0.46–0.55 ms (limit 10 ms). The GPU stayed at its 450 MHz floor throughout |
+| BOKEH cost | 26 orbs read 7.7–8.0 ms (~70% GPU busy at 450 MHz, vs ~45% for WAVE); 20 orbs read 2.9 ms, a non-linear drop (the longer loop evidently crossed a compiler threshold). Now 20 |
+| Pack shader, canary | ✅ drawn; marker present at first, gone after 120 frames |
+| Hot reload, compile error | ✅ edited `shader.frag` relinked live; `fx/broken.frag` toast names line 3 |
+| Watchdog | ✅ the 6000-iteration shader drew at 344 ms a frame; tripped after 3 samples, 1.5 s after its first frame (2.9 s before the 3-sample rule) |
+| Crash recovery | ✅ planted marker → toast at start, key blocked, never compiled |
+
+**Not covered:** Adreno and Mali GPUs (handhelds), a real driver crash or GPU reset, and E-Ink
+with a pack shader. The watchdog measures at whatever clock the GPU governor has chosen, so a
+reading near the limit at the lowest clock could pass at a higher one.
 
 ## 4. Display matrix & performance
 

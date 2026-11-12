@@ -53,6 +53,15 @@ class AppContainer(context: Context) {
     val themePacks: dev.xross.launcher.theme.pack.ThemePackLoader by lazy {
         dev.xross.launcher.theme.pack.ThemePackLoader(appContext.assets) { environment.current.themes }
     }
+    /**
+     * Background shader status, toasts and the crash-loop canary (`Xross/cache/`). Its creation
+     * runs the canary's recovery, so it is built in [XrossApplication.onCreate], before any frame.
+     */
+    val shaderHealth: dev.xross.launcher.theme.shader.ShaderHealth by lazy {
+        dev.xross.launcher.theme.shader.ShaderHealth(
+            dev.xross.launcher.theme.shader.ShaderCanary { java.io.File(environment.current.root, CACHE_DIR) },
+        )
+    }
     val themes: dev.xross.launcher.theme.pack.ThemeRuntime by lazy { dev.xross.launcher.theme.pack.ThemeRuntime(themePacks) }
     val sounds: UiSounds by lazy { UiSounds(appContext).also { it.useTheme(themes.active.value) } }
     val sessions: PlaySessionTracker by lazy { PlaySessionTracker(PrefsSessionStore(appContext)) }
@@ -186,5 +195,10 @@ class AppContainer(context: Context) {
             // New fingerprints may now match an imported DAT.
             onFinished = { dats.matchAll() },
         )
+    }
+
+    private companion object {
+        /** Under the Xross root: the shader canary and the list of shaders blocked after a crash. */
+        const val CACHE_DIR = "cache"
     }
 }

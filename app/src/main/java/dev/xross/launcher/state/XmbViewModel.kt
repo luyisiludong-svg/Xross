@@ -2504,6 +2504,8 @@ class XmbViewModel(
         viewModelScope.launch {
             tree.collect { if (transient.value.search?.query?.isNotBlank() == true) runSearch(0) }
         }
+        // Background shader failures (compile errors, the watchdog, a crash last time): one toast each.
+        viewModelScope.launch { container.shaderHealth.notices.collect { toast(it) } }
         // Theme pack: discover, activate the saved one, and keep sounds and Settings ▸ Theme in step.
         viewModelScope.launch {
             container.themes.rediscover()

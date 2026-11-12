@@ -24,7 +24,7 @@ import kotlinx.serialization.json.JsonObject
  *   "typography": { "display": "fonts/Display.ttf", "body": "fonts/Rounded.ttf" },
  *   "audio": { "sounds": { "cursor": "tick.wav" }, "soundGains": { "cursor": 0.6 } },
  *   "icons": { "album": "disc.svg" },
- *   "effects": { "surfaceStyle": "petal" },
+ *   "effects": { "surfaceStyle": "petal", "shaderPreset": "BOKEH" },
  *   "surfaces": { "petal": { "shape": { "type": "CHAMFERED", "cutDp": [10, 0, 10, 0] } } }
  * }
  * ```
@@ -163,6 +163,7 @@ data class ThemeManifest(
         val soundGains: Map<String, Float> = emptyMap(),
     )
 
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
     @Serializable
     data class Effects(
         /** A [SurfacePreset] id or a key of [surfaces]. */
@@ -172,6 +173,13 @@ data class ThemeManifest(
          * Null: on, unless the user turns it off.
          */
         val adaptiveGamePalette: Boolean? = null,
+        /**
+         * Background program ([dev.xross.launcher.theme.shader.ShaderPreset]): `WAVE` (default),
+         * `ASCII_MATRIX`, `BOKEH`, `STARFIELD`, `CRT`, or `CUSTOM` for the pack's own GLSL.
+         */
+        @kotlinx.serialization.json.JsonNames("shader") val shaderPreset: String? = null,
+        /** CUSTOM's fragment shader, from the pack root (default `shader.frag`); alone it implies CUSTOM. */
+        val shaderPath: String? = null,
     )
 
     companion object {

@@ -43,6 +43,12 @@ fun AdaptiveWave(
     enabled: Boolean,
     paused: Boolean,
     idle: Boolean,
+    /** The active pack's programs, compiled ahead of time, and the key of the one the look shows. */
+    shaders: dev.xross.launcher.theme.shader.ShaderLibrary = dev.xross.launcher.theme.shader.ShaderLibrary.DEFAULT,
+    shader: String = dev.xross.launcher.theme.shader.ShaderLibrary.WAVE_KEY,
+    /** Open category id, for `uTransition`. */
+    category: String? = null,
+    health: dev.xross.launcher.theme.shader.ShaderHealth? = null,
 ) {
     val artColors by art.collectAsStateWithLifecycle()
     val level by battery.collectAsStateWithLifecycle()
@@ -65,7 +71,8 @@ fun AdaptiveWave(
         }
     }
     val s = settings
-    val params = remember(palette, s.waveSpeed, s.waveLineCount, s.waveTurbulence, s.waveThickness, pulse) {
+    val batteryLevel = level?.percent?.let { it.coerceIn(0, 100) / 100f } ?: 1f
+    val params = remember(palette, s.waveSpeed, s.waveLineCount, s.waveTurbulence, s.waveThickness, pulse, shader, category, batteryLevel) {
         WaveParams(
             speed = s.waveSpeed,
             palette = palette,
@@ -73,9 +80,20 @@ fun AdaptiveWave(
             turbulence = s.waveTurbulence,
             thickness = s.waveThickness,
             chargePulse = pulse,
+            shader = shader,
+            category = category,
+            battery = batteryLevel,
         )
     }
-    WaveBackground(enabled = enabled, params = params, paused = paused, idle = idle, frozen = profile.stillMotion)
+    WaveBackground(
+        enabled = enabled,
+        params = params,
+        paused = paused,
+        idle = idle,
+        frozen = profile.stillMotion,
+        shaders = shaders,
+        health = health,
+    )
 
     // Halos stay white unless a color layer is at work, so the plain themes look as before.
     val colored = shownArt != null || profile != QuickProfile.NONE || switches.circadian ||
