@@ -65,16 +65,25 @@ fun StatusBar(
     }
     val battery by rememberBattery(context)
 
-    val text = remember(now, battery) {
+    // Date and time in the pack's display font, the battery figure in its mono font.
+    val mono = ThemeTypography.mono ?: ThemeTypography.family
+    val text = remember(now, battery, mono) {
         val locale = Locale.getDefault()
         val date = DateFormat.format(DateFormat.getBestDateTimePattern(locale, "Md"), now)
         val time = DateFormat.getTimeFormat(context).format(now)
-        "$date  $time" + (battery?.let { "  ${it.percent}%" } ?: "")
+        androidx.compose.ui.text.buildAnnotatedString {
+            append("$date  $time")
+            battery?.let {
+                pushStyle(androidx.compose.ui.text.SpanStyle(fontFamily = mono))
+                append("  ${it.percent}%")
+                pop()
+            }
+        }
     }
     val style = TextStyle(
         color = Color.White,
         fontSize = textSize,
-        fontFamily = ThemeTypography.family,
+        fontFamily = ThemeTypography.display ?: ThemeTypography.family,
         shadow = Shadow(Color(0x99000000), Offset(0f, 3f), 6f),
     )
     val heightDp = with(LocalDensity.current) { textSize.toDp() }

@@ -25,7 +25,22 @@ val LocalThemePack = staticCompositionLocalOf<LoadedTheme?> { null }
  * still tracked, so switching packs redraws text.
  */
 object ThemeTypography {
+    /** `body`: titles, descriptions, menus, dialogs (every style that doesn't pick a role). */
     var family: FontFamily? by mutableStateOf(null)
+
+    /** `display`: the clock and category names; the body font when the pack has none. */
+    var display: FontFamily? by mutableStateOf(null)
+
+    /** `mono`: figures that should line up (battery, points, playtime); the body font otherwise. */
+    var mono: FontFamily? by mutableStateOf(null)
+}
+
+/**
+ * The surface every card, panel and toast is drawn with (`Modifier.xrossSurface`). Snapshot state,
+ * read only while drawing, so switching surfaces redraws without recomposing anything.
+ */
+object ThemeSurfaces {
+    var active: dev.xross.launcher.theme.pack.Surface by mutableStateOf(dev.xross.launcher.theme.pack.Surface.FALLBACK)
 }
 
 private val Blank = ColorPainter(Color.Transparent)

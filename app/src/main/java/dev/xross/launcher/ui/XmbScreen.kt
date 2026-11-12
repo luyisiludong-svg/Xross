@@ -594,6 +594,7 @@ private fun CategoryBar(
                 text = category.title,
                 fontSize = labelSp,
                 glow = { pulse() * focus() },
+                fontFamily = ThemeTypography.display ?: ThemeTypography.family,
                 modifier = Modifier.fadeAlpha { focus() * (1f - depth()) },
             )
         }
@@ -1076,6 +1077,8 @@ internal fun GlowText(
     fontSize: TextUnit,
     glow: () -> Float,
     modifier: Modifier = Modifier,
+    /** A font role other than body (the category bar uses `display`). */
+    fontFamily: androidx.compose.ui.text.font.FontFamily? = ThemeTypography.family,
 ) {
     Box(modifier) {
         Text(
@@ -1083,7 +1086,7 @@ internal fun GlowText(
             style = TextStyle(
                 color = Color.White.copy(alpha = 0.55f),
                 fontSize = fontSize,
-                fontFamily = ThemeTypography.family,
+                fontFamily = fontFamily,
                 shadow = Shadow(Color.White, Offset.Zero, blurRadius = 18f),
             ),
             maxLines = 1,
@@ -1097,7 +1100,7 @@ internal fun GlowText(
         )
         Text(
             text,
-            style = shadowed(fontSize),
+            style = shadowed(fontSize).copy(fontFamily = fontFamily),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )

@@ -158,7 +158,14 @@ class MainActivity : ComponentActivity() {
             val pack by container.themes.active.collectAsStateWithLifecycle()
             // The theme pack's font for every launcher text style.
             androidx.compose.runtime.LaunchedEffect(pack) {
-                dev.xross.launcher.ui.ThemeTypography.family = pack.font?.let { androidx.compose.ui.text.font.FontFamily(it) }
+                fun family(t: android.graphics.Typeface?) = t?.let { androidx.compose.ui.text.font.FontFamily(it) }
+                dev.xross.launcher.ui.ThemeTypography.family = family(pack.fonts.body)
+                dev.xross.launcher.ui.ThemeTypography.display = family(pack.fonts.display)
+                dev.xross.launcher.ui.ThemeTypography.mono = family(pack.fonts.mono)
+            }
+            // The user's surface choice (Settings ▸ Theme ▸ Surface style), else the pack's.
+            androidx.compose.runtime.LaunchedEffect(pack, state.settings.surfaceStyle) {
+                dev.xross.launcher.ui.ThemeSurfaces.active = pack.surface(state.settings.surfaceStyle)
             }
             var backdropCovers by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
             // Resting: no input for a few seconds and nothing playing. Music and video snaps keep

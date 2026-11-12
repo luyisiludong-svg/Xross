@@ -38,6 +38,7 @@ class ConfigCodecTest {
         waveEnabled = false,
         waveSpeed = 1.5f,
         theme = "ORIGINAL",
+        surfaceStyle = "Y2K_GLOSSY_BEZEL",
         showButtonHints = false,
         soundEffects = false,
         soundVolume = 0.25f,

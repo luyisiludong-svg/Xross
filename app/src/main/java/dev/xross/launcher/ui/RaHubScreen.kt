@@ -165,8 +165,7 @@ private fun Section(title: String, m: XmbMetrics, modifier: Modifier = Modifier,
     Column(
         modifier
             .fillMaxWidth()
-            .frostedGlass(CardShape)
-            .iridescentBorder(CardShape, width = 1.dp, alpha = 0.45f)
+            .xrossSurface(CardShape, borderAlpha = 0.45f, borderScale = 2f / 3f)
             .padding(horizontal = with(density) { (m.s * 0.035f).toDp() }, vertical = with(density) { (m.s * 0.028f).toDp() }),
     ) {
         Text(title, style = shadowed(text * 0.8f, color = Pastel.Lilac, weight = FontWeight.Bold).copy(letterSpacing = text * 0.12f))
@@ -196,8 +195,7 @@ private fun IdentityCard(profile: ProfileState, style: AvatarStyleConfig, m: Xmb
     // The status line is pinned to the bottom; on a short screen only the identity above it scrolls.
     Column(
         modifier
-            .frostedGlass(CardShape)
-            .iridescentBorder(CardShape, alpha = 0.6f)
+            .xrossSurface(CardShape, borderAlpha = 0.6f)
             .padding(horizontal = (m.s * 0.035f).dp(), vertical = (m.s * 0.035f).dp()),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
