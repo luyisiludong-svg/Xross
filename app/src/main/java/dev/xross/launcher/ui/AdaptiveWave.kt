@@ -83,6 +83,7 @@ fun AdaptiveWave(
     val halo = if (colored) Color(palette.glow) else Color.White
     val still = profile.stillMotion
     LaunchedEffect(halo, still) {
+        ThemeAccent.haloTarget = halo
         if (still) ThemeAccent.halo.snapTo(halo) else ThemeAccent.halo.animateTo(halo, tween(ThemeAccent.MORPH_MS))
     }
     val mix = if (shownArt != null) ADAPTIVE_AVATAR_MIX else 0f

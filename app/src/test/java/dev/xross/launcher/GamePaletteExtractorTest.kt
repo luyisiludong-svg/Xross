@@ -3,11 +3,18 @@ package dev.xross.launcher
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
+import dev.xross.launcher.scrape.ArtKind
+import dev.xross.launcher.state.GameDetailsState
+import dev.xross.launcher.state.GlyphKey
+import dev.xross.launcher.state.NodeIcon
+import dev.xross.launcher.state.XmbNode
+import dev.xross.launcher.state.XmbUiState
 import dev.xross.launcher.theme.ArtSwatches
 import dev.xross.launcher.theme.ColorMath
 import dev.xross.launcher.theme.GameColors
 import dev.xross.launcher.theme.GamePaletteExtractor
 import dev.xross.launcher.theme.SwatchSet
+import dev.xross.launcher.ui.adaptiveArtKey
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
@@ -202,4 +209,60 @@ class GamePaletteExtractorTest {
         assertEquals("u-1/3", ArtSwatches.key("u-1", 3))
         assertEquals("u-1", ArtSwatches.uuidOf("u-1/3"))
     }
+
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Test fun aWheelLogosTransparentPixelsAreIgnored() {
+        // A wheel logo: mostly fully transparent, an orange word mark with anti-aliased edges and a
+        // thin magenta underline. Transparent pixels read back as 0x00000000 (black, no alpha); if
+        // Palette counted them, black would be the dominant swatch and the canvas would be grey.
+        val bitmap = Bitmap.createBitmap(240, 90, Bitmap.Config.ARGB_8888)
+        Canvas(bitmap).apply {
+            val orange = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFFF7A10.toInt() }
+            drawRoundRect(60f, 25f, 180f, 60f, 12f, 12f, orange)
+            drawCircle(40f, 42f, 14f, orange)
+            drawRect(60f, 66f, 180f, 70f, Paint().apply { color = 0xFFE028C8.toInt() })
+        }
+        assertEquals(0, bitmap.getPixel(2, 2)) // the background really is transparent
+        val swatches = ArtSwatches.analyze(bitmap)
+        assertNotNull(swatches)
+        val dominant = ColorMath.hsv(swatches!!.dominant!!)
+        assertTrue("dominant ${dominant.toList()} is the logo, not the transparent black", dominant[0] in 15f..40f && dominant[2] > 0.5f)
+        val colors = GameColors.from(swatches)
+        assertNotNull("a logo on transparency still recolors the theme", colors)
+        val accentHue = ColorMath.hsv(colors!!.accent)[0]
+        assertTrue("accent hue $accentHue", accentHue in 15f..40f || accentHue in 290f..320f)
+        // The canvas comes from the logo's hues too, darkened, never the transparent black.
+        val canvas = ColorMath.hsv(colors.canvas)
+        assertTrue("canvas ${canvas.toList()}", canvas[1] >= GameColors.MIN_SATURATION && canvas[2] > 0.05f)
+
+        // A logo that is all transparent says nothing: no swatches, the theme's colors stay.
+        assertNull(ArtSwatches.analyze(Bitmap.createBitmap(64, 32, Bitmap.Config.ARGB_8888)))
+    }
+
+    // region Which art is read
+
+    private fun row(icon: NodeIcon) = XmbNode("game:1", "G", icon = icon)
+    private fun details(uuid: String) = GameDetailsState(1, uuid, "G", null, null, emptyList(), null, "", artVersion = 99)
+
+    @Test fun theFocusedGameOrTheOpenDetailsScreenNamesTheArt() {
+        val art = NodeIcon.Art("u-1", listOf(ArtKind.HERO), GlyphKey.GAME_CART, version = 7)
+        val scraped = NodeIcon.Tile("u-2", "T", GlyphKey.GAME_CART, version = 5, scraped = true)
+        val unscraped = NodeIcon.Tile("u-3", "T", GlyphKey.GAME_CART, version = 0, scraped = false)
+
+        assertEquals("u-1/7", adaptiveArtKey(XmbUiState(items = listOf(row(art)))))
+        assertEquals("u-2/5", adaptiveArtKey(XmbUiState(items = listOf(row(scraped)))))
+        // An unscraped tile has no art to read; neither has a plain row or an empty list.
+        assertNull(adaptiveArtKey(XmbUiState(items = listOf(row(unscraped)))))
+        assertNull(adaptiveArtKey(XmbUiState(items = listOf(row(NodeIcon.Glyph(GlyphKey.SETTINGS))))))
+        assertNull(adaptiveArtKey(XmbUiState()))
+
+        // Details of the focused game: the same key as its row, so the cached colors are reused.
+        assertEquals("u-1/7", adaptiveArtKey(XmbUiState(items = listOf(row(art)), details = details("u-1"))))
+        // Details paged to another game: that game's art, whatever row is focused below it.
+        assertEquals("u-9/0", adaptiveArtKey(XmbUiState(items = listOf(row(art)), details = details("u-9"))))
+        // Details of an unscraped game still names its art (it may have a screenshot).
+        assertEquals("u-3/0", adaptiveArtKey(XmbUiState(items = listOf(row(unscraped)), details = details("u-3"))))
+    }
+
+    // endregion
 }

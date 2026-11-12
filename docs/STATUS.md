@@ -724,14 +724,14 @@ override switches on a 120 Hz phone; a pack with many large fonts near the 50 MB
 
 ### 3.19 Phase 2b.3: game-art palette, context rules, circadian curve, battery tint, quick profiles (2026-11-12)
 
-On branch `feat/theme-2b3` (from `feat/theme-2b2`, not committed yet). Spec: Roadmap §4.3,
+On branch `feat/theme-2b3` (from `feat/theme-2b2`). Spec: Roadmap §4.3,
 Appendix A.4, A.7, A.13, docs/THEME_RICING_AND_WEB_STUDIO.md §3.4. Everything not yet verified is
 listed in [`PHASE_2B3_PENDING_TESTS.md`](PHASE_2B3_PENDING_TESTS.md).
 
 | Feature | How it works |
 | --- | --- |
 | Game-art palette | `androidx.palette:palette-ktx` 1.0.0. `GamePaletteExtractor` (app-scoped in `AppContainer`): the focused game's art (or the open Details game's), keyed `uuid/artVersion`, debounced 250 ms (the hero fade delay) with `collectLatest`, decoded to ~192 px from `media/heroes`, then `wheels`, then `screenshots`, and analyzed on `Dispatchers.Default`. Results, including "no usable colors", sit in a 100-entry LRU cache. `GameColors.from` maps vibrant (or dominant) to `accent`, light-vibrant (or muted) to `accentSecondary`, dark-muted (or the dominant darkened to ≤ 35% value) to `canvas`. All-grey art or a glow under 3:1 contrast against the canvas falls back to the theme. Guarded by `effects.adaptiveGamePalette` (default on) and Settings ▸ Theme ▸ **Adaptive colors** |
-| Morphing | The wave eases to the new colors on the GL thread (~95% in 300 ms, the 2b.2 crossfade). In Compose, `ThemeAccent` holds animated colors read in the draw phase: the avatar's focus halo and style glow (leaning 60% toward the art accent), and the status-bar battery outline. Glow-text bloom reads it in its own small `GlowBloom` composable. Halos stay white unless a color layer is active, so plain themes look as before. `AdaptiveWave` collects art colors, battery and clock, so those updates recompose it and not the screen |
+| Morphing | The wave eases to the new colors on the GL thread (~95% in 300 ms, the 2b.2 crossfade). In Compose, `ThemeAccent` holds animated colors read in the draw phase: the avatar's focus halo and style glow (leaning 60% toward the art accent), and the status-bar battery outline. Glow-text bloom (`GlowBloom`) switches straight to the new color (`ThemeAccent.haloTarget`) instead of morphing: its color is a text shadow's, and animating it re-blurred the text every frame (see Benchmarks). Halos stay white unless a color layer is active, so plain themes look as before. `AdaptiveWave` collects art colors, battery and clock, so those updates recompose it and not the screen |
 | Context rules | `rules: [{match, apply}]` (`ContextRule`) inline or from `rules.json` in `imports`; rules from every file add up (imports first). Selectors: `category`, `system` (platform id or folder alias), `battery` (`<= 20`, `<`, `>=`, `>`, `==`, `charging`, `discharging`, `full`; also read as `battery.level`), `time` (`HH:MM..HH:MM`, wraps midnight, end excluded). `apply`: palette roles and the `circadianCurve` / `batteryTint` switches, `effects.surfaceStyle` / `adaptiveGamePalette`, `cardAspectRatio`, any `layout` key. Unreadable selectors are reported and the rule dropped. Static tile-shape rules fold into the pack layout at load; dynamic ones produce a per-context `ThemeLayout` (`LocalThemeLayout`). At most 64 rules |
 | Precedence | Default pack → pack → variant → category override → system override → rules in file order (`cascade`), then the user's theme color, the quick profile, the circadian curve and battery tint, then game art (`ColorPipeline`). OLED True Black keeps its black canvas under game art, and a low battery still shows over art. `LoadedTheme.look` is cached by the set of rules that hold, and battery and time reach it only when that set changes (`rememberMinuteOfDay` checks once a minute) |
 | Circadian curve | `Circadian`: phases 06 cyan/sky (hue 192), 11 azure/cobalt (214), 18 amber/rose gold (22), 21 indigo/midnight (255), built with the Original theme's `SeasonalPalette.paletteOf`, smoothstep-blended ±45 min around each boundary, mixed 50% into the canvas, 35% into the wave and 20% into the glow. `palette.circadianCurve` / Settings ▸ Theme ▸ **Circadian curve** |
@@ -739,7 +739,7 @@ listed in [`PHASE_2B3_PENDING_TESTS.md`](PHASE_2B3_PENDING_TESTS.md).
 | Quick profiles | Settings ▸ Theme ▸ **Quick profile** (`display.quickProfile`). `OLED_TRUE_BLACK`: `#000000` canvas and the `OLED_TRUE_BLACK` surface. `Y2K_CYBER_PASTEL`: `#1B1829` canvas, `#C8B6FF` lilac, `#FFB5C5` strawberry, `Y2K_GLOSSY_BEZEL`. `MONOCHROME_EINK`: black and white with `EINK_HIGH_CONTRAST`, motion `INSTANT`, marquee off, `LocalStillMotion` freezing `rememberBreathing` (focus pulse, avatar glow), the busy dots and the search caret, and the wave in `WaveLoop.SINGLE_FRAME` (`RENDERMODE_WHEN_DIRTY`, one frame per change, no time drift). All color layers are off under E-Ink. A profile's surface wins over Surface style |
 | Settings | `display.quickProfile`, `display.adaptiveGamePalette`, `display.circadianCurve`, `display.batteryTint` (`null` follows the pack) in `settings.json`. Four rows after Surface style; each switch's Options offers On, Off and Theme pack default |
 
-**Unit tests (495, 0 failures; 31 new):** `ContextRulesTest` (9): time ranges, wrapping and
+**Unit tests (499, 0 failures; 35 new):** `ContextRulesTest` (9): time ranges, wrapping and
 bounds; battery comparisons and charger states; category, system alias, battery and time rules
 holding only in context; later rules winning over the variant and the overrides; `rules.json`
 imports adding up; bad rules dropped with reasons; tile shapes and layout patches; rule switches;
@@ -751,8 +751,12 @@ resolution, the ambient-under-art order, OLED/Y2K/E-Ink definitions, E-Ink's `IN
 `GamePaletteExtractorTest` (6): the debounce (four games scrolled at 100 ms extract only the
 last), cache hits on revisits and for unusable art, LRU eviction at 100, extraction on the worker
 dispatcher and on a real worker thread, and real `androidx.palette` on a bitmap (Robolectric
-native graphics). `StillMotionTest` (2, Compose): the pulse breathes normally and holds exactly at
-rest under E-Ink.
+native graphics), plus a wheel logo on a transparent background (the transparent pixels don't make
+the dominant swatch black, an all-transparent image yields nothing) and `adaptiveArtKey` (art and
+scraped tiles, unscraped tiles, the Details screen sharing its row's key or naming a paged-to
+game). `ContextRulesTest` also covers the `battery.level` / `batteryLevel` aliases and a
+`category` + `system` tile shape applied at run time in that category only. `StillMotionTest`
+(2, Compose): the pulse breathes normally and holds exactly at rest under E-Ink.
 
 **Emulator (API 37, debug build, 2026-11-12): `smoke.sh` 164 of 171.** New checks, all passing:
 the four rows and their defaults; profile cycling and saving; OLED's `#000000` canvas and Y2K's
@@ -768,16 +772,39 @@ checks hit by timing and a leftover stub (script fixed, not rerun), the "Buttons
 (A/B against the base build: 1 of 4 on both, a pre-existing flake), and music still BUFFERING
 after 1.5 s.
 
-**Benchmarks:** extracting one 320×180 hero took 3.3 ms on the emulator; 10 extractions of
-640×360 heroes averaged 6.2 ms (max 31.3 ms), all off the main thread. **Frame pacing of game
-navigation (target 0–1.5% janky on the profiling build) was not measured.** The only pass that
-reached the list read 96.7% janky with a 117 ms median while the emulator's own system process
-was not responding ("Process system isn't responding"), so it is discarded. The adaptive-off
-baseline didn't run. Procedure in the pending-tests file.
+**Rerun on a cold-booted emulator (2026-11-12, later): `smoke.sh` 171 of 171.** Three script
+fixes: the imported-pack check waits up to 8 s for `settings.json`, the remap wizard passes on the
+toast *or* the wizard closing (the saved bindings are checked right after), and the song check
+waits up to 6 s for the player to leave BUFFERING.
 
-**Not verified:** frame pacing; anything on a phone, handheld or E-Ink panel; the colors by eye
-(only through logs); a real battery crossing 20%; Android 9–13; wheel-only art; hot reload of
-time and battery rules; the display matrix with the new rows.
+**Benchmarks:** extracting one 320×180 hero took 3.3 ms on the emulator; 60 extractions of
+640×360 heroes (decoded to 320×180) took a median 0.3 ms, max 5.8 ms, none on the main thread.
+**Frame pacing of game navigation** (`tools/device-tests/palette-perf.sh`: 12 scraped SNES games
+with distinct heroes, profiling build, cold start per pass, Down 11 × and Up 11 × 450 ms apart,
+adaptive on and off interleaved): the emulator had picked software rendering (`swangle`,
+Vulkan on `llvmpipe`), which explains the earlier 96.7% (100% janky, GPU p50 4950 ms). With
+`-gpu host`, the first measurements met the deadline target (on 0.29–1.04% janky, off 0.15–0.44%)
+but GPU time rose with the feature: GPU p50 17–18 ms instead of 14 ms and 13–82% legacy-janky
+passes on 7 of 7 adaptive passes (1 of 6 off). The cause was the glow-text bloom: its shadow color
+animated through each ~300 ms morph, so the text was blurred again on every frame. With the bloom
+switching color at once, **on: 0.29–0.90% janky, legacy 0.15–1.05%, GPU p50 14 ms; off:
+0.30%, legacy 0.30–0.89%, GPU p50 14 ms** (3 pairs), so the feature has no measurable frame cost
+on the emulator. Still to be confirmed on the Galaxy A55 at 120 Hz.
+
+**Checked by eye on the emulator (screenshots):** game art tints the battery outline and the title
+bloom; OLED True Black (black canvas, dim waves, no pill fill), Y2K Cyber-Pastel (violet to
+lavender, lilac waves, strawberry rim) and Monochrome E-Ink (black to `#1A1A1A`, white waves);
+the circadian curve in each phase by time zone (no root needed: `cmd alarm set-timezone`): night
+violet `#1E1A37`, morning `#1E253C`, day `#1B203D`, evening plum `#291F2F`, blending toward night
+at 20:58; the battery tint at 20% (pale amber), 5% (red, warm waves) and charging (mint). Context
+rules from a pack's imported `rules.json` switched live with `dumpsys battery` and a time-zone
+change (within the minute), and editing `rules.json` while the battery rule held applied the new
+color in 3 s. Found: under E-Ink the avatar ring keeps its color (the user's avatar style, or the
+iridescent default), so the screen isn't fully black and white.
+
+**Not verified:** anything on a phone, handheld or E-Ink panel (frame pacing included); the
+morphs in motion by eye; a real battery crossing 20%; Android 9–13; wheel-only art on a device;
+the `motionProfile: INSTANT` rule patch on screen; the display matrix with the new rows.
 
 ## 4. Display matrix & performance
 
