@@ -18,6 +18,7 @@ Legend: ✅ done and verified · ◐ partial · ❌ not started · 🧪 verified
 | Visual front end from `assets/examples` (icons, themes, glow, status bar, sounds) | ✅ plus the Original monthly theme, busy indicator, optional button hints, Information screen |
 | Phase 2 (metadata, media hub, theme packs, on-screen controller and keyboard) | ◐ fingerprinting, media hub, gamepad search, DAT verification, scrapers, art, Details screen, manual matching and video snaps done (§2, §3); portable `Xross/` folder with JSON config and database backup, All Games, media controls shortcut and mini-player hide done (§3.9); library organization (hidden apps, app folders, base ROMs folder, custom Photo/Video folders, art in `Xross/media`) done (§3.10); ScreenScraper verified live with developer credentials (§3.13); theme packs, wave shader settings and the focused-game background done (§3.13); on-screen controller not started |
 | Phase 2b.1 (customization engine): avatar mini-HUD, 16:9 game tiles, Details paging, playtime subtitle, game RA telemetry, profile customization, RetroAchievements dashboard | ✅ 🧪 unit- and view-model-tested; no device run yet (§3.15) |
+| Phase 2b.2 (Theme 2.0 foundation): v2 manifest, imports, surfaces, hot reload, layout block, motion, drill-down, variants, category and system overrides, `.xtheme` import | ✅ 🧪 on `feat/theme-2b2` (2026-11-12): unit tests, `smoke.sh` 139/139 and the 12-configuration display matrix on the API 37 emulator; not yet on a phone or handheld (§3.16–§3.18) |
 | Phase 3 (dual screen, hot-swap, RetroAchievements, Web Portal, FTPS) | ◐ RetroAchievements account linking, status bar avatar and User Card (§3.12), per-game achievement lists and unlock toasts (§3.13), live on the emulator and the Galaxy A55 (§3.14); hot-swap and live resolution change done; dual screen, docking, Portal and FTPS not started |
 | Phase 4 (onboarding, triage, profiling, plugin API) | ◐ app triage and performance work started |
 
@@ -28,7 +29,8 @@ configurations on the emulator, live scraping runs, and feature passes on a **Sa
 A55** (Android 16, 120 Hz) on 2026-11-11 (§3.11–§3.14). The updated on-device smoke test ran on the
 Galaxy A55 on 2026-11-11: 75 of 86 checks pass, and the 11 failures are Photo/Music checks that
 need a device without its own media (§3.13). On 2026-11-12 the smoke test, extended with the 2b.1
-checks, passed 112 of 112 on the API 37 emulator (§3.15). ScreenScraper and RetroAchievements sign-in ran
+checks, passed 112 of 112 on the API 37 emulator (§3.15), and with the Theme 2.0 (2b.2) checks 139
+of 139 (§3.18). ScreenScraper and RetroAchievements sign-in ran
 live; frame pacing on the A55 is 0.63% janky with 82.9 MB PSS in the background (§3.13). No physical controller, gaming handheld or real emulator install has been tested yet,
 and the portable folder and library organization passed a device run on the Galaxy A55 as an
 upgrade of a real install (§3.11); SD card, Android 9/10 and handhelds are still untested.
@@ -127,7 +129,7 @@ parked until an API is documented.
 | Custom boot animations | ❌ | |
 | UI sound effects + volume, game-start cue | ✅ | SoundPool for short effects, MediaPlayer for long cues |
 | BGM and video-snap volume sliders | ◐ | Music uses system media volume; separate sliders planned in Phase 2b.5 |
-| Loadable sound packs / theme packs | ✅ | `Xross/themes/<id>/` (theme.json, fonts, icons, sounds); the bundled icons and sounds are the built-in Default pack in `assets/themes/default` |
+| Loadable sound packs / theme packs | ✅ | `Xross/themes/<id>/` (theme.json, fonts, icons, sounds); the bundled icons and sounds are the built-in Default pack in `assets/themes/default`. Variants, category and system overrides, and single-file `.xtheme` import (§3.18) |
 | Icons from the design SVGs | ✅ | `tools/icons/svg_icons.py` → 29 SVGs in the Default pack, read by `SvgIcon` at runtime |
 | Custom fonts | ✅ | One .ttf/.otf per theme pack, applied to all launcher text |
 | UI scale slider (50–150%) | ❌ | Layout already scales automatically (§4) |
@@ -155,11 +157,13 @@ HTTPS Xross Portal (Ktor CIO), FTPS (Apache FtpServer), auth, uploads, library e
 
 ## 3. Test results
 
-### 3.1 Unit tests — 426 tests, 0 failures (2026-11-12)
-`./gradlew :app:testDebugUnitTest` (JVM + Robolectric on SDK 35): 422 run by default, 4 opt-in live
+### 3.1 Unit tests — 464 tests, 0 failures (2026-11-12)
+`./gradlew :app:testDebugUnitTest` (JVM + Robolectric on SDK 35): 460 run by default, 4 opt-in live
 tests skip unless `-PliveScrape=true`. The 415 from Phase 2b.1 passed unchanged; the idle rest
 added `InactivityTrackerTest` (3 tests: timeout, input pushing it back, wave frame strides), and
-2b.2 slice 1 added 8 to `ThemePackTest` (§3.16). Slice 2 added `ThemeLayoutTest` (13, §3.17). The table below lists the original suites; later suites
+2b.2 slice 1 added 8 to `ThemePackTest` (§3.16). Slice 2 added `ThemeLayoutTest` (13, §3.17); slice 3 added
+`ThemeVariantsTest` (12) and `ThemeArchiveTest` (13) and a `themeVariant` field to the
+`ConfigCodecTest` round trip (§3.18). The table below lists the original suites; later suites
 are listed after it.
 
 | Suite | Tests | Covers |
@@ -663,6 +667,60 @@ Screenshotted by hand: `CHEVRON_COLLAPSE` + `FULL_BLEED_LINE` on Settings and on
 tests check the clamping on all 12); `MARQUEE` and `EDGE_FADE` were not looked at on screen;
 `BOUNCY` feel and frame cost on a handheld; the HUD on the chamfered and E-Ink surfaces.
 
+### 3.18 Phase 2b.2, slice 3: variants, overrides, `.xtheme` import (2026-11-12)
+
+On branch `feat/theme-2b2`; completes 2b.2. Spec: Roadmap §4.3 and Appendix A.4, A.12, A.13.
+
+| Feature | How it works |
+| --- | --- |
+| Variants | `variants: [{ id, name, palette?, effects? }]` (`ThemeVariant`), checked into `ResolvedVariant` (ids `[A-Za-z0-9_.-]`, unique; bad colors and unknown surfaces dropped one by one and reported). Settings ▸ Theme ▸ **Theme variant** appears right under Theme pack only when the pack has variants: Confirm steps Standard → each variant, Options lists them. Saved as `display.themeVariant` in `settings.json`; an id the pack doesn't have means the base look, and switching packs resets it. A variant with colors switches Theme color to the pack's, as choosing a pack does |
+| Category and system overrides | `categoryOverrides` (`GAMES`, `MUSIC`, `PHOTO`, `VIDEO`, `APPS`, `SETTINGS`) and `systemOverrides` (platform id or any folder alias, `dc` → `dreamcast`, through `PlatformRegistry`; the exact id wins over an alias) carry `palette`, `effects.surfaceStyle` and `cardAspectRatio` (`ThemeOverride`). A system's aspect shapes that system's game tiles wherever they are listed (`ThemeLayout.systemAspects`), so tiles don't change shape as the cursor moves |
+| Precedence | `cascade()`: Default pack → pack → variant → category → system, then the user's `settings.json` (a fixed Theme color or a chosen Surface style wins). A variant may bring a pack's only palette; overrides only patch an existing one, so a pack without colors never repaints the user's theme. `LoadedTheme.look(variant, category, system)` is cached per triple |
+| Runtime | `MainActivity` computes the look from the open category and the focused game's platform (`XmbUiState.focusedSystem`), the system after the cursor rests 250 ms (`rememberSettledSystem`; a category switch applies at once). Surfaces go through `ThemeSurfaces.active` (draw phase only); the wave eases its three colors on the GL thread (`WaveRenderer.easeColor`, ~95% in 300 ms at any frame rate), so a switch costs no recomposition beyond the one the focus move already makes |
+| `.xtheme` import | Settings ▸ Theme ▸ **Import theme (.xtheme)…** (last row) opens the SAF picker (`application/zip`, `application/x-zip-compressed`, `application/octet-stream`). The file is copied to the cache (capped at 51 MB), then `ThemeArchive` checks every entry before writing: `..`, leading `/` or `\`, drive letters and NUL reject the archive (Android 14+'s own `ZipFile` guard is reported the same way); only `.json` / `.md` / `.txt` at the root and `fonts/`, `sounds/`, `audio/`, `icons/`, `shaders/` with their own file types, at most 4 levels; programs (`.apk`, `.dex`, `.so`, `.sh`, `.jar`, …) named as such; ≤ 50 MB unpacked by declared size and again by bytes actually inflated; ≤ 2000 files; no duplicate paths. `__MACOSX/`, `.DS_Store` and `._*` are skipped and a single wrapping folder is unwrapped. It unpacks into a hidden `Xross/themes/.import-*` folder, must pass the loader's manifest check (`schemaVersion: 2`, a name), and is renamed to `Xross/themes/<slug of the name>/`, rescanned and applied. If that id exists, an Options prompt offers **Replace** or **Keep both** (`<id>-2`); nothing is overwritten otherwise, and leftover staging folders are swept on the next import |
+| Display matrix | `tools/device-tests/display-matrix.sh [out] [stress]` sets each of the 12 sizes with `wm size` / `wm density`, warms up, measures 4 down, 4 up, L1, R1 with `gfxinfo`, counts text cut by a screen edge and saves screenshots of the Games root and Settings ▸ Theme. `stress` installs a pack with `PSP_CENTER`, 150% UI scale, 20 dp spacing, 1.35× focus and 3:4 game tiles |
+
+**Unit tests (464, 0 failures):** `ThemeVariantsTest` — variants patch only the roles they set,
+unknown or blank ids fall back to the base, a variant may bring the only palette, bad colors and
+surfaces drop on their own, the full precedence order including the user layer, overrides never
+add a palette, folder aliases and exact-id priority, system and category aspects, the saved
+variant in `settings.json` (and its absence in older files), the row shown only with variants, and
+the wave crossfade being frame-rate independent. `ThemeArchiveTest` — five traversal forms, four
+absolute forms, six program types, unknown folders, root files, wrong types per folder and depth,
+51 MB (≈ 50 KB compressed) rejected and 49 MB accepted, a summed-size overrun, no `theme.json`,
+v1 and broken manifests, not-a-zip, empty and duplicate entries, unwrapping a zipped folder, ids
+from name / folder / file name, install and discovery, replace only when asked, Keep both, and no
+files left behind after a rejection or a cancelled prompt.
+
+**Emulator (API 37, 2026-11-12):** `smoke.sh` 139/139 (121 before, 18 new): the Import row opens
+DocumentsUI; a `../../evil.json` archive is refused with the reason and writes nothing; a valid
+archive wrapped in a folder installs as `smoke-variants` and is applied without problems; Theme
+variant shows, cycles to BIOS Matrix, is saved, and its Options list every variant; re-importing
+asks first and Keep both installs `smoke-variants-2`; the SNES list still works with an `sfc`
+override; Default has no variant row. A first run failed one check that read a 2.6 s toast too
+late; the picker helper now reads it straight away. By hand: BIOS Matrix turned the wave green, a
+focused SNES game turned it red-orange through the `sfc` override with 3:4 tiles, crossfading
+both ways.
+
+**Display matrix re-run (profiling build, 2026-11-12).** Layout: no on-screen text runs past an
+edge on any of the 12 configurations with the Default pack or the stress pack, and the
+screenshots show one whole neighbour category on each side with the Default pack (at 150% on 1:1
+and 4:3 only the left one fits, as designed in §3.17). The stress pass found one clamp bug, fixed
+here: at 150% UI scale on 1:1 the focused row's text had a minimum width wider than the room left,
+so it ran off the edge instead of ending in "…"; the text width is now capped at the screen edge.
+At that extreme the button-hint pill still covers the row below the focus (as before, it has a
+translucent backing). Frame timing was unreliable on this emulator today: every configuration had
+at least one clean run (0–1.2% janky, p99 ≤ 19 ms; the stress pack all 12 clean in one pass), but
+runs of 20–35% janky frames came and went across configurations between passes, also after a
+reboot. They are "slow issue draw commands" frames (the render thread waiting on the host GPU),
+not UI-thread work, and an interleaved A/B on 1920×1080 measured the slice 2 build just as janky
+at the same time (base 16–27%, this branch 14–30% over 12 passes each), so they don't come from
+this slice. Re-measure on a phone or handheld before quoting numbers.
+
+**Not verified:** the import on Android 9–13 (the copy and checks are plain `java.util.zip`, but
+only API 37 ran) and from a removable volume or a cloud provider in the picker; the crossfade and
+override switches on a 120 Hz phone; a pack with many large fonts near the 50 MB cap.
+
 ## 4. Display matrix & performance
 
 All numbers are from the Android emulator on an Apple M5 with the host GPU, using an
@@ -687,6 +745,9 @@ Each configuration scripted 4 down, 4 up, then L1/R1, running live without resta
 | 21:9 | 2560×1080 @400 | 0% | 19 / 24 ms | 18.9 ms / 1 |
 | 4K TV | 3840×2160 @640 | 0% | 20 / 24 ms | 20.1 ms / 2 |
 | Portrait phone | 1080×2400 @420 | 0% | 16 / 17 ms | 18.6 ms / 0 |
+
+Re-run on 2026-11-12 for Theme 2.0 with `tools/device-tests/display-matrix.sh`, with the Default
+pack and a stress pack; layout results and the day's frame-timing noise are in §3.18.
 
 Layout fixes from this pass:
 - On 4:3, 1:1 and 3:2 the left neighbour category was half off-screen. The focus column now
