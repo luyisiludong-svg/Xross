@@ -19,11 +19,12 @@ Legend: ✅ done and verified · ◐ partial · ❌ not started · 🧪 verified
 | Phase 2 (metadata, media hub, theme packs, on-screen controller and keyboard) | ◐ fingerprinting, media hub, gamepad search, DAT verification, scrapers, art, Details screen, manual matching and video snaps done (§2, §3); portable `Xross/` folder with JSON config and database backup, All Games, media controls shortcut and mini-player hide done (§3.9); library organization (hidden apps, app folders, base ROMs folder, custom Photo/Video folders, art in `Xross/media`) done (§3.10); ScreenScraper verified live with developer credentials (§3.13); theme packs, wave shader settings and the focused-game background done (§3.13); on-screen controller not started |
 | Phase 2b.1 (customization engine): avatar mini-HUD, 16:9 game tiles, Details paging, playtime subtitle, game RA telemetry, profile customization, RetroAchievements dashboard | ✅ 🧪 unit- and view-model-tested; no device run yet (§3.15) |
 | Phase 2b.2 (Theme 2.0 foundation): v2 manifest, imports, surfaces, hot reload, layout block, motion, drill-down, variants, category and system overrides, `.xtheme` import | ✅ 🧪 on `feat/theme-2b2` (2026-11-12): unit tests, `smoke.sh` 139/139 and the 12-configuration display matrix on the API 37 emulator; not yet on a phone or handheld (§3.16–§3.18) |
+| Phase 2b.3 (color intelligence): game-art palette, `rules` context engine, circadian curve, battery tint, quick profiles | ✅ 🧪 on `feat/theme-2b3` (2026-11-12): 495 unit tests; `smoke.sh` with the 2b.3 checks 164/171 on the API 37 emulator (every new check passes; the failures are timing in older sections, §3.19). **Frame pacing of game navigation not measured yet**: the emulator's system process stopped responding mid-run. Open items: [`PHASE_2B3_PENDING_TESTS.md`](PHASE_2B3_PENDING_TESTS.md) |
 | Phase 3 (dual screen, hot-swap, RetroAchievements, Web Portal, FTPS) | ◐ RetroAchievements account linking, status bar avatar and User Card (§3.12), per-game achievement lists and unlock toasts (§3.13), live on the emulator and the Galaxy A55 (§3.14); hot-swap and live resolution change done; dual screen, docking, Portal and FTPS not started |
 | Phase 4 (onboarding, triage, profiling, plugin API) | ◐ app triage and performance work started |
 
-**Verification:** 418 JVM/Robolectric unit tests (414 run by default; 4 opt-in tests call the real
-services), all passing on 2026-11-12 (§3.1), end-to-end launch tests against stub builds of eleven emulators, a
+**Verification:** 495 JVM/Robolectric unit tests (491 run by default; 4 opt-in tests call the real
+services), all passing on 2026-11-12 on `feat/theme-2b3` (§3.1, §3.19), end-to-end launch tests against stub builds of eleven emulators, a
 hot-swap test with a real removable volume, frame-pacing measurements across 12 display
 configurations on the emulator, live scraping runs, and feature passes on a **Samsung Galaxy
 A55** (Android 16, 120 Hz) on 2026-11-11 (§3.11–§3.14). The updated on-device smoke test ran on the
@@ -124,7 +125,7 @@ parked until an API is documented.
 | Busy indicator | ✅ 📱 | Ring of dots by the hint pill while scanning, fingerprinting, importing DATs or scraping |
 | Hide the button-hint pill | ✅ 📱 | Settings ▸ Theme ▸ Button hints |
 | Day/night color shift | ✅ | Brightness follows the time of day |
-| Battery-level color blending | ❌ | Battery level is already read for the status bar |
+| Battery-level color blending | ✅ 🧪 | `palette.batteryTint` / Settings ▸ Theme ▸ Battery alert tint: amber to red below 20%, a green pulse while charging (2b.3, §3.19) |
 | Coldboot: fade-in + startup sound | ✅ | Once per process start, `01. opening.wav` (was the coldboot cue); can be turned off |
 | Custom boot animations | ❌ | |
 | UI sound effects + volume, game-start cue | ✅ | SoundPool for short effects, MediaPlayer for long cues |
@@ -720,6 +721,63 @@ this slice. Re-measure on a phone or handheld before quoting numbers.
 **Not verified:** the import on Android 9–13 (the copy and checks are plain `java.util.zip`, but
 only API 37 ran) and from a removable volume or a cloud provider in the picker; the crossfade and
 override switches on a 120 Hz phone; a pack with many large fonts near the 50 MB cap.
+
+### 3.19 Phase 2b.3: game-art palette, context rules, circadian curve, battery tint, quick profiles (2026-11-12)
+
+On branch `feat/theme-2b3` (from `feat/theme-2b2`, not committed yet). Spec: Roadmap §4.3,
+Appendix A.4, A.7, A.13, docs/THEME_RICING_AND_WEB_STUDIO.md §3.4. Everything not yet verified is
+listed in [`PHASE_2B3_PENDING_TESTS.md`](PHASE_2B3_PENDING_TESTS.md).
+
+| Feature | How it works |
+| --- | --- |
+| Game-art palette | `androidx.palette:palette-ktx` 1.0.0. `GamePaletteExtractor` (app-scoped in `AppContainer`): the focused game's art (or the open Details game's), keyed `uuid/artVersion`, debounced 250 ms (the hero fade delay) with `collectLatest`, decoded to ~192 px from `media/heroes`, then `wheels`, then `screenshots`, and analyzed on `Dispatchers.Default`. Results, including "no usable colors", sit in a 100-entry LRU cache. `GameColors.from` maps vibrant (or dominant) to `accent`, light-vibrant (or muted) to `accentSecondary`, dark-muted (or the dominant darkened to ≤ 35% value) to `canvas`. All-grey art or a glow under 3:1 contrast against the canvas falls back to the theme. Guarded by `effects.adaptiveGamePalette` (default on) and Settings ▸ Theme ▸ **Adaptive colors** |
+| Morphing | The wave eases to the new colors on the GL thread (~95% in 300 ms, the 2b.2 crossfade). In Compose, `ThemeAccent` holds animated colors read in the draw phase: the avatar's focus halo and style glow (leaning 60% toward the art accent), and the status-bar battery outline. Glow-text bloom reads it in its own small `GlowBloom` composable. Halos stay white unless a color layer is active, so plain themes look as before. `AdaptiveWave` collects art colors, battery and clock, so those updates recompose it and not the screen |
+| Context rules | `rules: [{match, apply}]` (`ContextRule`) inline or from `rules.json` in `imports`; rules from every file add up (imports first). Selectors: `category`, `system` (platform id or folder alias), `battery` (`<= 20`, `<`, `>=`, `>`, `==`, `charging`, `discharging`, `full`; also read as `battery.level`), `time` (`HH:MM..HH:MM`, wraps midnight, end excluded). `apply`: palette roles and the `circadianCurve` / `batteryTint` switches, `effects.surfaceStyle` / `adaptiveGamePalette`, `cardAspectRatio`, any `layout` key. Unreadable selectors are reported and the rule dropped. Static tile-shape rules fold into the pack layout at load; dynamic ones produce a per-context `ThemeLayout` (`LocalThemeLayout`). At most 64 rules |
+| Precedence | Default pack → pack → variant → category override → system override → rules in file order (`cascade`), then the user's theme color, the quick profile, the circadian curve and battery tint, then game art (`ColorPipeline`). OLED True Black keeps its black canvas under game art, and a low battery still shows over art. `LoadedTheme.look` is cached by the set of rules that hold, and battery and time reach it only when that set changes (`rememberMinuteOfDay` checks once a minute) |
+| Circadian curve | `Circadian`: phases 06 cyan/sky (hue 192), 11 azure/cobalt (214), 18 amber/rose gold (22), 21 indigo/midnight (255), built with the Original theme's `SeasonalPalette.paletteOf`, smoothstep-blended ±45 min around each boundary, mixed 50% into the canvas, 35% into the wave and 20% into the glow. `palette.circadianCurve` / Settings ▸ Theme ▸ **Circadian curve** |
+| Battery tint | `BatteryMonitor` (sticky `ACTION_BATTERY_CHANGED`) in `XmbViewModel.battery`. ≤ 20% unplugged: glow and wave shift toward amber, reaching red at 5%. Charging: a green lean plus a 2.4 s brightness pulse of the sheets (1.00–1.18×) on the GL thread, resting with the wave. `palette.batteryTint` / Settings ▸ Theme ▸ **Battery alert tint** |
+| Quick profiles | Settings ▸ Theme ▸ **Quick profile** (`display.quickProfile`). `OLED_TRUE_BLACK`: `#000000` canvas and the `OLED_TRUE_BLACK` surface. `Y2K_CYBER_PASTEL`: `#1B1829` canvas, `#C8B6FF` lilac, `#FFB5C5` strawberry, `Y2K_GLOSSY_BEZEL`. `MONOCHROME_EINK`: black and white with `EINK_HIGH_CONTRAST`, motion `INSTANT`, marquee off, `LocalStillMotion` freezing `rememberBreathing` (focus pulse, avatar glow), the busy dots and the search caret, and the wave in `WaveLoop.SINGLE_FRAME` (`RENDERMODE_WHEN_DIRTY`, one frame per change, no time drift). All color layers are off under E-Ink. A profile's surface wins over Surface style |
+| Settings | `display.quickProfile`, `display.adaptiveGamePalette`, `display.circadianCurve`, `display.batteryTint` (`null` follows the pack) in `settings.json`. Four rows after Surface style; each switch's Options offers On, Off and Theme pack default |
+
+**Unit tests (495, 0 failures; 31 new):** `ContextRulesTest` (9): time ranges, wrapping and
+bounds; battery comparisons and charger states; category, system alias, battery and time rules
+holding only in context; later rules winning over the variant and the overrides; `rules.json`
+imports adding up; bad rules dropped with reasons; tile shapes and layout patches; rule switches;
+no rules in Default. `ColorIntelligenceTest` (14): the four circadian phases and hues, a
+never-more-than-8/255-per-minute blend all day, battery amber → red → green, swatch mapping and
+fallbacks, the precedence order pack → variant → rule → user → profile → game art, switch
+resolution, the ambient-under-art order, OLED/Y2K/E-Ink definitions, E-Ink's `INSTANT` motion and
+`SINGLE_FRAME` wave loop at every stride, the `settings.json` round trip, and the Settings rows.
+`GamePaletteExtractorTest` (6): the debounce (four games scrolled at 100 ms extract only the
+last), cache hits on revisits and for unusable art, LRU eviction at 100, extraction on the worker
+dispatcher and on a real worker thread, and real `androidx.palette` on a bitmap (Robolectric
+native graphics). `StillMotionTest` (2, Compose): the pulse breathes normally and holds exactly at
+rest under E-Ink.
+
+**Emulator (API 37, debug build, 2026-11-12): `smoke.sh` 164 of 171.** New checks, all passing:
+the four rows and their defaults; profile cycling and saving; OLED's `#000000` canvas and Y2K's
+`#1B1829` / `#FFB5C5` (from the debug-only `XrossColors` log); E-Ink switching the wave to
+`SINGLE_FRAME` and back to a loop on leaving; color rows held off under E-Ink; each switch
+toggling and saving; the circadian curve recoloring; `dumpsys battery` at 12% producing the tint
+and `status 2` the charging pulse. In "Game-art palette", two SNES games got seeded hero PNGs and
+were marked scraped in the database. Chrono Trigger's blue banner gave a `#060F29` canvas, and
+EarthBound's green one replaced it with `#062912`. A game without art fell back to the theme.
+Revisits made 2 extractions for 4 visits, on `DefaultDispatcher` workers. A game scrolled past in
+under 250 ms was never extracted. The 7 failures are in older sections: Recently Played/import
+checks hit by timing and a leftover stub (script fixed, not rerun), the "Buttons remapped" toast
+(A/B against the base build: 1 of 4 on both, a pre-existing flake), and music still BUFFERING
+after 1.5 s.
+
+**Benchmarks:** extracting one 320×180 hero took 3.3 ms on the emulator; 10 extractions of
+640×360 heroes averaged 6.2 ms (max 31.3 ms), all off the main thread. **Frame pacing of game
+navigation (target 0–1.5% janky on the profiling build) was not measured.** The only pass that
+reached the list read 96.7% janky with a 117 ms median while the emulator's own system process
+was not responding ("Process system isn't responding"), so it is discarded. The adaptive-off
+baseline didn't run. Procedure in the pending-tests file.
+
+**Not verified:** frame pacing; anything on a phone, handheld or E-Ink panel; the colors by eye
+(only through logs); a real battery crossing 20%; Android 9–13; wheel-only art; hot reload of
+time and battery rules; the display matrix with the new rows.
 
 ## 4. Display matrix & performance
 
