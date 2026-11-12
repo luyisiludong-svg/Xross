@@ -34,8 +34,10 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import dev.xross.launcher.input.GamepadHandler
+import dev.xross.launcher.input.InputSink
 import dev.xross.launcher.input.NavAction
 import dev.xross.launcher.launch.LaunchResult
+import dev.xross.launcher.state.InactivityTracker
 import dev.xross.launcher.state.MediaOverlay
 import dev.xross.launcher.state.UiEffect
 import dev.xross.launcher.storage.VolumeMonitor
@@ -62,6 +64,9 @@ class MainActivity : ComponentActivity() {
     }
 
     private lateinit var gamepad: GamepadHandler
+
+    /** No input for a few seconds: the wave drops to a standby rate and the glows hold still. */
+    private val inactivity = InactivityTracker(now = android.os.SystemClock::uptimeMillis)
 
     /** When the gamepad handler last consumed a KEYCODE_BACK (see the back callback). */
     private var lastBackKeyAt = 0L
@@ -106,7 +111,14 @@ class MainActivity : ComponentActivity() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
         hideSystemBars()
 
-        gamepad = GamepadHandler(lifecycleScope, viewModel) { viewModel.inputConfig }
+        // Every nav action, including held-stick repeats, counts as input for the idle timer.
+        val sink = object : InputSink by viewModel {
+            override fun onAction(action: NavAction) {
+                inactivity.onInput()
+                viewModel.onAction(action)
+            }
+        }
+        gamepad = GamepadHandler(lifecycleScope, sink) { viewModel.inputConfig }
 
         // System back (gesture / nav bar). Gamepad back buttons arrive via dispatchKeyEvent.
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
@@ -137,6 +149,9 @@ class MainActivity : ComponentActivity() {
                 viewModel.effects.collect(::handleEffect)
             }
         }
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) { inactivity.run() }
+        }
 
         setContent {
             val state by viewModel.state.collectAsStateWithLifecycle()
@@ -146,7 +161,16 @@ class MainActivity : ComponentActivity() {
                 dev.xross.launcher.ui.ThemeTypography.family = pack.font?.let { androidx.compose.ui.text.font.FontFamily(it) }
             }
             var backdropCovers by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
-            androidx.compose.runtime.CompositionLocalProvider(dev.xross.launcher.ui.LocalThemePack provides pack) {
+            // Resting: no input for a few seconds and nothing playing. Music and video snaps keep
+            // the screen awake (the mini player and the snap are live content).
+            val noInput by inactivity.idle.collectAsStateWithLifecycle()
+            val music by container.music.state.collectAsStateWithLifecycle()
+            val snapPlaying by container.snaps.player.collectAsStateWithLifecycle()
+            val uiIdle = noInput && !music.isPlaying && snapPlaying == null
+            androidx.compose.runtime.CompositionLocalProvider(
+                dev.xross.launcher.ui.LocalThemePack provides pack,
+                dev.xross.launcher.ui.LocalUiIdle provides uiIdle,
+            ) {
             Box(Modifier.fillMaxSize()) {
                 // The wave is hidden (and its GL loop stopped) under full-screen photos and video,
                 // and paused while focused-game art or a video snap covers it.
@@ -169,6 +193,7 @@ class MainActivity : ComponentActivity() {
                     enabled = state.waveEnabled && !fullscreenMedia,
                     params = params,
                     paused = backdropCovers && state.waveEditor == null,
+                    idle = uiIdle,
                 )
                 XmbScreen(
                     state = state,
@@ -229,6 +254,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        inactivity.onInput()
         // Picks up permission grants, installed emulators, and newly mounted drives, and resumes
         // background fingerprinting.
         viewModel.onForeground()
@@ -265,11 +291,18 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        inactivity.onInput()
         val handled = gamepad.onKeyEvent(event)
         if (handled && event.keyCode == KeyEvent.KEYCODE_BACK) lastBackKeyAt = android.os.SystemClock.uptimeMillis()
         return handled || super.dispatchKeyEvent(event)
     }
 
+    override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+        inactivity.onInput()
+        return super.dispatchTouchEvent(event)
+    }
+
+    // Raw stick motion isn't counted (an idle stick can jitter); the nav actions it produces are.
     override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean =
         gamepad.onMotionEvent(event) || super.dispatchGenericMotionEvent(event)
 

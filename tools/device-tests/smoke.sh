@@ -40,6 +40,15 @@ expect() { # expect <text> <description>
   done
   bad "$2 — '$1' not on screen"; grep -v '^[[:space:]]*$' <<<"$s" | sed 's/^/       | /' | head -12
 }
+expect_any() { # expect_any <text> <text> <description>: either text (e.g. linked or not)
+  local s
+  for _ in 1 2 3; do
+    s=$(screen)
+    if grep -qF -e "$1" -e "$2" <<<"$s"; then ok "$3"; return; fi
+    pause 0.5
+  done
+  bad "$3 — neither '$1' nor '$2' on screen"; grep -v '^[[:space:]]*$' <<<"$s" | sed 's/^/       | /' | head -12
+}
 expect_not() {
   local s; s=$(screen)
   if grep -qF -- "$1" <<<"$s"; then bad "$2 — '$1' unexpectedly on screen"; else ok "$2"; fi
@@ -61,7 +70,8 @@ home() { # Games category root, cursor on the first collection (just below Searc
   category 4
   key KEYCODE_DPAD_DOWN
 }
-# Games root rows below Search: [Recently Played] [Favorites] All Games [Android Games].
+# Games root rows below Search: [Recently Played] [Favorites] All Games [Android Games]
+# RetroAchievements.
 all_games() { # all_games <collections above it>: open All Games (the platform folders)
   home
   [ "${1:-0}" -gt 0 ] && key $(for _ in $(seq "$1"); do printf 'KEYCODE_DPAD_DOWN '; done)
@@ -130,9 +140,11 @@ expect "Details" "Options menu offers Details"
 expect "Achievements" "Options menu offers Achievements (SNES has RetroAchievements)"
 expect "Metadata" "Options menu offers Metadata"
 key KEYCODE_DPAD_DOWN KEYCODE_DPAD_DOWN KEYCODE_DPAD_CENTER
-expect "Link your RetroAchievements account" "Achievements screen opens and asks to link an account"
+# Unlinked it asks to link; linked (an account can outlive pm clear), the test ROM is unknown.
+expect_any "Link your RetroAchievements account" "doesn't recognize this file" "Achievements screen opens"
 key KEYCODE_BACK
-expect_not "Link your RetroAchievements account" "Back closes the Achievements screen"
+expect_not "check the game's page on retroachievements.org" "Back closes the Achievements screen"
+expect_not "Link your RetroAchievements account" "Back closes the Achievements screen (unlinked text gone)"
 key KEYCODE_BUTTON_Y
 key KEYCODE_DPAD_DOWN KEYCODE_DPAD_DOWN KEYCODE_DPAD_DOWN KEYCODE_DPAD_CENTER
 pause 0.6
@@ -164,6 +176,44 @@ expect "Keyboard" "R1 moves focus to the results"
 key KEYCODE_BACK KEYCODE_BACK
 expect "Find a game by name" "Back returns to the keys, then closes search"
 
+echo "== Status-bar avatar"
+# Up from the first row of a category root focuses the avatar (it expands into the mini-HUD);
+# Down hands focus back to that first row.
+home
+key KEYCODE_DPAD_UP KEYCODE_DPAD_UP
+expect_any "No RetroAchievements account linked" "SOFTCORE" "Up from the top row expands the avatar HUD"
+key KEYCODE_DPAD_DOWN KEYCODE_DPAD_CENTER
+expect "Type to search your library" "Down leaves the avatar for the first row (Search)"
+key KEYCODE_BACK KEYCODE_BACK
+
+echo "== Game tiles and Details paging"
+all_games 1 # Favorites sits above All Games now
+key KEYCODE_DPAD_CENTER
+expect "Chrono Trigger" "Super Nintendo lists its games"
+expect "Never played" "game rows show playtime instead of the file size"
+key KEYCODE_DPAD_RIGHT
+expect "Game 1 of 3" "Right opens Details with its position in the list"
+key KEYCODE_BUTTON_R1
+expect "Game 2 of 3" "R1 pages to the next game"
+key KEYCODE_DPAD_RIGHT KEYCODE_DPAD_RIGHT
+expect "Game 3 of 3" "Right pages too and stops at the last game"
+key KEYCODE_BUTTON_L1
+expect "Game 2 of 3" "L1 pages back"
+key KEYCODE_BACK
+expect_not "Game 2 of 3" "Back closes Details"
+key KEYCODE_DPAD_RIGHT
+expect "Game 2 of 3" "the list cursor followed the paging"
+key KEYCODE_BACK KEYCODE_BACK KEYCODE_BACK
+
+echo "== RetroAchievements dashboard"
+home
+# RetroAchievements is the last row (Android Games may sit above it on a real device).
+key $(for _ in $(seq 6); do printf 'KEYCODE_DPAD_DOWN '; done) KEYCODE_DPAD_CENTER
+expect_any "Link your account with your user name" "HARDCORE POINTS" "Games ▸ RetroAchievements opens the dashboard"
+key KEYCODE_BACK
+expect_not "HARDCORE POINTS" "Back closes the dashboard"
+expect_not "Link your account with your user name" "Back closes the dashboard (unlinked text gone)"
+
 echo "== Categories"
 home
 key KEYCODE_BUTTON_R1
@@ -175,7 +225,8 @@ expect "Sound" "Settings lists the Sound section"
 top
 
 echo "== Settings"
-# Theme rows: Theme pack, Theme color, Wave background, Wave settings, Button hints, Platform folders.
+# Theme rows: Theme pack, Theme color, Wave background, Wave settings, Profile customization,
+# Button hints, Platform folders.
 key $(for _ in $(seq 3); do printf 'KEYCODE_DPAD_DOWN '; done) KEYCODE_DPAD_CENTER
 expect "Theme pack" "Theme section lists theme packs"
 expect "Default" "the built-in Default pack is active"
@@ -198,6 +249,20 @@ key KEYCODE_BACK
 expect "1.1× · 6 lines" "Wave settings row summarizes the new values"
 adb shell cat /sdcard/Xross/config/settings.json | grep -q '"waveSpeed": 1.1' \
   && ok "wave uniforms are saved to settings.json" || bad "waveSpeed not in settings.json"
+key KEYCODE_DPAD_DOWN
+expect "glow on" "Profile customization row summarizes the avatar style"
+# Panel rows: Border color, Custom color…, Border width, Glow, Glow speed, Glow intensity, Reset.
+key KEYCODE_DPAD_CENTER
+expect "Live preview · saved as you change it" "Profile customization panel opens"
+key KEYCODE_DPAD_RIGHT
+expect "Neon cyan" "Border color steps to the next preset"
+key KEYCODE_DPAD_DOWN KEYCODE_DPAD_DOWN KEYCODE_DPAD_DOWN KEYCODE_DPAD_CENTER
+expect "Off" "Glow toggles off"
+key KEYCODE_BACK
+expect "Neon cyan ring" "the row summary shows the new color"
+expect "glow off" "the row summary shows the glow is off"
+adb shell cat /sdcard/Xross/config/settings.json | grep -q '"#00E5FF"' \
+  && ok "avatar style is saved to settings.json" || bad "avatar border color not in settings.json"
 key KEYCODE_DPAD_DOWN KEYCODE_DPAD_DOWN
 expect "Inside All Games" "Platform folders setting shows the All Games layout"
 key KEYCODE_DPAD_CENTER
