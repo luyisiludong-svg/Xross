@@ -147,8 +147,8 @@ adb shell dumpsys meminfo dev.xross.launcher
 | `TOTAL PSS` with a game running | ≤ 150 MB | |
 
 The wave is capped near 60 fps (every 2nd vsync at 120 Hz, full rate at 90 Hz and below), and
-drops to ~12 fps after 3 s without input while no music or video snap plays. On a 120 Hz screen
-the `WaveFrames` lines report `period 16.7ms` while in use and `period 83.3ms` at rest; check
+drops to ~20 fps after 3 s without input while no music or video snap plays. On a 120 Hz screen
+the `WaveFrames` lines report `period 16.7ms` while in use and `period 50.0ms` at rest; check
 `p95` against that period.
 
 Check by eye and ear:
