@@ -72,6 +72,8 @@ data class SettingsFile(
         val theme: String = D.theme,
         /** Folder name in Xross/themes/, or "default". */
         val themePack: String = D.themePack,
+        /** Surface id (FLAT_GLASS, Y2K_GLOSSY_BEZEL, OLED_TRUE_BLACK, EINK_HIGH_CONTRAST or the pack's); empty = the pack's. */
+        val surfaceStyle: String = D.surfaceStyle,
         val wave: Boolean = D.waveEnabled,
         /** Wave shader uniforms: speed 0.5–2.0, lines 0–12, turbulence 0–2, thickness 0.5–3. */
         val waveSpeed: Float = D.waveSpeed,
@@ -215,6 +217,7 @@ object ConfigCodec {
         display = SettingsFile.Display(
             theme = s.theme,
             themePack = s.themePack,
+            surfaceStyle = s.surfaceStyle,
             wave = s.waveEnabled,
             waveSpeed = s.waveSpeed,
             waveLines = s.waveLineCount,
@@ -250,6 +253,7 @@ object ConfigCodec {
         axialDeadzone = f.controls.axialDeadzone.finiteOr(D.axialDeadzone).coerceIn(0f, 0.95f),
         theme = f.display.theme.ifBlank { D.theme },
         themePack = f.display.themePack.trim().ifBlank { D.themePack },
+        surfaceStyle = f.display.surfaceStyle.trim().take(48),
         waveEnabled = f.display.wave,
         waveSpeed = WaveLimits.clampSpeed(f.display.waveSpeed),
         waveLineCount = WaveLimits.clampLines(f.display.waveLines),

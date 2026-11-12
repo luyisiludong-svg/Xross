@@ -1,0 +1,46 @@
+{
+  "surfaces": {
+    "FLAT_GLASS": {
+      "label": "Flat glass",
+      "fill": {
+        "type": "LINEAR_GRADIENT",
+        "angle": 180,
+        "stops": [["#2A2A40", 0.0, 0.62], ["#16161F", 0.55, 0.74], ["#0A0A12", 1.0, 0.84]]
+      },
+      "sheen": { "heightPercent": 0.35, "gradient": [["#FFFFFF", 0.10], ["#FFFFFF", 0.02]] },
+      "borders": [
+        {
+          "type": "INNER",
+          "widthDp": 1.5,
+          "brush": { "type": "SWEEP_GRADIENT", "colors": ["#C9B8FF", "#9FD8FF", "#A8F0D4", "#FFD3A8", "#FFB3D9", "#C9B8FF"] }
+        }
+      ]
+    },
+    "Y2K_GLOSSY_BEZEL": {
+      "label": "Y2K glossy bezel",
+      "fill": {
+        "type": "LINEAR_GRADIENT",
+        "angle": 180,
+        "stops": [["#3A3F58", 0.0, 0.82], ["#1A1D2C", 0.5, 0.88], ["#0E101A", 1.0, 0.92]]
+      },
+      "sheen": { "heightPercent": 0.5, "gradient": [["#FFFFFF", 0.32], ["#FFFFFF", 0.06]] },
+      "borders": [
+        { "type": "OUTER", "widthDp": 2.0, "color": "#FFFFFF", "opacity": 0.9 },
+        { "type": "INNER", "widthDp": 1.5, "color": "#4A5568", "opacity": 0.6 }
+      ],
+      "shadows": [{ "offsetDp": [0, 3], "blurDp": 8, "color": "#000000", "opacity": 0.35 }]
+    },
+    "OLED_TRUE_BLACK": {
+      "label": "OLED true black",
+      "fill": { "type": "SOLID", "color": "#000000", "opacity": 1.0 },
+      "borders": [{ "type": "INNER", "widthDp": 1.0, "color": "#C9B8FF", "opacity": 0.9 }],
+      "glow": { "color": "#C9B8FF", "radiusDp": 6, "intensity": 0.35 }
+    },
+    "EINK_HIGH_CONTRAST": {
+      "label": "E-Ink high contrast",
+      "shape": { "type": "RECTANGLE" },
+      "fill": { "type": "SOLID", "color": "#000000", "opacity": 1.0 },
+      "borders": [{ "type": "INNER", "widthDp": 2.0, "color": "#FFFFFF", "opacity": 1.0 }]
+    }
+  }
+}

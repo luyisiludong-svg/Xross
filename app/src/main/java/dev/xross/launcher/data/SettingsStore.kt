@@ -55,6 +55,8 @@ data class XrossSettings(
     val waveColors: dev.xross.launcher.theme.WaveColors = dev.xross.launcher.theme.WaveColors(),
     /** Active theme pack: "default" (built in) or a folder name in `Xross/themes/`. */
     val themePack: String = dev.xross.launcher.theme.pack.ThemePackLoader.DEFAULT_ID,
+    /** A surface id (preset or one of the pack's); empty uses the theme pack's `effects.surfaceStyle`. */
+    val surfaceStyle: String = "",
     /** [dev.xross.launcher.theme.XrossTheme] name, or [dev.xross.launcher.theme.PACK_THEME] for the theme pack's own colors. */
     val theme: String = "LAVENDER",
     /** The pill of button hints in the bottom corner of the home menu. */

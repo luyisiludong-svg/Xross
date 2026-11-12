@@ -155,10 +155,11 @@ HTTPS Xross Portal (Ktor CIO), FTPS (Apache FtpServer), auth, uploads, library e
 
 ## 3. Test results
 
-### 3.1 Unit tests — 418 tests, 0 failures (2026-11-12)
-`./gradlew :app:testDebugUnitTest` (JVM + Robolectric on SDK 35): 414 run by default, 4 opt-in live
+### 3.1 Unit tests — 426 tests, 0 failures (2026-11-12)
+`./gradlew :app:testDebugUnitTest` (JVM + Robolectric on SDK 35): 422 run by default, 4 opt-in live
 tests skip unless `-PliveScrape=true`. The 415 from Phase 2b.1 passed unchanged; the idle rest
-added `InactivityTrackerTest` (3 tests: timeout, input pushing it back, wave frame strides). The table below lists the original suites; later suites
+added `InactivityTrackerTest` (3 tests: timeout, input pushing it back, wave frame strides), and
+2b.2 slice 1 added 8 to `ThemePackTest` (§3.16). The table below lists the original suites; later suites
 are listed after it.
 
 | Suite | Tests | Covers |
@@ -613,6 +614,29 @@ with the identity block above it scrolling if needed and slightly tighter spacin
 **Not verified:** whether the HUD morph and the Details crossfade animate without jitter (checked
 by screenshot only, not by eye); L1/R1 on a physical controller; the < 10% idle-CPU target is not
 met (12–19% with the 20 fps standby kept); the dashboard with many achievements.
+
+### 3.16 Phase 2b.2, slice 1: Theme 2.0 manifest, surfaces, hot reload (2026-11-12)
+
+On branch `feat/theme-2b2`. Scope and what is left: Roadmap §4.3 (2b.2 row) and §4.7.
+
+| Feature | How it works |
+| --- | --- |
+| Manifest v2 | `ThemeManifest` with `schemaVersion: 2` required; v1 folders are listed as skipped with the reason (`ThemePackLoader.scan`, Options ▸ Look for new packs, the Theme pack row). Palette roles (`canvas`, `accent`, `accentSecondary`, …) map onto today's background and wave colors; `wave.gradient`'s last stop is the canvas bottom |
+| Imports | `imports` lists JSON files in the pack, deep-merged under `theme.json` (which wins); paths stay inside the pack, `.json` only, 256 KB each, at most 8, no nested imports. The Default pack imports its `surfaces.json` |
+| Font roles | `typography.display` / `body` / `mono`; missing roles use `body`. `display` draws the clock and category names, `mono` the battery figure |
+| Sounds | `audio.sounds` / `audio.soundGains`; a bare name is in `sounds/`, a path from the pack root; the spec names `cancel`, `optionOpen`, `gameLaunch`, `achievementUnlock` are aliases |
+| Surfaces | `SurfaceSpec` (shape, fill, sheen, borders, shadows, glow) validated into `Surface` with caps (3 borders, 2 shadows, glow ≤ 24 dp); `Modifier.xrossSurface()` draws it in the draw phase only and replaces `frostedGlass` + `iridescentBorder` in all nine places. The four styles are presets in the Default pack's `surfaces.json`; `FLAT_GLASS` reproduces the old look. Settings ▸ Theme ▸ Surface style (`display.surfaceStyle`) overrides the pack's choice |
+| Hot reload | `ThemeWatcher` (`FileObserver` on the active pack and its folders, 150 ms debounce) and a fingerprint check on resume. A load that fails keeps the last good theme and toasts the file and line; sounds reload even when file names didn't change (`LoadedTheme.revision`) |
+
+**Emulator (API 37, 2026-11-12):** `smoke.sh` 118/118, including the new Surface style and hot
+reload checks (a first run failed one check that read a row that wasn't focused; fixed). Checked by hand: an `echo` into
+`theme.json` through `adb shell` renamed the active pack within ~1.5 s without leaving Xross, and
+a broken save showed "Theme not reloaded". The Wave settings panel was screenshotted with all
+four presets and a custom chamfered surface with a cyan glow pushed while the app was running.
+
+**Not verified:** hot reload on the Galaxy A55 (FUSE delivery differs between devices; the
+resume check is the fallback); shadow and glow cost on a low-end handheld; the `AvatarHud`
+capsule still draws its own frosted glass and doesn't follow the surface style yet.
 
 ## 4. Display matrix & performance
 

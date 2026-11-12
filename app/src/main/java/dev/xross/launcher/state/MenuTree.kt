@@ -72,6 +72,12 @@ data class ThemeSetup(
     val packPalette: Boolean = false,
     /** Problems loading the active pack, shown under its row. */
     val problems: List<String> = emptyList(),
+    /** (id, label) of every surface the active pack offers: the four presets, then its own. */
+    val surfaces: List<Pair<String, String>> = emptyList(),
+    /** The pack's own `effects.surfaceStyle`. */
+    val packSurface: String = "FLAT_GLASS",
+    /** Folders in Xross/themes/ skipped as packs, with the reason ("Sakura: no schemaVersion 2"). */
+    val rejected: List<String> = emptyList(),
 )
 
 /** What Settings ▸ Accounts shows (public profile data only, never the Web API key). */
@@ -880,7 +886,16 @@ class MenuTree(private val s: MenuSnapshot) {
             GlyphKey.GAMES,
             Command.ToggleAllGamesFolder,
         ),
+        setting("disp:surface", "Surface style", surfaceSummary(), GlyphKey.DISPLAY, Command.CycleSurfaceStyle),
     )
+
+    /** "Theme pack (Flat glass)", or the chosen surface's label. */
+    private fun surfaceSummary(): String {
+        val t = s.themes
+        fun label(id: String) = t.surfaces.firstOrNull { it.first == id }?.second ?: id
+        val own = s.settings.surfaceStyle
+        return if (own.isEmpty() || t.surfaces.none { it.first == own }) "Theme pack (${label(t.packSurface)})" else label(own)
+    }
 
     private fun soundSettings() = listOf(
         setting("snd:fx", "Sound effects", onOff(s.settings.soundEffects), GlyphKey.SOUND, Command.ToggleSoundEffects),
@@ -1002,6 +1017,7 @@ class MenuTree(private val s: MenuSnapshot) {
         val others = s.themes.packs.size - 1
         append(if (others == 0) " · add packs to Xross/themes" else " · ${s.themes.packs.size} packs")
         s.themes.problems.firstOrNull()?.let { append(" · $it") }
+        if (s.themes.problems.isEmpty()) s.themes.rejected.firstOrNull()?.let { append(" · skipped $it") }
     }
 
     private fun waveSummary(): String {

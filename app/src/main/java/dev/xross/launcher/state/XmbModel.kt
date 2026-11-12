@@ -66,6 +66,8 @@ sealed interface Command {
     data object CycleThemePack : Command
     data class SetThemePack(val id: String) : Command
     data object ReloadThemePacks : Command
+    /** Settings ▸ Theme ▸ Surface style: the pack's own, then each surface it offers. */
+    data object CycleSurfaceStyle : Command
     data object ToggleSoundEffects : Command
     data object CycleSoundVolume : Command
     data object ToggleBootSound : Command

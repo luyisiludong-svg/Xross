@@ -168,6 +168,11 @@ class XmbViewModel(
 ) : ViewModel(), InputSink {
 
     private val sounds = container.sounds
+
+    /** Hot reload: the active folder pack's files changed; a broken edit keeps the last good theme. */
+    private val themeWatcher = dev.xross.launcher.theme.pack.ThemeWatcher(viewModelScope) {
+        container.themes.hotReload()?.let { toast("Theme not reloaded: $it") }
+    }
     private val music = container.music
 
     val media = MediaOverlayController(
@@ -373,6 +378,7 @@ class XmbViewModel(
     private var volumeJob: Job? = null
 
     override fun onCleared() {
+        themeWatcher.watch(null)
         media.close()
         super.onCleared()
     }
@@ -1435,6 +1441,8 @@ class XmbViewModel(
         if (env.value.storageGranted && scanJob?.isActive != true) fingerprints.start(viewModelScope)
         if (settingsStore.current.scrapeAutomatically && scanJob?.isActive != true) container.scraper.start(viewModelScope)
         if (profileLoaded && profiles.isStale()) refreshProfile(quiet = true)
+        // Theme files edited while Xross was in the background (or events FUSE didn't deliver).
+        viewModelScope.launch { container.themes.reloadIfChanged()?.let { toast("Theme not reloaded: $it") } }
     }
 
     /** The offline profile cache has been read (see init). */
@@ -2101,7 +2109,19 @@ class XmbViewModel(
             Command.ReloadThemePacks -> viewModelScope.launch {
                 val found = container.themes.rediscover()
                 container.themes.reload()
-                toast(if (found.size == 1) "No theme packs in Xross/themes" else "${found.size} theme packs")
+                val skipped = container.themes.rejected.value
+                toast(
+                    buildString {
+                        append(if (found.size == 1) "No theme packs in Xross/themes" else "${found.size} theme packs")
+                        if (skipped.isNotEmpty()) append(" · skipped ${skipped.size}: ${skipped.first().id} (${skipped.first().reason})")
+                    },
+                )
+            }
+            Command.CycleSurfaceStyle -> settingsStore.update {
+                // "" (the pack's own) first, then every surface the active pack offers.
+                val ids = listOf("") + container.themes.active.value.surfaces.keys
+                val i = ids.indexOf(it.surfaceStyle).coerceAtLeast(0)
+                it.copy(surfaceStyle = ids[(i + 1) % ids.size])
             }
             Command.ToggleSoundEffects -> settingsStore.update { it.copy(soundEffects = !it.soundEffects) }
             Command.CycleSoundVolume -> {
@@ -2304,8 +2324,11 @@ class XmbViewModel(
             if (coldBoot && settingsStore.current.bootSound) sounds.playCue(UiCue.OPENING, settingsStore.current.soundVolume)
         }
         viewModelScope.launch {
-            combine(container.themes.packs, container.themes.active) { packs, active -> packs to active }.collect { (packs, active) ->
+            combine(container.themes.packs, container.themes.active, container.themes.rejected) { packs, active, rejected ->
+                Triple(packs, active, rejected)
+            }.collect { (packs, active, rejected) ->
                 sounds.useTheme(active)
+                themeWatcher.watch((active.info.source as? dev.xross.launcher.theme.pack.PackSource.Folder)?.dir)
                 env.update {
                     it.copy(
                         themes = ThemeSetup(
@@ -2315,6 +2338,9 @@ class XmbViewModel(
                             activeAuthor = active.info.manifest.author,
                             packPalette = active.palette != null,
                             problems = active.problems,
+                            surfaces = active.surfaces.values.map { s -> s.id to s.label },
+                            packSurface = active.surfaceId,
+                            rejected = rejected.map { r -> "${r.id}: ${r.reason}" },
                         ),
                     )
                 }

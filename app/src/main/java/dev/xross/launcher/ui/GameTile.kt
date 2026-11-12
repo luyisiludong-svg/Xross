@@ -212,8 +212,7 @@ internal fun GameTelemetryBadge(telemetry: GameTelemetry?, size: TextUnit, modif
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
-                    .frostedGlass(shape, strength = 0.9f)
-                    .iridescentBorder(shape, width = 1.dp, alpha = if (t.mastered) 0.9f else 0.45f)
+                    .xrossSurface(shape, strength = 0.9f, borderAlpha = if (t.mastered) 0.9f else 0.45f, borderScale = 2f / 3f)
                     .padding(horizontal = 12.dp, vertical = 5.dp),
             ) {
                 val icon = with(density) { (size * 1.15f).toDp() }

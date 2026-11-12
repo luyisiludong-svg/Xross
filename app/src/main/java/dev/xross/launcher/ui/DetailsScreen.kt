@@ -252,8 +252,7 @@ private fun AchievementsSummary(
     Column(
         Modifier
             .width((m.width * 0.46f).dp())
-            .frostedGlass(shape, strength = 0.8f)
-            .iridescentBorder(shape, width = 1.dp, alpha = 0.45f)
+            .xrossSurface(shape, strength = 0.8f, borderAlpha = 0.45f, borderScale = 2f / 3f)
             .clickable(onClick = onOpen)
             .padding(horizontal = 12.dp, vertical = 9.dp),
     ) {

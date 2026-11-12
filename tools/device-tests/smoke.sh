@@ -226,7 +226,7 @@ top
 
 echo "== Settings"
 # Theme rows: Theme pack, Theme color, Wave background, Wave settings, Profile customization,
-# Button hints, Platform folders.
+# Button hints, Platform folders, Surface style.
 key $(for _ in $(seq 3); do printf 'KEYCODE_DPAD_DOWN '; done) KEYCODE_DPAD_CENTER
 expect "Theme pack" "Theme section lists theme packs"
 expect "Default" "the built-in Default pack is active"
@@ -269,6 +269,14 @@ key KEYCODE_DPAD_CENTER
 expect "At the top of Games (classic)" "Platform folders toggles to the classic layout"
 key KEYCODE_DPAD_CENTER
 expect "Inside All Games" "Platform folders toggles back"
+key KEYCODE_DPAD_DOWN
+expect "Theme pack (Flat glass)" "Surface style follows the theme pack (Flat glass)"
+key KEYCODE_DPAD_CENTER KEYCODE_DPAD_CENTER
+expect "Y2K glossy bezel" "Surface style cycles through the presets"
+adb shell cat /sdcard/Xross/config/settings.json | grep -q '"surfaceStyle": "Y2K_GLOSSY_BEZEL"' \
+  && ok "surface style is saved to settings.json" || bad "surfaceStyle not in settings.json"
+key KEYCODE_DPAD_CENTER KEYCODE_DPAD_CENTER KEYCODE_DPAD_CENTER
+expect "Theme pack (Flat glass)" "Surface style cycles back to the pack's own"
 key KEYCODE_BACK KEYCODE_DPAD_DOWN KEYCODE_DPAD_CENTER
 expect "Effects volume" "Sound section opens"
 key KEYCODE_DPAD_DOWN KEYCODE_DPAD_CENTER
@@ -276,12 +284,13 @@ expect "100%" "Effects volume cycles"
 key KEYCODE_BACK
 
 echo "== Theme packs"
-# A minimal pack: name, palette, wave defaults, one sound; everything else inherits from Default.
+# A minimal v2 pack: name, palette, wave defaults, one sound; everything else inherits from Default.
 pack=$(mktemp -d)
 mkdir -p "$pack/smoke_pack/sounds"
 cat > "$pack/smoke_pack/theme.json" <<'JSON'
-{"name": "Smoke Pack", "author": "smoke", "palette": {"top": "#101830", "bottom": "#3060A0", "wave": "#C0E0FF"},
- "wave": {"lineCount": 8, "turbulence": 1.4}}
+{"schemaVersion": 2, "name": "Smoke Pack", "author": "smoke",
+ "palette": {"canvas": "#101830", "accentSecondary": "#C0E0FF"},
+ "wave": {"lineCount": 8, "turbulence": 1.4, "gradient": ["#101830", "#3060A0"]}}
 JSON
 cp "$(dirname "$0")/../../app/src/main/assets/themes/default/sounds/cursor.wav" "$pack/smoke_pack/sounds/CURSOR.WAV"
 adb shell rm -rf /sdcard/Xross/themes/smoke_pack
@@ -302,6 +311,19 @@ key KEYCODE_DPAD_DOWN
 expect "Theme pack · Smoke Pack" "the pack's palette becomes the theme color"
 key KEYCODE_DPAD_DOWN KEYCODE_DPAD_DOWN
 expect "8 lines" "the pack's wave defaults are applied"
+# Hot reload: an edit to the active pack applies without leaving Xross; a broken save keeps it.
+good='{"schemaVersion": 2, "name": "Smoke Pack Live", "author": "smoke", "palette": {"canvas": "#101830", "accentSecondary": "#C0E0FF"}}'
+adb shell "echo '$good' > /sdcard/Xross/themes/smoke_pack/theme.json"
+pause 1.5
+# Only the focused row shows its subtitle: Wave settings → up three rows to Theme pack.
+key KEYCODE_DPAD_UP KEYCODE_DPAD_UP KEYCODE_DPAD_UP
+expect "Smoke Pack Live" "an edited theme.json reloads while Xross is open"
+key KEYCODE_DPAD_DOWN KEYCODE_DPAD_DOWN KEYCODE_DPAD_DOWN
+adb shell "echo '{\"schemaVersion\": 2, \"name\": \"Smoke Pack Live\",,}' > /sdcard/Xross/themes/smoke_pack/theme.json"
+pause 0.8
+expect "Theme not reloaded" "a broken theme.json keeps the last good theme and says why"
+adb shell "echo '$good' > /sdcard/Xross/themes/smoke_pack/theme.json"
+pause 1.5
 top_list
 key KEYCODE_DPAD_CENTER
 pause 1.5

@@ -109,8 +109,7 @@ internal fun AchievementsScreen(
             Column(
                 Modifier
                     .fillMaxSize()
-                    .frostedGlass(shape)
-                    .iridescentBorder(shape, alpha = 0.55f)
+                    .xrossSurface(shape, borderAlpha = 0.55f)
                     .clickable(remember { MutableInteractionSource() }, indication = null) {}
                     .padding(horizontal = (m.s * 0.04f).dp(), vertical = (m.s * 0.03f).dp()),
             ) {

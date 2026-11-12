@@ -10,6 +10,12 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import dev.xross.launcher.state.GlyphKey
 import dev.xross.launcher.theme.ThemePalette
 import kotlinx.serialization.SerializationException
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
 import java.io.File
 import java.io.IOException
 import java.util.Locale
@@ -54,13 +60,39 @@ data class LoadedTheme(
     val palette: ThemePalette?,
     val wave: ThemeManifest.WaveDefaults?,
     val icons: Map<GlyphKey, ThemeIcon>,
-    val font: Typeface?,
+    val fonts: ThemeFonts,
     val sounds: Map<SoundRole, SoundSource>,
     val gains: Map<SoundRole, Float>,
+    /** Every surface available: the Default pack's presets, then this pack's own. */
+    val surfaces: Map<String, Surface> = emptyMap(),
+    /** The pack's `effects.surfaceStyle` (or the inherited one). */
+    val surfaceId: String = SurfacePreset.FLAT_GLASS.name,
     /** What the pack declared but couldn't be used (bad font, unreadable icon), for Settings. */
     val problems: List<String> = emptyList(),
+    /** Bumped on every load, so a hot reload of the same files still counts as a change. */
+    val revision: Long = 0,
 ) {
     val id: String get() = info.id
+
+    /** [id] if it names a surface, else the pack's own, else [Surface.FALLBACK]. */
+    fun surface(id: String = ""): Surface = surfaces[id] ?: surfaces[surfaceId] ?: Surface.FALLBACK
+}
+
+/** Typefaces per role (Roadmap Appendix A.8); a role the pack lacks falls back to [body]. */
+@Immutable
+data class ThemeFonts(val display: Typeface? = null, val body: Typeface? = null, val mono: Typeface? = null)
+
+/** A folder in `Xross/themes/` that isn't offered as a pack, and why. */
+@Immutable
+data class RejectedPack(val id: String, val reason: String)
+
+/** [discover] plus the folders it skipped. */
+data class PackScan(val packs: List<ThemePackInfo>, val rejected: List<RejectedPack>)
+
+/** A strict load for hot reload: the theme, or why it can't be used. */
+sealed interface PackLoad {
+    data class Ok(val theme: LoadedTheme) : PackLoad
+    data class Failed(val reason: String) : PackLoad
 }
 
 /**
@@ -69,8 +101,9 @@ data class LoadedTheme(
  *
  * ```
  * Xross/themes/<theme_id>/
- *   theme.json   name, author, version, palette, wave defaults (see ThemeManifest)
- *   fonts/       one .ttf/.otf
+ *   theme.json   schemaVersion 2, name, palette, wave, typography, audio, effects (see ThemeManifest)
+ *   *.json       files listed in "imports" (surfaces.json, ...), merged under theme.json
+ *   fonts/       .ttf/.otf, named in "typography" (or the first one, for every role)
  *   icons/       <icon id>.svg / .png / .webp, e.g. settings.svg, games.png
  *   sounds/      cursor.wav, confirm.wav, back.wav, option.wav, ok.wav, system_ng.wav,
  *                trophy.wav, 01. opening.wav, gameboot.wav
@@ -84,34 +117,76 @@ class ThemePackLoader(
     private val assets: AssetManager,
     private val themesDir: () -> File,
 ) {
-    /** Default first, then folder packs by name. Unreadable folders are skipped. */
-    fun discover(): List<ThemePackInfo> {
+    /** Default first, then folder packs by name. Unreadable and v1 folders are skipped. */
+    fun discover(): List<ThemePackInfo> = scan().packs
+
+    /** [discover], plus each skipped folder with a `theme.json` and the reason it was skipped. */
+    fun scan(): PackScan {
         val packs = ArrayList<ThemePackInfo>()
+        val rejected = ArrayList<RejectedPack>()
         builtIn()?.let(packs::add)
         val dir = themesDir()
         val folders = dir.listFiles()?.filter { it.isDirectory && !it.name.startsWith(".") }.orEmpty()
         for (folder in folders.sortedBy { it.name.lowercase(Locale.ROOT) }) {
             val id = folder.name
             if (!ID.matches(id) || id.equals(DEFAULT_ID, ignoreCase = true)) continue
-            val manifestFile = find(folder, MANIFEST) ?: continue
-            val manifest = readManifest { manifestFile.readText() } ?: continue
-            packs += ThemePackInfo(id, manifest, PackSource.Folder(folder))
+            if (find(folder, MANIFEST) == null) continue
+            when (val r = readFolderManifest(folder)) {
+                is Read.Ok -> packs += ThemePackInfo(id, r.manifest, PackSource.Folder(folder))
+                is Read.Bad -> rejected += RejectedPack(id, r.reason)
+            }
         }
-        return packs.sortedWith(compareBy<ThemePackInfo>({ !it.builtIn }, { it.name.lowercase(Locale.ROOT) }))
+        return PackScan(
+            packs.sortedWith(compareBy<ThemePackInfo>({ !it.builtIn }, { it.name.lowercase(Locale.ROOT) })),
+            rejected,
+        )
     }
 
     /** The Default pack's manifest; null only if the APK is broken. */
-    fun builtIn(): ThemePackInfo? = readManifest {
-        assets.open("$DEFAULT_DIR/$MANIFEST").bufferedReader().use { it.readText() }
-    }?.let { ThemePackInfo(DEFAULT_ID, it, PackSource.Builtin(DEFAULT_DIR)) }
+    fun builtIn(): ThemePackInfo? {
+        val r = readManifest(MANIFEST) { name -> runCatching { assets.open("$DEFAULT_DIR/$name").bufferedReader().use { it.readText() } }.getOrNull() }
+        return (r as? Read.Ok)?.let { ThemePackInfo(DEFAULT_ID, it.manifest, PackSource.Builtin(DEFAULT_DIR)) }
+    }
 
     /** Loads [id], or the Default pack when [id] is unknown or unreadable. */
-    fun load(id: String): LoadedTheme {
+    fun load(id: String): LoadedTheme = (loadStrict(id) as? PackLoad.Ok)?.theme ?: base()
+
+    /** Loads [id] without falling back, so a hot reload can keep the last good theme. */
+    fun loadStrict(id: String): PackLoad {
+        if (id.equals(DEFAULT_ID, ignoreCase = true) || id.isBlank()) return PackLoad.Ok(base())
+        val folder = themesDir().listFiles()?.firstOrNull { it.isDirectory && it.name == id }
+            ?: return PackLoad.Failed("$id is no longer in Xross/themes")
+        return when (val r = readFolderManifest(folder)) {
+            is Read.Ok -> PackLoad.Ok(resolve(ThemePackInfo(id, r.manifest, PackSource.Folder(folder)), base()))
+            is Read.Bad -> PackLoad.Failed(r.reason)
+        }
+    }
+
+    /**
+     * Changes when any file of folder pack [id] is added, removed or rewritten (names, sizes and
+     * modification times, two folders deep); 0 for the built-in pack.
+     */
+    fun fingerprint(id: String): Long {
+        val folder = themesDir().listFiles()?.firstOrNull { it.isDirectory && it.name == id } ?: return 0
+        var h = 17L
+        fun walk(dir: File, depth: Int) {
+            for (f in dir.listFiles().orEmpty().sortedBy { it.name }) {
+                h = h * 31 + f.name.hashCode()
+                if (f.isDirectory) {
+                    if (depth < 2) walk(f, depth + 1)
+                } else {
+                    h = h * 31 + f.length()
+                    h = h * 31 + f.lastModified()
+                }
+            }
+        }
+        walk(folder, 0)
+        return h
+    }
+
+    private fun base(): LoadedTheme {
         val default = builtIn() ?: error("Built-in theme pack missing from the APK")
-        val base = resolve(default, null)
-        if (id.equals(DEFAULT_ID, ignoreCase = true) || id.isBlank()) return base
-        val pack = discover().firstOrNull { it.id == id } ?: return base
-        return resolve(pack, base)
+        return resolve(default, null)
     }
 
     private fun resolve(pack: ThemePackInfo, base: LoadedTheme?): LoadedTheme {
@@ -120,12 +195,15 @@ class ThemePackLoader(
 
         val sounds = LinkedHashMap<SoundRole, SoundSource>()
         val gains = LinkedHashMap<SoundRole, Float>()
+        val declaredSounds = m.audio?.sounds.orEmpty()
+        val declaredGains = m.audio?.soundGains.orEmpty()
+        for (key in declaredSounds.keys + declaredGains.keys) if (SoundRole.byKey(key) == null) problems += "Unknown sound role $key"
         for (role in SoundRole.entries) {
-            val fileName = m.sounds.entries.firstOrNull { it.key.equals(role.key, ignoreCase = true) }?.value ?: role.file
+            val fileName = declaredSounds.entries.firstOrNull { SoundRole.byKey(it.key) == role }?.value ?: role.file
             val own = soundFile(pack, fileName)
             val source = own ?: base?.sounds?.get(role)
             if (source != null) sounds[role] = source
-            val gain = m.soundGains.entries.firstOrNull { it.key.equals(role.key, ignoreCase = true) }?.value
+            val gain = declaredGains.entries.firstOrNull { SoundRole.byKey(it.key) == role }?.value
             gains[role] = when {
                 gain != null && gain.isFinite() -> gain.coerceIn(0f, 1f)
                 own == null -> base?.gains?.get(role) ?: 1f
@@ -141,26 +219,47 @@ class ThemePackLoader(
             (icon ?: base?.icons?.get(key))?.let { icons[key] = it }
         }
 
-        val font = font(pack, m.font, problems)
-        val palette = m.palette?.let { p -> p.toPalette().also { if (it == null) problems += "Palette colors must be #RRGGBB" } }
+        val fonts = fonts(pack, m.typography, base?.fonts, problems)
+        val palette = m.palette?.let { p ->
+            p.toPalette(m.wave).also { if (it == null) problems += "Palette needs a canvas color, and colors must be #RRGGBB" }
+        }
+
+        val surfaces = LinkedHashMap(base?.surfaces.orEmpty())
+        for ((sid, spec) in m.surfaces) {
+            if (!SURFACE_ID.matches(sid)) {
+                problems += "Surface name $sid: use letters, digits, - and _"
+                continue
+            }
+            surfaces[sid] = resolveSurface(sid, spec, problems)
+        }
+        val wanted = m.effects?.surfaceStyle?.trim().orEmpty()
+        if (wanted.isNotEmpty() && wanted !in surfaces) problems += "effects.surfaceStyle: no surface named $wanted"
+        val surfaceId = wanted.takeIf { it in surfaces } ?: base?.surfaceId ?: SurfacePreset.FLAT_GLASS.name
 
         return LoadedTheme(
             info = pack,
             palette = palette,
             wave = m.wave,
             icons = icons,
-            font = font ?: if (m.font.isBlank()) base?.font else null,
+            fonts = fonts,
             sounds = sounds,
             gains = gains,
+            surfaces = surfaces,
+            surfaceId = surfaceId,
             problems = problems,
+            revision = revisions.incrementAndGet(),
         )
     }
 
     // region Files inside a pack
 
-    private fun soundFile(pack: ThemePackInfo, name: String): SoundSource? = when (val s = pack.source) {
-        is PackSource.Builtin -> "${s.dir}/$SOUNDS/$name".takeIf { assetExists(it) }?.let { SoundSource.Asset(it) }
-        is PackSource.Folder -> inside(s.dir, "$SOUNDS/$name")?.let { SoundSource.Disk(it) }
+    /** A bare file name is looked up in `sounds/`; a path ("audio/tick.wav") from the pack root. */
+    private fun soundFile(pack: ThemePackInfo, name: String): SoundSource? {
+        val path = if ('/' in name || '\\' in name) name else "$SOUNDS/$name"
+        return when (val s = pack.source) {
+            is PackSource.Builtin -> "${s.dir}/$path".takeIf { assetExists(it) }?.let { SoundSource.Asset(it) }
+            is PackSource.Folder -> inside(s.dir, path)?.takeIf { it.isFile }?.let { SoundSource.Disk(it) }
+        }
     }
 
     private fun icon(pack: ThemePackInfo, declared: String?, id: String): ThemeIcon? {
@@ -201,16 +300,28 @@ class ThemePackLoader(
         return BitmapFactory.decodeByteArray(data, 0, data.size, BitmapFactory.Options().apply { inSampleSize = sample })?.asImageBitmap()
     }
 
-    private fun font(pack: ThemePackInfo, declared: String, problems: MutableList<String>): Typeface? = when (val s = pack.source) {
+    /**
+     * The pack's font roles. `body` is the declared file or the first font in `fonts/`; `display`
+     * and `mono` fall back to it. A pack with no fonts at all inherits [base]'s.
+     */
+    private fun fonts(pack: ThemePackInfo, t: ThemeManifest.Typography?, base: ThemeFonts?, problems: MutableList<String>): ThemeFonts {
+        val body = font(pack, t?.body.orEmpty(), problems, firstIfBlank = true)
+        val display = t?.display?.takeIf { it.isNotBlank() }?.let { font(pack, it, problems, firstIfBlank = false) }
+        val mono = t?.mono?.takeIf { it.isNotBlank() }?.let { font(pack, it, problems, firstIfBlank = false) }
+        if (body == null && display == null && mono == null) return base ?: ThemeFonts()
+        return ThemeFonts(display = display ?: body, body = body ?: display ?: mono, mono = mono ?: body)
+    }
+
+    private fun font(pack: ThemePackInfo, declared: String, problems: MutableList<String>, firstIfBlank: Boolean): Typeface? = when (val s = pack.source) {
         is PackSource.Builtin -> {
-            val path = if (declared.isNotBlank()) "${s.dir}/$declared" else firstFontAsset(s.dir)
+            val path = if (declared.isNotBlank()) "${s.dir}/$declared" else if (firstIfBlank) firstFontAsset(s.dir) else null
             path?.let { p -> runCatching { Typeface.createFromAsset(assets, p) }.getOrNull() }
         }
         is PackSource.Folder -> {
-            val file = if (declared.isNotBlank()) {
-                inside(s.dir, declared)
-            } else {
-                find(s.dir, FONTS)?.listFiles()?.filter { it.isFile && it.extension.lowercase(Locale.ROOT) in FONT_TYPES }?.minByOrNull { it.name }
+            val file = when {
+                declared.isNotBlank() -> inside(s.dir, declared)
+                firstIfBlank -> find(s.dir, FONTS)?.listFiles()?.filter { it.isFile && it.extension.lowercase(Locale.ROOT) in FONT_TYPES }?.minByOrNull { it.name }
+                else -> null
             }
             when {
                 file == null -> {
@@ -243,14 +354,67 @@ class ThemePackLoader(
 
     // endregion
 
-    private fun readManifest(text: () -> String): ThemeManifest? = try {
-        ThemeManifest.JSON.decodeFromString(ThemeManifest.serializer(), text()).takeIf { it.name.isNotBlank() }
-    } catch (_: IOException) {
-        null
-    } catch (_: SerializationException) {
-        null
-    } catch (_: IllegalArgumentException) {
-        null
+    private sealed interface Read {
+        data class Ok(val manifest: ThemeManifest) : Read
+        data class Bad(val reason: String) : Read
+    }
+
+    private fun readFolderManifest(folder: File): Read = readManifest(find(folder, MANIFEST)?.name ?: MANIFEST) { name ->
+        inside(folder, name)?.takeIf { it.isFile && it.length() <= MAX_JSON_BYTES }?.let { f -> runCatching { f.readText() }.getOrNull() }
+    }
+
+    /**
+     * Reads [manifestName] and its `imports` through [read] (null: missing or unreadable), merges
+     * them (imports first, the manifest on top) and decodes the result. Only `schemaVersion: 2` is
+     * accepted. Imports are JSON files inside the pack; they can't import further files.
+     */
+    private fun readManifest(manifestName: String, read: (String) -> String?): Read {
+        val text = read(manifestName) ?: return Read.Bad("$manifestName can't be read")
+        val root = when (val p = parseObject(manifestName, text)) {
+            is Parsed.Ok -> p.obj
+            is Parsed.Bad -> return Read.Bad(p.reason)
+        }
+        var merged = JsonObject(emptyMap())
+        val imports = (root["imports"] as? JsonArray).orEmpty()
+        if (imports.size > MAX_IMPORTS) return Read.Bad("$manifestName: at most $MAX_IMPORTS imports")
+        for (entry in imports) {
+            val name = (entry as? JsonPrimitive)?.contentOrNull?.trim().orEmpty()
+            if (!name.lowercase(Locale.ROOT).endsWith(".json") || name.contains("..")) return Read.Bad("$manifestName: imports must be .json files in the pack ($name)")
+            val importText = read(name) ?: return Read.Bad("$manifestName imports $name, which can't be read")
+            val obj = when (val p = parseObject(name, importText)) {
+                is Parsed.Ok -> p.obj
+                is Parsed.Bad -> return Read.Bad(p.reason)
+            }
+            merged = ThemeManifest.merge(merged, JsonObject(obj - "imports"))
+        }
+        merged = ThemeManifest.merge(merged, root)
+        val version = (merged["schemaVersion"] as? JsonPrimitive)?.intOrNull
+        if (version != ThemeManifest.SCHEMA_VERSION) {
+            return Read.Bad(if (version == null) "theme.json has no \"schemaVersion\": 2 (v1 packs aren't supported)" else "schemaVersion $version isn't supported (use 2)")
+        }
+        return try {
+            val m = ThemeManifest.JSON.decodeFromJsonElement(ThemeManifest.serializer(), merged)
+            if (m.name.isBlank()) Read.Bad("theme.json needs a \"name\"") else Read.Ok(m)
+        } catch (e: SerializationException) {
+            Read.Bad("$manifestName: ${e.message?.lineSequence()?.firstOrNull() ?: "invalid"}")
+        } catch (e: IllegalArgumentException) {
+            Read.Bad("$manifestName: ${e.message?.lineSequence()?.firstOrNull() ?: "invalid"}")
+        }
+    }
+
+    private sealed interface Parsed {
+        data class Ok(val obj: JsonObject) : Parsed
+        data class Bad(val reason: String) : Parsed
+    }
+
+    /** Parses [text] as a JSON object; a failure names the file and, when known, the line. */
+    private fun parseObject(name: String, text: String): Parsed = try {
+        (Json.parseToJsonElement(text) as? JsonObject)?.let { Parsed.Ok(it) } ?: Parsed.Bad("$name isn't a JSON object")
+    } catch (e: SerializationException) {
+        val msg = e.message.orEmpty()
+        val line = Regex("offset (\\d+)").find(msg)?.groupValues?.get(1)?.toIntOrNull()
+            ?.let { off -> text.take(off).count { it == '\n' } + 1 }
+        Parsed.Bad(name + (line?.let { " line $it" } ?: "") + ": " + msg.lineSequence().first().substringBefore(" at path").take(120))
     }
 
     companion object {
@@ -267,6 +431,10 @@ class ThemePackLoader(
         private const val MAX_ICON_BYTES = 2L * 1024 * 1024
         private const val MAX_FONT_BYTES = 16L * 1024 * 1024
         private val ID = Regex("[A-Za-z0-9_. -]{1,64}")
+        private val SURFACE_ID = Regex("[A-Za-z0-9_-]{1,48}")
+        private const val MAX_JSON_BYTES = 256L * 1024
+        private const val MAX_IMPORTS = 8
+        private val revisions = java.util.concurrent.atomic.AtomicLong()
 
         /**
          * [relative] inside [root], matching each path segment without regard to case; null when
