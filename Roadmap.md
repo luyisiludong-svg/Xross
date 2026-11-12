@@ -218,9 +218,9 @@ Bugs or gaps in features that are already built, separate from the new work in �
 | Issue | Impact | Fix |
 | --- | --- | --- |
 | No real-hardware validation of controllers, sticks, emulators or audio | Biggest risk to Beta | Phase 1b hardware pass (§4.1) |
-| Phase 2b.1 has not run on a device | The avatar HUD morph, the 16:9 tiles, L1/R1 paging on Details and the dashboard are unit- and view-model-tested only | Run the 2b.1 checks in `docs/HARDWARE_TESTING.md` §6c on the Galaxy A55, then on a handheld |
+| Phase 2b.1 animations not checked by eye | On the Galaxy A55 (2026-11-12) the HUD, tiles, Details paging and dashboard all work and were screenshotted; `smoke.sh` passes 112/112 on the emulator. The HUD morph and the Details crossfade haven't been watched for jitter, and L1/R1 hasn't been pressed on a physical controller | Watch them on the A55, then on a handheld with a controller |
 | `smoke.sh` 75/86 on the Galaxy A55 | The 11 failures are Photo/Music checks that expect the seeded media to be the only media. Not re-run since 2b.1 added Settings ▸ Theme ▸ Profile customization and Games ▸ RetroAchievements, which may shift key counts | Re-run on a throwaway emulator; fix counts |
-| Idle CPU in front: fix not yet measured on a device | Was 100–130% of the 8-core total on the Galaxy A55 (focus pulse redrawing ~85×/s, wave at 120 Hz). Now: after 3 s without input (`InactivityTracker`; music or a video snap keeps it awake), the focus pulse and avatar glow settle and stop, and the wave drops to ~20 fps; in use the wave is capped near 60 fps. On the API 37 emulator (60 Hz) resting CPU fell from 21.9% to 2.5–2.8%, with in-use CPU unchanged | Measure on the Galaxy A55 (`docs/HARDWARE_TESTING.md` §6c), and check by eye that the standby wave still looks smooth |
+| Idle CPU in front still 12% | Was 114–124% resting on the Galaxy A55 (focus pulse redrawing every frame, wave at 120 Hz). After 3 s without input (`InactivityTracker`; music or a video snap keeps it awake) the pulses settle and stop and the wave drops to 20 fps (p95 51.9 ms against 50 ms); in use it runs at 60 fps. Resting is now 12–19%, mostly the 20 fps wave (GL 5.7%, main 3.3%) | To reach < 10%: a lower standby rate, or stopping the wave after a longer rest (docs/STATUS.md §3.15) |
 | Library organization and the portable folder only tested on a phone | Passed on the Galaxy A55's internal storage. Moving the folder to an SD card or USB drive, atomic replace on FAT/exFAT, and Android 9/10 are unit-tested only | Check on a device with an SD card, and on an Android 9 or 10 device |
 | Folder names are typed in capitals | The gamepad keyboard has no lower case; "MY TOOLS" is saved as "My Tools" | Keyboard modes (§4.6) |
 | Config writes are asynchronous | A crash within milliseconds of changing a setting can lose that one change | Acceptable; writes are flushed before restores and folder moves |
@@ -283,7 +283,7 @@ Theme Mixer) comes from v2.1 and needs everything before it.
 
 | Milestone | Scope | Prerequisites | State |
 | --- | --- | --- | --- |
-| **2b.1** | Far-right avatar and mini-HUD, 16:9 game tiles, Details paging, playtime subtitle, game RA telemetry, avatar style settings, Games ▸ RetroAchievements dashboard | RetroAchievements ✅, Details ✅ | ✅ 🧪 (device pass pending) |
+| **2b.1** | Far-right avatar and mini-HUD, 16:9 game tiles, Details paging, playtime subtitle, game RA telemetry, avatar style settings, Games ▸ RetroAchievements dashboard | RetroAchievements ✅, Details ✅ | ✅ 📱 (A55 screenshots; animations not yet watched) |
 | **2b.2** | **Foundation.** Theme 2.0 manifest (`theme.json` v2, `schemaVersion`) with a v1 reader; variants and category/system overrides in the model; `.xtheme` archive import; font roles (`display`, `body`, `mono`); layout block (crosshair anchors and clamping, tile aspect per category, spacing, focused scale, unfocused alpha, UI scale 50–150%, motion profiles); text overflow mode; `Modifier.xrossSurface()` with the four surface styles (tint only); `FULL_BLEED_LINE` focus divider; drill-down styles (`CHEVRON_COLLAPSE`, `XMB_FOLDER_COLUMN`, today's `BREADCRUMB`) | Theme pack loader ✅ | ⬜ |
 | **2b.3** | Contextual palette from game art (Jetpack Palette) driving the wave, status-bar rings and focus glow; quick profiles (OLED True Black, Y2K / Cyber-Pastel, Monochrome E-Ink); optional hourly circadian curve; optional battery-level tint | Art in `Xross/media` ✅, 2b.2 palette roles and surface styles | ⬜ |
 | **2b.4** | Shader presets (`WAVE`, `ASCII_MATRIX`, `BOKEH`, `STARFIELD`, `CRT`) and custom `shader.frag` with standard uniforms and a frame-budget watchdog; foreground ambient particles (layer 4); blur radius and opacity on surfaces; focus frame styles (`BREATHING_HALO`, `STATIC_NEON`, `HARD_SHADOW`, `GOLD_BEZEL`); icon masks and duotone tinting for app icons; static wallpaper (`wallpaper.png` in a pack, or Set as Xross wallpaper from Photos) | Wave uniforms ✅, 2b.2 | ⬜ |
@@ -450,12 +450,11 @@ Before any public release: original Default pack + open-licensed typeface (§4.2
 
 ### Suggested next steps
 
-1. Device pass for 2b.1 on the Galaxy A55 (`docs/HARDWARE_TESTING.md` §6c) and a clean
-   `./gradlew :app:testDebugUnitTest` run; re-run `smoke.sh` on an emulator and fix its counts.
+1. Watch the 2b.1 animations (HUD morph, Details crossfade) on the Galaxy A55 for jitter; the
+   functional pass, unit tests and `smoke.sh` are done (2026-11-12).
 2. The real-handheld pass with a controller and real emulators (also covers per-controller
    mappings, the deadzones and the six newer recipes).
-3. Measure the idle-CPU fix on the Galaxy A55 (target < 10% at rest) and check that the 20 fps
-   standby wave looks smooth.
+3. Idle CPU below 10% at rest (12% on the Galaxy A55 now): a lower standby rate or a deep rest.
 4. 2b.2: Theme 2.0 manifest with a v1 reader and `.xtheme` import, font roles, an open-licensed
    rounded typeface as the default `display` font, `xrossSurface()`, the focus divider and the
    drill-down styles; re-run the 12-configuration display matrix.
@@ -478,7 +477,7 @@ From `project_scope.md` §5.
 | Cold boot to interactive < 2.5 s | ✅ 📱 377–1,050 ms to first frame on the Galaxy A55 (profiling build); ~200 ms on the emulator |
 | Idle RAM ≤ 150 MB with an emulator in front | ✅ 📱 83–122 MB PSS on the Galaxy A55 |
 | GL loop suspended when Xross isn't in front | ✅ 📱 0% CPU in the background on the Galaxy A55 |
-| Idle CPU in front | ◐ Not a scope target. Resting on the home screen: 2.5–2.8% on the emulator after the idle rest (was 21.9%); was 100–130% on the Galaxy A55, not re-measured yet (§3) |
+| Idle CPU in front | ◐ Not a scope target. Resting on the home screen: 12–19% on the Galaxy A55 (was 114–124%), 2.5–2.8% on the emulator (§3) |
 | Background daemons < 3% CPU when idle | ⬜ No daemons yet |
 
 ---
