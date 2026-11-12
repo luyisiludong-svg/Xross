@@ -4,6 +4,7 @@ import androidx.compose.runtime.Immutable
 import dev.xross.launcher.state.Categories
 import dev.xross.launcher.storage.PlatformRegistry
 import dev.xross.launcher.theme.ThemePalette
+import dev.xross.launcher.theme.shader.ShaderRef
 import java.util.Locale
 
 /** A `variants` entry checked against its pack: colors that parse, a surface that exists. */
@@ -14,6 +15,8 @@ data class ResolvedVariant(
     val palette: ThemeManifest.Palette? = null,
     val surfaceId: String? = null,
     val flags: ColorFlags? = null,
+    /** `effects.shaderPreset` / `effects.shaderPath`, checked. */
+    val shader: ShaderRef? = null,
 )
 
 /** A checked `categoryOverrides` / `systemOverrides` entry (its tile aspect lives in [ThemeLayout]). */
@@ -23,6 +26,8 @@ data class ThemePatch(
     val surfaceId: String? = null,
     /** Circadian curve, battery tint and adaptive palette switches. */
     val flags: ColorFlags? = null,
+    /** The background program while this patch holds. */
+    val shader: ShaderRef? = null,
 )
 
 /**
@@ -40,6 +45,8 @@ data class ThemeLook(
     val layout: ThemeLayout? = null,
     /** Indices of the context rules that hold here. */
     val rules: List<Int> = emptyList(),
+    /** The background program here (2b.4a): the last layer that names one wins. */
+    val shader: ShaderRef = ShaderRef.WAVE,
 )
 
 /**
@@ -62,21 +69,25 @@ fun cascade(
     system: ThemePatch?,
     rules: List<ResolvedRule> = emptyList(),
     flags: ColorFlags = ColorFlags.NONE,
+    shader: ShaderRef = ShaderRef.WAVE,
 ): ThemeLook {
     var palette = roles
     var surface = surfaceId
     var f = flags
+    var program = shader
     variant?.let { v ->
         v.palette?.let { palette = palette?.over(it) ?: it }
         v.surfaceId?.let { surface = it }
         f = f.over(v.flags)
+        v.shader?.let { program = it }
     }
     for (patch in listOfNotNull(category, system) + rules.mapNotNull { it.patch }) {
         patch.palette?.let { p -> palette = palette?.over(p) }
         patch.surfaceId?.let { surface = it }
         f = f.over(patch.flags)
+        patch.shader?.let { program = it }
     }
-    return ThemeLook(palette?.toPalette(wave), surface, variant?.id.orEmpty(), f, rules = rules.map { it.index })
+    return ThemeLook(palette?.toPalette(wave), surface, variant?.id.orEmpty(), f, rules = rules.map { it.index }, shader = program)
 }
 
 /** Variant ids: what `settings.json` stores. */
@@ -113,6 +124,7 @@ internal fun resolveVariants(
             palette = palette,
             surfaceId = surfaceOf("variants.$id", v.effects, surfaceIds, problems),
             flags = ColorFlags.of(v.palette, v.effects).takeUnless { it.empty },
+            shader = ShaderRef.of("variants.$id", v.effects?.shaderPreset, v.effects?.shaderPath, problems),
         )
     }
     return out
@@ -181,7 +193,8 @@ internal fun patchOf(where: String, o: ThemeOverride, surfaceIds: Set<String>, p
     val palette = o.palette?.valid("$where.palette", problems)?.takeIf { it.hasColors }
     val surface = surfaceOf(where, o.effects, surfaceIds, problems)
     val flags = ColorFlags.of(o.palette, o.effects).takeUnless { it.empty }
-    return if (palette == null && surface == null && flags == null) null else ThemePatch(palette, surface, flags)
+    val shader = ShaderRef.of(where, o.effects?.shaderPreset, o.effects?.shaderPath, problems)
+    return if (palette == null && surface == null && flags == null && shader == null) null else ThemePatch(palette, surface, flags, shader)
 }
 
 private fun surfaceOf(where: String, effects: ThemeManifest.Effects?, surfaceIds: Set<String>, problems: MutableList<String>): String? {

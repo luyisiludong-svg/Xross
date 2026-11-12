@@ -241,6 +241,10 @@ class MainActivity : ComponentActivity() {
                     enabled = state.waveEnabled && !fullscreenMedia,
                     paused = backdropCovers && state.waveEditor == null,
                     idle = uiIdle,
+                    shaders = pack.shaderLibrary,
+                    shader = pack.shaderLibrary.keyOf(look.shader),
+                    category = categoryId,
+                    health = container.shaderHealth,
                 )
                 XmbScreen(
                     state = state,

@@ -13,6 +13,8 @@ class XrossApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         container = AppContainer(this)
+        // Before any frame: a theme shader that crashed the last process is blocked now (2b.4a).
+        container.shaderHealth
     }
 
     /**
