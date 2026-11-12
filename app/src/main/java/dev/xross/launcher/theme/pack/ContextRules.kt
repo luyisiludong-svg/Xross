@@ -48,7 +48,7 @@ data class RuleMatcher(
 data class RuleApplication(
     /** Palette roles, and the `circadianCurve` / `batteryTint` switches. */
     val palette: ThemeManifest.Palette? = null,
-    /** `surfaceStyle`, `adaptiveGamePalette`, `shaderPreset` and `shaderPath`. */
+    /** `surfaceStyle`, `adaptiveGamePalette`, `shaderPreset`, `shaderPath` and `wallpaperPath`. */
     val effects: ThemeManifest.Effects? = null,
     /** Tile aspect while the rule holds ("1:1"); with a `system` selector, that system's game tiles. */
     val cardAspectRatio: String? = null,

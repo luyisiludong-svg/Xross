@@ -193,8 +193,13 @@ fun XmbScreen(
     onMiniPlayerTap: () -> Unit = {},
     onMiniPlayerLongPress: () -> Unit = {},
     loadBadge: suspend (String, Int) -> ImageBitmap? = { _, _ -> null },
-    /** Opaque hero art or a video snap covers the screen: the wave can stop rendering. */
+    /** Opaque hero art, a video snap or an opaque wallpaper covers the screen: the wave can stop rendering. */
     onBackdropCoverChanged: (Boolean) -> Unit = {},
+    /** The wallpaper behind the menu (the user's Xross wallpaper or the pack's); null: none. */
+    wallpaper: dev.xross.launcher.theme.WallpaperSource? = null,
+    /** The pack's wallpaper, shown when [wallpaper] (the user's) can't be read. */
+    packWallpaper: dev.xross.launcher.theme.WallpaperSource? = null,
+    loadWallpaper: suspend (dev.xross.launcher.theme.WallpaperSource, Int) -> Wallpaper? = { _, _ -> null },
     onWaveRowTap: (Int) -> Unit = {},
     onWaveSlider: (Int, Float) -> Unit = { _, _ -> },
     onCloseWaveSettings: () -> Unit = {},
@@ -226,6 +231,7 @@ fun XmbScreen(
         Modifier
             .fillMaxSize()
             .graphicsLayer { alpha = reveal.value }
+            .frostHost()
             .swipeNavigation(onAction),
     ) {
         val m = remember(constraints.maxWidth, constraints.maxHeight, layout) {
@@ -248,10 +254,23 @@ fun XmbScreen(
             state.avatarEditor == null && state.raHub == null
         var heroCovers by remember { mutableStateOf(false) }
         var videoCovers by remember { mutableStateOf(false) }
+        var wallpaperCovers by remember { mutableStateOf(false) }
+        val viewport = androidx.compose.ui.geometry.Size(m.width, m.height)
+        // Layer 3: the wallpaper, hidden while the wave editor shows the wave it edits.
+        WallpaperBackdrop(
+            source = wallpaper,
+            fallback = packWallpaper,
+            shown = state.waveEditor == null,
+            maxPx = minOf(maxOf(m.width, m.height), 2560f).toInt(),
+            viewport = viewport,
+            load = loadWallpaper,
+            onCovering = { wallpaperCovers = it },
+        )
         FocusBackdrop(
             uuid = focusedArt?.uuid?.takeIf { quiet && state.details == null },
             artVersion = focusedArt?.version ?: 0L,
             maxPx = minOf(maxOf(m.width, m.height), 1600f).toInt(),
+            viewport = viewport,
             loadArt = loadArt,
             onCovering = { heroCovers = it },
         )
@@ -266,7 +285,12 @@ fun XmbScreen(
             playing?.let { SnapVideo(it, Modifier.fillMaxSize(), scrim = 0.55f, onCovering = { c -> videoCovers = c }) }
             if (playing == null) videoCovers = false
         }
-        val covers = heroCovers || videoCovers
+        // Frosted surfaces show blurred art only where a still image is what's behind them:
+        // not over a video snap or a media screen.
+        val snapOn = snap?.player?.collectAsState()?.value != null
+        val frostOff = snapOn || state.overlay != null
+        androidx.compose.runtime.SideEffect { FrostedBackdrop.suppressed = frostOff }
+        val covers = heroCovers || videoCovers || wallpaperCovers
         val reportCover by rememberUpdatedState(onBackdropCoverChanged)
         LaunchedEffect(covers) { reportCover(covers) }
 

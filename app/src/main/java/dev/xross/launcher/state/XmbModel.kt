@@ -103,7 +103,12 @@ sealed interface Command {
     data class SetGameEmulator(val gameId: Long, val key: String?) : Command
     data object OpenNowPlaying : Command
     data object ShuffleAllSongs : Command
+    /** Sets the photo as the Android system wallpaper (through the system's cropper). */
     data class SetWallpaper(val photoId: Long) : Command
+    /** Draws the photo behind Xross's menu instead of the theme's wallpaper (`display.customWallpaper`). */
+    data class SetXrossWallpaper(val photoId: Long) : Command
+    /** Back to the theme pack's wallpaper (or none). */
+    data object ResetXrossWallpaper : Command
     data object CycleSlideshowInterval : Command
     data object ToggleResumeMusicAfterGames : Command
     data object ToggleVideoLoop : Command

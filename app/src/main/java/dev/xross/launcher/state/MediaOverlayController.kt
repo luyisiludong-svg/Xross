@@ -57,7 +57,7 @@ sealed interface MediaOverlay {
  *
  * Controls
  * - Photos: ←/→ previous/next (pan when zoomed) · ↑/↓ pan when zoomed · R1/L1 zoom in/out ·
- *   Confirm info · Start slideshow · Options set as wallpaper · Back un-zoom, then close
+ *   Confirm info · Start slideshow · Options wallpaper menu · Back un-zoom, then close
  * - Video: Confirm/Start play/pause · ←/→ seek 10 s · L1/R1 seek 60 s · ↑/↓ previous/next video ·
  *   Options loop · Back close
  * - Now Playing: Confirm/Start play/pause · ←/→ previous/next · L1/R1 seek 10 s ·
@@ -69,7 +69,8 @@ class MediaOverlayController(
     private val music: MusicPlayer,
     private val settings: SettingsStore,
     private val sounds: UiSounds,
-    private val setWallpaper: (Photo) -> Unit,
+    /** Opens the photo's Options menu (Set as Xross / Android wallpaper). */
+    private val photoOptions: (Photo) -> Unit,
     private val toast: (String) -> Unit,
 ) {
     private val _overlay = MutableStateFlow<MediaOverlay?>(null)
@@ -216,7 +217,7 @@ class MediaOverlayController(
             NavAction.START -> if (o.slideshow) stopSlideshow(announce = true) else startSlideshow()
             NavAction.OPTIONS -> {
                 sounds.play(UiSound.OPTION)
-                setWallpaper(o.photo)
+                photoOptions(o.photo)
             }
             NavAction.MEDIA -> Unit
             NavAction.BACK -> if (zoomed) {

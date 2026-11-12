@@ -24,7 +24,7 @@ import kotlinx.serialization.json.JsonObject
  *   "typography": { "display": "fonts/Display.ttf", "body": "fonts/Rounded.ttf" },
  *   "audio": { "sounds": { "cursor": "tick.wav" }, "soundGains": { "cursor": 0.6 } },
  *   "icons": { "album": "disc.svg" },
- *   "effects": { "surfaceStyle": "petal", "shaderPreset": "BOKEH" },
+ *   "effects": { "surfaceStyle": "petal", "shaderPreset": "BOKEH", "wallpaperPath": "art/sakura.webp" },
  *   "surfaces": { "petal": { "shape": { "type": "CHAMFERED", "cutDp": [10, 0, 10, 0] } } }
  * }
  * ```
@@ -180,6 +180,11 @@ data class ThemeManifest(
         @kotlinx.serialization.json.JsonNames("shader") val shaderPreset: String? = null,
         /** CUSTOM's fragment shader, from the pack root (default `shader.frag`); alone it implies CUSTOM. */
         val shaderPath: String? = null,
+        /**
+         * Static wallpaper behind the menu ([WallpaperRef], 2b.4c): a PNG, JPEG or WebP from the
+         * pack root, or `none`. Unset: the pack's `wallpaper.png` if it has one.
+         */
+        @kotlinx.serialization.json.JsonNames("wallpaper") val wallpaperPath: String? = null,
     )
 
     companion object {

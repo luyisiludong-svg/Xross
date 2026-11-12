@@ -88,6 +88,10 @@ data class LoadedTheme(
     val shader: ShaderRef = ShaderRef.WAVE,
     /** Text of each CUSTOM shader file the pack names, by its pack-relative path (unreadable ones absent). */
     val customShaders: Map<String, String> = emptyMap(),
+    /** The pack's own wallpaper (2b.4c): `effects.wallpaperPath`, else its `wallpaper.png`, else none. */
+    val wallpaper: WallpaperRef = WallpaperRef.NONE,
+    /** Each wallpaper file the pack names, by its pack-relative path (missing ones absent). */
+    val wallpapers: Map<String, File> = emptyMap(),
     /** What the pack declared but couldn't be used (bad font, unreadable icon), for Settings. */
     val problems: List<String> = emptyList(),
     /** Bumped on every load, so a hot reload of the same files still counts as a change. */
@@ -117,6 +121,12 @@ data class LoadedTheme(
     /** [shadersUsed] as programs, compiled ahead of time when this pack becomes active. */
     val shaderLibrary: ShaderLibrary by lazy { ShaderLibrary.of(shadersUsed, customShaders) }
 
+    /** True when the base, a variant, an override or a rule can show a wallpaper. */
+    val hasWallpaper: Boolean get() = wallpapers.isNotEmpty()
+
+    /** The file of [ref] (the look's wallpaper); null for none or a file that wasn't found. */
+    fun wallpaperFile(ref: WallpaperRef): File? = ref.path?.let(wallpapers::get)
+
     /** Some rule depends on the battery. */
     val usesBattery: Boolean get() = rules.any { it.battery != null }
 
@@ -145,7 +155,7 @@ data class LoadedTheme(
         // Category-wide tile shapes and focused-system layout patches depend on those two as well.
         val layoutContext = if (layoutHeld.isEmpty()) "" else "${category.orEmpty()}/${system.orEmpty()}"
         return looks.getOrPut(LookKey(v?.id.orEmpty(), cat, sys, held.map { it.index }, layoutHeld, layoutContext)) {
-            cascade(roles, surfaceId, wave, v, categoryPatches[cat], systemPatches[sys], held, flags, shader)
+            cascade(roles, surfaceId, wave, v, categoryPatches[cat], systemPatches[sys], held, flags, shader, wallpaper)
                 .copy(layout = if (layoutHeld.isEmpty()) null else applyRuleLayout(layout, rules, ctx))
         }
     }
@@ -188,6 +198,7 @@ sealed interface PackLoad {
  *   sounds/      cursor.wav, confirm.wav, back.wav, option.wav, ok.wav, system_ng.wav,
  *                trophy.wav, 01. opening.wav, gameboot.wav
  *   shader.frag  GLSL ES 3.0 fragment shader for "effects": { "shaderPreset": "CUSTOM" } (or effects.shaderPath)
+ *   wallpaper.png  static wallpaper behind the menu (or .jpg / .webp, or effects.wallpaperPath)
  * ```
  *
  * File lookups ignore case (FAT-formatted SD cards and hand-made packs disagree on it) and never
@@ -338,6 +349,14 @@ class ThemePackLoader(
         val customShaders = LinkedHashMap<String, String>()
         for (path in customPaths) shaderText(pack, path, problems)?.let { customShaders[path] = it }
 
+        val folder = (pack.source as? PackSource.Folder)?.dir
+        val wallpaper = WallpaperRef.of("theme", m.effects?.wallpaperPath, problems)
+            ?: folder?.let(WallpaperRef::defaultIn)?.let(::WallpaperRef)
+            ?: WallpaperRef.NONE
+        val wallpaperRefs = listOf(wallpaper) + variants.mapNotNull { it.wallpaper } +
+            (categoryPatches.values + systemPatches.values).mapNotNull { it.wallpaper } + rules.mapNotNull { it.patch?.wallpaper }
+        val wallpapers = wallpaperFiles(folder, wallpaperRefs, problems)
+
         return LoadedTheme(
             info = pack,
             palette = palette,
@@ -357,6 +376,8 @@ class ThemePackLoader(
             flags = ColorFlags.of(m.palette, m.effects),
             shader = shader,
             customShaders = customShaders,
+            wallpaper = wallpaper,
+            wallpapers = wallpapers,
             problems = problems,
             revision = revisions.incrementAndGet(),
         )

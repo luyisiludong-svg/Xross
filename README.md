@@ -113,12 +113,12 @@ on screens 600 dp and wider.
 | DAT verification | Done. No-Intro, Redump and MAME DATs (Logiqx XML or clrmamepro, plain or zipped) matched by SHA-1, MD5, CRC32 + size or arcade set name; Room schema v5 |
 | Scraping and art | Done. Hasheous, SteamGridDB and ScreenScraper with per-service pacing and quotas; art cached on disk per game; box art on game rows; Details screen with paging between games; manual match and title override; hero art and video snaps behind the focused game. All three services verified live |
 | Emulator dispatch | Done. RetroArch (per-platform core), DuckStation, NetherSX2, Dolphin, PPSSPP, Azahar, Eden, Flycast, M64Plus FZ, melonDS and ScummVM, chosen per platform or per game. ROMs go out as a path extra plus a `content://` URI with a read grant. Verified with stand-ins only |
-| Media hub | Done. Photo viewer (zoom, pan, slideshow, wallpaper), background music player with media-session controls, video player; music pauses for games and videos |
+| Media hub | Done. Photo viewer (zoom, pan, slideshow, Set as Xross or Android wallpaper), background music player with media-session controls, video player; music pauses for games and videos |
 | Wave background | Done. GLSL ES 3.0 ribbon shader with day/night palette; speed, ribbon lines, turbulence, thickness and color presets as live uniforms (Settings ▸ Theme ▸ Wave settings). Pauses whenever the launcher isn't in front or game art covers it |
 | Theme packs | Done. `Xross/themes/<id>/` with a v2 `theme.json` (imports, palette roles, font roles, surfaces), fonts, SVG/PNG icons and sounds, reloaded live when edited; the bundled icons and sounds are the built-in Default pack |
 | RetroAchievements | Done. Account linking, status bar avatar with an expanding mini-HUD, User Card, Games ▸ RetroAchievements dashboard, per-game telemetry and achievement lists, unlock toasts. Linking and lists verified live on an emulator and the Galaxy A55; the 2b.1 HUD and dashboard are unit-tested only; unlock toasts not yet seen after a real session |
 | Library organization | Done. Hide apps (Options ▸ Hide, Settings ▸ Apps ▸ Hidden apps, Hide system apps), app folders (Emulators, Streaming, Tools or your own name, with emulators suggested), base ROMs folder with Create system folders, and custom Photo/Video folders that also find files MediaStore skips. Tested on the Galaxy A55 |
-| Customization | 16:9 XMB game tiles (logo, wide art or a title plate); Settings ▸ Theme ▸ Profile customization for the avatar's border and glow (`profile.avatarStyle` in `settings.json`). Theme 2.0 packs with variants, overrides and context rules, palettes from game art, an hourly circadian curve, a battery tint and quick profiles (OLED True Black, Y2K Cyber-Pastel, Monochrome E-Ink); custom shaders, BGM and haptics are planned, see Roadmap §4.3 |
+| Customization | 16:9 XMB game tiles (logo, wide art or a title plate); Settings ▸ Theme ▸ Profile customization for the avatar's border and glow (`profile.avatarStyle` in `settings.json`). Theme 2.0 packs with variants, overrides and context rules, palettes from game art, an hourly circadian curve, a battery tint and quick profiles (OLED True Black, Y2K Cyber-Pastel, Monochrome E-Ink); background shader presets and a pack's own `shader.frag` (music-reactive through Xross's player), a pack wallpaper or a photo set as Xross wallpaper, and frosted surfaces over art and wallpapers. BGM and haptics are planned, see Roadmap §4.3 |
 | Extras | Android apps (games sorted into Games ▸ Android Games), 8 color themes including Original (a color per month), busy indicator, optional button hints, Information screen, can be set as the HOME launcher, Android TV leanback entry |
 | XMB fidelity | Closer. The home menu's layout, motion, navigation, status bar and options panel match the XMB; games show their own tiles, and focusing one brings up its art and video. An XMB-style typeface, Resume/Quit Game and the folder drill-down are missing |
 | Not started | On-screen controller, dual screen, Xross Portal, FTPS |
@@ -233,8 +233,9 @@ Xross/themes/<theme_id>/
 ├── surfaces.json   optional: any JSON file listed in "imports" is merged under theme.json
 ├── fonts/          .ttf/.otf; "typography" names one per role (display, body, mono)
 ├── icons/          <icon id>.svg / .png / .webp, e.g. settings.svg, games.png
-└── sounds/         cursor.wav, confirm.wav, back.wav, option.wav, ok.wav, system_ng.wav,
-                    trophy.wav, 01. opening.wav, gameboot.wav
+├── sounds/         cursor.wav, confirm.wav, back.wav, option.wav, ok.wav, system_ng.wav,
+│                   trophy.wav, 01. opening.wav, gameboot.wav
+└── wallpaper.png   optional: drawn behind the menu (or .jpg / .webp, or effects.wallpaperPath)
 ```
 
 ```json
@@ -291,7 +292,18 @@ drawn, layer by layer:
   borders `INNER`, `OUTER` or a `side` (`TOP`, `LEFT`, `BOTTOM`, `RIGHT`). At most 3 borders and
   2 shadows are drawn, glows up to 24 dp. Every pack also gets the built-in `FLAT_GLASS`,
   `Y2K_GLOSSY_BEZEL`, `OLED_TRUE_BLACK` and `EINK_HIGH_CONTRAST`, and **Settings ▸ Theme ▸ Surface
-  style** picks any of them over the pack's choice. `backdropBlurDp` is accepted but not drawn yet.
+  style** picks any of them over the pack's choice. `backdropBlurDp` (0–48) frosts a surface:
+  over hero art or a wallpaper it shows a blurred slice of the image behind it under its fill;
+  over the live shader it keeps its tint. The blur is made once per image, small and off the main
+  thread, so it costs nothing per frame and works on every Android version. `FLAT_GLASS` uses 14.
+* **Wallpaper:** a `wallpaper.png` (or `.jpg` / `.webp`) at the pack root is drawn full-bleed
+  behind the menu, over the background shader and under the focused game's hero art;
+  `effects.wallpaperPath` names another file in the pack (`wallpaper` is accepted too), and
+  `"none"` turns it off. Variants, overrides and rules may set it like the shader. An opaque
+  wallpaper stops the shader's GL loop while it covers the screen. **Photo ▸ Options ▸ Set as
+  Xross wallpaper** (in a photo list or the viewer) puts a photo there instead of the pack's,
+  saved as `display.customWallpaper` (a `content://` URI or a file path) and separate from the
+  Android wallpaper; **Settings ▸ Theme ▸ Xross wallpaper** goes back to the theme's.
 * **Variants:** `"variants": [{ "id": "bios-matrix", "name": "BIOS Matrix", "palette": {…},
   "effects": { "surfaceStyle": "OLED_TRUE_BLACK" } }]` adds colorways that share the pack's fonts,
   icons and sounds. **Settings ▸ Theme ▸ Theme variant** (shown only for packs that have them)
@@ -299,8 +311,8 @@ drawn, layer by layer:
 * **Overrides:** `"categoryOverrides": { "MUSIC": {…} }` (`GAMES`, `MUSIC`, `PHOTO`, `VIDEO`,
   `APPS`, `SETTINGS`) applies while that category is open; `"systemOverrides": { "dreamcast": {…} }`
   (a platform id or a folder alias such as `dc`) while one of that system's games is focused, after
-  the cursor rests for a quarter second. Each may set `palette` roles, `effects.surfaceStyle` and
-  `cardAspectRatio` (a system's aspect shapes that system's game tiles). Precedence, lowest to
+  the cursor rests for a quarter second. Each may set `palette` roles, `effects.surfaceStyle`,
+  `effects.shaderPreset`, `effects.wallpaperPath` and `cardAspectRatio` (a system's aspect shapes that system's game tiles). Precedence, lowest to
   highest: Default pack → pack → variant → category → system → your own Settings (a fixed theme
   color or a chosen surface style wins over all of them). Overrides patch a pack palette; they
   don't add one to a pack without colors. The wave crossfades between palettes.
@@ -329,8 +341,8 @@ drawn, layer by layer:
   overrides → rules → your theme color → quick profile → circadian curve and battery tint → game art.
 * **`.xtheme` files:** a pack zipped into one file (the folder itself or its contents) installs with
   **Settings ▸ Theme ▸ Import theme (.xtheme)…**. The archive is checked before anything is
-  written: no `..` or absolute paths, only `.json` / `.md` / `.txt` at the top and fonts, sounds
-  (or `audio/`), icons and shaders in their folders with their own file types, no programs, at most
+  written: no `..` or absolute paths, only `.json` / `.md` / `.txt`, `wallpaper.png` and
+  `shader.frag` at the top and fonts, sounds (or `audio/`), icons, shaders and `wallpapers/` in their folders with their own file types, no programs, at most
   50 MB unpacked, and a valid `schemaVersion: 2` `theme.json`. It unpacks into
   `Xross/themes/<id>/` (the id is made from the pack's name) and is switched to; if that id is
   installed, Xross asks whether to replace it or keep both.

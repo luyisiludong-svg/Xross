@@ -22,6 +22,7 @@ Legend: ✅ done and verified · ◐ partial · ❌ not started · 🧪 verified
 | Phase 2b.3 (color intelligence): game-art palette, `rules` context engine, circadian curve, battery tint, quick profiles | ✅ on `feat/theme-2b3` (2026-11-12): 499 unit tests; 171/171 on the API 37 emulator (§3.19, §3.20); on the **Galaxy A55 at 120 Hz** 160/171 (the 11 are seeded-media checks), game navigation 0.12–0.19% janky with game-art colors, GPU p50 6 ms; wheel-only art, Details as the source and a rule's layout patch checked on the device (§3.21). Idle CPU at rest is 16–21% (target < 10%) except under E-Ink (0%). Open items: [`PHASE_2B3_PENDING_TESTS.md`](PHASE_2B3_PENDING_TESTS.md) |
 | Phase 2b.4a (shader host & watchdog): multi-program GL host, public uniforms, `ASCII_MATRIX` / `BOKEH` / `STARFIELD` / `CRT` / `CUSTOM` presets, ahead-of-time compile, frame-budget watchdog, crash-loop canary | ✅ on `feat/theme-2b4` (2026-11-12): 535 unit tests, `validateShaders` (glslangValidator); `smoke.sh` 12/12 and the theme suite 88/88 on the API 37 emulator; `smoke.sh` 12/12 on the **Galaxy A55** (profiling build, timer-query watchdog): presets 1.3–3.0 ms GPU p90, a custom shader, hot reload, a compile error, the watchdog and crash recovery checked by hand on both (§3.22) |
 | Phase 2b.4b (audio-reactive uniforms): `uAudioBass` / `uAudioBeat` from Xross's own music player, no `RECORD_AUDIO`; a tap in ExoPlayer's audio sink, 150 Hz 4th-order low-pass, beat detector, latency-compensated ring buffer | ✅ on `feat/theme-2b4` (2026-11-12): 558 unit tests; media suite 24/24 (two new checks: the music drives both uniforms, a pause binds 0) and `smoke.sh` 12/12 on the API 37 emulator, where the analysis ran 475–507 ms ahead of the speaker and was compensated. Not yet on the Galaxy A55 (§3.23) |
+| Phase 2b.4c (wallpapers and frosted surfaces): `wallpaper.png` / `effects.wallpaperPath`, Set as Xross wallpaper (`display.customWallpaper`), the shader resting under an opaque wallpaper, `backdropBlurDp` as a pre-blurred slice on every Android version | ✅ 🧪 on `feat/theme-2b4` (2026-11-12): 578 unit tests; theme suite 94/94, media suite 31/31 and `smoke.sh` 12/12 on the API 37 emulator, frosting checked by eye. Not yet on the Galaxy A55 (§3.24) |
 | Phase 3 (dual screen, hot-swap, RetroAchievements, Web Portal, FTPS) | ◐ RetroAchievements account linking, status bar avatar and User Card (§3.12), per-game achievement lists and unlock toasts (§3.13), live on the emulator and the Galaxy A55 (§3.14); hot-swap and live resolution change done; dual screen, docking, Portal and FTPS not started |
 | Phase 4 (onboarding, triage, profiling, plugin API) | ◐ app triage and performance work started |
 
@@ -161,7 +162,7 @@ HTTPS Xross Portal (Ktor CIO), FTPS (Apache FtpServer), auth, uploads, library e
 
 ## 3. Test results
 
-### 3.1 Unit tests — 464 tests, 0 failures (2026-11-12; 558 on `feat/theme-2b4`, §3.22, §3.23)
+### 3.1 Unit tests — 464 tests, 0 failures (2026-11-12; 578 on `feat/theme-2b4`, §3.22–§3.24)
 `./gradlew :app:testDebugUnitTest` (JVM + Robolectric on SDK 35): 460 run by default, 4 opt-in live
 tests skip unless `-PliveScrape=true`. The 415 from Phase 2b.1 passed unchanged; the idle rest
 added `InactivityTrackerTest` (3 tests: timeout, input pushing it back, wave frame strides), and
@@ -1019,6 +1020,61 @@ put every pulse half a second early.
 their extra delay, which the sink's clock should include), sync judged by eye against real music,
 and the frame cost (one biquad cascade per sample on the playback thread, a locked array read per
 frame on the GL thread; neither profiled).
+
+### 3.24 Phase 2b.4c: wallpapers and frosted surfaces (2026-11-12)
+
+Layer 3 of the Theme 2.0 stack, and the `backdropBlurDp` that 2b.2 read but didn't draw.
+
+- **Wallpaper:** a pack's `wallpaper.png` / `.jpg` / `.webp` at its root, or `effects.wallpaperPath`
+  (alias `wallpaper`; `none` turns it off), through variants, overrides and rules like the shader
+  (`WallpaperRef` in the cascade; files checked at load, `LoadedTheme.wallpapers`). Photo ▸ Options
+  ▸ **Set as Xross wallpaper** (in a photo list, and now as an Options menu over the viewer, which
+  also offers Set as Android wallpaper and, while one is set, Use the theme's wallpaper) saves the
+  photo's URI as `display.customWallpaper`; it beats the pack's, and the pack's shows again if the
+  photo can't be read. **Settings ▸ Theme ▸ Xross wallpaper** (above Import theme) says where the
+  wallpaper comes from and goes back to the theme's. `WallpaperLoader` decodes with `ImageDecoder`
+  (EXIF rotation, software pixels, ≤ 2560 px) on IO and keeps the last two. `WallpaperBackdrop`
+  draws it full-bleed under the hero art with a lighter scrim, hides it while the wave editor is
+  open, and reports `backdropCovers` when it is opaque and fully in, so the GL loop stops.
+- **Frosted surfaces (`PreBlur`, `FrostedBackdrop`):** when hero art or a wallpaper is shown and
+  the active surface has `backdropBlurDp`, a 192 px wide copy is blurred once on
+  `Dispatchers.Default` (three box passes ≈ a Gaussian of that sigma, premultiplied, edges
+  clamped) and cached by image and radius (`PreBlurCache`, 8 copies, LRU). `Modifier.frostedSlice`,
+  inside `xrossSurface`'s clip and under its fill, draws each layer's aligned slice (same
+  `ContentScale.Crop` rect, measured from the home screen's root) with its scrim and fade, reads
+  everything in the draw phase and redraws when the surface moves. No `RenderEffect`, so Android
+  9–11 get it too (§5 of the Roadmap revised). Over the live shader, a video snap or a media screen
+  the tint alone. The Default pack's `FLAT_GLASS` now blurs 14 dp.
+- **`.xtheme`:** archives may now hold `wallpaper.*` and `shader.frag` at their root (the loader's
+  default names; `shader.frag` there was rejected since 2b.4a) and a `wallpapers/` folder.
+- Debug and profiling builds log `XrossWallpaper` (`wallpaper=pack 320x180 opaque=true`) and
+  `XrossFrost` (`WALLPAPER radius=3 copy=192x108 in 24.5 ms`).
+
+**Unit tests:** `BackdropTest` (20): wallpaper paths (none, escapes, types), the pack default in
+any case, the cascade through variants, a category override and a rule, a missing file, the
+user's wallpaper over the pack's, `display.customWallpaper` (round trip, trim, length cap), the
+photo Options and the Settings row; the copy's size, the radius mapping, the crop rect, opacity,
+the blur (uniform stays uniform, a point spreads symmetrically and keeps its energy, transparent
+neighbors don't darken, radius 0 copies) and the cache (LRU eviction, radii, evict, no cached
+failures). `ThemeArchiveTest`, `MediaMenusTest`, `ConfigCodecTest` and `WaveSettingsTest`
+updated. 578 unit tests in all.
+
+**Emulator (API 37, debug build):** theme suite **94/94**, with six new checks: a `wallpaper.png`
+dropped into the active pack hot-reloads behind the menu, stops the wave's loop (`mode=STOPPED`)
+and gets a 192×108 pre-blurred copy; Settings ▸ Theme ▸ Xross wallpaper names the pack; removing
+the file hides it and the wave runs again. Media suite **31/31**, with seven new checks: the photo
+viewer's Options offer Set as Xross wallpaper, the URI lands in `settings.json`, the photo is
+decoded opaque and stops the wave, the Settings row shows it, and Confirm clears it and the wave
+resumes. `smoke.sh` 12/12. By eye: a checkerboard wallpaper shows full-bleed with its scrim, and
+the avatar mini-HUD (Flat glass) shows it blurred under its tint, aligned with the squares around
+it. A blur took 24.5 ms for hero art on a warm process, and 428 ms for the first one after a cold
+start (JIT and the default dispatcher warming up); either way off the main thread.
+
+**Not covered:** the Galaxy A55 and handhelds (the blur's look at 120 Hz, decode time of a 4K
+photo, memory with a 2560 px wallpaper held), frame pacing on the profiling build, a surface
+sliding with `graphicsLayer` (its slice follows positioning callbacks), Android 9–11 on hardware,
+and the `.xtheme` change on a device (unit-tested only). The Options panel and the button-hint
+pill aren't themed surfaces, so they don't frost.
 
 ## 4. Display matrix & performance
 

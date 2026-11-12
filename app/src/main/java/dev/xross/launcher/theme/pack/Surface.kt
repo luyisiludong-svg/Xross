@@ -28,7 +28,10 @@ data class SurfaceSpec(
     val label: String = "",
     val shape: ShapeSpec? = null,
     val fill: FillSpec? = null,
-    /** Read but not drawn yet: backdrop blur comes in 2b.4 (Android 12+, over art only). */
+    /**
+     * Frosted glass (2b.4c): over hero art or a wallpaper the surface draws a pre-blurred slice of
+     * it under its fill, blurred by about this many dp; over the live shader, the fill alone.
+     */
     val backdropBlurDp: Float = 0f,
     val sheen: SheenSpec? = null,
     val borders: List<BorderSpec> = emptyList(),

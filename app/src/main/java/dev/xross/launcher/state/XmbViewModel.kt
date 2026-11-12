@@ -200,7 +200,7 @@ class XmbViewModel(
         music = music,
         settings = container.settings,
         sounds = container.sounds,
-        setWallpaper = { photo -> emit(UiEffect.SetWallpaper(photo.uri)) },
+        photoOptions = { photo -> openPhotoOptions(photo) },
         toast = { toast(it) },
     )
 
@@ -430,8 +430,9 @@ class XmbViewModel(
         transient.value.raHub?.let { return raHubAction(it, action) }
         transient.value.info?.let { return infoAction(it, action) }
         transient.value.details?.let { return detailsAction(it, action) }
-        if (media.onAction(action)) return
+        // Before the media screens: the photo viewer's Options menu opens over it.
         transient.value.optionsMenu?.let { return optionsAction(it, action) }
+        if (media.onAction(action)) return
         transient.value.search?.let { return searchAction(it, action) }
         if (transient.value.avatarFocused) return avatarAction(action)
         val ui = current()
@@ -1121,6 +1122,12 @@ class XmbViewModel(
     // endregion
 
     // region Options menu
+
+    /** The photo viewer's Options: its wallpaper choices, over the viewer. */
+    private fun openPhotoOptions(photo: dev.xross.launcher.media.Photo) {
+        val options = MediaMenus.photoOptions(photo.id, customWallpaper = settingsStore.current.customWallpaper.isNotBlank())
+        transient.update { it.copy(optionsMenu = OptionsMenuState.open(photo.name.substringBeforeLast('.'), options)) }
+    }
 
     private fun openOptions(node: XmbNode) {
         if (node.menu.isEmpty()) return refuse()
@@ -2349,6 +2356,14 @@ class XmbViewModel(
             }
             is Command.SetWallpaper -> container.media.library.value.photos.firstOrNull { it.id == command.photoId }
                 ?.let { emit(UiEffect.SetWallpaper(it.uri)) }
+            is Command.SetXrossWallpaper -> container.media.library.value.photos.firstOrNull { it.id == command.photoId }?.let { photo ->
+                settingsStore.update { it.copy(customWallpaper = photo.uri.toString()) }
+                toast("Xross wallpaper set")
+            }
+            Command.ResetXrossWallpaper -> {
+                settingsStore.update { it.copy(customWallpaper = "") }
+                toast(if (container.themes.active.value.hasWallpaper) "Using the theme's wallpaper" else "Xross wallpaper removed")
+            }
             Command.CycleSlideshowInterval -> settingsStore.update {
                 it.copy(slideshowSeconds = SLIDESHOW_SECONDS[(SLIDESHOW_SECONDS.indexOf(it.slideshowSeconds) + 1) % SLIDESHOW_SECONDS.size])
             }
@@ -2534,6 +2549,7 @@ class XmbViewModel(
                             packSurface = active.surfaceId,
                             rejected = rejected.map { r -> "${r.id}: ${r.reason}" },
                             packFlags = active.flags,
+                            packWallpaper = active.hasWallpaper,
                         ),
                     )
                 }

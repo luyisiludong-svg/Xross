@@ -35,9 +35,9 @@ sealed interface InstallResult {
  *
  * - **Zip slip:** an entry whose path contains `..`, starts with `/` or `\`, has a drive letter
  *   or a NUL is rejected, and every written file is checked to stay inside the staging folder.
- * - **Known folders only:** `.json` (and `.md` / `.txt` notes) at the root; fonts, sounds (also
- *   `audio/`, as in the spec's manifest example), icons and shaders in their folders, with their
- *   own file types. Programs (`.apk`, `.dex`, `.so`, `.sh`, …) and anything else abort the import.
+ * - **Known folders only:** `.json` (and `.md` / `.txt` notes), `wallpaper.png` / `.jpg` /
+ *   `.webp` and `shader.frag` at the root; fonts, sounds (also `audio/`, as in the spec's manifest
+ *   example), icons, shaders and wallpapers in their folders, with their own file types. Programs (`.apk`, `.dex`, `.so`, `.sh`, …) and anything else abort the import.
  *   macOS `__MACOSX/` and `.DS_Store` litter is skipped.
  * - **Size cap:** at most [maxBytes] (50 MB) uncompressed, checked against the declared sizes and
  *   again while unpacking (a header can lie), and at most [MAX_ENTRIES] files.
@@ -191,8 +191,12 @@ class ThemeArchive(
             "audio" to setOf("wav", "ogg", "mp3", "flac", "m4a", "aac", "opus"),
             "icons" to setOf("svg", "png", "webp"),
             "shaders" to setOf("frag", "glsl", "agsl"),
+            "wallpapers" to WallpaperRef.TYPES.toSet(),
         )
         private val ROOT_TYPES = setOf("json", "md", "txt")
+
+        /** Files the loader looks for at the pack root by name: the wallpaper and the CUSTOM shader. */
+        private val ROOT_FILES = WallpaperRef.DEFAULT_NAMES.toSet() + "shader.frag"
         private val PROGRAMS = setOf(
             "apk", "apks", "xapk", "aab", "dex", "odex", "vdex", "oat", "jar", "class", "so", "elf", "bin",
             "sh", "bash", "zsh", "bat", "cmd", "ps1", "exe", "dll", "msi", "py", "js", "lua", "pl", "rb",
@@ -212,9 +216,12 @@ class ThemeArchive(
             val path = parts.joinToString("/")
             val ext = parts.last().substringAfterLast('.', "").lowercase(Locale.ROOT)
             if (ext in PROGRAMS) return "$path is a program; theme packs hold data only"
-            if (parts.size == 1) return if (ext in ROOT_TYPES) null else "unexpected file $path (only .json at the top level)"
+            if (parts.size == 1) {
+                val ok = ext in ROOT_TYPES || parts[0].lowercase(Locale.ROOT) in ROOT_FILES
+                return if (ok) null else "unexpected file $path (only .json, wallpaper.png and shader.frag at the top level)"
+            }
             val types = FOLDERS[parts[0].lowercase(Locale.ROOT)]
-                ?: return "unexpected folder ${parts[0]}/ (use fonts/, sounds/, audio/, icons/ or shaders/)"
+                ?: return "unexpected folder ${parts[0]}/ (use fonts/, sounds/, audio/, icons/, shaders/ or wallpapers/)"
             if (parts.size > 4) return "$path is nested too deep"
             return if (ext in types) null else "unexpected file $path (${parts[0]}/ holds ${types.sorted().joinToString()})"
         }

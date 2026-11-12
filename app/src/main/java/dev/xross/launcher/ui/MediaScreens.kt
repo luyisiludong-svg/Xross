@@ -219,7 +219,7 @@ private fun PhotoViewer(
                         "←→" to "Photo",
                         "L1/R1" to "Zoom",
                         "Start" to "Slideshow",
-                        "@options" to "Wallpaper",
+                        "@options" to "Wallpaper…",
                     ),
                 )
             }

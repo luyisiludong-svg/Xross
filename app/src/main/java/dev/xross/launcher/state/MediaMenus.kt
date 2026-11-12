@@ -162,7 +162,7 @@ class MediaMenus(private val media: MediaLibrary, private val storageGranted: Bo
         ).joinToString(" · "),
         icon = thumb(ThumbKind.PHOTO, p.id, GlyphKey.PHOTO),
         action = NodeAction.OpenMedia(MediaKind.PHOTO, key, i),
-        menu = listOf(MenuOption("Set as wallpaper", command = Command.SetWallpaper(p.id))),
+        menu = photoOptions(p.id, customWallpaper = false),
     )
 
     private fun videoNode(v: Video, key: String, i: Int) = XmbNode(
@@ -217,6 +217,16 @@ class MediaMenus(private val media: MediaLibrary, private val storageGranted: Bo
     // endregion
 
     companion object {
+        /**
+         * A photo's Options: Xross's own wallpaper (behind the menu) or the Android one, and, while
+         * a Xross wallpaper is set ([customWallpaper]), back to the theme's.
+         */
+        fun photoOptions(photoId: Long, customWallpaper: Boolean): List<MenuOption> = buildList {
+            add(MenuOption("Set as Xross wallpaper", detail = "Behind the menu", command = Command.SetXrossWallpaper(photoId)))
+            add(MenuOption("Set as Android wallpaper", command = Command.SetWallpaper(photoId)))
+            if (customWallpaper) add(MenuOption("Use the theme's wallpaper", command = Command.ResetXrossWallpaper))
+        }
+
         const val PHOTOS_ALL = "photos:all"
         const val PHOTO_FOLDER = "photos:folder:"
         const val VIDEOS_ALL = "videos:all"
