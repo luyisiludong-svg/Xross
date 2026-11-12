@@ -1,0 +1,8 @@
+# shellcheck settings for the device tests (picked up from this directory).
+# SC2015: `check && ok … || bad …` is the house pattern; ok and bad always return 0, so bad
+#         never runs after ok.
+# SC2016: single-quoted `adb shell '…'` scripts are meant to expand on the device, not the host.
+# SC2119/SC2120: all_games and friends take an optional argument.
+disable=SC2015,SC2016,SC2119,SC2120
+external-sources=true
+source-path=SCRIPTDIR

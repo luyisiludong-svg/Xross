@@ -5,7 +5,7 @@ file lists what has **not** been verified yet, why, and how to verify it. What *
 including that pass, is in [`STATUS.md` §3.19](STATUS.md).
 
 **Done on the emulator in that pass:** frame pacing of game navigation (target met, once a GPU cost
-in the glow-text bloom was fixed), the full smoke test (171 of 171), the colors by eye, context
+in the glow-text bloom was fixed), the full device regression (171 of 171, now `tools/device-tests/run-all.sh`), the colors by eye, context
 rules switching live and under hot reload, and unit tests for wheel-only art, `adaptiveArtKey`,
 the `battery.level` aliases and `category` + `system` tile shapes (499 tests).
 
@@ -15,7 +15,8 @@ the `battery.level` aliases and `category` + `system` tile shapes (499 tests).
 
 Only the API 37 emulator has run this branch.
 
-- **Galaxy A55 (120 Hz):** the full `smoke.sh`, then `tools/device-tests/palette-perf.sh` (it
+- **Galaxy A55 (120 Hz):** the device regression (`tools/device-tests/run-all.sh`; `test-media.sh`
+  fails there by design, since the phone has its own photos and music), then `tools/device-tests/palette-perf.sh` (it
   installs the debug build to seed, then the profiling build; judge the deadline-based
   "Janky frames", target 0–1.5%, and compare on/off). On the emulator, with the bloom fix: on
   0.29–0.90%, off 0.30%, GPU p50 14 ms both. At 120 Hz the budget is 8.3 ms, so watch GPU p50.

@@ -141,7 +141,9 @@ on screens 600 dp and wider.
 ./gradlew :app:testDebugUnitTest --tests '*ScreenScraperLiveTest*' -PliveScrape=true   # real API calls, uses .env and localTestMedia/Roms/
 ./gradlew :app:testDebugUnitTest --tests '*RetroAchievementsLiveTest*' -PliveScrape=true
 ./gradlew :app:installDebug :emulator-stub:installRetroarchDebug
-tools/device-tests/smoke.sh                       # on-device smoke test (see warning below)
+tools/device-tests/smoke.sh                       # quick on-device smoke test, ~30 s (see warning below)
+tools/device-tests/test-theme.sh                  # one suite: test-{library,theme,media,input,integration}.sh
+tools/device-tests/run-all.sh                     # full device regression, all 171 checks (= smoke.sh --all)
 ./gradlew :app:assembleProfiling                  # R8-optimized build for frame timing
 ```
 
@@ -153,9 +155,17 @@ only when its credentials are in `.env`: ScreenScraper works with the developer 
 profile and loads a game's achievements. `localTestMedia/` (ROMs, music and video for local testing) is never
 committed.
 
-> **`smoke.sh` is for a throwaway emulator.** It clears Xross's data and runs
-> `rm -rf /sdcard/ROMs` (plus `XrossSmoke` folders under Pictures, Music and Movies) to seed its
-> own test files. Never run it on a device that holds a real ROM collection.
+> **The device tests are for a throwaway emulator.** Each one clears Xross's data and runs
+> `rm -rf /sdcard/ROMs` (the media suite also uses `XrossSmoke` folders under Pictures, Music and
+> Movies) to seed its own test files, and deletes them at the end. Never run them on a device that
+> holds a real ROM collection.
+
+The device tests come in three tiers that share `tools/device-tests/lib/harness.sh`: `smoke.sh`
+(12 checks: boot, database, library scan, category bar, no crash) for everyday work; five suites
+that each start from a reset and run on their own (`test-library.sh` 41, `test-theme.sh` 88,
+`test-media.sh` 22, `test-input.sh` 11, `test-integration.sh` 9); and `run-all.sh`, which runs them
+all with one passed / failed / skipped summary and exits non-zero on any failure. Details and
+optional host tools: [`docs/HARDWARE_TESTING.md`](docs/HARDWARE_TESTING.md) §2a.
 
 Measure smoothness only on the `profiling` build. The debug build is debuggable, and Compose runs
 several times slower there, so it shows stutter that the optimized build doesn't have.
@@ -378,5 +388,5 @@ assets/docs/         PS3 and PSP instruction manuals (local reference only, git-
 assets/examples/     XMB reference screenshots and design mock-ups
 tools/icons/         SVG → VectorDrawable converter and icon role map
 tools/emulator-stub/ test-only emulator stand-ins (Gradle module :emulator-stub)
-tools/device-tests/  adb-driven smoke test
+tools/device-tests/  adb-driven device tests: quick smoke, five suites, run-all.sh, frame timing
 ```

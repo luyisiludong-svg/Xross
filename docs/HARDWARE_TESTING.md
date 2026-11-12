@@ -4,9 +4,10 @@ How to install, exercise and measure Xross on a physical handheld, phone or TV b
 send back when something is wrong. Feature status and emulator measurements are in
 [`STATUS.md`](STATUS.md); open work is in [`Roadmap.md`](../Roadmap.md).
 
-> **Don't run `tools/device-tests/smoke.sh` on a device that holds your real ROM collection.**
-> It runs `rm -rf /sdcard/ROMs` to seed its own test files and clears Xross's app data. It is
-> meant for a throwaway emulator.
+> **Don't run the scripts in `tools/device-tests/` on a device that holds your real ROM
+> collection.** Every suite, the quick `smoke.sh` included, runs `rm -rf /sdcard/ROMs` to seed its
+> own test files (and removes them at the end) and clears Xross's app data. They are meant for a
+> throwaway emulator (§2a).
 
 ## 1. Connect the device
 
@@ -43,6 +44,37 @@ Grant storage access in the app (**Settings ▸ Library ▸ All files access**) 
 ```bash
 adb shell appops set --uid dev.xross.launcher MANAGE_EXTERNAL_STORAGE allow
 ```
+
+## 2a. Automated device tests
+
+`tools/device-tests/` drives the debug build over adb (key events, the accessibility tree,
+debug-build logs) in three tiers. All share `lib/harness.sh`; each suite clears Xross's data and
+seeds its own fixtures, so any of them runs on its own and in any order.
+
+| Command | Checks | Time (API 37 emulator) | What it covers |
+| --- | --- | --- | --- |
+| `tools/device-tests/smoke.sh` | 12 | ~30 s | Quick sanity: Xross starts, creates its database, scans the seeded ROMs, draws the category bar and Games root, opens the first platform, L1/R1, no crash. No media, theme, database or battery fixtures |
+| `tools/device-tests/test-library.sh` | 41 | ~2 min | Platform detection, `.cue`/`.bin` pairing, title cleaning, favorites, per-game emulator, search, game tiles and Details paging, categories, rescan and fingerprinting |
+| `tools/device-tests/test-theme.sh` | 88 | ~4 min | Settings ▸ Theme rows, quick profiles, color layers (circadian, `dumpsys battery` tint and charging pulse), Sound, v2 packs and hot reload, `.xtheme` import and variants, game-art palette |
+| `tools/device-tests/test-media.sh` | 22 | ~1.5 min | Photo viewer and zoom, music from tags, Now Playing, Select shortcut and mini-player, music pausing for video and games |
+| `tools/device-tests/test-input.sh` | 11 | ~45 s | Deadzone cycle, ten-button remap and its saved mapping, touch swipes and drag |
+| `tools/device-tests/test-integration.sh` | 9 | ~35 s | Avatar mini-HUD, RetroAchievements dashboard, no secrets in `Xross/config`, RetroArch launch through the stub |
+| `tools/device-tests/run-all.sh` (or `smoke.sh --all`) | 171 | ~9 min | Every suite in sequence with one summary; exit 0 only when nothing failed |
+
+`smoke.sh <suite>` runs one suite (`smoke.sh theme`); `run-all.sh theme input` runs a chosen set.
+
+- **Host tools:** `python3` (theme fixtures); `ffmpeg` (media suite) and `sqlite3` with a
+  debuggable build (game-art block) are optional, and their checks are reported as skipped
+  without them. The RetroArch stub (`./gradlew :emulator-stub:installRetroarchDebug`) enables the
+  launch and music-during-a-game checks; never install it next to real RetroArch (§3).
+- **Teardown:** however a suite ends (pass, fail, Ctrl-C), it runs `dumpsys battery reset`, stops
+  the stub and deletes what it put on the device: `/sdcard/ROMs`, the `XrossSmoke` media folders,
+  the smoke theme packs and `.xtheme` files, hero art and the UI dump. `XROSS_KEEP_FIXTURES=1`
+  keeps them for debugging. Xross's previous `Xross/config` stays in `/sdcard/Xross-smoke-backup/`.
+- **On a phone with its own media** the Photo and Music checks fail by design: they expect the
+  seeded `XrossSmoke` files to be the only media.
+- Frame timing has its own scripts (`palette-perf.sh`, `display-matrix.sh`, §5); they need the
+  profiling build.
 
 ## 3. Games and real emulators
 
