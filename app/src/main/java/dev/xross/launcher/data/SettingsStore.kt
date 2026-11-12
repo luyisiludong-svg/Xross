@@ -59,6 +59,12 @@ data class XrossSettings(
     val surfaceStyle: String = "",
     /** The active pack's variant id (Settings ▸ Theme ▸ Theme variant); empty or unknown = the pack's base look. */
     val themeVariant: String = "",
+    /**
+     * Xross's own wallpaper (Photo ▸ Options ▸ Set as Xross wallpaper): a photo's content URI or a
+     * file path, drawn behind the menu instead of the theme pack's. Empty uses the pack's
+     * wallpaper, if it has one. Separate from the Android system wallpaper.
+     */
+    val customWallpaper: String = "",
     /** [dev.xross.launcher.theme.QuickProfile] name (Settings ▸ Theme ▸ Quick profile); NONE = the theme's own look. */
     val quickProfile: String = dev.xross.launcher.theme.QuickProfile.NONE.name,
     /** Colors from the focused game's art; null follows the pack's `effects.adaptiveGamePalette` (on by default). */

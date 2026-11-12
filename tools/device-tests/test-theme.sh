@@ -2,7 +2,8 @@
 # Theme suite (88 checks): Settings ▸ Theme rows (theme color, wave and avatar panels, platform
 # folders, surface style), quick profiles (OLED, Y2K, E-Ink), color layers (adaptive colors,
 # circadian curve, battery tint and charging pulse through `dumpsys battery`), the Sound section,
-# v2 theme packs and hot reload, .xtheme import (zip-slip, variants, overrides, Keep both), and the
+# v2 theme packs and hot reload (and a pack's wallpaper.png, which stops the wave and is pre-blurred
+# for frosted surfaces), .xtheme import (zip-slip, variants, overrides, Keep both), and the
 # game-art palette (hero PNGs, scraped flags patched into the database, extraction cache, debounce).
 #
 #   tools/device-tests/test-theme.sh
@@ -13,7 +14,7 @@
 # The battery override is always reset at exit, even after Ctrl-C.
 set -u
 . "$(dirname "$0")/lib/harness.sh"
-suite_begin theme 88
+suite_begin theme 94
 
 setup_base_env
 setup_theme_fixtures
@@ -24,7 +25,7 @@ category 0
 section "Settings"
 # Theme rows: Theme pack, [Theme variant, only for packs with variants], Theme color, Wave
 # background, Wave settings, Profile customization, Button hints, Platform folders, Surface style,
-# Quick profile, Adaptive colors, Circadian curve, Battery alert tint, Import theme (.xtheme)….
+# Quick profile, Adaptive colors, Circadian curve, Battery alert tint, Xross wallpaper, Import theme (.xtheme)….
 press DPAD_DOWN 3 KEYCODE_DPAD_CENTER
 expect "Theme pack" "Theme section lists theme packs"
 expect "Default" "the built-in Default pack is active"
@@ -176,6 +177,28 @@ pause 0.8
 expect "Theme not reloaded" "a broken theme.json keeps the last good theme and says why"
 adb shell "echo '$good' > /sdcard/Xross/themes/smoke_pack/theme.json"
 pause 1.5
+# 2b.4c: a wallpaper.png dropped into the active pack hot-reloads behind the menu. It is opaque,
+# so the wave's GL loop stops; Flat glass (the Default surface, 14 dp) blurs a small copy of it.
+adb logcat -c
+adb push "$FIX/smoke_wallpaper.png" /sdcard/Xross/themes/smoke_pack/wallpaper.png >/dev/null
+pause 2.5
+adb logcat -d -s XrossWallpaper:I | tail -1 | grep -q "wallpaper=pack .* opaque=true" \
+  && ok "a pack's wallpaper.png shows behind the menu" || bad "no pack wallpaper ($(adb logcat -d -s XrossWallpaper:I | tail -1))"
+adb logcat -d -s WaveLoop:I | tail -1 | grep -q "mode=STOPPED" \
+  && ok "an opaque wallpaper stops the wave's GL loop" || bad "the wave still runs ($(adb logcat -d -s WaveLoop:I | tail -1))"
+adb logcat -d -s XrossFrost:I | grep -q "WALLPAPER radius=[1-9][0-9]* copy=192x108" \
+  && ok "frosted surfaces get a 192 px pre-blurred copy of it" || bad "no pre-blurred copy ($(adb logcat -d -s XrossFrost:I | tail -1))"
+# Xross wallpaper sits just above Import theme (the last row); then back to Wave settings.
+press DPAD_DOWN 20 KEYCODE_DPAD_UP
+expect "From Smoke Pack Live" "Settings ▸ Theme ▸ Xross wallpaper names the pack"
+press DPAD_UP 25 KEYCODE_DPAD_DOWN KEYCODE_DPAD_DOWN KEYCODE_DPAD_DOWN
+adb logcat -c
+adb shell rm /sdcard/Xross/themes/smoke_pack/wallpaper.png
+pause 2.5
+adb logcat -d -s XrossWallpaper:I | tail -1 | grep -q "wallpaper=none" \
+  && ok "removing wallpaper.png hides it" || bad "the wallpaper stayed ($(adb logcat -d -s XrossWallpaper:I | tail -1))"
+adb logcat -d -s WaveLoop:I | tail -1 | grep -qE "mode=(CONTINUOUS|PACED)" \
+  && ok "the wave runs again" || bad "the wave didn't resume ($(adb logcat -d -s WaveLoop:I | tail -1))"
 top_list
 key KEYCODE_DPAD_CENTER
 pause 1.5

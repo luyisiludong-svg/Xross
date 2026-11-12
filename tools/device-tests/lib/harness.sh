@@ -195,6 +195,7 @@ media_scan() { adb shell content call --method scan_volume --uri content://media
 #                                  override and a SNES override under its "sfc" folder alias
 #   $XT_TMP/theme/smoke_slip.xtheme       a pack with a ../ (zip-slip) entry
 #   $XT_TMP/theme/heroes/          hero art for two SNES games (blue/orange, green/magenta)
+#   $XT_TMP/theme/smoke_wallpaper.png  an opaque 320×180 wallpaper for smoke_pack (2b.4c)
 setup_theme_fixtures() {
   local d; d=$(tmpdir theme)
   mkdir -p "$d/smoke_pack/sounds" "$d/heroes"
@@ -234,6 +235,7 @@ def png(path, bg, fg, w=320, h=180):
         f.write(b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0))
                 + chunk(b"IDAT", zlib.compress(b"".join(rows))) + chunk(b"IEND", b""))
 png(d + "/heroes/Chrono Trigger (USA).png", (11, 30, 74), (255, 122, 16))
+png(d + "/smoke_wallpaper.png", (40, 20, 60), (200, 180, 255))
 png(d + "/heroes/EarthBound (USA).png", (12, 60, 24), (230, 40, 200))
 PY
 }

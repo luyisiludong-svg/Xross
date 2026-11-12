@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Media suite (24 checks): photo folders and the viewer (paging, R1 zoom), music from tags (albums,
+# Media suite (31 checks): photo folders and the viewer (paging, R1 zoom, Set as Xross wallpaper and
+# back to the theme's), music from tags (albums,
 # track order, playback through the media session), the music driving the shader's audio uniforms
 # (and 0 when paused), Now Playing, the Select shortcut and the mini-player line, and background
 # music pausing for a video and for a game.
@@ -14,11 +15,11 @@
 # folders under Pictures, Music and Movies (all removed at exit; see lib/harness.sh).
 set -u
 . "$(dirname "$0")/lib/harness.sh"
-suite_begin media 24
+suite_begin media 31
 
 setup_base_env
 if ! setup_media_fixtures; then
-  skip 24 "the media suite needs ffmpeg on the host"
+  skip 31 "the media suite needs ffmpeg on the host"
   suite_end
   exit
 fi
@@ -39,8 +40,35 @@ key KEYCODE_DPAD_RIGHT
 expect "2 / 2" "right shows the next photo"
 key KEYCODE_BUTTON_R1
 expect "1.5×" "R1 zooms in"
-key KEYCODE_BACK KEYCODE_BACK
+key KEYCODE_BACK
+# 2b.4c: Options over the viewer; Set as Xross wallpaper draws the photo behind the menu
+# (display.customWallpaper), and the opaque photo stops the wave's GL loop (debug-build logs).
+adb logcat -c
+key KEYCODE_BUTTON_Y
+expect "Set as Xross wallpaper" "the viewer's Options offer Set as Xross wallpaper"
+key KEYCODE_DPAD_CENTER
+for _ in $(seq 10); do settings_has '"customWallpaper": "content://' && break; pause 0.5; done
+settings_has '"customWallpaper": "content://' && ok "the photo is saved as display.customWallpaper" || bad "customWallpaper not in settings.json"
+key KEYCODE_BACK
 expect "Smoke Photo A" "Back un-zooms, then closes the viewer"
+pause 1.5
+adb logcat -d -s XrossWallpaper:I | tail -1 | grep -q "wallpaper=custom .* opaque=true" \
+  && ok "the Xross wallpaper is decoded and shown" || bad "no custom wallpaper ($(adb logcat -d -s XrossWallpaper:I | tail -1))"
+adb logcat -d -s WaveLoop:I | tail -1 | grep -q "mode=STOPPED" \
+  && ok "an opaque wallpaper stops the wave's GL loop" || bad "the wave still runs under the wallpaper ($(adb logcat -d -s WaveLoop:I | tail -1))"
+# Settings ▸ Theme ▸ Xross wallpaper (just above Import theme, the last row) says where it comes
+# from; Confirm goes back to the theme's.
+category 0
+press DPAD_DOWN 3 KEYCODE_DPAD_CENTER
+press DPAD_DOWN 20 KEYCODE_DPAD_UP
+expect "A photo you chose" "Settings ▸ Theme shows the Xross wallpaper"
+key KEYCODE_DPAD_CENTER
+for _ in $(seq 10); do settings_has '"customWallpaper": ""' && break; pause 0.5; done
+settings_has '"customWallpaper": ""' && ok "Confirm goes back to the theme's wallpaper" || bad "customWallpaper not cleared"
+pause 1
+adb logcat -d -s WaveLoop:I | tail -1 | grep -qE "mode=(CONTINUOUS|PACED)" \
+  && ok "the wave runs again without the wallpaper" || bad "the wave didn't resume ($(adb logcat -d -s WaveLoop:I | tail -1))"
+key KEYCODE_BACK
 
 section "Music"
 category 2

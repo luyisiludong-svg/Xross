@@ -282,6 +282,13 @@ class MainActivity : ComponentActivity() {
                     onMiniPlayerLongPress = viewModel::onMiniPlayerLongPressed,
                     loadBadge = { name, px -> badgeImages.load(name, px) },
                     onBackdropCoverChanged = { backdropCovers = it },
+                    wallpaper = androidx.compose.runtime.remember(state.settings.customWallpaper, pack, look) {
+                        dev.xross.launcher.theme.WallpaperSource.resolve(state.settings.customWallpaper, pack, look)
+                    },
+                    packWallpaper = androidx.compose.runtime.remember(pack, look) {
+                        dev.xross.launcher.theme.WallpaperSource.packWallpaper(pack, look)
+                    },
+                    loadWallpaper = { source, px -> container.wallpapers.load(source, px) },
                     onWaveRowTap = viewModel::onWaveRowTapped,
                     onWaveSlider = viewModel::onWaveSliderChanged,
                     onCloseWaveSettings = viewModel::closeWaveSettings,

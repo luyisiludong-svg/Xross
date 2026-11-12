@@ -55,11 +55,11 @@ seeds its own fixtures, so any of them runs on its own and in any order.
 | --- | --- | --- | --- |
 | `tools/device-tests/smoke.sh` | 12 | ~30 s | Quick sanity: Xross starts, creates its database, scans the seeded ROMs, draws the category bar and Games root, opens the first platform, L1/R1, no crash. No media, theme, database or battery fixtures |
 | `tools/device-tests/test-library.sh` | 41 | ~2 min | Platform detection, `.cue`/`.bin` pairing, title cleaning, favorites, per-game emulator, search, game tiles and Details paging, categories, rescan and fingerprinting |
-| `tools/device-tests/test-theme.sh` | 88 | ~4 min | Settings ▸ Theme rows, quick profiles, color layers (circadian, `dumpsys battery` tint and charging pulse), Sound, v2 packs and hot reload, `.xtheme` import and variants, game-art palette |
-| `tools/device-tests/test-media.sh` | 24 | ~1.5 min | Photo viewer and zoom, music from tags, the music driving the shader's audio uniforms (0 when paused), Now Playing, Select shortcut and mini-player, music pausing for video and games |
+| `tools/device-tests/test-theme.sh` | 94 | ~4 min | Settings ▸ Theme rows, quick profiles, color layers (circadian, `dumpsys battery` tint and charging pulse), Sound, v2 packs and hot reload (a pack's `wallpaper.png`: shown, stops the wave, pre-blurred), `.xtheme` import and variants, game-art palette |
+| `tools/device-tests/test-media.sh` | 31 | ~2 min | Photo viewer and zoom, Set as Xross wallpaper and back to the theme's, music from tags, the music driving the shader's audio uniforms (0 when paused), Now Playing, Select shortcut and mini-player, music pausing for video and games |
 | `tools/device-tests/test-input.sh` | 11 | ~45 s | Deadzone cycle, ten-button remap and its saved mapping, touch swipes and drag |
 | `tools/device-tests/test-integration.sh` | 9 | ~35 s | Avatar mini-HUD, RetroAchievements dashboard, no secrets in `Xross/config`, RetroArch launch through the stub |
-| `tools/device-tests/run-all.sh` (or `smoke.sh --all`) | 173 | ~9 min | Every suite in sequence with one summary; exit 0 only when nothing failed |
+| `tools/device-tests/run-all.sh` (or `smoke.sh --all`) | 186 | ~10 min | Every suite in sequence with one summary; exit 0 only when nothing failed |
 
 `smoke.sh <suite>` runs one suite (`smoke.sh theme`); `run-all.sh theme input` runs a chosen set.
 
@@ -274,7 +274,9 @@ pid=$(adb shell pidof dev.xross.launcher); t0=$(adb shell cat /proc/$pid/stat | 
 - [ ] Settings ▸ Media ▸ Photo folders ▸ Add folder…: Photo then shows only that folder,
       including pictures in a folder with a `.nomedia` file; "Show all photos again" undoes it
 - [ ] Photo viewer: L1/R1 zoom, D-pad pans without showing black edges, Start runs a
-      slideshow, Options opens the system "Set wallpaper" screen
+      slideshow, Options offers Set as Xross wallpaper (the photo shows behind the menu, and
+      frosted cards over it show it blurred) and Set as Android wallpaper (the system screen);
+      Settings ▸ Theme ▸ Xross wallpaper goes back to the theme's
 - [ ] Music keeps playing while you browse and shows a media notification; headset buttons work
 - [ ] While music plays, a mini player card sits in the lower-right corner above the button
       hints; pausing for 30 s fades it out, and resuming brings it back

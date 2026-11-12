@@ -82,6 +82,8 @@ data class ThemeSetup(
     val variants: List<Pair<String, String>> = emptyList(),
     /** The active pack's own circadian, battery-tint and adaptive-palette switches. */
     val packFlags: dev.xross.launcher.theme.pack.ColorFlags = dev.xross.launcher.theme.pack.ColorFlags.NONE,
+    /** The active pack brings a wallpaper (`wallpaper.png` or `effects.wallpaperPath`). */
+    val packWallpaper: Boolean = false,
 )
 
 /** What Settings ▸ Accounts shows (public profile data only, never the Web API key). */
@@ -899,12 +901,28 @@ class MenuTree(private val s: MenuSnapshot) {
         colorSwitchRow("disp:adaptive", "Adaptive colors", ColorSwitch.ADAPTIVE, "Colors follow the focused game's art"),
         colorSwitchRow("disp:circadian", "Circadian curve", ColorSwitch.CIRCADIAN, "Colors shift with the time of day"),
         colorSwitchRow("disp:battery", "Battery alert tint", ColorSwitch.BATTERY, "Amber to red below 20%, green while charging"),
+        wallpaperRow(),
         setting(
             "disp:import", "Import theme (.xtheme)…",
             "Pick a theme file; it is checked, then unpacked into Xross/themes",
             GlyphKey.DOWNLOAD, Command.ImportThemeArchive,
         ),
     )
+
+    /**
+     * Xross wallpaper: the photo set from Photo ▸ Options, the theme's, or none. Confirm on a
+     * custom one goes back to the theme's; otherwise it says where to set one.
+     */
+    private fun wallpaperRow(): XmbNode {
+        val custom = s.settings.customWallpaper.isNotBlank()
+        val summary = when {
+            custom -> "A photo you chose · Confirm to use the theme's"
+            s.themes.packWallpaper -> "From ${s.themes.activeName} · set your own from Photo ▸ Options"
+            else -> "None (the background shader shows) · set one from Photo ▸ Options"
+        }
+        val action = if (custom) NodeAction.Run(Command.ResetXrossWallpaper) else NodeAction.None
+        return XmbNode("disp:wallpaper", "Xross wallpaper", summary, NodeIcon.Glyph(GlyphKey.PHOTO), action)
+    }
 
     /** Theme variant, only while the active pack has variants; its Options list them all. */
     private fun themeVariantRow(): List<XmbNode> {

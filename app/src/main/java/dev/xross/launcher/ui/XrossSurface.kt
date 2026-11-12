@@ -37,6 +37,9 @@ import kotlin.math.sin
  * [strength] scales the fill and sheen, [borderAlpha] and [borderScale] the borders' opacity and
  * width (1 = as the surface defines them).
  *
+ * A surface with `backdropBlurDp` draws its slice of the pre-blurred hero art or wallpaper behind
+ * it under the fill ([frostedSlice], 2b.4c); over the live shader it keeps the tint alone.
+ *
  * The surface is read only in the draw phase, so switching it redraws without recomposing. Glows,
  * shadows and outer borders draw outside the shape and are clipped out under it, so they never
  * darken a translucent fill; the fill, sheen, content and inner borders are clipped to the shape.
@@ -96,6 +99,8 @@ internal fun Modifier.xrossSurface(
         this.shape = shape(ThemeSurfaces.active)
         this.clip = clip()
     }
+    // Frosted glass (backdropBlurDp): the pre-blurred slice of the art or wallpaper behind, under the fill.
+    .frostedSlice(strength, clip)
     .drawWithCache {
         val s = ThemeSurfaces.active
         val outline = shape(s).createOutline(size, layoutDirection, this)

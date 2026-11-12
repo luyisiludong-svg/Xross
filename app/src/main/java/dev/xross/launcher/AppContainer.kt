@@ -108,6 +108,11 @@ class AppContainer(context: Context) {
     }
     val art: ArtLoader by lazy { ArtLoader(assets) }
 
+    /** The wallpaper behind the menu (2b.4c): Set as Xross wallpaper, or the theme pack's. */
+    val wallpapers: dev.xross.launcher.ui.WallpaperLoader by lazy {
+        dev.xross.launcher.ui.WallpaperLoader(appContext.contentResolver) { environment.current.root }
+    }
+
     /**
      * Colors of the focused game's hero or wheel art (Theme 2.0 contextual palette), debounced and
      * cached per game; extraction runs on [kotlinx.coroutines.Dispatchers.Default].

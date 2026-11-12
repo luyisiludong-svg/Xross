@@ -76,6 +76,8 @@ data class SettingsFile(
         val surfaceStyle: String = D.surfaceStyle,
         /** Variant id of the theme pack ("cyber-lilac"); empty = the pack's base look. */
         val themeVariant: String = D.themeVariant,
+        /** Xross wallpaper: a photo's content:// URI or a file path; empty = the theme pack's wallpaper. */
+        val customWallpaper: String = D.customWallpaper,
         /** NONE, OLED_TRUE_BLACK, Y2K_CYBER_PASTEL or MONOCHROME_EINK. */
         val quickProfile: String = D.quickProfile,
         /** Colors from the focused game's art; null = the theme pack's choice (on by default). */
@@ -209,6 +211,9 @@ data class SystemsFile(
 object ConfigCodec {
     const val VERSION = 1
 
+    /** A hand-edited `display.customWallpaper` longer than this is cut (URIs and paths are far shorter). */
+    const val MAX_WALLPAPER_CHARS = 1024
+
     val json = Json {
         prettyPrint = true
         prettyPrintIndent = "  "
@@ -229,6 +234,7 @@ object ConfigCodec {
             themePack = s.themePack,
             surfaceStyle = s.surfaceStyle,
             themeVariant = s.themeVariant,
+            customWallpaper = s.customWallpaper,
             quickProfile = s.quickProfile,
             adaptiveGamePalette = s.adaptiveGamePalette,
             circadianCurve = s.circadianCurve,
@@ -270,6 +276,7 @@ object ConfigCodec {
         themePack = f.display.themePack.trim().ifBlank { D.themePack },
         surfaceStyle = f.display.surfaceStyle.trim().take(48),
         themeVariant = f.display.themeVariant.trim().take(48),
+        customWallpaper = f.display.customWallpaper.trim().take(MAX_WALLPAPER_CHARS),
         quickProfile = dev.xross.launcher.theme.QuickProfile.normalize(f.display.quickProfile),
         adaptiveGamePalette = f.display.adaptiveGamePalette,
         circadianCurve = f.display.circadianCurve,

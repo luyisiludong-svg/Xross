@@ -17,6 +17,8 @@ data class ResolvedVariant(
     val flags: ColorFlags? = null,
     /** `effects.shaderPreset` / `effects.shaderPath`, checked. */
     val shader: ShaderRef? = null,
+    /** `effects.wallpaperPath`, checked ([WallpaperRef.NONE] turns the pack's off). */
+    val wallpaper: WallpaperRef? = null,
 )
 
 /** A checked `categoryOverrides` / `systemOverrides` entry (its tile aspect lives in [ThemeLayout]). */
@@ -28,6 +30,8 @@ data class ThemePatch(
     val flags: ColorFlags? = null,
     /** The background program while this patch holds. */
     val shader: ShaderRef? = null,
+    /** The wallpaper while this patch holds ([WallpaperRef.NONE]: none). */
+    val wallpaper: WallpaperRef? = null,
 )
 
 /**
@@ -47,6 +51,8 @@ data class ThemeLook(
     val rules: List<Int> = emptyList(),
     /** The background program here (2b.4a): the last layer that names one wins. */
     val shader: ShaderRef = ShaderRef.WAVE,
+    /** The pack's wallpaper here (2b.4c), resolved through [LoadedTheme.wallpaperFile]. */
+    val wallpaper: WallpaperRef = WallpaperRef.NONE,
 )
 
 /**
@@ -70,24 +76,31 @@ fun cascade(
     rules: List<ResolvedRule> = emptyList(),
     flags: ColorFlags = ColorFlags.NONE,
     shader: ShaderRef = ShaderRef.WAVE,
+    wallpaper: WallpaperRef = WallpaperRef.NONE,
 ): ThemeLook {
     var palette = roles
     var surface = surfaceId
     var f = flags
     var program = shader
+    var backdrop = wallpaper
     variant?.let { v ->
         v.palette?.let { palette = palette?.over(it) ?: it }
         v.surfaceId?.let { surface = it }
         f = f.over(v.flags)
         v.shader?.let { program = it }
+        v.wallpaper?.let { backdrop = it }
     }
     for (patch in listOfNotNull(category, system) + rules.mapNotNull { it.patch }) {
         patch.palette?.let { p -> palette = palette?.over(p) }
         patch.surfaceId?.let { surface = it }
         f = f.over(patch.flags)
         patch.shader?.let { program = it }
+        patch.wallpaper?.let { backdrop = it }
     }
-    return ThemeLook(palette?.toPalette(wave), surface, variant?.id.orEmpty(), f, rules = rules.map { it.index }, shader = program)
+    return ThemeLook(
+        palette?.toPalette(wave), surface, variant?.id.orEmpty(), f,
+        rules = rules.map { it.index }, shader = program, wallpaper = backdrop,
+    )
 }
 
 /** Variant ids: what `settings.json` stores. */
@@ -125,6 +138,7 @@ internal fun resolveVariants(
             surfaceId = surfaceOf("variants.$id", v.effects, surfaceIds, problems),
             flags = ColorFlags.of(v.palette, v.effects).takeUnless { it.empty },
             shader = ShaderRef.of("variants.$id", v.effects?.shaderPreset, v.effects?.shaderPath, problems),
+            wallpaper = WallpaperRef.of("variants.$id", v.effects?.wallpaperPath, problems),
         )
     }
     return out
@@ -194,7 +208,12 @@ internal fun patchOf(where: String, o: ThemeOverride, surfaceIds: Set<String>, p
     val surface = surfaceOf(where, o.effects, surfaceIds, problems)
     val flags = ColorFlags.of(o.palette, o.effects).takeUnless { it.empty }
     val shader = ShaderRef.of(where, o.effects?.shaderPreset, o.effects?.shaderPath, problems)
-    return if (palette == null && surface == null && flags == null && shader == null) null else ThemePatch(palette, surface, flags, shader)
+    val wallpaper = WallpaperRef.of(where, o.effects?.wallpaperPath, problems)
+    return if (palette == null && surface == null && flags == null && shader == null && wallpaper == null) {
+        null
+    } else {
+        ThemePatch(palette, surface, flags, shader, wallpaper)
+    }
 }
 
 private fun surfaceOf(where: String, effects: ThemeManifest.Effects?, surfaceIds: Set<String>, problems: MutableList<String>): String? {
