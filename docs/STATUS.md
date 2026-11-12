@@ -588,7 +588,7 @@ the 16:9 title plates were also checked in screenshots.
 
 **Idle rest (2026-11-12):** `InactivityTracker` marks the screen idle after 3 s without key, nav or
 touch input, unless music or a video snap plays. While idle the focus pulse and avatar glow ease to
-a resting value and stop (`rememberBreathing`), and the wave drops to ~12 fps; in use it is capped
+a resting value and stop (`rememberBreathing`), and the wave drops to ~20 fps; in use it is capped
 near 60 fps on panels above 90 Hz. Both rates are paced on vsync by a Choreographer callback that
 wakes once per wave frame. Resting CPU on the emulator: 21.9% before, 2.5–2.8% after.
 
@@ -596,10 +596,10 @@ wakes once per wave frame. Resting CPU on the emulator: 21.9% before, 2.5–2.8%
 
 | Measure | Before (`cddf975`) | After |
 | --- | --- | --- |
-| Process CPU resting on the Games root | 114–124% | 20 fps standby: 13–19%, 12% after a few minutes. 12 fps standby (kept): 9.9–11.6% over 20 s windows, 7.9% over 30 s (GL thread 3.7%, main 2.3%, binder 1.3%) |
+| Process CPU resting on the Games root | 114–124% | 20 fps standby: 13–19%, 12% after a few minutes. 12 fps standby (tried, reverted as sluggish): 9.9–11.6% over 20 s windows, 7.9% over 30 s (GL thread 3.7%, main 2.3%, binder 1.3%) |
 | Process CPU while pressing keys | 79–114% | 105–108% |
 | Wave in use | 120 fps | 60 fps: p50 16.7 ms, p95 18.2–18.8 ms, 1–3 missed per 300 |
-| Wave at rest | 120 fps | 20 fps: p50 50.0 ms, p95 51.9 ms. 12 fps (kept): p50 89.4 ms, p95 93.3 ms against 83.3 ms, so about half the frames land one vsync late |
+| Wave at rest | 120 fps | 20 fps: p50 50.0 ms, p95 51.9 ms. 12 fps (tried): p50 89.4 ms, p95 93.3 ms against 83.3 ms, so about half the frames land one vsync late |
 | UI while in use | | 0.27% janky, p50 7 ms, p95 9 ms; 0 UI frames per 5 s at rest |
 
 Screenshots on the A55: the HUD expands with the clock and battery hidden; logo tiles with
@@ -612,7 +612,7 @@ with the identity block above it scrolling if needed and slightly tighter spacin
 
 **Not verified:** whether the HUD morph and the Details crossfade animate without jitter (checked
 by screenshot only, not by eye); L1/R1 on a physical controller; the < 10% idle-CPU target is not
-met only on average (7.9–11.6%); whether the 12 fps standby wave looks even; the dashboard with many achievements.
+met (12–19% with the 20 fps standby kept); the dashboard with many achievements.
 
 ## 4. Display matrix & performance
 

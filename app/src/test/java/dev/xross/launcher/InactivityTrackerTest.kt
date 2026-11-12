@@ -52,12 +52,12 @@ class InactivityTrackerTest {
     }
 
     @Test
-    fun `wave paces to 60 Hz on fast panels and drops to about 12 Hz at rest`() {
+    fun `wave paces to 60 Hz on fast panels and drops to about 20 Hz at rest`() {
         assertEquals(1, WaveRenderer.activeStride(60f))
         assertEquals(1, WaveRenderer.activeStride(90f))
         assertEquals(2, WaveRenderer.activeStride(120f))
         assertEquals(2, WaveRenderer.activeStride(144f))
-        assertEquals(5, WaveRenderer.idleStride(60f))
-        assertEquals(10, WaveRenderer.idleStride(120f))
+        assertEquals(3, WaveRenderer.idleStride(60f))
+        assertEquals(6, WaveRenderer.idleStride(120f))
     }
 }
