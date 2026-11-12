@@ -39,6 +39,7 @@ class ConfigCodecTest {
         waveSpeed = 1.5f,
         theme = "ORIGINAL",
         surfaceStyle = "Y2K_GLOSSY_BEZEL",
+        themeVariant = "bios-matrix",
         showButtonHints = false,
         soundEffects = false,
         soundVolume = 0.25f,

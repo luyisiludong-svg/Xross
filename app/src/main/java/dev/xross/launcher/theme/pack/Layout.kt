@@ -54,9 +54,8 @@ data class LayoutSpec(
     data class SpringSpecJson(val stiffness: Float? = null, val dampingRatio: Float? = null)
 }
 
-/** A category override in `categoryOverrides` (Appendix A.4); only `cardAspectRatio` is read so far. */
-@Serializable
-data class CategoryOverride(val cardAspectRatio: String? = null)
+/** The pre-variants name of a `categoryOverrides` entry. */
+typealias CategoryOverride = ThemeOverride
 
 /** Crosshair anchors (Appendix A.5): where the category bar and the active column cross. */
 enum class CrosshairPreset(val x: Float, val y: Float, val label: String) {
@@ -170,6 +169,8 @@ data class ThemeLayout(
     val cardAspect: Float? = null,
     /** Per category id, over [cardAspect]. */
     val categoryAspects: Map<String, Float> = emptyMap(),
+    /** Per Xross platform id (`systemOverrides.<id>.cardAspectRatio`), over the category's, for that system's game tiles. */
+    val systemAspects: Map<String, Float> = emptyMap(),
     val itemSpacingDp: Float = 12f,
     val focusedScale: Float = 1.32f,
     /** Opacity of rows without the focus; null keeps the built-in mix (full icons, 72% titles). */
@@ -182,6 +183,9 @@ data class ThemeLayout(
 ) {
     /** The tile aspect in [categoryId], or null for the tile's own shape. */
     fun aspectFor(categoryId: String): Float? = categoryAspects[categoryId] ?: cardAspect
+
+    /** The tile aspect of a game of [systemId] in [categoryId]: the system's, else the category's. */
+    fun aspectFor(categoryId: String, systemId: String?): Float? = systemId?.let(systemAspects::get) ?: aspectFor(categoryId)
 
     companion object {
         val DEFAULT = ThemeLayout()
@@ -226,14 +230,16 @@ fun parseAspect(text: String?): Float? {
  * Validates [spec] over [base] (the Default pack's layout, or [ThemeLayout.DEFAULT]). Unknown names
  * are reported in [problems] and keep [base]'s value; numbers are clamped to [LayoutLimits].
  * [overrides] are the pack's `categoryOverrides`; their `cardAspectRatio` wins over `layout.tile`.
+ * [systems] are its `systemOverrides` keyed by platform id ([resolveSystemKeys]).
  */
 fun resolveLayout(
     spec: LayoutSpec?,
-    overrides: Map<String, CategoryOverride>,
+    overrides: Map<String, ThemeOverride>,
     base: ThemeLayout,
     problems: MutableList<String>,
+    systems: Map<String, ThemeOverride> = emptyMap(),
 ): ThemeLayout {
-    if (spec == null && overrides.values.all { it.cardAspectRatio == null }) return base
+    if (spec == null && (overrides.values + systems.values).all { it.cardAspectRatio == null }) return base
     val s = spec ?: LayoutSpec()
 
     fun <E> named(field: String, value: String?, parse: (String) -> E?, fallback: E): E {
@@ -260,6 +266,8 @@ fun resolveLayout(
     val aspects = LinkedHashMap(base.categoryAspects)
     for ((cat, value) in s.tile) aspect("layout.tile.$cat", value)?.let { aspects[cat.trim().lowercase(Locale.ROOT)] = it }
     for ((cat, o) in overrides) aspect("categoryOverrides.$cat.cardAspectRatio", o.cardAspectRatio)?.let { aspects[cat.trim().lowercase(Locale.ROOT)] = it }
+    val systemAspects = LinkedHashMap(base.systemAspects)
+    for ((id, o) in systems) aspect("systemOverrides.$id.cardAspectRatio", o.cardAspectRatio)?.let { systemAspects[id] = it }
 
     val profile = named("motionProfile", s.motionProfile ?: s.motion, MotionProfile::byName, base.motion.profile)
     val profileChanged = profile != base.motion.profile
@@ -280,6 +288,7 @@ fun resolveLayout(
         crosshairY = number("crosshairY", s.crosshairY, 0f, 1f, preset?.y ?: base.crosshairY),
         cardAspect = aspect("layout.cardAspectRatio", s.cardAspectRatio) ?: base.cardAspect,
         categoryAspects = aspects,
+        systemAspects = systemAspects,
         itemSpacingDp = number("itemSpacingDp", s.itemSpacingDp, 0f, LayoutLimits.MAX_SPACING_DP, base.itemSpacingDp),
         focusedScale = number("focusedScale", s.focusedScale, LayoutLimits.MIN_FOCUS_SCALE, LayoutLimits.MAX_FOCUS_SCALE, base.focusedScale),
         unfocusedAlpha = s.unfocusedAlpha?.let {

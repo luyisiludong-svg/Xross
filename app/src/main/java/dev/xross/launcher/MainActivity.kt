@@ -82,6 +82,11 @@ class MainActivity : ComponentActivity() {
         viewModel.onDatFolderPicked(it)
     }
 
+    /** Settings ▸ Theme ▸ Import theme: `.xtheme` files have no registered type, so octet-stream too. */
+    private val pickThemeArchive = registerForActivityResult(ActivityResultContracts.OpenDocument()) {
+        viewModel.onThemeArchivePicked(it)
+    }
+
     private val pickBaseRomsFolder = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) {
         viewModel.onBaseRomsFolderPicked(it)
     }
@@ -163,9 +168,18 @@ class MainActivity : ComponentActivity() {
                 dev.xross.launcher.ui.ThemeTypography.display = family(pack.fonts.display)
                 dev.xross.launcher.ui.ThemeTypography.mono = family(pack.fonts.mono)
             }
-            // The user's surface choice (Settings ▸ Theme ▸ Surface style), else the pack's.
-            androidx.compose.runtime.LaunchedEffect(pack, state.settings.surfaceStyle) {
-                dev.xross.launcher.ui.ThemeSurfaces.active = pack.surface(state.settings.surfaceStyle)
+            // The pack's look here (Appendix A.4): its variant, then the open category's override,
+            // then the focused game's system override (once the cursor rests, so scrolling a mixed
+            // list doesn't flicker). The user's settings (theme color, surface style) win over it.
+            val categoryId = state.categoryId
+            val system = dev.xross.launcher.theme.rememberSettledSystem(state.focusedSystem, categoryId)
+            val look = androidx.compose.runtime.remember(pack, state.settings.themeVariant, categoryId, system) {
+                pack.look(state.settings.themeVariant, categoryId, system)
+            }
+            // The user's surface choice (Settings ▸ Theme ▸ Surface style), else the look's. Read in
+            // the draw phase only, so a category or system switch redraws without recomposing.
+            androidx.compose.runtime.LaunchedEffect(pack, look, state.settings.surfaceStyle) {
+                dev.xross.launcher.ui.ThemeSurfaces.active = pack.surfaceFor(look, state.settings.surfaceStyle)
             }
             var backdropCovers by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
             // Resting: no input for a few seconds and nothing playing. Music and video snaps keep
@@ -176,6 +190,7 @@ class MainActivity : ComponentActivity() {
             val uiIdle = noInput && !music.isPlaying && snapPlaying == null
             androidx.compose.runtime.CompositionLocalProvider(
                 dev.xross.launcher.ui.LocalThemePack provides pack,
+                dev.xross.launcher.ui.LocalThemeLook provides look,
                 dev.xross.launcher.ui.LocalUiIdle provides uiIdle,
             ) {
             Box(Modifier.fillMaxSize()) {
@@ -183,7 +198,7 @@ class MainActivity : ComponentActivity() {
                 // and paused while focused-game art or a video snap covers it.
                 val fullscreenMedia = state.overlay is MediaOverlay.Photos || state.overlay is MediaOverlay.VideoPlayback
                 val s = state.settings
-                val base = rememberActivePalette(state.theme, pack.palette)
+                val base = rememberActivePalette(state.theme, look.palette)
                 val wavePalette = androidx.compose.runtime.remember(base, s.waveTint, s.waveColors) {
                     dev.xross.launcher.theme.wavePalette(base, dev.xross.launcher.theme.WaveTint.byName(s.waveTint), s.waveColors)
                 }
@@ -318,6 +333,9 @@ class MainActivity : ComponentActivity() {
             is UiEffect.StartActivity -> safeStart(effect.intent)
             UiEffect.PickFolder -> runCatching { pickFolder.launch(null) }
             UiEffect.PickDatFolder -> runCatching { pickDatFolder.launch(null) }
+            UiEffect.PickThemeArchive -> runCatching {
+                pickThemeArchive.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream", "application/x-xtheme"))
+            }
             UiEffect.PickBaseRomsFolder -> runCatching { pickBaseRomsFolder.launch(null) }
             is UiEffect.PickMediaFolder -> {
                 pendingMediaFolder = effect.kind

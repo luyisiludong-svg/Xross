@@ -48,8 +48,19 @@ data class ThemeManifest(
     val surfaces: Map<String, SurfaceSpec> = emptyMap(),
     /** Crosshair, tile shapes, spacing, focus divider, drill-down, text overflow and motion ([LayoutSpec]). */
     val layout: LayoutSpec? = null,
-    /** Category id (`GAMES`, `MUSIC`, …) → patches while that category is open; only `cardAspectRatio` so far. */
-    val categoryOverrides: Map<String, CategoryOverride> = emptyMap(),
+    /**
+     * Named colorways over this pack ([ThemeVariant]): palette and effects patches sharing its
+     * fonts, icons and sounds. Settings ▸ Theme ▸ Theme variant picks one (`display.themeVariant`).
+     */
+    val variants: List<ThemeVariant> = emptyList(),
+    /** Category id (`GAMES`, `MUSIC`, …) → a patch applied while that category is open. */
+    val categoryOverrides: Map<String, ThemeOverride> = emptyMap(),
+    /**
+     * Xross platform id (`dreamcast`, `ps2`, `gba`) or one of its folder aliases (`dc`) → a patch
+     * applied while one of that system's games is focused. Its `cardAspectRatio` shapes that
+     * system's game tiles.
+     */
+    val systemOverrides: Map<String, ThemeOverride> = emptyMap(),
 ) {
     val supported: Boolean get() = schemaVersion == SCHEMA_VERSION
 
@@ -76,6 +87,40 @@ data class ThemeManifest(
             val ribbon = (accentSecondary ?: accent)?.let { parseColor(it) ?: return null } ?: 0xFFFFFFFF.toInt()
             val glow = accent?.let { parseColor(it) ?: return null } ?: 0xFFFFFFFF.toInt()
             return ThemePalette(top, bottom, ribbon, glow)
+        }
+
+        /** These roles with every role [patch] sets replacing them (the precedence cascade, A.4). */
+        fun over(patch: Palette?): Palette = if (patch == null) this else Palette(
+            canvas = patch.canvas ?: canvas,
+            surface = patch.surface ?: surface,
+            surfaceBorder = patch.surfaceBorder ?: surfaceBorder,
+            accent = patch.accent ?: accent,
+            accentSecondary = patch.accentSecondary ?: accentSecondary,
+            focusGold = patch.focusGold ?: focusGold,
+            textPrimary = patch.textPrimary ?: textPrimary,
+            textSecondary = patch.textSecondary ?: textSecondary,
+        )
+
+        /** True when no role is set. */
+        val empty: Boolean get() = this == Palette()
+
+        /** These roles minus any color that doesn't parse, each reported in [problems] under [where]. */
+        fun valid(where: String, problems: MutableList<String>): Palette {
+            fun check(role: String, value: String?): String? {
+                if (value == null || parseColor(value) != null) return value
+                problems += "$where.$role: $value isn't a color like #RRGGBB"
+                return null
+            }
+            return Palette(
+                canvas = check("canvas", canvas),
+                surface = check("surface", surface),
+                surfaceBorder = check("surfaceBorder", surfaceBorder),
+                accent = check("accent", accent),
+                accentSecondary = check("accentSecondary", accentSecondary),
+                focusGold = check("focusGold", focusGold),
+                textPrimary = check("textPrimary", textPrimary),
+                textSecondary = check("textSecondary", textSecondary),
+            )
         }
     }
 
@@ -139,6 +184,29 @@ data class ThemeManifest(
         )
     }
 }
+
+/**
+ * One entry of `variants`: a colorway of the pack ("Cyber Lilac", "BIOS Matrix") that patches its
+ * [palette] and [effects]; everything else (fonts, icons, sounds, layout) is the pack's.
+ */
+@Serializable
+data class ThemeVariant(
+    val id: String,
+    val name: String = "",
+    val palette: ThemeManifest.Palette? = null,
+    val effects: ThemeManifest.Effects? = null,
+)
+
+/**
+ * A `categoryOverrides` or `systemOverrides` entry (Appendix A.4): palette roles, effects and the
+ * tile aspect while that category is open or that system's game is focused.
+ */
+@Serializable
+data class ThemeOverride(
+    val palette: ThemeManifest.Palette? = null,
+    val effects: ThemeManifest.Effects? = null,
+    val cardAspectRatio: String? = null,
+)
 
 /**
  * UI sound roles and their canonical file names in a pack's `sounds/` folder. [stream] roles are

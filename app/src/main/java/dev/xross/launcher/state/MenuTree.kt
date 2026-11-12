@@ -78,6 +78,8 @@ data class ThemeSetup(
     val packSurface: String = "FLAT_GLASS",
     /** Folders in Xross/themes/ skipped as packs, with the reason ("Sakura: no schemaVersion 2"). */
     val rejected: List<String> = emptyList(),
+    /** (id, name) of the active pack's variants; empty hides Theme variant. */
+    val variants: List<Pair<String, String>> = emptyList(),
 )
 
 /** What Settings ▸ Accounts shows (public profile data only, never the Web API key). */
@@ -115,6 +117,9 @@ data class ScraperSetup(
 class MenuTree(private val s: MenuSnapshot) {
 
     private val gamesByPlatform by lazy { s.games.groupBy { it.platformId } }
+
+    /** Game id → platform id, for the theme's system overrides on the focused game. */
+    val platformByGame: Map<Long, String> by lazy { s.games.associate { it.id to it.platformId } }
     private val visibleApps by lazy { AppFolders.visible(s.apps, s.settings) }
     private val androidGames by lazy { visibleApps.filter { it.isGame } }
 
@@ -868,6 +873,7 @@ class MenuTree(private val s: MenuSnapshot) {
                 add(MenuOption("Look for new packs", detail = "Rescan Xross/themes", command = Command.ReloadThemePacks))
             },
         ),
+    ) + themeVariantRow() + listOf(
         setting("disp:theme", "Theme color", themeColorLabel(), GlyphKey.DISPLAY, Command.CycleTheme),
         setting("disp:wave", "Wave background", onOff(s.settings.waveEnabled), GlyphKey.DISPLAY, Command.ToggleWave),
         setting("disp:wavesettings", "Wave settings", waveSummary(), GlyphKey.DISPLAY, Command.OpenWaveSettings),
@@ -887,7 +893,34 @@ class MenuTree(private val s: MenuSnapshot) {
             Command.ToggleAllGamesFolder,
         ),
         setting("disp:surface", "Surface style", surfaceSummary(), GlyphKey.DISPLAY, Command.CycleSurfaceStyle),
+        setting(
+            "disp:import", "Import theme (.xtheme)…",
+            "Pick a theme file; it is checked, then unpacked into Xross/themes",
+            GlyphKey.DOWNLOAD, Command.ImportThemeArchive,
+        ),
     )
+
+    /** Theme variant, only while the active pack has variants; its Options list them all. */
+    private fun themeVariantRow(): List<XmbNode> {
+        val t = s.themes
+        if (t.variants.isEmpty()) return emptyList()
+        val choices = listOf("" to "Standard") + t.variants
+        // A saved id the pack doesn't have (renamed, or another pack's) means its base look.
+        val active = s.settings.themeVariant.takeIf { v -> t.variants.any { it.first == v } }.orEmpty()
+        val current = choices.first { it.first == active }.second
+        return listOf(
+            XmbNode(
+                id = "disp:variant",
+                title = "Theme variant",
+                subtitle = "$current · ${countOf(choices.size, "look")} in ${t.activeName}",
+                icon = NodeIcon.Glyph(GlyphKey.DISPLAY),
+                action = NodeAction.Run(Command.CycleThemeVariant),
+                menu = choices.map { (id, name) ->
+                    MenuOption(name, command = Command.SetThemeVariant(id), selected = id == active)
+                },
+            ),
+        )
+    }
 
     /** "Theme pack (Flat glass)", or the chosen surface's label. */
     private fun surfaceSummary(): String {

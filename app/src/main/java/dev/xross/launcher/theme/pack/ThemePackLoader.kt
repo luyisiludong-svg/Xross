@@ -69,6 +69,14 @@ data class LoadedTheme(
     val surfaceId: String = SurfacePreset.FLAT_GLASS.name,
     /** The `layout` block over the Default pack's (crosshair, tiles, spacing, motion, …). */
     val layout: ThemeLayout = ThemeLayout.DEFAULT,
+    /** The pack's palette roles when it has a valid palette ([palette] is drawn from them). */
+    val roles: ThemeManifest.Palette? = null,
+    /** The pack's `variants`, checked. */
+    val variants: List<ResolvedVariant> = emptyList(),
+    /** `categoryOverrides` by category id ("games"). */
+    val categoryPatches: Map<String, ThemePatch> = emptyMap(),
+    /** `systemOverrides` by Xross platform id ("dreamcast"). */
+    val systemPatches: Map<String, ThemePatch> = emptyMap(),
     /** What the pack declared but couldn't be used (bad font, unreadable icon), for Settings. */
     val problems: List<String> = emptyList(),
     /** Bumped on every load, so a hot reload of the same files still counts as a change. */
@@ -78,6 +86,32 @@ data class LoadedTheme(
 
     /** [id] if it names a surface, else the pack's own, else [Surface.FALLBACK]. */
     fun surface(id: String = ""): Surface = surfaces[id] ?: surfaces[surfaceId] ?: Surface.FALLBACK
+
+    /** The variant [id] names, or null for the pack's base look (blank or unknown ids). */
+    fun variant(id: String?): ResolvedVariant? = id?.takeIf { it.isNotBlank() }?.let { v -> variants.firstOrNull { it.id == v } }
+
+    private val looks = java.util.concurrent.ConcurrentHashMap<Triple<String, String, String>, ThemeLook>()
+
+    /**
+     * The pack's look with variant [variantId] (blank or unknown: the base), while [category] is
+     * open and a game of [system] is focused ([cascade]). Cached, so calling it on every focus
+     * change costs a map lookup.
+     */
+    fun look(variantId: String = "", category: String? = null, system: String? = null): ThemeLook {
+        val v = variant(variantId)
+        val cat = category?.takeIf { it in categoryPatches }.orEmpty()
+        val sys = system?.takeIf { it in systemPatches }.orEmpty()
+        return looks.getOrPut(Triple(v?.id.orEmpty(), cat, sys)) {
+            cascade(roles, surfaceId, wave, v, categoryPatches[cat], systemPatches[sys])
+        }
+    }
+
+    /**
+     * The surface drawn in [look]: the user's [userSurface] (Settings ▸ Theme ▸ Surface style)
+     * when it names one, else the look's.
+     */
+    fun surfaceFor(look: ThemeLook, userSurface: String): Surface =
+        surfaces[userSurface] ?: surfaces[look.surfaceId] ?: surface()
 }
 
 /** Typefaces per role (Roadmap Appendix A.8); a role the pack lacks falls back to [body]. */
@@ -164,6 +198,12 @@ class ThemePackLoader(
         }
     }
 
+    /** Reads [folder] as a pack (its manifest and imports), as discovery would. */
+    fun inspect(folder: File): FolderCheck = when (val r = readFolderManifest(folder)) {
+        is Read.Ok -> FolderCheck.Ok(r.manifest)
+        is Read.Bad -> FolderCheck.Bad(r.reason)
+    }
+
     /**
      * Changes when any file of folder pack [id] is added, removed or rewritten (names, sizes and
      * modification times, two folders deep); 0 for the built-in pack.
@@ -237,6 +277,7 @@ class ThemePackLoader(
         val wanted = m.effects?.surfaceStyle?.trim().orEmpty()
         if (wanted.isNotEmpty() && wanted !in surfaces) problems += "effects.surfaceStyle: no surface named $wanted"
         val surfaceId = wanted.takeIf { it in surfaces } ?: base?.surfaceId ?: SurfacePreset.FLAT_GLASS.name
+        val systems = resolveSystemKeys(m.systemOverrides, problems)
 
         return LoadedTheme(
             info = pack,
@@ -248,7 +289,11 @@ class ThemePackLoader(
             gains = gains,
             surfaces = surfaces,
             surfaceId = surfaceId,
-            layout = resolveLayout(m.layout, m.categoryOverrides, base?.layout ?: ThemeLayout.DEFAULT, problems),
+            layout = resolveLayout(m.layout, m.categoryOverrides, base?.layout ?: ThemeLayout.DEFAULT, problems, systems),
+            roles = if (palette != null) m.palette else null,
+            variants = resolveVariants(m.variants, palette != null, surfaces.keys, problems),
+            categoryPatches = resolveCategoryPatches(m.categoryOverrides, surfaces.keys, problems),
+            systemPatches = resolveSystemPatches(systems, surfaces.keys, problems),
             problems = problems,
             revision = revisions.incrementAndGet(),
         )

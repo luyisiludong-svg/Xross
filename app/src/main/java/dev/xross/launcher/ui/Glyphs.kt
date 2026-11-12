@@ -20,6 +20,12 @@ import dev.xross.launcher.theme.pack.ThemeIcon
 val LocalThemePack = staticCompositionLocalOf<LoadedTheme?> { null }
 
 /**
+ * The active pack's look in the current context (variant, category and system overrides). Dynamic,
+ * unlike [LocalThemePack], so a category or system switch recomposes only what reads it.
+ */
+val LocalThemeLook = androidx.compose.runtime.compositionLocalOf<dev.xross.launcher.theme.pack.ThemeLook?> { null }
+
+/**
  * The theme pack's typeface for all launcher text. Snapshot state rather than a composition
  * local because [shadowed] builds styles outside composable scope; reads during composition are
  * still tracked, so switching packs redraws text.

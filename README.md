@@ -282,6 +282,25 @@ drawn, layer by layer:
   2 shadows are drawn, glows up to 24 dp. Every pack also gets the built-in `FLAT_GLASS`,
   `Y2K_GLOSSY_BEZEL`, `OLED_TRUE_BLACK` and `EINK_HIGH_CONTRAST`, and **Settings ▸ Theme ▸ Surface
   style** picks any of them over the pack's choice. `backdropBlurDp` is accepted but not drawn yet.
+* **Variants:** `"variants": [{ "id": "bios-matrix", "name": "BIOS Matrix", "palette": {…},
+  "effects": { "surfaceStyle": "OLED_TRUE_BLACK" } }]` adds colorways that share the pack's fonts,
+  icons and sounds. **Settings ▸ Theme ▸ Theme variant** (shown only for packs that have them)
+  steps through them; the choice is saved as `display.themeVariant` in `settings.json`.
+* **Overrides:** `"categoryOverrides": { "MUSIC": {…} }` (`GAMES`, `MUSIC`, `PHOTO`, `VIDEO`,
+  `APPS`, `SETTINGS`) applies while that category is open; `"systemOverrides": { "dreamcast": {…} }`
+  (a platform id or a folder alias such as `dc`) while one of that system's games is focused, after
+  the cursor rests for a quarter second. Each may set `palette` roles, `effects.surfaceStyle` and
+  `cardAspectRatio` (a system's aspect shapes that system's game tiles). Precedence, lowest to
+  highest: Default pack → pack → variant → category → system → your own Settings (a fixed theme
+  color or a chosen surface style wins over all of them). Overrides patch a pack palette; they
+  don't add one to a pack without colors. The wave crossfades between palettes.
+* **`.xtheme` files:** a pack zipped into one file (the folder itself or its contents) installs with
+  **Settings ▸ Theme ▸ Import theme (.xtheme)…**. The archive is checked before anything is
+  written: no `..` or absolute paths, only `.json` / `.md` / `.txt` at the top and fonts, sounds
+  (or `audio/`), icons and shaders in their folders with their own file types, no programs, at most
+  50 MB unpacked, and a valid `schemaVersion: 2` `theme.json`. It unpacks into
+  `Xross/themes/<id>/` (the id is made from the pack's name) and is switched to; if that id is
+  installed, Xross asks whether to replace it or keep both.
 * Anything a pack leaves out (a sound, an icon, the fonts) comes from the Default pack, so a pack
   can be as small as one `theme.json` and a font.
 * Icon ids are the lower-case glyph names: `settings`, `games`, `apps`, `photo`, `music`, `video`,

@@ -74,6 +74,8 @@ data class SettingsFile(
         val themePack: String = D.themePack,
         /** Surface id (FLAT_GLASS, Y2K_GLOSSY_BEZEL, OLED_TRUE_BLACK, EINK_HIGH_CONTRAST or the pack's); empty = the pack's. */
         val surfaceStyle: String = D.surfaceStyle,
+        /** Variant id of the theme pack ("cyber-lilac"); empty = the pack's base look. */
+        val themeVariant: String = D.themeVariant,
         val wave: Boolean = D.waveEnabled,
         /** Wave shader uniforms: speed 0.5–2.0, lines 0–12, turbulence 0–2, thickness 0.5–3. */
         val waveSpeed: Float = D.waveSpeed,
@@ -218,6 +220,7 @@ object ConfigCodec {
             theme = s.theme,
             themePack = s.themePack,
             surfaceStyle = s.surfaceStyle,
+            themeVariant = s.themeVariant,
             wave = s.waveEnabled,
             waveSpeed = s.waveSpeed,
             waveLines = s.waveLineCount,
@@ -254,6 +257,7 @@ object ConfigCodec {
         theme = f.display.theme.ifBlank { D.theme },
         themePack = f.display.themePack.trim().ifBlank { D.themePack },
         surfaceStyle = f.display.surfaceStyle.trim().take(48),
+        themeVariant = f.display.themeVariant.trim().take(48),
         waveEnabled = f.display.wave,
         waveSpeed = WaveLimits.clampSpeed(f.display.waveSpeed),
         waveLineCount = WaveLimits.clampLines(f.display.waveLines),
