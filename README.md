@@ -118,7 +118,7 @@ on screens 600 dp and wider.
 | Theme packs | Done. `Xross/themes/<id>/` with a v2 `theme.json` (imports, palette roles, font roles, surfaces), fonts, SVG/PNG icons and sounds, reloaded live when edited; the bundled icons and sounds are the built-in Default pack |
 | RetroAchievements | Done. Account linking, status bar avatar with an expanding mini-HUD, User Card, Games ▸ RetroAchievements dashboard, per-game telemetry and achievement lists, unlock toasts. Linking and lists verified live on an emulator and the Galaxy A55; the 2b.1 HUD and dashboard are unit-tested only; unlock toasts not yet seen after a real session |
 | Library organization | Done. Hide apps (Options ▸ Hide, Settings ▸ Apps ▸ Hidden apps, Hide system apps), app folders (Emulators, Streaming, Tools or your own name, with emulators suggested), base ROMs folder with Create system folders, and custom Photo/Video folders that also find files MediaStore skips. Tested on the Galaxy A55 |
-| Customization | 16:9 XMB game tiles (logo, wide art or a title plate); Settings ▸ Theme ▸ Profile customization for the avatar's border and glow (`profile.avatarStyle` in `settings.json`). Theme 2.0 (layouts, palettes from game art, custom shaders, BGM, haptics) is planned, see Roadmap §4.3 |
+| Customization | 16:9 XMB game tiles (logo, wide art or a title plate); Settings ▸ Theme ▸ Profile customization for the avatar's border and glow (`profile.avatarStyle` in `settings.json`). Theme 2.0 packs with variants, overrides and context rules, palettes from game art, an hourly circadian curve, a battery tint and quick profiles (OLED True Black, Y2K Cyber-Pastel, Monochrome E-Ink); custom shaders, BGM and haptics are planned, see Roadmap §4.3 |
 | Extras | Android apps (games sorted into Games ▸ Android Games), 8 color themes including Original (a color per month), busy indicator, optional button hints, Information screen, can be set as the HOME launcher, Android TV leanback entry |
 | XMB fidelity | Closer. The home menu's layout, motion, navigation, status bar and options panel match the XMB; games show their own tiles, and focusing one brings up its art and video. An XMB-style typeface, Resume/Quit Game and the folder drill-down are missing |
 | Not started | On-screen controller, dual screen, Xross Portal, FTPS |
@@ -294,6 +294,29 @@ drawn, layer by layer:
   highest: Default pack → pack → variant → category → system → your own Settings (a fixed theme
   color or a chosen surface style wins over all of them). Overrides patch a pack palette; they
   don't add one to a pack without colors. The wave crossfades between palettes.
+* **Context rules:** `"rules": [{ "match": {…}, "apply": {…} }]` inline, or in a `rules.json`
+  listed in `imports` (imported rules come first, then the manifest's; they add up). `match` takes
+  any of `category` (`MUSIC`), `system` (a platform id or folder alias), `battery` (`<= 20`, `< 15`,
+  `>= 80`, `charging`, `discharging`, `full`) and `time` (`21:00..06:00`, wrapping past midnight;
+  start included, end excluded); every selector given must hold. `apply` takes `palette` roles,
+  `effects.surfaceStyle`, `cardAspectRatio` and any `layout` key. Rules sit above the variant and
+  the overrides, in file order, so the last matching rule wins. A rule whose selector can't be read
+  is reported and dropped, never applied everywhere. Battery and time are re-checked when they
+  change and once a minute, never per frame.
+* **Color layers:** `palette.circadianCurve` (an hourly curve: cool cyan 06–11, azure 11–18, amber
+  and rose gold 18–21, indigo 21–06, blended across each boundary), `palette.batteryTint` (accent and
+  glow shift to amber, then red, below 20%; a soft green pulse while charging) and
+  `effects.adaptiveGamePalette` (the focused game's hero or wheel art drives the wave, focus halos,
+  avatar glow and battery outline, 250 ms after the cursor rests). A pack sets the defaults (off,
+  off, on); **Settings ▸ Theme ▸ Adaptive colors / Circadian curve / Battery alert tint** override
+  them (`display.adaptiveGamePalette`, `display.circadianCurve`, `display.batteryTint`; `null`
+  follows the pack). Rules can switch them too.
+* **Quick profiles:** **Settings ▸ Theme ▸ Quick profile** (`display.quickProfile`): *OLED True
+  Black* (pure black canvas, no surface fills, glowing outlines; game art still drives the accent),
+  *Y2K Cyber-Pastel* (lavender, lilac and strawberry, glossy bezels) and *Monochrome E-Ink* (black
+  and white, no translucency, instant motion, every pulse and glow frozen, the wave a single still
+  frame, color layers off). Precedence, lowest to highest: Default pack → pack → variant →
+  overrides → rules → your theme color → quick profile → circadian curve and battery tint → game art.
 * **`.xtheme` files:** a pack zipped into one file (the folder itself or its contents) installs with
   **Settings ▸ Theme ▸ Import theme (.xtheme)…**. The archive is checked before anything is
   written: no `..` or absolute paths, only `.json` / `.md` / `.txt` at the top and fonts, sounds
