@@ -5,12 +5,9 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -98,7 +95,6 @@ import dev.xross.launcher.scrape.ArtKind
 import dev.xross.launcher.theme.ThemePalette
 import dev.xross.launcher.theme.XrossTheme
 import dev.xross.launcher.theme.rememberActivePalette
-import kotlinx.coroutines.delay
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.floor
@@ -195,13 +191,11 @@ fun XmbScreen(
 ) {
     val palette = rememberActivePalette(state.theme, LocalThemePack.current?.palette)
 
-    // Slow "breathing" glow shared by everything that is focused.
-    val pulse by rememberInfiniteTransition(label = "glow").animateFloat(
-        initialValue = 0.35f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(1700, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-        label = "pulse",
-    )
+    // Slow "breathing" glow shared by everything that is focused. It settles and holds still while
+    // the screen rests (LocalUiIdle), so an untouched home screen draws no frames for it.
+    val started by lifecycleStarted()
+    val idle = LocalUiIdle.current
+    val pulse by rememberBreathing(running = started && !idle, low = 0.35f, high = 1f, halfPeriodMs = 1700, rest = PULSE_REST)
 
     // Cold boot: fade the whole interface in once per process start.
     val reveal = remember { Animatable(if (state.coldBoot) 0f else 1f) }
@@ -265,15 +259,8 @@ fun XmbScreen(
             state.waveEditor == null && state.achievements == null && state.profileCard == null &&
             state.avatarEditor == null && state.raHub == null
         val menuAlpha by animateFloatAsState(if (menuShown) 1f else 0f, tween(220), label = "menu")
-        // The avatar's glow pulses only while the menu is in front and in use: it holds still once
-        // the screen has been idle for a while, under overlays, and when the activity is stopped.
-        var idle by remember { mutableStateOf(false) }
-        LaunchedEffect(state.categoryIndex, state.listKey, state.focusedIndex, state.avatarFocused, state.settings.avatarStyle) {
-            idle = false
-            delay(AVATAR_GLOW_IDLE_MS)
-            idle = true
-        }
-        val started by lifecycleStarted()
+        // The avatar's glow pulses only while the menu is in front and in use: it holds still while
+        // the screen rests, under overlays, and when the activity is stopped.
         val avatarGlowRuns = started && !idle && menuShown
 
         Box(Modifier.fillMaxSize().graphicsLayer { alpha = menuAlpha }) {
@@ -541,8 +528,8 @@ fun XmbScreen(
 /** The focused row's scraped art, for the hero backdrop and the video snap. */
 private data class FocusedArt(val uuid: String, val version: Long)
 
-/** Without input for this long, the avatar's glow stops pulsing. */
-private const val AVATAR_GLOW_IDLE_MS = 30_000L
+/** Where the focus glow holds while the screen rests: a little above the middle of its swing. */
+private const val PULSE_REST = 0.7f
 
 /** True while the activity is at least started; animations tied to it stop in the background. */
 @Composable
