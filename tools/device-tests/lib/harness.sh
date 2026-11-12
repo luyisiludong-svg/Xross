@@ -97,6 +97,9 @@ music_state() { adb shell dumpsys media_session | grep -o "state=PlaybackState {
 # Debug builds log every color change (XrossColors), palette extraction (XrossPalette) and wave
 # loop change (WaveLoop): colors aren't in the accessibility tree.
 colors() { adb logcat -d -s XrossColors:I; }
+# ...and the audio uniforms every ~2 s while they move, once more when they drop to 0 (XrossAudio:
+# "bass max=0.87 beats=4").
+audio_levels() { adb logcat -d -s XrossAudio:I | grep -o "bass max=[0-9.]* beats=[0-9]*" | tail -1; }
 
 # endregion
 # region Navigation
@@ -162,7 +165,8 @@ setup_base_env() {
   adb logcat -c
 }
 
-# Media fixtures (ffmpeg on the host): 2 photos, 2 tagged songs, 1 video in XrossSmoke folders
+# Media fixtures (ffmpeg on the host): 2 photos, 2 tagged songs (a tone over a 55 Hz kick at
+# 120 BPM, for the audio-reactive uniforms), 1 video in XrossSmoke folders
 # under Pictures, Music and Movies. Returns 1 without ffmpeg. Call before start_app, so the media
 # scan has indexed them by the time Xross queries.
 setup_media_fixtures() {
@@ -171,7 +175,8 @@ setup_media_fixtures() {
   ffmpeg -loglevel error -y -f lavfi -i color=c=teal:s=1600x1200 -frames:v 1 "$d/Smoke Photo A.png"
   ffmpeg -loglevel error -y -f lavfi -i color=c=orange:s=1600x1200 -frames:v 1 "$d/Smoke Photo B.png"
   for n in 1 2; do
-    ffmpeg -loglevel error -y -f lavfi -i "sine=frequency=$((300 + n * 60)):duration=30" -c:a libmp3lame \
+    ffmpeg -loglevel error -y -f lavfi \
+      -i "aevalsrc=exprs='0.12*sin(2*PI*$((300 + n * 60))*t)+0.5*sin(2*PI*55*t)*lt(mod(t\\,0.5)\\,0.08)':s=44100:d=30" -c:a libmp3lame \
       -metadata title="Smoke Song $n" -metadata artist="Smoke Artist" -metadata album="Smoke Album" -metadata track=$n "$d/Smoke Song $n.mp3"
   done
   ffmpeg -loglevel error -y -f lavfi -i testsrc2=size=640x360:rate=30:duration=8 -c:v libx264 -pix_fmt yuv420p "$d/Smoke Clip.mp4"

@@ -49,6 +49,8 @@ fun AdaptiveWave(
     /** Open category id, for `uTransition`. */
     category: String? = null,
     health: dev.xross.launcher.theme.shader.ShaderHealth? = null,
+    /** The music player's levels for the audio-reactive uniforms. */
+    audio: dev.xross.launcher.media.energy.AudioLevels? = null,
 ) {
     val artColors by art.collectAsStateWithLifecycle()
     val level by battery.collectAsStateWithLifecycle()
@@ -93,6 +95,7 @@ fun AdaptiveWave(
         frozen = profile.stillMotion,
         shaders = shaders,
         health = health,
+        audio = audio,
     )
 
     // Halos stay white unless a color layer is at work, so the plain themes look as before.

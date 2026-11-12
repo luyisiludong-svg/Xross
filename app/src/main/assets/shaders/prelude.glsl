@@ -11,7 +11,7 @@ uniform vec4 uColorBottom;   // canvas bottom color
 uniform vec4 uAccent;        // wave / ribbon color (pack accentSecondary, else accent)
 uniform vec4 uGlow;          // glow color (pack accent)
 uniform float uBatteryLevel; // 0.0 empty .. 1.0 full (1.0 where unknown)
-uniform float uAudioBass;    // 0.0 .. 1.0 bass energy of the music playing (0.0 for now)
-uniform float uAudioBeat;    // 1.0 on a beat, else 0.0 (0.0 for now)
+uniform float uAudioBass;    // 0.0 .. 1.0 bass energy of Xross's music, as heard (0.0 with none or paused)
+uniform float uAudioBeat;    // 1.0 for ~100 ms from a beat, else 0.0
 uniform float uTransition;   // 1.0 right after a category switch, easing back to 0.0 in ~1 s
 out vec4 fragColor;

@@ -7,6 +7,7 @@ import android.opengl.GLSurfaceView
 import android.os.SystemClock
 import android.util.Log
 import dev.xross.launcher.BuildConfig
+import dev.xross.launcher.media.energy.AudioLevels
 import dev.xross.launcher.theme.ThemePalette
 import dev.xross.launcher.theme.XrossTheme
 import dev.xross.launcher.theme.rgb
@@ -81,6 +82,10 @@ data class WaveParams(
  *  - Crash-loop guard: a pack's own program is armed in the [ShaderCanary] while it compiles and
  *    until it has drawn [ShaderCanary.PROVEN_FRAMES] frames in a row.
  *
+ * Audio (2b.4b): `uAudioBass` / `uAudioBeat` are read from [audio] once per frame, as heard at
+ * the frame's time (latency-compensated, see [dev.xross.launcher.media.energy.MusicEnergy]); 0
+ * with no music, paused, or in a still-motion profile.
+ *
  * Smoothness:
  *  - Animation time advances in whole display-refresh periods, so sampling jitter in when the
  *    GL thread wakes up never shows up as uneven motion.
@@ -101,6 +106,8 @@ class WaveRenderer(
     /** Where the built-in sources come from; null draws a plain gradient fill (previews, tests). */
     private val assets: AssetManager? = null,
     private val health: ShaderHealth? = null,
+    /** The music player's levels; null binds 0 (previews, tests). */
+    private val audio: AudioLevels? = null,
 ) : GLSurfaceView.Renderer {
     private val framePeriodNs = (1e9 / refreshRateHz.coerceIn(30f, 240f)).roundToLong()
 
@@ -120,6 +127,10 @@ class WaveRenderer(
     @Volatile var library: ShaderLibrary = ShaderLibrary.DEFAULT
 
     private val canary: ShaderCanary? get() = health?.canary
+
+    /** This frame's `uAudioBass`, `uAudioBeat`. */
+    private val audioLevels = FloatArray(2)
+    private val audioStats = if (BuildConfig.PERF_LOG) AudioStats() else null
 
     /** [shownWave] scaled by the charging pulse, uploaded instead of it. */
     private val pulsedWave = FloatArray(3)
@@ -252,6 +263,15 @@ class WaveRenderer(
             travel = (travel + step * transition * WARP_TRAVEL) % 1000.0
             transition *= exp(-step / TRANSITION_S)
         }
+
+        val source = audio
+        if (still || source == null) {
+            audioLevels[0] = 0f
+            audioLevels[1] = 0f
+        } else {
+            source.read(now, audioLevels)
+        }
+        audioStats?.record(audioLevels, now, source)
 
         if (now - daylightCheckedAt > 60_000_000_000L) {
             daylight = daylight(Calendar.getInstance())
@@ -477,9 +497,8 @@ class WaveRenderer(
         GLES30.glUniform4f(program.uAccent, wave[0], wave[1], wave[2], 1f)
         GLES30.glUniform4f(program.uGlow, shownGlow[0], shownGlow[1], shownGlow[2], 1f)
         GLES30.glUniform1f(program.uBatteryLevel, p.battery.coerceIn(0f, 1f))
-        // Audio-reactive uniforms arrive with 2b.4b.
-        GLES30.glUniform1f(program.uAudioBass, 0f)
-        GLES30.glUniform1f(program.uAudioBeat, 0f)
+        GLES30.glUniform1f(program.uAudioBass, audioLevels[0])
+        GLES30.glUniform1f(program.uAudioBeat, audioLevels[1])
         GLES30.glUniform1f(program.uTransition, if (still) 0f else transition)
         GLES30.glUniform1f(program.uTravel, travel.toFloat())
         // WAVE's own.
@@ -521,6 +540,37 @@ class WaveRenderer(
                 "gl frames=${sorted.size} p50=%.1fms p95=%.1fms max=%.1fms missed=$hitches (period %.1fms)"
                     .format(p50, p95, max, expected / 1e6),
             )
+        }
+    }
+
+    /**
+     * Debug and profiling builds: the audio uniforms over each ~2 s under "XrossAudio" (peak bass,
+     * beats started, and how far the analysis ran ahead of the speaker: the latency compensated),
+     * while they move and once more when they fall back to 0, for the device tests.
+     */
+    private class AudioStats {
+        private var windowStart = 0L
+        private var peak = 0f
+        private var beats = 0
+        private var lastBeat = false
+        private var wasLive = false
+
+        fun record(levels: FloatArray, now: Long, source: AudioLevels?) {
+            if (windowStart == 0L) windowStart = now
+            peak = max(peak, levels[0])
+            val beat = levels[1] > 0.5f
+            if (beat && !lastBeat) beats++
+            lastBeat = beat
+            if (now - windowStart < 2_000_000_000L) return
+            val live = peak > 0f || beats > 0
+            if (live || wasLive) {
+                val lead = source?.leadUs(now)?.let { " lead=%d ms".format(it / 1000) }.orEmpty()
+                Log.i("XrossAudio", "bass max=%.2f beats=%d%s".format(peak, beats, lead))
+            }
+            wasLive = live
+            windowStart = now
+            peak = 0f
+            beats = 0
         }
     }
 

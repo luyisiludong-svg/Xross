@@ -245,6 +245,7 @@ class MainActivity : ComponentActivity() {
                     shader = pack.shaderLibrary.keyOf(look.shader),
                     category = categoryId,
                     health = container.shaderHealth,
+                    audio = container.music.energy,
                 )
                 XmbScreen(
                     state = state,

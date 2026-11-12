@@ -143,7 +143,7 @@ on screens 600 dp and wider.
 ./gradlew :app:installDebug :emulator-stub:installRetroarchDebug
 tools/device-tests/smoke.sh                       # quick on-device smoke test, ~30 s (see warning below)
 tools/device-tests/test-theme.sh                  # one suite: test-{library,theme,media,input,integration}.sh
-tools/device-tests/run-all.sh                     # full device regression, all 171 checks (= smoke.sh --all)
+tools/device-tests/run-all.sh                     # full device regression, all 173 checks (= smoke.sh --all)
 ./gradlew :app:assembleProfiling                  # R8-optimized build for frame timing
 ```
 

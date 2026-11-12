@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Media suite (22 checks): photo folders and the viewer (paging, R1 zoom), music from tags (albums,
-# track order, playback through the media session), Now Playing, the Select shortcut and the
-# mini-player line, and background music pausing for a video and for a game.
+# Media suite (24 checks): photo folders and the viewer (paging, R1 zoom), music from tags (albums,
+# track order, playback through the media session), the music driving the shader's audio uniforms
+# (and 0 when paused), Now Playing, the Select shortcut and the mini-player line, and background
+# music pausing for a video and for a game.
 #
 #   ./gradlew :emulator-stub:installRetroarchDebug   # optional: the two music-during-a-game checks
 #   tools/device-tests/test-media.sh
@@ -13,11 +14,11 @@
 # folders under Pictures, Music and Movies (all removed at exit; see lib/harness.sh).
 set -u
 . "$(dirname "$0")/lib/harness.sh"
-suite_begin media 22
+suite_begin media 24
 
 setup_base_env
 if ! setup_media_fixtures; then
-  skip 22 "the media suite needs ffmpeg on the host"
+  skip 24 "the media suite needs ffmpeg on the host"
   suite_end
   exit
 fi
@@ -54,6 +55,21 @@ pause 1.5
 # The emulator's player can sit in BUFFERING for a few seconds; a song that never plays still fails.
 for _ in $(seq 9); do [ "$(music_state)" = "PLAYING" ] && break; pause 0.5; done
 [ "$(music_state)" = "PLAYING" ] && ok "song plays through the media session" || bad "song plays (state $(music_state))"
+# 2b.4b: the fixture's 55 Hz kick at 120 BPM reaches uAudioBass / uAudioBeat (debug builds log
+# them). Pausing drops both to 0 at once; then play again for the checks below.
+pause 4.5
+lv=$(audio_levels)
+if [[ "$lv" =~ bass\ max=([0-9.]+)\ beats=([0-9]+) ]] && awk "BEGIN{exit !(${BASH_REMATCH[1]} >= 0.5)}" && [ "${BASH_REMATCH[2]}" -ge 2 ]; then
+  ok "the music drives the shader's bass and beat ($lv)"
+else
+  bad "audio uniforms while playing ('${lv:-no XrossAudio line}')"
+fi
+adb shell cmd media_session dispatch pause
+pause 4.5
+lv=$(audio_levels)
+[ "$lv" = "bass max=0.00 beats=0" ] && ok "paused music binds 0" || bad "audio uniforms after a pause ('${lv:-no XrossAudio line}')"
+adb shell cmd media_session dispatch play
+for _ in $(seq 9); do [ "$(music_state)" = "PLAYING" ] && break; pause 0.5; done
 category 2
 expect "Now playing" "Now playing row appears"
 key KEYCODE_DPAD_CENTER
