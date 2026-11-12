@@ -146,7 +146,10 @@ adb shell dumpsys meminfo dev.xross.launcher
 | Cold start `TotalTime` | < 2500 ms | |
 | `TOTAL PSS` with a game running | ≤ 150 MB | |
 
-On a 120 Hz screen the `WaveFrames` lines should report `period 8.3ms`.
+The wave is capped near 60 fps (every 2nd vsync at 120 Hz, full rate at 90 Hz and below), and
+drops to ~20 fps after 3 s without input while no music or video snap plays. On a 120 Hz screen
+the `WaveFrames` lines report `period 16.7ms` while in use and `period 50.0ms` at rest; check
+`p95` against that period.
 
 Check by eye and ear:
 - [ ] The wave background moves smoothly with no visible banding
@@ -223,7 +226,15 @@ logos and hero art.
       still shows the cached data
 - [ ] **Settings ▸ Theme ▸ Profile customization:** color, width and glow change the preview at
       once and are saved in `config/settings.json` under `profile.avatarStyle`
-- [ ] Idle CPU with the glow on vs. off (`adb shell top -n 1 | grep xross`); note both
+- [ ] Idle CPU: rest on the Games root for 10 s (no music), then sample 20 s of the process's
+      CPU time (below). Target < 10%; note it with the avatar glow on and off. Before the idle
+      rest it was 100–130% on the Galaxy A55
+- [ ] The first press after a rest moves the cursor at once, and the wave and glows pick up
+      without a jump
+
+```bash
+pid=$(adb shell pidof dev.xross.launcher); t0=$(adb shell cat /proc/$pid/stat | awk '{print $14+$15}'); sleep 20; t1=$(adb shell cat /proc/$pid/stat | awk '{print $14+$15}'); echo "CPU $(( (t1 - t0) * 100 / 20 / 100 ))%"
+```
 
 ## 7. Photo, Music and Video
 
