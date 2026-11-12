@@ -10,6 +10,7 @@ import dev.xross.launcher.theme.pack.ThemePackLoader
 import dev.xross.launcher.theme.pack.TimeRange
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
@@ -255,6 +256,46 @@ class ContextRulesTest {
         assertTrue(f.problems.toString(), f.problems.isEmpty())
         assertNull(f.palette)
         assertEquals(true, f.flags.batteryTint)
+    }
+
+    @Test fun batterySelectorAcceptsTheDottedAndCamelCaseNames() {
+        // docs/THEME_RICING_AND_WEB_STUDIO.md §3.4 writes "battery.level"; "batteryLevel" is also read.
+        pack(
+            "aliases", palette + """,
+            "rules": [
+              {"match": {"battery.level": "<= 20"}, "apply": {"palette": {"accent": "#AA0000"}}},
+              {"match": {"batteryLevel": "charging"}, "apply": {"palette": {"accentSecondary": "#00AA00"}}}
+            ]""",
+        )
+        val t = loader.load("aliases")
+        assertTrue(t.problems.toString(), t.problems.isEmpty())
+        assertEquals(2, t.rules.size)
+        assertTrue(t.usesBattery)
+        assertEquals(0xFFAA0000.toInt(), t.look(battery = battery(15)).palette!!.glow)
+        assertEquals(0xFF202020.toInt(), t.look(battery = battery(60)).palette!!.glow)
+        assertEquals(0xFF00AA00.toInt(), t.look(battery = battery(60, charging = true)).palette!!.wave)
+        assertEquals(0xFF303030.toInt(), t.look(battery = battery(60)).palette!!.wave)
+    }
+
+    @Test fun aCategoryAndSystemTileShapeAppliesAtRunTimeOnlyInThatCategory() {
+        pack(
+            "both", palette + """,
+            "rules": [{"match": {"category": "GAMES", "system": "gba"}, "apply": {"cardAspectRatio": "3:2"}}]""",
+        )
+        val t = loader.load("both")
+        assertTrue(t.problems.toString(), t.problems.isEmpty())
+        // Not folded into the pack's layout: it depends on the open category.
+        assertFalse(t.rules.single().folded)
+        assertEquals(16f / 9f, t.layout.aspectFor("games", "gba")!!, 1e-4f) // the pack default
+        // In Games it shapes GBA tiles whichever game is focused, and only those.
+        for (focused in listOf("gba", "snes", null)) {
+            val l = t.look(category = "games", system = focused).layout
+            assertNotNull("focused $focused", l)
+            assertEquals(1.5f, l!!.aspectFor("games", "gba")!!, 1e-4f)
+            assertEquals(t.layout.aspectFor("games", "snes"), l.aspectFor("games", "snes"))
+        }
+        // Elsewhere the pack's own layout instance stands.
+        assertNull(t.look(category = "music", system = "gba").layout)
     }
 
     @Test fun theDefaultPackHasNoRules() {

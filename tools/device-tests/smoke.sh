@@ -479,9 +479,10 @@ for _ in 1 2 3 4 5 6; do adb shell ls /sdcard/Xross/themes/smoke-variants/theme.
 adb shell ls /sdcard/Xross/themes/smoke-variants/theme.json >/dev/null 2>&1 \
   && ok "a valid .xtheme unpacks into Xross/themes/smoke-variants" || bad "smoke-variants not installed"
 # settings.json is written off the main thread: give it a moment.
-for _ in 1 2 3 4 5 6; do adb shell cat /sdcard/Xross/config/settings.json | grep -q '"themePack": "smoke-variants"' && break; pause 0.5; done
+for _ in $(seq 16); do adb shell cat /sdcard/Xross/config/settings.json | grep -q '"themePack": "smoke-variants"' && break; pause 0.5; done
 adb shell cat /sdcard/Xross/config/settings.json | grep -q '"themePack": "smoke-variants"' \
-  && ok "the imported pack is applied" || bad "the imported pack isn't active"
+  && ok "the imported pack is applied" \
+  || bad "the imported pack isn't active (settings.json has $(adb shell cat /sdcard/Xross/config/settings.json | grep -o '"themePack": "[^"]*"'))"
 top_list
 expect "Smoke Variants by smoke · 3 packs" "the imported pack is listed and loads without problems"
 key KEYCODE_DPAD_DOWN
@@ -625,7 +626,14 @@ for k in DPAD_UP DPAD_DOWN DPAD_LEFT DPAD_RIGHT BUTTON_X BUTTON_B BUTTON_Y BUTTO
   adb shell input keyevent "KEYCODE_$k"
 done
 pause 0.6
-expect "Buttons remapped" "wizard completes after ten buttons (last: media controls)"
+# The "Buttons remapped" toast lasts 2.6 s and is often gone before the dump; the wizard closing
+# (back on the Controls rows) is the same signal. "10 custom bindings" below checks what was saved.
+s=$(screen)
+if grep -qF "Buttons remapped" <<<"$s" || { ! grep -qF "Press the button for" <<<"$s" && grep -qF "Remap buttons…" <<<"$s"; }; then
+  ok "wizard completes after ten buttons (last: media controls)"
+else
+  bad "wizard completes after ten buttons — still asking"; grep -v '^[[:space:]]*$' <<<"$s" | sed 's/^/       | /' | head -6
+fi
 key KEYCODE_DPAD_DOWN
 expect "default mapping changed" "Reset all summarizes the changed mapping"
 key KEYCODE_DPAD_DOWN
@@ -682,6 +690,8 @@ if [ "$MEDIA" -eq 1 ]; then
   expect "Smoke Song 1" "album lists its songs in track order"
   key KEYCODE_DPAD_CENTER
   pause 1.5
+  # The emulator's player can sit in BUFFERING for a few seconds; a song that never plays still fails.
+  for _ in $(seq 9); do [ "$(music_state)" = "PLAYING" ] && break; pause 0.5; done
   [ "$(music_state)" = "PLAYING" ] && ok "song plays through the media session" || bad "song plays (state $(music_state))"
   category 2
   expect "Now playing" "Now playing row appears"

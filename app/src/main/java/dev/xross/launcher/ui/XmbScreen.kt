@@ -1277,8 +1277,9 @@ internal fun GlowText(
 private val NoLayoutCallback: (androidx.compose.ui.text.TextLayoutResult) -> Unit = {}
 
 /**
- * The bloom copy behind a [GlowText]: its color is [ThemeAccent.halo] (white unless game art, a
- * quick profile or the battery tint colors it). Its own composable, so a halo morph recomposes
+ * The bloom copy behind a [GlowText]: its color is [ThemeAccent.haloTarget] (white unless game
+ * art, a quick profile or the battery tint colors it), switched at once rather than morphed, since
+ * each new shadow color blurs the text again. Its own composable, so a color change recomposes
  * this one text and nothing around it.
  */
 @Composable
@@ -1290,7 +1291,7 @@ private fun GlowBloom(
     cut: TextOverflow,
     glow: () -> Float,
 ) {
-    val halo = ThemeAccent.halo.value
+    val halo = ThemeAccent.haloTarget
     Text(
         text,
         style = TextStyle(
