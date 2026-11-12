@@ -21,14 +21,14 @@ Legend: ✅ done and verified · ◐ partial · ❌ not started · 🧪 verified
 | Phase 3 (dual screen, hot-swap, RetroAchievements, Web Portal, FTPS) | ◐ RetroAchievements account linking, status bar avatar and User Card (§3.12), per-game achievement lists and unlock toasts (§3.13), live on the emulator and the Galaxy A55 (§3.14); hot-swap and live resolution change done; dual screen, docking, Portal and FTPS not started |
 | Phase 4 (onboarding, triage, profiling, plugin API) | ◐ app triage and performance work started |
 
-**Verification:** 415 JVM/Robolectric unit tests (411 run by default; 4 opt-in tests call the real
-services). The last recorded run, 395 tests with 0 failures, predates Phase 2b.1, which added 20
-(§3.1), end-to-end launch tests against stub builds of eleven emulators, a
+**Verification:** 418 JVM/Robolectric unit tests (414 run by default; 4 opt-in tests call the real
+services), all passing on 2026-11-12 (§3.1), end-to-end launch tests against stub builds of eleven emulators, a
 hot-swap test with a real removable volume, frame-pacing measurements across 12 display
 configurations on the emulator, live scraping runs, and feature passes on a **Samsung Galaxy
 A55** (Android 16, 120 Hz) on 2026-11-11 (§3.11–§3.14). The updated on-device smoke test ran on the
 Galaxy A55 on 2026-11-11: 75 of 86 checks pass, and the 11 failures are Photo/Music checks that
-need a device without its own media (§3.13). ScreenScraper and RetroAchievements sign-in ran
+need a device without its own media (§3.13). On 2026-11-12 the smoke test, extended with the 2b.1
+checks, passed 112 of 112 on the API 37 emulator (§3.15). ScreenScraper and RetroAchievements sign-in ran
 live; frame pacing on the A55 is 0.63% janky with 82.9 MB PSS in the background (§3.13). No physical controller, gaming handheld or real emulator install has been tested yet,
 and the portable folder and library organization passed a device run on the Galaxy A55 as an
 upgrade of a real install (§3.11); SD card, Android 9/10 and handhelds are still untested.
@@ -155,10 +155,10 @@ HTTPS Xross Portal (Ktor CIO), FTPS (Apache FtpServer), auth, uploads, library e
 
 ## 3. Test results
 
-### 3.1 Unit tests — 415 tests (last recorded run: 395, 0 failures, before Phase 2b.1)
-`./gradlew :app:testDebugUnitTest` (JVM + Robolectric on SDK 35): 411 run by default, 4 opt-in live
-tests skip unless `-PliveScrape=true`. The suite hasn't been run since Phase 2b.1 added 20 tests
-(count taken from the source). The table below lists the original suites; later suites
+### 3.1 Unit tests — 418 tests, 0 failures (2026-11-12)
+`./gradlew :app:testDebugUnitTest` (JVM + Robolectric on SDK 35): 414 run by default, 4 opt-in live
+tests skip unless `-PliveScrape=true`. The 415 from Phase 2b.1 passed unchanged; the idle rest
+added `InactivityTrackerTest` (3 tests: timeout, input pushing it back, wave frame strides). The table below lists the original suites; later suites
 are listed after it.
 
 | Suite | Tests | Covers |
@@ -581,8 +581,20 @@ unit and view-model tests only (§3.1); **no device run yet**.
 | Profile customization | `profile.avatarStyle` (`AvatarStyle.kt`): border color presets or custom, width 1–6 dp, glow on/off, speed 0.5–2×, intensity 0.1–1, clamped on load. `AvatarStylePanel` previews live and saves at once. The glow's infinite transition stops when the screen is idle or covered |
 | RetroAchievements dashboard | `RaHubScreen` from Games ▸ RetroAchievements: header card (avatar, user, rank, member since, points, RetroRatio), library completion gauge, mastery showcase, recent activity feed. Built from the cached progress in `Xross/data/ra`; placeholder states when offline or not linked |
 
-**Not verified:** any of the above on a device; the HUD morph for jitter; L1/R1 paging on a real
-controller; the dashboard with a large library; CPU cost of the avatar glow (see Roadmap §3).
+**Emulator run (2026-11-12, API 37, 60 Hz):** `smoke.sh` 112/112, now covering the avatar HUD
+(Up from the top row and back), the playtime subtitle, Details paging (Right, R1, L1, both ends,
+cursor follows), the dashboard and Profile customization (saved to `settings.json`). The HUD and
+the 16:9 title plates were also checked in screenshots.
+
+**Idle rest (2026-11-12):** `InactivityTracker` marks the screen idle after 3 s without key, nav or
+touch input, unless music or a video snap plays. While idle the focus pulse and avatar glow ease to
+a resting value and stop (`rememberBreathing`), and the wave drops to ~20 fps; in use it is capped
+near 60 fps on panels above 90 Hz. Both rates are paced on vsync by a Choreographer callback that
+wakes once per wave frame. Resting CPU on the emulator: 21.9% before, 2.5–2.8% after.
+
+**Not verified:** any of the above on a real device; the HUD morph for jitter; L1/R1 paging on a
+real controller; the dashboard with a large library; idle CPU and the smoothness of the 20 fps
+standby wave on the Galaxy A55 (the emulator drops frames at rest even without the change).
 
 ## 4. Display matrix & performance
 
