@@ -9,13 +9,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -40,36 +38,6 @@ internal object Pastel {
     /** Closed loop for sweep gradients, so the seam is invisible. */
     val Iridescent = listOf(Lilac, Sky, Mint, Peach, Rose, Lilac)
 }
-
-/**
- * Frosted glass: a translucent cool tint with a top sheen and a hairline inner highlight, over a
- * deeper shade at the bottom. Compose can't blur what is behind a view, so the "frost" is a
- * layered tint that reads the same over the wave, hero art and video without hiding them.
- */
-internal fun Modifier.frostedGlass(shape: Shape, strength: Float = 1f): Modifier = this
-    .clip(shape)
-    .background(
-        Brush.verticalGradient(
-            0f to Color(0xFF2A2A40).copy(alpha = 0.62f * strength),
-            0.55f to Color(0xFF16161F).copy(alpha = 0.74f * strength),
-            1f to Color(0xFF0A0A12).copy(alpha = 0.84f * strength),
-        ),
-    )
-    .drawWithContent {
-        // Sheen across the top third.
-        drawRect(
-            Brush.verticalGradient(
-                0f to Color.White.copy(alpha = 0.10f * strength),
-                0.35f to Color.White.copy(alpha = 0.02f * strength),
-                0.36f to Color.Transparent,
-            ),
-        )
-        drawContent()
-    }
-
-/** Soft iridescent pastel border (a sweep gradient around the shape). */
-internal fun Modifier.iridescentBorder(shape: Shape, width: Dp = 1.5.dp, alpha: Float = 0.85f): Modifier =
-    border(width, Brush.sweepGradient(Pastel.Iridescent.map { it.copy(alpha = alpha) }), shape)
 
 /** Rounded progress bar: a dim track with an amber fill and a light top edge. */
 @Composable

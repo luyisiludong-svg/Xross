@@ -3,13 +3,18 @@ package dev.xross.launcher.ui
 import android.app.ActivityManager
 import android.content.Context
 import android.opengl.GLSurfaceView
+import android.view.Choreographer
 import android.view.View
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalContext
@@ -23,10 +28,17 @@ import kotlin.math.roundToInt
  * GL wave background. The render loop stops whenever the activity is paused (screen off,
  * emulator in front), so it costs nothing while a game runs, and while [paused] is set: something
  * opaque (focused-game hero art, a video snap, a full-screen photo) covers the whole screen. A
- * pause keeps the GL surface and context, so resuming is instant.
+ * pause keeps the GL surface and context, so resuming is instant. While [idle] (no input for a
+ * few seconds) it drifts on at a standby frame rate; see [WaveRenderer] for the rates.
  */
 @Composable
-fun WaveBackground(enabled: Boolean, params: WaveParams, paused: Boolean = false, modifier: Modifier = Modifier) {
+fun WaveBackground(
+    enabled: Boolean,
+    params: WaveParams,
+    paused: Boolean = false,
+    idle: Boolean = false,
+    modifier: Modifier = Modifier,
+) {
     val context = LocalContext.current
     val supported = remember { supportsGles3(context) }
     val palette = params.palette
@@ -35,12 +47,11 @@ fun WaveBackground(enabled: Boolean, params: WaveParams, paused: Boolean = false
         return
     }
 
-    val renderer = remember {
-        @Suppress("DEPRECATION")
-        val hz = (context.getSystemService(Context.WINDOW_SERVICE) as android.view.WindowManager)
-            .defaultDisplay.refreshRate
-        WaveRenderer(refreshRateHz = hz)
+    @Suppress("DEPRECATION")
+    val refreshHz = remember {
+        (context.getSystemService(Context.WINDOW_SERVICE) as android.view.WindowManager).defaultDisplay.refreshRate
     }
+    val renderer = remember { WaveRenderer(refreshRateHz = refreshHz) }
     renderer.params = params
 
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -61,25 +72,82 @@ fun WaveBackground(enabled: Boolean, params: WaveParams, paused: Boolean = false
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
         }
     }
-    // Covered: stop drawing frames (the GL thread sleeps) but keep the surface.
-    androidx.compose.runtime.LaunchedEffect(view, paused) {
-        view.renderMode = if (paused) GLSurfaceView.RENDERMODE_WHEN_DIRTY else GLSurfaceView.RENDERMODE_CONTINUOUSLY
-    }
+    val pacer = remember { VsyncPacer(view, refreshHz) }
+    var resumed by remember { mutableStateOf(lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) }
     DisposableEffect(lifecycle, view) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
-                Lifecycle.Event.ON_RESUME -> view.onResume()
-                Lifecycle.Event.ON_PAUSE -> view.onPause()
+                Lifecycle.Event.ON_RESUME -> {
+                    view.onResume()
+                    resumed = true
+                }
+                Lifecycle.Event.ON_PAUSE -> {
+                    resumed = false
+                    view.onPause()
+                }
                 else -> Unit
             }
         }
         lifecycle.addObserver(observer)
         onDispose {
             lifecycle.removeObserver(observer)
+            pacer.stop()
             view.onPause()
         }
     }
+    // Covered: stop drawing frames (the GL thread sleeps) but keep the surface. Otherwise run at
+    // full rate when that is already at or under the ceiling, else paced to every n-th vsync.
+    val stride = if (idle) WaveRenderer.idleStride(refreshHz) else WaveRenderer.activeStride(refreshHz)
+    LaunchedEffect(view, paused, stride, resumed) {
+        renderer.stride = stride
+        when {
+            paused || !resumed -> {
+                pacer.stop()
+                view.renderMode = GLSurfaceView.RENDERMODE_WHEN_DIRTY
+            }
+            stride <= 1 -> {
+                pacer.stop()
+                view.renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
+            }
+            else -> {
+                view.renderMode = GLSurfaceView.RENDERMODE_WHEN_DIRTY
+                pacer.start(stride)
+            }
+        }
+    }
     AndroidView(factory = { view }, modifier = modifier.fillMaxSize())
+}
+
+/**
+ * Asks for a frame every [start]'s `stride`-th vsync. Each callback is posted with a delay just
+ * short of the frame period, so Choreographer runs it on the vsync it is due and the main thread
+ * wakes once per wave frame, not once per vsync. A (re)start renders a frame at once, so leaving
+ * the standby rate shows motion on the next vsync.
+ */
+private class VsyncPacer(private val view: GLSurfaceView, refreshHz: Float) : Choreographer.FrameCallback {
+    private val choreographer = Choreographer.getInstance()
+    private val vsyncMs = 1000.0 / refreshHz.coerceIn(30f, 240f)
+    private var delayMs = 0L
+    private var running = false
+
+    fun start(stride: Int) {
+        delayMs = (vsyncMs * (stride - 0.5)).toLong()
+        choreographer.removeFrameCallback(this)
+        running = true
+        view.requestRender()
+        choreographer.postFrameCallbackDelayed(this, delayMs)
+    }
+
+    fun stop() {
+        running = false
+        choreographer.removeFrameCallback(this)
+    }
+
+    override fun doFrame(frameTimeNanos: Long) {
+        if (!running) return
+        view.requestRender()
+        choreographer.postFrameCallbackDelayed(this, delayMs)
+    }
 }
 
 private fun supportsGles3(context: Context): Boolean {

@@ -55,7 +55,7 @@ import dev.xross.launcher.state.GlyphKey
 import dev.xross.launcher.state.NodeIcon
 import java.text.NumberFormat
 
-/** Width over height of a game tile: the wide plate of the PS3 / PSP XMB game items. */
+/** Default width over height of a game tile (the theme layout may set another): the wide plate of the PS3 / PSP XMB game items. */
 internal const val GameTileAspect = 16f / 9f
 
 /** Tile height relative to a row's square icon; with the focus scale it still clears the rows around it. */
@@ -71,8 +71,11 @@ private val LOGO = listOf(ArtKind.WHEEL)
 /** Wide art first; a portrait capsule or box is cropped to its middle when that is all there is. */
 private val WIDE = listOf(ArtKind.HERO, ArtKind.GRID, ArtKind.SCREENSHOT, ArtKind.BOX_2D)
 
+/** Square and portrait tiles (box-art layouts) show the box first. */
+private val BOXY = listOf(ArtKind.BOX_2D, ArtKind.GRID, ArtKind.SCREENSHOT, ArtKind.HERO)
+
 /**
- * A game's rectangular XMB tile, [height] tall and 16:9 wide, centered on (and wider than) the
+ * A game's rectangular XMB tile, [height] tall and [aspect] (16:9 by default) wide, centered on (and wider than) the
  * row's square icon slot. Shows, in order of preference: the clear logo centered on a frosted
  * plate; wide hero / capsule art filling the plate; the title set on the plate when the game has
  * no art. Art crossfades in over the title plate, so a row never pops.
@@ -88,15 +91,19 @@ internal fun GameTile(
     focusScale: Float,
     glow: () -> Float,
     loadArt: suspend (String, List<ArtKind>, Int) -> ImageBitmap?,
+    /** Width over height, from the theme layout's `cardAspectRatio` (Appendix A.5). */
+    aspect: Float = GameTileAspect,
 ) {
     val density = LocalDensity.current
-    val width = height * GameTileAspect
-    val px = with(density) { (width * focusScale).roundToPx() }
-    val art by produceState<TileArt?>(null, icon.uuid, icon.version, icon.scraped) {
-        value = if (!icon.scraped) {
-            null
-        } else {
-            loadArt(icon.uuid, LOGO, px)?.let { TileArt(it, logo = true) }
+    val width = height * aspect
+    val px = with(density) { (maxOf(width, height) * focusScale).roundToPx() }
+    val boxy = aspect < 1.2f
+    val art by produceState<TileArt?>(null, icon.uuid, icon.version, icon.scraped, boxy) {
+        value = when {
+            !icon.scraped -> null
+            boxy -> loadArt(icon.uuid, BOXY, px)?.let { TileArt(it, logo = false) }
+                ?: loadArt(icon.uuid, LOGO, px)?.let { TileArt(it, logo = true) }
+            else -> loadArt(icon.uuid, LOGO, px)?.let { TileArt(it, logo = true) }
                 ?: loadArt(icon.uuid, WIDE, px)?.let { TileArt(it, logo = false) }
         }
     }
@@ -162,7 +169,7 @@ internal fun GameTile(
                     glyphPainter(icon.fallback),
                     contentDescription = null,
                     colorFilter = ColorFilter.tint(Color.White),
-                    modifier = Modifier.size(height * 0.7f).graphicsLayer { alpha = 0.12f * (1f - shown) },
+                    modifier = Modifier.size(minOf(height, width) * 0.7f).graphicsLayer { alpha = 0.12f * (1f - shown) },
                 )
                 Text(
                     icon.label,
@@ -212,8 +219,7 @@ internal fun GameTelemetryBadge(telemetry: GameTelemetry?, size: TextUnit, modif
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
-                    .frostedGlass(shape, strength = 0.9f)
-                    .iridescentBorder(shape, width = 1.dp, alpha = if (t.mastered) 0.9f else 0.45f)
+                    .xrossSurface(shape, strength = 0.9f, borderAlpha = if (t.mastered) 0.9f else 0.45f, borderScale = 2f / 3f)
                     .padding(horizontal = 12.dp, vertical = 5.dp),
             ) {
                 val icon = with(density) { (size * 1.15f).toDp() }

@@ -66,6 +66,17 @@ sealed interface Command {
     data object CycleThemePack : Command
     data class SetThemePack(val id: String) : Command
     data object ReloadThemePacks : Command
+    /** Settings ▸ Theme ▸ Surface style: the pack's own, then each surface it offers. */
+    data object CycleSurfaceStyle : Command
+    /** Next variant of the active pack ("" = its base look first). */
+    data object CycleThemeVariant : Command
+    data class SetThemeVariant(val id: String) : Command
+    /** Pick a `.xtheme` archive through the system file picker. */
+    data object ImportThemeArchive : Command
+    /** Install the staged `.xtheme` over the installed pack of the same id. */
+    data object ReplaceImportedTheme : Command
+    /** Install the staged `.xtheme` next to the installed pack, under a new id. */
+    data object KeepBothImportedThemes : Command
     data object ToggleSoundEffects : Command
     data object CycleSoundVolume : Command
     data object ToggleBootSound : Command

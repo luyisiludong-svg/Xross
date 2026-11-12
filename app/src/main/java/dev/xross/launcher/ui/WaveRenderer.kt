@@ -12,8 +12,11 @@ import java.util.Calendar
 import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
 import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.cos
+import kotlin.math.floor
 import kotlin.math.max
+import kotlin.math.roundToInt
 import kotlin.math.roundToLong
 
 /**
@@ -47,12 +50,28 @@ data class WaveParams(
  *    soft gradients don't band.
  *  - The surface is rendered below native resolution (see [WaveBackground]); the content is soft
  *    enough that the upscale is invisible and the GPU cost drops ~4x.
+ *
+ * Frame rate: a slow ambient sheet gains nothing from 120 Hz, so on high-refresh panels frames are
+ * paced to a whole fraction of the display rate near [ACTIVE_MAX_FPS] (120 → 60, 144 → 72;
+ * 90 Hz and below run at full rate). While the screen rests it drops to about [IDLE_FPS].
+ * [WaveBackground] paces frames on vsync; [stride] tells the renderer how many vsyncs a frame
+ * spans, so a paced frame is not mistaken for a hitch.
  */
 class WaveRenderer(
     @Volatile var params: WaveParams = WaveParams(),
     refreshRateHz: Float = 60f,
 ) : GLSurfaceView.Renderer {
     private val framePeriodNs = (1e9 / refreshRateHz.coerceIn(30f, 240f)).roundToLong()
+
+    /** Vsyncs per frame, set by [WaveBackground]'s pacer. */
+    @Volatile var stride = 1
+
+    // The colors on screen, eased toward params' so a theme variant, category or system override
+    // crossfades (~300 ms) instead of popping. GL thread only; the first frame snaps.
+    private val shownTop = FloatArray(3)
+    private val shownBottom = FloatArray(3)
+    private val shownWave = FloatArray(3)
+    private var colorsShown = false
 
     private var program = 0
     private var uRes = 0
@@ -85,6 +104,7 @@ class WaveRenderer(
         uTurb = GLES30.glGetUniformLocation(program, "uTurb")
         uThick = GLES30.glGetUniformLocation(program, "uThick")
         lastFrameNs = 0L
+        colorsShown = false
     }
 
     override fun onSurfaceChanged(gl: GL10?, w: Int, h: Int) {
@@ -96,10 +116,16 @@ class WaveRenderer(
     override fun onDrawFrame(gl: GL10?) {
         val now = SystemClock.elapsedRealtimeNanos()
         val p = params
+        val k = if (!colorsShown || lastFrameNs == 0L) 1f else colorStep((now - lastFrameNs) / 1e9f)
+        easeColor(shownTop, p.topRgb, k)
+        easeColor(shownBottom, p.bottomRgb, k)
+        easeColor(shownWave, p.waveRgb, k)
+        colorsShown = true
         if (lastFrameNs != 0L) {
-            stats?.record(now - lastFrameNs)
-            // Snap to whole vsync periods; cap long gaps (resume, hitch) to a few frames.
-            val frames = ((now - lastFrameNs).toDouble() / framePeriodNs).roundToLong().coerceIn(1, 4)
+            stats?.record(now - lastFrameNs, stride)
+            // Snap to whole vsync periods; cap long gaps (resume, hitch) to a couple of paced frames.
+            val maxFrames = max(4L, 2L * stride)
+            val frames = ((now - lastFrameNs).toDouble() / framePeriodNs).roundToLong().coerceIn(1, maxFrames)
             time += frames * framePeriodNs / 1e9 * p.speed
         }
         lastFrameNs = now
@@ -113,9 +139,9 @@ class WaveRenderer(
         GLES30.glUniform2f(uRes, width.toFloat(), height.toFloat())
         // Wrap time so float precision never degrades on a launcher that runs for weeks.
         GLES30.glUniform1f(uTime, (time % 10_000.0).toFloat())
-        GLES30.glUniform3fv(uTop, 1, p.topRgb, 0)
-        GLES30.glUniform3fv(uBottom, 1, p.bottomRgb, 0)
-        GLES30.glUniform3fv(uWave, 1, p.waveRgb, 0)
+        GLES30.glUniform3fv(uTop, 1, shownTop, 0)
+        GLES30.glUniform3fv(uBottom, 1, shownBottom, 0)
+        GLES30.glUniform3fv(uWave, 1, shownWave, 0)
         GLES30.glUniform1f(uBright, 0.8f + 0.2f * daylight)
         GLES30.glUniform1i(uLines, p.lineCount.coerceIn(0, MAX_LINES))
         GLES30.glUniform1f(uTurb, p.turbulence.coerceIn(0f, 2f))
@@ -131,7 +157,13 @@ class WaveRenderer(
         private val intervals = LongArray(300)
         private var n = 0
 
-        fun record(intervalNs: Long) {
+        private var stride = 1
+
+        fun record(intervalNs: Long, stride: Int) {
+            if (stride != this.stride) { // a new pace: start a fresh window
+                this.stride = stride
+                n = 0
+            }
             intervals[n++] = intervalNs
             if (n < intervals.size) return
             n = 0
@@ -139,11 +171,12 @@ class WaveRenderer(
             val p50 = sorted[sorted.size / 2] / 1e6
             val p95 = sorted[sorted.size * 95 / 100] / 1e6
             val max = sorted.last() / 1e6
-            val hitches = sorted.count { it > periodNs * 3 / 2 }
+            val expected = periodNs * stride
+            val hitches = sorted.count { it > expected + periodNs / 2 }
             Log.i(
                 "WaveFrames",
                 "gl frames=${sorted.size} p50=%.1fms p95=%.1fms max=%.1fms missed=$hitches (period %.1fms)"
-                    .format(p50, p95, max, periodNs / 1e6),
+                    .format(p50, p95, max, expected / 1e6),
             )
         }
     }
@@ -178,6 +211,33 @@ class WaveRenderer(
     companion object {
         /** Upper bound of `uLines`; the shader's strand loop is unrolled to this. */
         const val MAX_LINES = 12
+
+        /** Frame-rate ceiling while in use; see the class comment. */
+        const val ACTIVE_MAX_FPS = 60f
+
+        /** Standby frame rate while the screen rests: the sheet still drifts, at a fraction of the cost. */
+        const val IDLE_FPS = 20f
+
+        /** Vsyncs per frame in use: 1 up to ~90 Hz, 2 at 120 Hz, 2 at 144 Hz (72 fps). */
+        fun activeStride(refreshRateHz: Float): Int = max(1, floor(refreshRateHz / ACTIVE_MAX_FPS + 0.25f).toInt())
+
+        /** Vsyncs per frame at rest: 3 at 60 Hz, 4 at 90 Hz, 6 at 120 Hz. */
+        fun idleStride(refreshRateHz: Float): Int = max(1, (refreshRateHz / IDLE_FPS).roundToInt())
+
+        /** Time constant of the color crossfade: ~95% of the way in 300 ms. */
+        const val COLOR_FADE_S = 0.1f
+
+        /** Fraction of the way to the target colors to move after [dtSeconds] (frame-rate independent). */
+        fun colorStep(dtSeconds: Float): Float =
+            if (dtSeconds <= 0f) 0f else (1f - kotlin.math.exp(-dtSeconds / COLOR_FADE_S)).coerceIn(0f, 1f)
+
+        /** Moves [shown] [k] of the way to [target], snapping the last hair so it settles exactly. */
+        fun easeColor(shown: FloatArray, target: FloatArray, k: Float) {
+            for (i in 0..2) {
+                val d = target[i] - shown[i]
+                shown[i] = if (abs(d) < 1f / 512f) target[i] else shown[i] + d * k
+            }
+        }
 
         /** Render-target scale: keep the long side near 1280 px. */
         fun renderScale(widthPx: Int, heightPx: Int): Float =

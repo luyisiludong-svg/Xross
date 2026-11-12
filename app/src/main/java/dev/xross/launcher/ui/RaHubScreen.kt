@@ -165,8 +165,7 @@ private fun Section(title: String, m: XmbMetrics, modifier: Modifier = Modifier,
     Column(
         modifier
             .fillMaxWidth()
-            .frostedGlass(CardShape)
-            .iridescentBorder(CardShape, width = 1.dp, alpha = 0.45f)
+            .xrossSurface(CardShape, borderAlpha = 0.45f, borderScale = 2f / 3f)
             .padding(horizontal = with(density) { (m.s * 0.035f).toDp() }, vertical = with(density) { (m.s * 0.028f).toDp() }),
     ) {
         Text(title, style = shadowed(text * 0.8f, color = Pastel.Lilac, weight = FontWeight.Bold).copy(letterSpacing = text * 0.12f))
@@ -193,63 +192,67 @@ private fun IdentityCard(profile: ProfileState, style: AvatarStyleConfig, m: Xmb
     val text = with(density) { m.subtitleSize.toSp() }
     val number = remember { NumberFormat.getIntegerInstance() }
     val p = profile.profile
+    // The status line is pinned to the bottom; on a short screen only the identity above it scrolls.
     Column(
         modifier
-            .frostedGlass(CardShape)
-            .iridescentBorder(CardShape, alpha = 0.6f)
-            .verticalScroll(rememberScrollState())
+            .xrossSurface(CardShape, borderAlpha = 0.6f)
             .padding(horizontal = (m.s * 0.035f).dp(), vertical = (m.s * 0.035f).dp()),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text(
-            "RETROACHIEVEMENTS",
-            style = shadowed(text * 0.8f, color = Pastel.Lilac, weight = FontWeight.Bold).copy(letterSpacing = text * 0.12f),
-        )
-        Spacer(Modifier.height((m.s * 0.03f).dp()))
-        ProfileAvatar(
-            avatar = profile.avatar,
-            avatarVersion = profile.avatarVersion,
-            size = (m.s * 0.2f).dp(),
-            contentDescription = profile.username.ifEmpty { "Profile" },
-            style = style,
-            modifier = Modifier.padding((m.s * 0.02f).dp()),
-        )
-        Spacer(Modifier.height((m.s * 0.015f).dp()))
-        GlowText(p?.username ?: profile.username.ifEmpty { "Guest" }, fontSize = with(density) { (m.titleSize * 1.2f).toSp() }, glow = { 0.6f })
-        Text(
-            when {
-                !profile.linked -> "Not linked"
-                p?.rank != null -> "Global rank #${number.format(p.rank)}" + (p.totalRanked?.let { " of ${number.format(it)}" } ?: "")
-                p != null -> "Unranked"
-                else -> "Offline"
-            },
-            style = shadowed(text, color = if (p?.rank != null) Pastel.Sky else TextDim, weight = FontWeight.Bold),
-            textAlign = TextAlign.Center,
-        )
-        p?.memberSince?.let {
-            Text("Member since ${GameDateFormat.short(it)}", style = shadowed(text * 0.88f, color = TextDim))
-        }
-        if (p != null) {
-            Spacer(Modifier.height((m.s * 0.03f).dp()))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                val icon = (m.subtitleSize * 1.4f).dp()
-                Image(glyphPainter(GlyphKey.TROPHY), null, colorFilter = ColorFilter.tint(Pastel.Amber), modifier = Modifier.size(icon))
-                Spacer(Modifier.width(6.dp))
-                Text(number.format(p.totalPoints), style = shadowed(text * 1.6f, color = Pastel.Amber, weight = FontWeight.Bold))
-            }
-            Label("HARDCORE POINTS", text)
+        Column(
+            Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(
+                "RETROACHIEVEMENTS",
+                style = shadowed(text * 0.8f, color = Pastel.Lilac, weight = FontWeight.Bold).copy(letterSpacing = text * 0.12f),
+            )
             Spacer(Modifier.height((m.s * 0.02f).dp()))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                Figure(number.format(p.softcorePoints), "SOFTCORE", text)
-                Figure(number.format(p.truePoints), "RETROPOINTS", text)
-                Figure(p.retroRatio?.let { String.format(Locale.getDefault(), "%.2f", it) } ?: "—", "RATIO", text)
+            ProfileAvatar(
+                avatar = profile.avatar,
+                avatarVersion = profile.avatarVersion,
+                size = (m.s * 0.18f).dp(),
+                contentDescription = profile.username.ifEmpty { "Profile" },
+                style = style,
+                modifier = Modifier.padding((m.s * 0.015f).dp()),
+            )
+            Spacer(Modifier.height((m.s * 0.01f).dp()))
+            GlowText(p?.username ?: profile.username.ifEmpty { "Guest" }, fontSize = with(density) { (m.titleSize * 1.2f).toSp() }, glow = { 0.6f })
+            Text(
+                when {
+                    !profile.linked -> "Not linked"
+                    p?.rank != null -> "Global rank #${number.format(p.rank)}" + (p.totalRanked?.let { " of ${number.format(it)}" } ?: "")
+                    p != null -> "Unranked"
+                    else -> "Offline"
+                },
+                style = shadowed(text, color = if (p?.rank != null) Pastel.Sky else TextDim, weight = FontWeight.Bold),
+                textAlign = TextAlign.Center,
+            )
+            p?.memberSince?.let {
+                Text("Member since ${GameDateFormat.short(it)}", style = shadowed(text * 0.88f, color = TextDim))
             }
-            p.motto?.takeIf { it.isNotBlank() }?.let {
+            if (p != null) {
+                Spacer(Modifier.height((m.s * 0.03f).dp()))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    val icon = (m.subtitleSize * 1.4f).dp()
+                    Image(glyphPainter(GlyphKey.TROPHY), null, colorFilter = ColorFilter.tint(Pastel.Amber), modifier = Modifier.size(icon))
+                    Spacer(Modifier.width(6.dp))
+                    Text(number.format(p.totalPoints), style = shadowed(text * 1.6f, color = Pastel.Amber, weight = FontWeight.Bold))
+                }
+                Label("HARDCORE POINTS", text)
                 Spacer(Modifier.height((m.s * 0.02f).dp()))
-                Text("“$it”", style = shadowed(text * 0.9f, color = TextDim), maxLines = 3, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                    Figure(number.format(p.softcorePoints), "SOFTCORE", text)
+                    Figure(number.format(p.truePoints), "RETROPOINTS", text)
+                    Figure(p.retroRatio?.let { String.format(Locale.getDefault(), "%.2f", it) } ?: "—", "RATIO", text)
+                }
+                p.motto?.takeIf { it.isNotBlank() }?.let {
+                    Spacer(Modifier.height((m.s * 0.02f).dp()))
+                    Text("“$it”", style = shadowed(text * 0.9f, color = TextDim), maxLines = 3, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
+                }
             }
         }
-        Spacer(Modifier.height((m.s * 0.025f).dp()))
+        Spacer(Modifier.height((m.s * 0.02f).dp()))
         Text(
             when {
                 profile.refreshing -> "Refreshing…"

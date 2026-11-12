@@ -1,12 +1,7 @@
 package dev.xross.launcher.ui
 
 import android.graphics.BitmapFactory
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -18,7 +13,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -58,7 +52,7 @@ import java.io.File
  * With a [style] (`profile.avatarStyle` in settings.json) the ring takes that color and width
  * and, when its glow is on, a halo in the same color pulses behind the picture at the style's
  * speed and intensity. The pulse is read only while drawing, so it never recomposes anything;
- * with [animateGlow] false (screen idle or covered) the halo holds still and no animation runs.
+ * with [animateGlow] false (covered) or while [LocalUiIdle] is set, the halo settles and holds still.
  */
 @Composable
 fun ProfileAvatar(
@@ -87,19 +81,14 @@ fun ProfileAvatar(
     // Larger pictures (User Card, dashboard) get a proportionally heavier ring.
     val styleWidth = style?.let { it.borderWidthDp.dp * sqrt((size / 32.dp).coerceAtLeast(1f)) }
     val glowOn = style?.glowEnabled == true
-    val glowPhase: State<Float>? = if (glowOn && animateGlow) {
-        rememberInfiniteTransition(label = "avatarGlow").animateFloat(
-            initialValue = 0f,
-            targetValue = 1f,
-            animationSpec = infiniteRepeatable(
-                tween((GLOW_PERIOD_MS / style!!.glowSpeed).roundToInt().coerceAtLeast(200), easing = FastOutSlowInEasing),
-                RepeatMode.Reverse,
-            ),
-            label = "avatarGlowPhase",
-        )
-    } else {
-        null
-    }
+    // Breathes only while it is shown in use; holds at its resting strength while the screen rests.
+    val glowPhase = rememberBreathing(
+        running = glowOn && animateGlow && !LocalUiIdle.current,
+        low = 0f,
+        high = 1f,
+        halfPeriodMs = (GLOW_PERIOD_MS / (style?.glowSpeed ?: 1f)).roundToInt().coerceAtLeast(200),
+        rest = GLOW_REST,
+    )
 
     Box(
         contentAlignment = Alignment.Center,
@@ -109,7 +98,7 @@ fun ProfileAvatar(
                 val center = Offset(this.size.width / 2, this.size.height / 2)
                 if (glowOn && styleColor != null) {
                     // Halo in the ring color: both its reach (the "blur") and its opacity breathe.
-                    val phase = glowPhase?.value ?: GLOW_REST
+                    val phase = glowPhase.value
                     val k = style!!.glowIntensity
                     val picture = pictureSize.toPx() / 2
                     val reach = picture * (1.15f + 0.55f * k * (0.65f + 0.35f * phase))

@@ -57,13 +57,16 @@ class UiSounds(private val context: Context) {
     /** The pack whose sounds play now; null before the first theme is applied. */
     @Volatile var themeId: String? = null
         private set
+    private var revision = -1L
 
     /** Swaps every sound to [theme]'s (missing roles fall back to the Default pack's, see the loader). */
     fun useTheme(theme: LoadedTheme) = synchronized(lock) {
-        if (themeId == theme.id && sources == theme.sounds && gains == theme.gains) return
+        if (themeId == theme.id && sources == theme.sounds && gains == theme.gains && revision == theme.revision) return
         val wanted = theme.sounds.filterKeys { !it.stream }.values.toSet()
-        // Unload samples the new theme doesn't use; load the ones it adds.
-        for ((source, id) in ids.toMap()) if (source !in wanted) {
+        // A reload of the same pack (hot reload) may have rewritten files under the same names.
+        val reloaded = themeId == theme.id && revision != theme.revision
+        // Unload samples the new theme doesn't use (or all disk samples on a reload); load the rest.
+        for ((source, id) in ids.toMap()) if (source !in wanted || (reloaded && source is SoundSource.Disk)) {
             pool.unload(id)
             ids.remove(source)
         }
@@ -71,6 +74,7 @@ class UiSounds(private val context: Context) {
         sources = theme.sounds
         gains = theme.gains
         themeId = theme.id
+        revision = theme.revision
     }
 
     private fun load(source: SoundSource): Int? = runCatching {
