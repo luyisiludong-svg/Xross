@@ -25,5 +25,18 @@
     "artist": "users.svg",
     "shuffle": "refresh.svg"
   },
-  "effects": { "surfaceStyle": "FLAT_GLASS" }
+  "effects": { "surfaceStyle": "FLAT_GLASS" },
+  "layout": {
+    "crosshairX": 0.22,
+    "crosshairY": 0.25,
+    "cardAspectRatio": "16:9",
+    "tile": { "music": "1:1", "photo": "1.3", "video": "1.3" },
+    "itemSpacingDp": 12,
+    "focusedScale": 1.32,
+    "uiScale": 1.0,
+    "focusDivider": "TITLE_UNDERLINE",
+    "drillDownStyle": "BREADCRUMB",
+    "textOverflow": "ELLIPSIS",
+    "motionProfile": "CRISP"
+  }
 }

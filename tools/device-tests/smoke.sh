@@ -49,6 +49,25 @@ expect_any() { # expect_any <text> <text> <description>: either text (e.g. linke
   done
   bad "$3 — neither '$1' nor '$2' on screen"; grep -v '^[[:space:]]*$' <<<"$s" | sed 's/^/       | /' | head -12
 }
+# expect_line <text> <description>: <text> is a whole line on screen (not part of a longer one).
+expect_line() {
+  local s
+  for _ in 1 2 3; do
+    s=$(screen)
+    if grep -qxF -- "$1" <<<"$s"; then ok "$2"; return; fi
+    pause 0.5
+  done
+  bad "$2 — line '$1' not on screen"; grep -v '^[[:space:]]*$' <<<"$s" | sed 's/^/       | /' | head -12
+}
+expect_no_line() {
+  local s; s=$(screen)
+  if grep -qxF -- "$1" <<<"$s"; then bad "$2 — line '$1' unexpectedly on screen"; else ok "$2"; fi
+}
+# expect_desc <content-desc> <description>: an element described as <content-desc> (icons, glyphs).
+expect_desc() {
+  adb shell uiautomator dump /sdcard/xross-ui.xml >/dev/null 2>&1
+  if adb shell cat /sdcard/xross-ui.xml | grep -qF "content-desc=\"$1\""; then ok "$2"; else bad "$2 — no element described '$1'"; fi
+}
 expect_not() {
   local s; s=$(screen)
   if grep -qF -- "$1" <<<"$s"; then bad "$2 — '$1' unexpectedly on screen"; else ok "$2"; fi
@@ -307,17 +326,21 @@ pause 1
 key KEYCODE_DPAD_CENTER
 pause 1.5
 expect "Smoke Pack" "a pack in Xross/themes is found and applied"
+expect_line "Theme" "the inherited BREADCRUMB drill-down shows the path beside the open category"
 key KEYCODE_DPAD_DOWN
 expect "Theme pack · Smoke Pack" "the pack's palette becomes the theme color"
 key KEYCODE_DPAD_DOWN KEYCODE_DPAD_DOWN
 expect "8 lines" "the pack's wave defaults are applied"
 # Hot reload: an edit to the active pack applies without leaving Xross; a broken save keeps it.
-good='{"schemaVersion": 2, "name": "Smoke Pack Live", "author": "smoke", "palette": {"canvas": "#101830", "accentSecondary": "#C0E0FF"}}'
+# The edit also switches the layout: the bar collapses while drilled in and a ◀ marks the way back.
+good='{"schemaVersion": 2, "name": "Smoke Pack Live", "author": "smoke", "palette": {"canvas": "#101830", "accentSecondary": "#C0E0FF"}, "layout": {"drillDownStyle": "CHEVRON_COLLAPSE", "focusDivider": "FULL_BLEED_LINE", "motionProfile": "PS3_CRISP"}}'
 adb shell "echo '$good' > /sdcard/Xross/themes/smoke_pack/theme.json"
 pause 1.5
 # Only the focused row shows its subtitle: Wave settings → up three rows to Theme pack.
 key KEYCODE_DPAD_UP KEYCODE_DPAD_UP KEYCODE_DPAD_UP
 expect "Smoke Pack Live" "an edited theme.json reloads while Xross is open"
+expect_no_line "Theme" "CHEVRON_COLLAPSE drops the breadcrumb"
+expect_desc "Back" "CHEVRON_COLLAPSE puts a back chevron beside the focused row"
 key KEYCODE_DPAD_DOWN KEYCODE_DPAD_DOWN KEYCODE_DPAD_DOWN
 adb shell "echo '{\"schemaVersion\": 2, \"name\": \"Smoke Pack Live\",,}' > /sdcard/Xross/themes/smoke_pack/theme.json"
 pause 0.8

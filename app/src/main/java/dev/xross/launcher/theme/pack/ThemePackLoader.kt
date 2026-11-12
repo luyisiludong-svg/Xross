@@ -67,6 +67,8 @@ data class LoadedTheme(
     val surfaces: Map<String, Surface> = emptyMap(),
     /** The pack's `effects.surfaceStyle` (or the inherited one). */
     val surfaceId: String = SurfacePreset.FLAT_GLASS.name,
+    /** The `layout` block over the Default pack's (crosshair, tiles, spacing, motion, …). */
+    val layout: ThemeLayout = ThemeLayout.DEFAULT,
     /** What the pack declared but couldn't be used (bad font, unreadable icon), for Settings. */
     val problems: List<String> = emptyList(),
     /** Bumped on every load, so a hot reload of the same files still counts as a change. */
@@ -246,6 +248,7 @@ class ThemePackLoader(
             gains = gains,
             surfaces = surfaces,
             surfaceId = surfaceId,
+            layout = resolveLayout(m.layout, m.categoryOverrides, base?.layout ?: ThemeLayout.DEFAULT, problems),
             problems = problems,
             revision = revisions.incrementAndGet(),
         )
