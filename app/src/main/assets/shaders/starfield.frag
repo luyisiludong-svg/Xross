@@ -33,11 +33,11 @@ void main() {
         float across = dot(d, side);
         float star = exp(-(along * along + across * across) / (size * size));
         float fade = smoothstep(0.0, 0.3, z) * smoothstep(1.0, 0.8, z);
-        col += dust * star * fade * step(0.6, h) * (0.7 + 0.8 * warp);
+        col += dust * star * fade * step(0.6, h) * (0.7 + 0.8 * warp) * (1.0 + 0.35 * uAudioBass);
     }
 
-    // A faint glow at the vanishing point, brighter mid-warp.
-    col += uGlow.rgb * (0.04 + 0.10 * warp) * exp(-dot(uv, uv) * 6.0);
+    // A faint glow at the vanishing point, brighter mid-warp and on a beat of the music.
+    col += uGlow.rgb * (0.04 + 0.10 * warp + 0.05 * uAudioBeat) * exp(-dot(uv, uv) * 6.0);
     col += (hash(gl_FragCoord.xy + fract(uTime)) - 0.5) / 255.0;
     fragColor = vec4(col, 1.0);
 }

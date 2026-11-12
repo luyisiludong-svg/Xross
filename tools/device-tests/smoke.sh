@@ -7,7 +7,7 @@
 #   ./gradlew :app:installDebug
 #   tools/device-tests/smoke.sh                 # this quick check
 #   tools/device-tests/smoke.sh theme           # one suite: theme, media, library, input, integration
-#   tools/device-tests/smoke.sh --all           # full regression (run-all.sh: every suite, 171 checks)
+#   tools/device-tests/smoke.sh --all           # full regression (run-all.sh: every suite, 173 checks)
 #
 # WARNING: clears Xross's app data, moves /sdcard/Xross/config to /sdcard/Xross-smoke-backup/, and
 # replaces /sdcard/ROMs with test files (removed again at the end).

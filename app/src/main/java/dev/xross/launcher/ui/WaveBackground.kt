@@ -46,6 +46,8 @@ fun WaveBackground(
     frozen: Boolean = false,
     shaders: dev.xross.launcher.theme.shader.ShaderLibrary = dev.xross.launcher.theme.shader.ShaderLibrary.DEFAULT,
     health: dev.xross.launcher.theme.shader.ShaderHealth? = null,
+    /** Music levels for `uAudioBass` / `uAudioBeat` (2b.4b); null binds 0. */
+    audio: dev.xross.launcher.media.energy.AudioLevels? = null,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -60,7 +62,7 @@ fun WaveBackground(
     val refreshHz = remember {
         (context.getSystemService(Context.WINDOW_SERVICE) as android.view.WindowManager).defaultDisplay.refreshRate
     }
-    val renderer = remember { WaveRenderer(refreshRateHz = refreshHz, assets = context.assets, health = health) }
+    val renderer = remember { WaveRenderer(refreshRateHz = refreshHz, assets = context.assets, health = health, audio = audio) }
     // The library before the params that may name one of its programs.
     renderer.library = shaders
     renderer.params = params

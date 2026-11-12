@@ -21,6 +21,7 @@ Legend: ✅ done and verified · ◐ partial · ❌ not started · 🧪 verified
 | Phase 2b.2 (Theme 2.0 foundation): v2 manifest, imports, surfaces, hot reload, layout block, motion, drill-down, variants, category and system overrides, `.xtheme` import | ✅ 🧪 on `feat/theme-2b2` (2026-11-12): unit tests, `smoke.sh` 139/139 and the 12-configuration display matrix on the API 37 emulator; not yet on a phone or handheld (§3.16–§3.18) |
 | Phase 2b.3 (color intelligence): game-art palette, `rules` context engine, circadian curve, battery tint, quick profiles | ✅ on `feat/theme-2b3` (2026-11-12): 499 unit tests; 171/171 on the API 37 emulator (§3.19, §3.20); on the **Galaxy A55 at 120 Hz** 160/171 (the 11 are seeded-media checks), game navigation 0.12–0.19% janky with game-art colors, GPU p50 6 ms; wheel-only art, Details as the source and a rule's layout patch checked on the device (§3.21). Idle CPU at rest is 16–21% (target < 10%) except under E-Ink (0%). Open items: [`PHASE_2B3_PENDING_TESTS.md`](PHASE_2B3_PENDING_TESTS.md) |
 | Phase 2b.4a (shader host & watchdog): multi-program GL host, public uniforms, `ASCII_MATRIX` / `BOKEH` / `STARFIELD` / `CRT` / `CUSTOM` presets, ahead-of-time compile, frame-budget watchdog, crash-loop canary | ✅ on `feat/theme-2b4` (2026-11-12): 535 unit tests, `validateShaders` (glslangValidator); `smoke.sh` 12/12 and the theme suite 88/88 on the API 37 emulator; `smoke.sh` 12/12 on the **Galaxy A55** (profiling build, timer-query watchdog): presets 1.3–3.0 ms GPU p90, a custom shader, hot reload, a compile error, the watchdog and crash recovery checked by hand on both (§3.22) |
+| Phase 2b.4b (audio-reactive uniforms): `uAudioBass` / `uAudioBeat` from Xross's own music player, no `RECORD_AUDIO`; a tap in ExoPlayer's audio sink, 150 Hz 4th-order low-pass, beat detector, latency-compensated ring buffer | ✅ on `feat/theme-2b4` (2026-11-12): 558 unit tests; media suite 24/24 (two new checks: the music drives both uniforms, a pause binds 0) and `smoke.sh` 12/12 on the API 37 emulator, where the analysis ran 475–507 ms ahead of the speaker and was compensated. Not yet on the Galaxy A55 (§3.23) |
 | Phase 3 (dual screen, hot-swap, RetroAchievements, Web Portal, FTPS) | ◐ RetroAchievements account linking, status bar avatar and User Card (§3.12), per-game achievement lists and unlock toasts (§3.13), live on the emulator and the Galaxy A55 (§3.14); hot-swap and live resolution change done; dual screen, docking, Portal and FTPS not started |
 | Phase 4 (onboarding, triage, profiling, plugin API) | ◐ app triage and performance work started |
 
@@ -160,7 +161,7 @@ HTTPS Xross Portal (Ktor CIO), FTPS (Apache FtpServer), auth, uploads, library e
 
 ## 3. Test results
 
-### 3.1 Unit tests — 464 tests, 0 failures (2026-11-12; 535 on `feat/theme-2b4`, §3.22)
+### 3.1 Unit tests — 464 tests, 0 failures (2026-11-12; 558 on `feat/theme-2b4`, §3.22, §3.23)
 `./gradlew :app:testDebugUnitTest` (JVM + Robolectric on SDK 35): 460 run by default, 4 opt-in live
 tests skip unless `-PliveScrape=true`. The 415 from Phase 2b.1 passed unchanged; the idle rest
 added `InactivityTrackerTest` (3 tests: timeout, input pushing it back, wave frame strides), and
@@ -967,6 +968,57 @@ and config were backed up first and restored after).
 **Not covered:** Adreno and Mali GPUs (handhelds), a real driver crash or GPU reset, and E-Ink
 with a pack shader. The watchdog measures at whatever clock the GPU governor has chosen, so a
 reading near the limit at the lowest clock could pass at a higher one.
+
+### 3.23 Phase 2b.4b: audio-reactive uniforms (2026-11-12)
+
+`uAudioBass` (0–1) and `uAudioBeat` (0 or 1) now come from Xross's own music player. There's no
+`Visualizer`, so no `RECORD_AUDIO`: other apps' audio doesn't drive the shader. Code in
+`media/energy/`:
+
+- **Tap:** `MusicPlayer` builds its ExoPlayer with a renderers factory whose `DefaultAudioSink`
+  has `BassTapProcessor` in front of the default processors. It's a pass-through
+  `BaseAudioProcessor`: it reads each 16-bit or float buffer in place on the playback thread (any
+  channel count, averaged to mono) and copies it to an output buffer it reuses, so nothing is
+  allocated per buffer.
+- **Analysis (`BassAnalyzer`, no FFT):** a 4th-order Butterworth low-pass at 150 Hz (two RBJ
+  biquads, 24 dB/octave, so a voice's 360 Hz is 30 dB down; a single biquad let a pure 360 Hz
+  fixture read 0.75), then a 20 ms running mean square read every 10 ms. Bass is RMS over a
+  loudness reference that decays over 4 s (floor ≈ -28 dBFS) and is held with a 200 ms
+  exponential release. A beat is a hop over 1.6× the last second's mean energy, with an energy
+  floor and at least 0.35 of the track's own level. It holds for 100 ms and re-arms after 300 ms.
+- **Latency compensation:** Media3 1.10's sink flushes its processors without a stream position,
+  so the processor can't date a buffer itself. `EnergyAudioSink` (a `ForwardingAudioSink`)
+  anchors the analyzer to each new buffer's presentation time and passes every
+  `getCurrentPositionUs` reading (the sink's playout clock, which ExoPlayer turns into
+  `currentPosition`) to `PlaybackClock`. Both are on the sink's own timeline. The GL thread can't
+  call `player.currentPosition` (ExoPlayer is single-thread), so each frame it extrapolates the
+  last reading (≤ 250 ms old) and reads `AudioEnergyRing` at that time: bass interpolated, beat
+  from the entry at or before it. Paused, stopped, buffering or flushed (seek, new queue): 0 and 0.
+- **Shaders:** `BOKEH` and `ASCII_MATRIX` already scaled with `uAudioBass`. `STARFIELD`'s dust now
+  brightens with the bass, and its vanishing-point glow pulses on a beat. `WAVE` doesn't react
+  yet. Debug and profiling builds log the uniforms every ~2 s under `XrossAudio`
+  (`bass max=1.00 beats=4 lead=485 ms`).
+
+**Unit tests:** `AudioEnergyTest` (23): filter response (one biquad: -3 dB at 150 Hz, -36 dB at
+1.2 kHz; the cascade: -24 dB at 300 Hz, < -70 dB at 1.2 kHz, unity DC), hop timestamps, silence,
+a steady and a quiet bass line reading full, a voice barely registering, the 200 ms decay
+(e^-1 after one time constant), kicks at 120 BPM giving one 100 ms beat each, the refractory
+period, the ring's interpolation, edges, wrap and rewind, the playout clock, and the whole tap
+behind a fake sink. In that test the decoder runs 1 s ahead of the speaker and the shader still
+follows what is heard; it also covers pause, resume, seek, stop, a refused buffer and
+non-PCM pass-through. 558 unit tests in all.
+
+**Emulator (API 37, debug build):** the media fixtures now carry a 55 Hz kick at 120 BPM under
+their tones. Media suite 24/24, including the new checks "the music drives the shader's bass and
+beat" (`bass max=1.00 beats=4` per 2 s) and "paused music binds 0" (`bass max=0.00 beats=0`).
+`smoke.sh` 12/12. The analysis ran **475–507 ms** ahead of the speaker (decoder plus the
+AudioTrack buffer), about twice the 100–250 ms the plan assumed. Reading the newest entry would
+put every pulse half a second early.
+
+**Not covered:** the Galaxy A55 and handhelds (their output latency, Bluetooth headphones with
+their extra delay, which the sink's clock should include), sync judged by eye against real music,
+and the frame cost (one biquad cascade per sample on the playback thread, a locked array read per
+frame on the GL thread; neither profiled).
 
 ## 4. Display matrix & performance
 
