@@ -208,7 +208,8 @@ fun XmbScreen(
     onCloseRaHub: () -> Unit = {},
 ) {
     val palette = rememberActivePalette(state.theme, (LocalThemeLook.current ?: LocalThemePack.current?.look())?.palette)
-    val layout = LocalThemePack.current?.layout ?: ThemeLayout.DEFAULT
+    // The pack's layout with the context rules that hold and the quick profile's motion (MainActivity).
+    val layout = LocalThemeLayout.current ?: LocalThemePack.current?.layout ?: ThemeLayout.DEFAULT
     val motion = layout.motion
 
     // Slow "breathing" glow shared by everything that is focused. It settles and holds still while
@@ -1260,24 +1261,7 @@ internal fun GlowText(
     Box(modifier.then(clipped)) {
         // The clipping modes draw inside a padded box so the bloom isn't cut at the text's edges.
         Box(if (mode == TextOverflowMode.ELLIPSIS) Modifier else Modifier.padding(start = GlowBleed, top = GlowBleed, bottom = GlowBleed, end = if (mode == TextOverflowMode.MARQUEE) GlowBleed else 0.dp)) {
-            Text(
-                text,
-                style = TextStyle(
-                    color = Color.White.copy(alpha = 0.55f),
-                    fontSize = fontSize,
-                    fontFamily = fontFamily,
-                    shadow = Shadow(Color.White, Offset.Zero, blurRadius = 18f),
-                ),
-                maxLines = 1,
-                softWrap = mode == TextOverflowMode.ELLIPSIS,
-                overflow = cut,
-                modifier = Modifier
-                    .clearAndSetSemantics { } // decorative copy; screen readers read the text once
-                    .graphicsLayer {
-                        alpha = glow()
-                        compositingStrategy = CompositingStrategy.ModulateAlpha
-                    },
-            )
+            GlowBloom(text, fontSize, fontFamily, mode, cut, glow)
             Text(
                 text,
                 style = shadowed(fontSize).copy(fontFamily = fontFamily),
@@ -1291,6 +1275,41 @@ internal fun GlowText(
 }
 
 private val NoLayoutCallback: (androidx.compose.ui.text.TextLayoutResult) -> Unit = {}
+
+/**
+ * The bloom copy behind a [GlowText]: its color is [ThemeAccent.halo] (white unless game art, a
+ * quick profile or the battery tint colors it). Its own composable, so a halo morph recomposes
+ * this one text and nothing around it.
+ */
+@Composable
+private fun GlowBloom(
+    text: String,
+    fontSize: TextUnit,
+    fontFamily: androidx.compose.ui.text.font.FontFamily?,
+    mode: TextOverflowMode,
+    cut: TextOverflow,
+    glow: () -> Float,
+) {
+    val halo = ThemeAccent.halo.value
+    Text(
+        text,
+        style = TextStyle(
+            color = halo.copy(alpha = 0.55f),
+            fontSize = fontSize,
+            fontFamily = fontFamily,
+            shadow = Shadow(halo, Offset.Zero, blurRadius = 18f),
+        ),
+        maxLines = 1,
+        softWrap = mode == TextOverflowMode.ELLIPSIS,
+        overflow = cut,
+        modifier = Modifier
+            .clearAndSetSemantics { } // decorative copy; screen readers read the text once
+            .graphicsLayer {
+                alpha = glow()
+                compositingStrategy = CompositingStrategy.ModulateAlpha
+            },
+    )
+}
 
 /** Room for the title bloom inside a clipping text box. */
 private val GlowBleed = 8.dp

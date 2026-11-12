@@ -26,6 +26,12 @@ val LocalUiIdle = compositionLocalOf { false }
 @Composable
 fun rememberBreathing(running: Boolean, low: Float, high: Float, halfPeriodMs: Int, rest: Float): State<Float> {
     val value = remember { Animatable(rest) }
+    // Still-motion profiles (E-Ink): jump to rest and never animate.
+    val still = LocalStillMotion.current
+    if (still) {
+        LaunchedEffect(Unit) { value.snapTo(rest) }
+        return value.asState()
+    }
     LaunchedEffect(running, low, high, halfPeriodMs, rest) {
         if (!running) {
             value.animateTo(rest, tween(BREATH_SETTLE_MS, easing = FastOutSlowInEasing))

@@ -37,6 +37,8 @@ fun WaveBackground(
     params: WaveParams,
     paused: Boolean = false,
     idle: Boolean = false,
+    /** Still-motion profile (E-Ink): one frame per change of [params], no render loop at all. */
+    frozen: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -53,6 +55,7 @@ fun WaveBackground(
     }
     val renderer = remember { WaveRenderer(refreshRateHz = refreshHz) }
     renderer.params = params
+    renderer.frozen = frozen
 
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val view = remember {
@@ -98,24 +101,59 @@ fun WaveBackground(
     // Covered: stop drawing frames (the GL thread sleeps) but keep the surface. Otherwise run at
     // full rate when that is already at or under the ceiling, else paced to every n-th vsync.
     val stride = if (idle) WaveRenderer.idleStride(refreshHz) else WaveRenderer.activeStride(refreshHz)
-    LaunchedEffect(view, paused, stride, resumed) {
+    LaunchedEffect(view, paused, stride, resumed, frozen) {
         renderer.stride = stride
-        when {
-            paused || !resumed -> {
+        val loop = waveLoop(paused = paused, resumed = resumed, stride = stride, frozen = frozen)
+        // Debug and profiling builds: the smoke test reads this to check E-Ink stops the loop.
+        if (dev.xross.launcher.BuildConfig.PERF_LOG) android.util.Log.i("WaveLoop", "mode=$loop stride=$stride")
+        when (loop) {
+            WaveLoop.STOPPED -> {
                 pacer.stop()
                 view.renderMode = GLSurfaceView.RENDERMODE_WHEN_DIRTY
             }
-            stride <= 1 -> {
+            WaveLoop.SINGLE_FRAME -> {
+                pacer.stop()
+                view.renderMode = GLSurfaceView.RENDERMODE_WHEN_DIRTY
+                view.requestRender()
+            }
+            WaveLoop.CONTINUOUS -> {
                 pacer.stop()
                 view.renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
             }
-            else -> {
+            WaveLoop.PACED -> {
                 view.renderMode = GLSurfaceView.RENDERMODE_WHEN_DIRTY
                 pacer.start(stride)
             }
         }
     }
+    // Frozen: redraw the one still frame when the colors or shape change.
+    LaunchedEffect(params, frozen) {
+        if (frozen && !paused && resumed) view.requestRender()
+    }
     AndroidView(factory = { view }, modifier = modifier.fillMaxSize())
+}
+
+/** How the wave's GL loop runs. */
+enum class WaveLoop {
+    /** No frames (covered by art or video, or the activity isn't resumed). */
+    STOPPED,
+
+    /** One frame on request, then nothing: still-motion profiles (0 fps, no ghosting on E-Ink). */
+    SINGLE_FRAME,
+
+    /** Every vsync. */
+    CONTINUOUS,
+
+    /** Every n-th vsync, through [VsyncPacer]. */
+    PACED,
+}
+
+/** The loop for a wave [paused] (covered) or not, [resumed] or not, at [stride], [frozen] or not. */
+fun waveLoop(paused: Boolean, resumed: Boolean, stride: Int, frozen: Boolean): WaveLoop = when {
+    paused || !resumed -> WaveLoop.STOPPED
+    frozen -> WaveLoop.SINGLE_FRAME
+    stride <= 1 -> WaveLoop.CONTINUOUS
+    else -> WaveLoop.PACED
 }
 
 /**

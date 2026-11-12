@@ -45,6 +45,9 @@ enum class GlyphKey {
     ADD, REFRESH, HOME, INFO, DOWNLOAD, NETWORK, USERS, TROPHY,
 }
 
+/** The optional color layers of Settings ▸ Theme (Theme 2.0, 2b.3). */
+enum class ColorSwitch { ADAPTIVE, CIRCADIAN, BATTERY }
+
 sealed interface Command {
     data object RequestStorageAccess : Command
     data object AddFolder : Command
@@ -73,6 +76,13 @@ sealed interface Command {
     data class SetThemeVariant(val id: String) : Command
     /** Pick a `.xtheme` archive through the system file picker. */
     data object ImportThemeArchive : Command
+    /** Settings ▸ Theme ▸ Quick profile: None → OLED True Black → Y2K Cyber-Pastel → Monochrome E-Ink. */
+    data object CycleQuickProfile : Command
+    data class SetQuickProfile(val name: String) : Command
+    /** Flips one of the optional color layers (the user's choice wins over the pack's). */
+    data class ToggleColorSwitch(val which: ColorSwitch) : Command
+    /** Sets one of them; null hands it back to the theme pack. */
+    data class SetColorSwitch(val which: ColorSwitch, val on: Boolean?) : Command
     /** Install the staged `.xtheme` over the installed pack of the same id. */
     data object ReplaceImportedTheme : Command
     /** Install the staged `.xtheme` next to the installed pack, under a new id. */

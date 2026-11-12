@@ -44,9 +44,14 @@ import dev.xross.launcher.storage.VolumeMonitor
 import dev.xross.launcher.state.XmbViewModel
 import dev.xross.launcher.theme.XrossTheme
 import dev.xross.launcher.theme.rememberActivePalette
-import dev.xross.launcher.ui.WaveBackground
 import dev.xross.launcher.ui.XmbScreen
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+
+/** Indices of [pack]'s battery rules that hold at [b]; equal sets mean the same look. */
+private fun batteryRulesHeld(pack: dev.xross.launcher.theme.pack.LoadedTheme, b: dev.xross.launcher.theme.BatteryLevel?): List<Int> =
+    if (b == null) emptyList() else pack.rules.filter { r -> r.battery?.holds(b) == true }.map { it.index }
 
 class MainActivity : ComponentActivity() {
 
@@ -173,13 +178,27 @@ class MainActivity : ComponentActivity() {
             // list doesn't flicker). The user's settings (theme color, surface style) win over it.
             val categoryId = state.categoryId
             val system = dev.xross.launcher.theme.rememberSettledSystem(state.focusedSystem, categoryId)
-            val look = androidx.compose.runtime.remember(pack, state.settings.themeVariant, categoryId, system) {
-                pack.look(state.settings.themeVariant, categoryId, system)
+            // Battery and clock for the pack's context rules: read only when it has such rules, and
+            // passed on only when the set of rules that hold changes (not on every percent or minute).
+            val ruleBattery by androidx.compose.runtime.remember(pack) {
+                viewModel.battery
+                    .map { b -> b.takeIf { pack.usesBattery } }
+                    .distinctUntilChanged { a, b -> batteryRulesHeld(pack, a) == batteryRulesHeld(pack, b) }
+            }.collectAsStateWithLifecycle(initialValue = null)
+            val ruleMinute by dev.xross.launcher.theme.rememberMinuteOfDay(active = pack.usesClock, key = pack) { m ->
+                pack.rules.filter { r -> r.time?.contains(m) == true }.map { it.index }
             }
-            // The user's surface choice (Settings ▸ Theme ▸ Surface style), else the look's. Read in
-            // the draw phase only, so a category or system switch redraws without recomposing.
-            androidx.compose.runtime.LaunchedEffect(pack, look, state.settings.surfaceStyle) {
-                dev.xross.launcher.ui.ThemeSurfaces.active = pack.surfaceFor(look, state.settings.surfaceStyle)
+            val look = androidx.compose.runtime.remember(pack, state.settings.themeVariant, categoryId, system, ruleBattery, ruleMinute) {
+                pack.look(state.settings.themeVariant, categoryId, system, ruleBattery, ruleMinute)
+            }
+            val profile = dev.xross.launcher.theme.QuickProfile.byName(state.settings.quickProfile)
+            val layout = androidx.compose.runtime.remember(pack, look, profile) { profile.layout(look.layout ?: pack.layout) }
+            // The quick profile's surface, else the user's choice (Settings ▸ Theme ▸ Surface style),
+            // else the look's. Read in the draw phase only, so a category or system switch redraws
+            // without recomposing.
+            androidx.compose.runtime.LaunchedEffect(pack, look, state.settings.surfaceStyle, profile) {
+                dev.xross.launcher.ui.ThemeSurfaces.active =
+                    profile.surface?.let { pack.surfaces[it.name] } ?: pack.surfaceFor(look, state.settings.surfaceStyle)
             }
             var backdropCovers by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
             // Resting: no input for a few seconds and nothing playing. Music and video snaps keep
@@ -192,6 +211,8 @@ class MainActivity : ComponentActivity() {
                 dev.xross.launcher.ui.LocalThemePack provides pack,
                 dev.xross.launcher.ui.LocalThemeLook provides look,
                 dev.xross.launcher.ui.LocalUiIdle provides uiIdle,
+                dev.xross.launcher.ui.LocalThemeLayout provides layout,
+                dev.xross.launcher.ui.LocalStillMotion provides profile.stillMotion,
             ) {
             Box(Modifier.fillMaxSize()) {
                 // The wave is hidden (and its GL loop stopped) under full-screen photos and video,
@@ -202,18 +223,22 @@ class MainActivity : ComponentActivity() {
                 val wavePalette = androidx.compose.runtime.remember(base, s.waveTint, s.waveColors) {
                     dev.xross.launcher.theme.wavePalette(base, dev.xross.launcher.theme.WaveTint.byName(s.waveTint), s.waveColors)
                 }
-                val params = androidx.compose.runtime.remember(wavePalette, s.waveSpeed, s.waveLineCount, s.waveTurbulence, s.waveThickness) {
-                    dev.xross.launcher.ui.WaveParams(
-                        speed = s.waveSpeed,
-                        palette = wavePalette,
-                        lineCount = s.waveLineCount,
-                        turbulence = s.waveTurbulence,
-                        thickness = s.waveThickness,
-                    )
+                val switches = androidx.compose.runtime.remember(look.flags, s.circadianCurve, s.batteryTint, s.adaptiveGamePalette, profile) {
+                    dev.xross.launcher.theme.ColorSwitches.resolve(look.flags, s.circadianCurve, s.batteryTint, s.adaptiveGamePalette, profile)
                 }
-                WaveBackground(
+                // Game-art palette: the focused game's (or the Details screen's) art, debounced 250 ms.
+                val artKey = dev.xross.launcher.ui.adaptiveArtKey(state)
+                androidx.compose.runtime.LaunchedEffect(artKey, switches.adaptive) {
+                    container.gamePalette.focus(artKey.takeIf { switches.adaptive })
+                }
+                dev.xross.launcher.ui.AdaptiveWave(
+                    themed = wavePalette,
+                    profile = profile,
+                    switches = switches,
+                    art = container.gamePalette.colors,
+                    battery = viewModel.battery,
+                    settings = s,
                     enabled = state.waveEnabled && !fullscreenMedia,
-                    params = params,
                     paused = backdropCovers && state.waveEditor == null,
                     idle = uiIdle,
                 )

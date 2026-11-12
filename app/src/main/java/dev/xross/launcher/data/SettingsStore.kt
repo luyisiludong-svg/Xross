@@ -59,6 +59,14 @@ data class XrossSettings(
     val surfaceStyle: String = "",
     /** The active pack's variant id (Settings ▸ Theme ▸ Theme variant); empty or unknown = the pack's base look. */
     val themeVariant: String = "",
+    /** [dev.xross.launcher.theme.QuickProfile] name (Settings ▸ Theme ▸ Quick profile); NONE = the theme's own look. */
+    val quickProfile: String = dev.xross.launcher.theme.QuickProfile.NONE.name,
+    /** Colors from the focused game's art; null follows the pack's `effects.adaptiveGamePalette` (on by default). */
+    val adaptiveGamePalette: Boolean? = null,
+    /** The hourly circadian curve; null follows the pack's `palette.circadianCurve` (off by default). */
+    val circadianCurve: Boolean? = null,
+    /** The low-battery and charging tint; null follows the pack's `palette.batteryTint` (off by default). */
+    val batteryTint: Boolean? = null,
     /** [dev.xross.launcher.theme.XrossTheme] name, or [dev.xross.launcher.theme.PACK_THEME] for the theme pack's own colors. */
     val theme: String = "LAVENDER",
     /** The pill of button hints in the bottom corner of the home menu. */

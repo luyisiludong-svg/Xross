@@ -103,6 +103,8 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     // Portable config files in Xross/config/ (settings.json, controllers.json, systems.json).
     implementation(libs.kotlinx.serialization.json)
+    // Theme 2.0 contextual palette: swatches from the focused game's hero or wheel art.
+    implementation(libs.androidx.palette.ktx)
 
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
@@ -129,6 +131,9 @@ dependencies {
     testImplementation(libs.robolectric)
     testImplementation(libs.androidx.test.core)
     testImplementation(libs.room.testing)
+    // Compose under Robolectric: animation tests (E-Ink still motion).
+    testImplementation(libs.compose.ui.test.junit4)
+    debugImplementation(libs.compose.ui.test.manifest)
 }
 
 // ScreenScraperLiveTest makes real API calls; it only runs with -PliveScrape=true.

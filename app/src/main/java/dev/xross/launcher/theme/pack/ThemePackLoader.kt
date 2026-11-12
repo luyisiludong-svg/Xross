@@ -77,6 +77,10 @@ data class LoadedTheme(
     val categoryPatches: Map<String, ThemePatch> = emptyMap(),
     /** `systemOverrides` by Xross platform id ("dreamcast"). */
     val systemPatches: Map<String, ThemePatch> = emptyMap(),
+    /** `rules`, checked, in order (imported files first). */
+    val rules: List<ResolvedRule> = emptyList(),
+    /** The pack's own `palette.circadianCurve`, `palette.batteryTint` and `effects.adaptiveGamePalette`. */
+    val flags: ColorFlags = ColorFlags.NONE,
     /** What the pack declared but couldn't be used (bad font, unreadable icon), for Settings. */
     val problems: List<String> = emptyList(),
     /** Bumped on every load, so a hot reload of the same files still counts as a change. */
@@ -90,19 +94,40 @@ data class LoadedTheme(
     /** The variant [id] names, or null for the pack's base look (blank or unknown ids). */
     fun variant(id: String?): ResolvedVariant? = id?.takeIf { it.isNotBlank() }?.let { v -> variants.firstOrNull { it.id == v } }
 
-    private val looks = java.util.concurrent.ConcurrentHashMap<Triple<String, String, String>, ThemeLook>()
+    private data class LookKey(val variant: String, val category: String, val system: String, val rules: List<Int>, val layoutRules: List<Int>, val layoutContext: String)
+
+    private val looks = java.util.concurrent.ConcurrentHashMap<LookKey, ThemeLook>()
+
+    /** Some rule depends on the battery. */
+    val usesBattery: Boolean get() = rules.any { it.battery != null }
+
+    /** Some rule depends on the time of day. */
+    val usesClock: Boolean get() = rules.any { it.time != null }
 
     /**
      * The pack's look with variant [variantId] (blank or unknown: the base), while [category] is
-     * open and a game of [system] is focused ([cascade]). Cached, so calling it on every focus
-     * change costs a map lookup.
+     * open, a game of [system] is focused, the battery is at [battery] and the local time is
+     * [minuteOfDay] ([cascade], then the context rules that hold). Cached by the rules that hold,
+     * so calling it on every focus change or battery tick costs a scan of the rules and a lookup.
      */
-    fun look(variantId: String = "", category: String? = null, system: String? = null): ThemeLook {
+    fun look(
+        variantId: String = "",
+        category: String? = null,
+        system: String? = null,
+        battery: dev.xross.launcher.theme.BatteryLevel? = null,
+        minuteOfDay: Int? = null,
+    ): ThemeLook {
         val v = variant(variantId)
         val cat = category?.takeIf { it in categoryPatches }.orEmpty()
         val sys = system?.takeIf { it in systemPatches }.orEmpty()
-        return looks.getOrPut(Triple(v?.id.orEmpty(), cat, sys)) {
-            cascade(roles, surfaceId, wave, v, categoryPatches[cat], systemPatches[sys])
+        val ctx = RuleContext(category, system, battery, minuteOfDay)
+        val held = if (rules.isEmpty()) emptyList() else rules.filter { it.matches(ctx) }
+        val layoutHeld = if (rules.isEmpty()) emptyList() else rules.filter { it.changesLayout && it.matchesExceptSystem(ctx) }.map { it.index }
+        // Category-wide tile shapes and focused-system layout patches depend on those two as well.
+        val layoutContext = if (layoutHeld.isEmpty()) "" else "${category.orEmpty()}/${system.orEmpty()}"
+        return looks.getOrPut(LookKey(v?.id.orEmpty(), cat, sys, held.map { it.index }, layoutHeld, layoutContext)) {
+            cascade(roles, surfaceId, wave, v, categoryPatches[cat], systemPatches[sys], held, flags)
+                .copy(layout = if (layoutHeld.isEmpty()) null else applyRuleLayout(layout, rules, ctx))
         }
     }
 
@@ -262,7 +287,7 @@ class ThemePackLoader(
         }
 
         val fonts = fonts(pack, m.typography, base?.fonts, problems)
-        val palette = m.palette?.let { p ->
+        val palette = m.palette?.takeIf { it.hasColors }?.let { p ->
             p.toPalette(m.wave).also { if (it == null) problems += "Palette needs a canvas color, and colors must be #RRGGBB" }
         }
 
@@ -278,6 +303,10 @@ class ThemePackLoader(
         if (wanted.isNotEmpty() && wanted !in surfaces) problems += "effects.surfaceStyle: no surface named $wanted"
         val surfaceId = wanted.takeIf { it in surfaces } ?: base?.surfaceId ?: SurfacePreset.FLAT_GLASS.name
         val systems = resolveSystemKeys(m.systemOverrides, problems)
+        val (layout, rules) = foldRuleAspects(
+            resolveLayout(m.layout, m.categoryOverrides, base?.layout ?: ThemeLayout.DEFAULT, problems, systems),
+            resolveRules(m.rules, surfaces.keys, base?.layout ?: ThemeLayout.DEFAULT, problems),
+        )
 
         return LoadedTheme(
             info = pack,
@@ -289,11 +318,13 @@ class ThemePackLoader(
             gains = gains,
             surfaces = surfaces,
             surfaceId = surfaceId,
-            layout = resolveLayout(m.layout, m.categoryOverrides, base?.layout ?: ThemeLayout.DEFAULT, problems, systems),
+            layout = layout,
             roles = if (palette != null) m.palette else null,
             variants = resolveVariants(m.variants, palette != null, surfaces.keys, problems),
             categoryPatches = resolveCategoryPatches(m.categoryOverrides, surfaces.keys, problems),
             systemPatches = resolveSystemPatches(systems, surfaces.keys, problems),
+            rules = rules,
+            flags = ColorFlags.of(m.palette, m.effects),
             problems = problems,
             revision = revisions.incrementAndGet(),
         )
@@ -423,6 +454,8 @@ class ThemePackLoader(
             is Parsed.Bad -> return Read.Bad(p.reason)
         }
         var merged = JsonObject(emptyMap())
+        // `rules` add up across files (imports first) instead of the last file's replacing the rest.
+        val rules = ArrayList<kotlinx.serialization.json.JsonElement>()
         val imports = (root["imports"] as? JsonArray).orEmpty()
         if (imports.size > MAX_IMPORTS) return Read.Bad("$manifestName: at most $MAX_IMPORTS imports")
         for (entry in imports) {
@@ -433,9 +466,12 @@ class ThemePackLoader(
                 is Parsed.Ok -> p.obj
                 is Parsed.Bad -> return Read.Bad(p.reason)
             }
-            merged = ThemeManifest.merge(merged, JsonObject(obj - "imports"))
+            (obj["rules"] as? JsonArray)?.let(rules::addAll)
+            merged = ThemeManifest.merge(merged, JsonObject(obj - "imports" - "rules"))
         }
-        merged = ThemeManifest.merge(merged, root)
+        (root["rules"] as? JsonArray)?.let(rules::addAll)
+        merged = ThemeManifest.merge(merged, JsonObject(root - "rules"))
+        if (rules.isNotEmpty()) merged = JsonObject(merged + ("rules" to JsonArray(rules)))
         val version = (merged["schemaVersion"] as? JsonPrimitive)?.intOrNull
         if (version != ThemeManifest.SCHEMA_VERSION) {
             return Read.Bad(if (version == null) "theme.json has no \"schemaVersion\": 2 (v1 packs aren't supported)" else "schemaVersion $version isn't supported (use 2)")
