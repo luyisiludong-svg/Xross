@@ -1,52 +1,57 @@
 # Phase 2b.3 — what is still to be tested
 
-Branch `feat/theme-2b3` (from `feat/theme-2b2`), updated 2026-11-12 after an emulator pass. This
-file lists what has **not** been verified yet, why, and how to verify it. What *was* verified,
-including that pass, is in [`STATUS.md` §3.19](STATUS.md).
+Branch `feat/theme-2b3` (from `feat/theme-2b2`), updated 2026-11-12 after an emulator pass and a
+hardware pass on the Galaxy A55. This file lists what has **not** been verified yet, why, and how
+to verify it. What *was* verified is in [`STATUS.md` §3.19](STATUS.md) (emulator) and
+[§3.21](STATUS.md) (Galaxy A55).
 
-**Done on the emulator in that pass:** frame pacing of game navigation (target met, once a GPU cost
-in the glow-text bloom was fixed), the full device regression (171 of 171, now `tools/device-tests/run-all.sh`), the colors by eye, context
-rules switching live and under hot reload, and unit tests for wheel-only art, `adaptiveArtKey`,
-the `battery.level` aliases and `category` + `system` tile shapes (499 tests).
+**Done on the emulator:** frame pacing of game navigation (target met, once a GPU cost in the
+glow-text bloom was fixed), the full device regression (171 of 171), the colors by eye, context
+rules switching live and under hot reload, the display matrix with the new rows (12 of 12, 0
+clipped texts), and unit tests for wheel-only art, `adaptiveArtKey`, the `battery.level` aliases
+and `category` + `system` tile shapes (499 tests).
+
+**Done on the Galaxy A55 (120 Hz):** the device regression (160 of 171; the 11 are the
+seeded-media checks, which can't pass on a phone with its own media), after three script fixes for
+phone behavior (document picker, `dumpsys battery` status, the Android Games row). Frame pacing of
+game navigation: on 0.12–0.19% janky, off 0.19–0.38%, GPU p50 5–8 ms of the 8.3 ms budget.
+Idle CPU per quick profile. Wheel-only art, the Details screen as the palette source, a rule's
+`layout` patch (`INSTANT` motion and `focusedScale`) on screen with hot reload, and the charging
+tint from a real charger.
 
 ---
 
 ## 1. On real hardware
 
-Only the API 37 emulator has run this branch.
-
-- **Galaxy A55 (120 Hz):** the device regression (`tools/device-tests/run-all.sh`; `test-media.sh`
-  fails there by design, since the phone has its own photos and music), then `tools/device-tests/palette-perf.sh` (it
-  installs the debug build to seed, then the profiling build; judge the deadline-based
-  "Janky frames", target 0–1.5%, and compare on/off). On the emulator, with the bloom fix: on
-  0.29–0.90%, off 0.30%, GPU p50 14 ms both. At 120 Hz the budget is 8.3 ms, so watch GPU p50.
-  Also idle CPU at rest with each quick profile (E-Ink should be under today's 12–19%, since the
-  wave draws no frames).
-- **Watch the morphs by eye:** the wave crossfade to a game's colors (visible when a game has a
-  wheel logo but no hero, or while the hero fades in), and the focus halo, avatar glow and battery
-  outline morphing over ~300 ms without jitter. The title bloom now switches color at once (see
-  §3); check that it doesn't read as a flash.
+- **Idle CPU at rest is above target.** On the Galaxy A55 the Games root at rest uses 16–21% of a
+  core with no profile, OLED True Black or Y2K Cyber-Pastel (target < 10%, HARDWARE_TESTING §6c);
+  the wave itself is at its 20 fps rest rate. Monochrome E-Ink uses 0%. Profile what still runs at
+  rest (for example with `simpleperf` or a Perfetto trace) before the next phase.
+- **Watch the morphs by eye** between games whose art differs a lot in hue: the wave crossfade, and
+  the focus halo, avatar glow and battery outline morphing over ~300 ms. A recording of two
+  similar games showed no jitter and no bloom flash (§3.21), but that change was small.
 - **A real E-Ink panel** (or a 60 Hz panel with the profile on for a while): no ghosting, nothing
-  animating (pulse, avatar glow, busy dots, caret, marquee), and the wave as one still frame.
+  animating (pulse, avatar glow, busy dots, caret, marquee), and the wave as one still frame. On
+  the A55 the E-Ink profile drew no wave frames at rest (0% CPU).
 - **Android 9–11:** the battery receiver and `androidx.palette` are plain APIs, but only API 37
   ran.
-- **A real battery:** the tint was only driven by `dumpsys battery`. Watch it cross 20% unplugged,
-  and plug in.
+- **A real battery going low:** the charging look was confirmed with a real charger; the amber and
+  red look was only driven by `dumpsys battery`. Watch it cross 20% unplugged.
 
-**Emulator gotchas found:** a plain cold boot may pick software rendering (`gles_mode_selected:
-swangle` in the emulator log), which reads ~100% janky; boot with `-gpu host`. Even then the
-legacy janky count and GPU percentiles swing between passes, so interleave A/B passes. An
-existing library isn't rescanned on start or resume (only after a volume change); use Settings ▸
-Library ▸ Rescan library, as `palette-perf.sh` does.
+**Gotchas:** on the emulator, a plain cold boot may pick software rendering (`gles_mode_selected:
+swangle`), which reads ~100% janky; boot with `-gpu host`. The legacy janky count and GPU
+percentiles swing between passes on both the emulator and the A55, so interleave A/B passes and
+judge by the deadline-based "Janky frames". An existing library isn't rescanned on start or resume
+(only after a volume change); use Settings ▸ Library ▸ Rescan library, as `palette-perf.sh` does.
+On a phone, the suites delete `/sdcard/ROMs` and clear Xross's data: move a real ROM folder aside
+first (`mv /sdcard/ROMs /sdcard/ROMs-real-backup`, and back afterwards).
 
 ## 2. Not covered yet
 
-- Wheel-only art on a device (a unit test now shows Palette ignores transparent pixels).
-- The Details screen as the palette source, on a device (unit-tested through `adaptiveArtKey`).
-- A rule's `layout` patch on screen (for example `motionProfile: INSTANT` below 15%). Its color
-  half switched live on the emulator; the layout half is unit-tested only.
-- Display matrix (`tools/device-tests/display-matrix.sh`) wasn't rerun. The 2b.3 rows add four
-  lines to Settings ▸ Theme but no new layout code.
+- The display matrix screenshots stop at the top of Settings ▸ Theme, so the four new rows weren't
+  photographed in each configuration (no clipped text was counted on the visible part).
+- `focusedScale` is clamped to 1.00–1.35 and defaults to 1.32, so a rule can make the focus
+  flatter but barely bigger. Decide whether that range is intended for rules.
 
 ## 3. Found on screen, to decide
 

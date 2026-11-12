@@ -19,7 +19,7 @@ Legend: ✅ done and verified · ◐ partial · ❌ not started · 🧪 verified
 | Phase 2 (metadata, media hub, theme packs, on-screen controller and keyboard) | ◐ fingerprinting, media hub, gamepad search, DAT verification, scrapers, art, Details screen, manual matching and video snaps done (§2, §3); portable `Xross/` folder with JSON config and database backup, All Games, media controls shortcut and mini-player hide done (§3.9); library organization (hidden apps, app folders, base ROMs folder, custom Photo/Video folders, art in `Xross/media`) done (§3.10); ScreenScraper verified live with developer credentials (§3.13); theme packs, wave shader settings and the focused-game background done (§3.13); on-screen controller not started |
 | Phase 2b.1 (customization engine): avatar mini-HUD, 16:9 game tiles, Details paging, playtime subtitle, game RA telemetry, profile customization, RetroAchievements dashboard | ✅ 🧪 unit- and view-model-tested; no device run yet (§3.15) |
 | Phase 2b.2 (Theme 2.0 foundation): v2 manifest, imports, surfaces, hot reload, layout block, motion, drill-down, variants, category and system overrides, `.xtheme` import | ✅ 🧪 on `feat/theme-2b2` (2026-11-12): unit tests, `smoke.sh` 139/139 and the 12-configuration display matrix on the API 37 emulator; not yet on a phone or handheld (§3.16–§3.18) |
-| Phase 2b.3 (color intelligence): game-art palette, `rules` context engine, circadian curve, battery tint, quick profiles | ✅ 🧪 on `feat/theme-2b3` (2026-11-12): 495 unit tests; `smoke.sh` with the 2b.3 checks 164/171 on the API 37 emulator (every new check passes; the failures are timing in older sections, §3.19). **Frame pacing of game navigation not measured yet**: the emulator's system process stopped responding mid-run. Open items: [`PHASE_2B3_PENDING_TESTS.md`](PHASE_2B3_PENDING_TESTS.md) |
+| Phase 2b.3 (color intelligence): game-art palette, `rules` context engine, circadian curve, battery tint, quick profiles | ✅ on `feat/theme-2b3` (2026-11-12): 499 unit tests; 171/171 on the API 37 emulator (§3.19, §3.20); on the **Galaxy A55 at 120 Hz** 160/171 (the 11 are seeded-media checks), game navigation 0.12–0.19% janky with game-art colors, GPU p50 6 ms; wheel-only art, Details as the source and a rule's layout patch checked on the device (§3.21). Idle CPU at rest is 16–21% (target < 10%) except under E-Ink (0%). Open items: [`PHASE_2B3_PENDING_TESTS.md`](PHASE_2B3_PENDING_TESTS.md) |
 | Phase 3 (dual screen, hot-swap, RetroAchievements, Web Portal, FTPS) | ◐ RetroAchievements account linking, status bar avatar and User Card (§3.12), per-game achievement lists and unlock toasts (§3.13), live on the emulator and the Galaxy A55 (§3.14); hot-swap and live resolution change done; dual screen, docking, Portal and FTPS not started |
 | Phase 4 (onboarding, triage, profiling, plugin API) | ◐ app triage and performance work started |
 
@@ -791,7 +791,7 @@ passes on 7 of 7 adaptive passes (1 of 6 off). The cause was the glow-text bloom
 animated through each ~300 ms morph, so the text was blurred again on every frame. With the bloom
 switching color at once, **on: 0.29–0.90% janky, legacy 0.15–1.05%, GPU p50 14 ms; off:
 0.30%, legacy 0.30–0.89%, GPU p50 14 ms** (3 pairs), so the feature has no measurable frame cost
-on the emulator. Still to be confirmed on the Galaxy A55 at 120 Hz.
+on the emulator. On the Galaxy A55 at 120 Hz: on 0.12–0.19%, off 0.19–0.38%, GPU p50 5–8 ms (§3.21).
 
 **Checked by eye on the emulator (screenshots):** game art tints the battery outline and the title
 bloom; OLED True Black (black canvas, dim waves, no pill fill), Y2K Cyber-Pastel (violet to
@@ -804,9 +804,8 @@ change (within the minute), and editing `rules.json` while the battery rule held
 color in 3 s. Found: under E-Ink the avatar ring keeps its color (the user's avatar style, or the
 iridescent default), so the screen isn't fully black and white.
 
-**Not verified:** anything on a phone, handheld or E-Ink panel (frame pacing included); the
-morphs in motion by eye; a real battery crossing 20%; Android 9–13; wheel-only art on a device;
-the `motionProfile: INSTANT` rule patch on screen; the display matrix with the new rows.
+**Not verified (after the Galaxy A55 run in §3.21):** a handheld or E-Ink panel; the morphs
+between games with very different accents by eye; a real battery crossing 20%; Android 9–13.
 
 ### 3.20 Device tests split into tiers (2026-11-12)
 
@@ -837,7 +836,83 @@ error message.
 (171 each). `shellcheck` 0.11 is clean (`.shellcheckrc` documents the suppressed house patterns).
 `test-theme.sh` passed 88 of 88 alone right after an emulator reboot. `run-all.sh` passed **171 of
 171** twice, and the quick smoke 12 of 12 both times. After each run the battery was back to its
-own state and no test file was left in `/sdcard`. Not run on the Galaxy A55 yet.
+own state and no test file was left in `/sdcard`. On the Galaxy A55: §3.21.
+
+### 3.21 Hardware run: Phase 2b.3 on the Galaxy A55 at 120 Hz (2026-11-12)
+
+Samsung Galaxy A55 (SM-A556B, Android 17 / API 37, 1080×2340, 120 Hz), on USB power, branch
+`feat/theme-2b3` at `ade1203`. The phone's real `/sdcard/ROMs` (370 arcade sets, 2 PSP ISOs) was
+moved aside for the suites and put back afterwards. The RetroArch stub was installed for the
+integration suite and removed again.
+
+**Device regression (`run-all.sh`, debug build): 160 of 171 after three script fixes.**
+
+| Suite | First run | After the fixes | Notes |
+| --- | --- | --- | --- |
+| library | 41/41 | — | |
+| theme | 76/88 (15 failures) | **88/88** | Fixes 1 and 2 |
+| media | 11/22 | — | The 11 failures are the seeded-media checks; the phone has its own photos and music (as on 2026-11-11) |
+| input | 10/11 | **11/11** | Fix 3 |
+| integration | 9/9 | — | RetroArch stub launch, secrets, mini-HUD, dashboard |
+
+The first run's 27 failures came from three script assumptions that hold on the emulator but not on
+a phone. None was an app bug, and each was confirmed by hand before the fix:
+1. **Document picker** (13 failures, one cause): the phone's picker opens on an empty *Recent*, so
+   the pushed `.xtheme` files weren't listed. `pick()` in `test-theme.sh` now searches the picker
+   for the file after two looks. Importing by hand from Downloads worked (`Xross/themes/hw-probe`
+   created), and the rerun passed import, zip-slip rejection, variants and re-import.
+2. **Battery tint** (2 failures): on a phone charging over USB, `dumpsys battery unplug` clears the
+   power sources but leaves `status: 2` (charging). Xross reads the status, so it correctly stayed
+   in the charging look, and the later "charging" step then changed nothing. The suite now sets
+   `status 3` after the unplug.
+3. **Vertical drag** (1 failure): the drag works and lands on the last row, but this phone's Games
+   root has an Android Games row, so the row shown above the focus wasn't All Games. The check now
+   asserts that Search scrolled away and RetroAchievements is focused.
+
+**Frame pacing of game navigation (`palette-perf.sh`, profiling build, 3 interleaved pairs):**
+
+| Pass | Frames | Janky (deadline) | Legacy | p50 / p90 / p99 | GPU p50 | Extractions |
+| --- | --- | --- | --- | --- | --- | --- |
+| on1 | 1,590 | 0.19% | 22.8% | 12 / 13 / 17 ms | 6 ms | 12 (0 on main) |
+| off1 | 1,601 | 0.19% | 17.9% | 12 / 13 / 16 ms | 6 ms | — |
+| on2 | 1,614 | 0.12% | 70.9% | 18 / 20 / 22 ms | 8 ms | 12 (0 on main) |
+| off2 | 1,606 | 0.25% | 15.6% | 12 / 13 / 17 ms | 6 ms | — |
+| on3 | 1,600 | 0.19% | 12.7% | 12 / 13 / 16 ms | 6 ms | 12 (0 on main) |
+| off3 | 1,583 | 0.38% | 20.9% | 12 / 13 / 17 ms | 5 ms | — |
+
+The target is met with room to spare: 0.12–0.19% janky with adaptive colors on, 0.19–0.38% with
+them off, and GPU p50 5–8 ms against the 8.3 ms budget at 120 Hz. The game-art palette has no
+measurable frame cost on this phone. The legacy column swings between passes, as on the emulator.
+No other pass matches on2's higher p50, so it reads as a one-off rather than a feature cost.
+
+**Other measurements (profiling build):**
+
+| Measure | Result | Target |
+| --- | --- | --- |
+| Idle CPU, Games root, 10 s rest, 20 s sample (2 runs each) | No profile 18 / 21%, OLED True Black 17 / 16%, Y2K Cyber-Pastel 21 / 21%, **Monochrome E-Ink 0 / 0%** (no wave frames at all) | < 10% ❌ except E-Ink |
+| Wave at rest (`WaveFrames`) | p50 50.0 ms, p95 51.4–51.8 ms, 0–3 missed per 300 (period 50 ms) | ✅ |
+| Wave in use, 25 s of D-pad | p95 18.4–20.3 ms and 1–5 missed per 300 once warm; the first window after a cold start had 11 missed, max 74 ms | ✅ ≤ 20 ms / ≤ 5 after warm-up |
+| UI: Apps list 40 down and up, 10 category switches | 2,610 frames, 0.46% janky, p50 7 ms, p99 15 ms, GPU p50 3 ms, 1 missed vsync | ✅ |
+| Cold start (`am start -W`) | 445, 400, 433 ms | ✅ < 2,500 ms |
+| PSS in front | 164 MB at rest; peaks of 315 MB right after a cold start and 454 MB right after scrolling Apps and Photo (2,138 photos), then back down | — |
+| PSS in the background (8 s after Home) | 84 MB, 0% CPU | ✅ ≤ 150 MB |
+
+**2b.3 items checked on the device by hand:**
+
+| Item | Result |
+| --- | --- |
+| Wheel-only art | ✅ A game with only a transparent wheel logo (magenta on alpha) extracted at 240×90 to a `#290614` canvas and `#FC9EC2` glow; the transparent area didn't turn the canvas black |
+| Details as the palette source | ✅ Opening Details keeps the row's colors with no new extraction (same art key); R1 paging extracts and recolors per game (04 → `#172906`, 05 → `#062906`); Back returns to the list on the last game shown with no further extraction |
+| A rule's `layout` patch on screen | ✅ A pack rule `battery <= 15 → layout {motionProfile: INSTANT, focusedScale: 1.0}`: at 10% the focused tile is the size of its neighbours, at 50% it is back to 1.32×. In a screen recording the list moves 06 → 07 in one frame at 10% and glides over ~300 ms at 50%. Editing `rules.json` on the device hot-reloaded the patch. `focusedScale` is clamped to 1.35, so a rule asking for 1.4 moves the default 1.32 by only a few pixels |
+| Real charger | ✅ With no `dumpsys` override (USB, status 2, 67%) the battery tint shows `charging=true` and the `#D8FFE8` mint glow |
+| Morphs by eye | ◐ Recorded 05 → 06 at 120 Hz: the backdrop crossfades over ~4 frames, the battery outline and avatar ring show no jitter, and the title bloom shows no flash in the frames. Those two games' accents are close in hue, so a bigger accent jump still needs a look by eye |
+
+Also: the display matrix (`display-matrix.sh`) was rerun on the API 37 emulator (host GPU) with
+the 2b.3 rows: 12 of 12 configurations, 0 clipped texts, janky 0–1.16%. Its screenshots show the
+top of Settings ▸ Theme, so the four new rows lower down weren't photographed.
+
+**Not covered:** a real battery going below 20% unplugged, an E-Ink panel, Android 9–11, a physical
+controller, and morphs between games with very different accents, judged by eye.
 
 ## 4. Display matrix & performance
 
@@ -904,10 +979,10 @@ Unisoc T618) before calling it final.**
 | Target (scope §5) | Result |
 | --- | --- |
 | ≥ 60 FPS menu navigation | ✅ 🧪 UI median 16 ms; GL p50 16.7 ms everywhere |
-| 120 Hz on high-refresh panels | ✅ Galaxy A55 at 120 Hz: 0.63–1.46% janky, no missed vsync (§3.11, §3.13); no 120 Hz handheld yet |
+| 120 Hz on high-refresh panels | ✅ Galaxy A55 at 120 Hz: 0.63–1.46% janky, no missed vsync (§3.11, §3.13); game navigation with game-art colors 0.12–0.19%, GPU p50 6 ms of the 8.3 ms budget (§3.21); no 120 Hz handheld yet |
 | Input-to-screen ≤ 16.6 ms | ❓ Not measured (needs high-speed capture on hardware) |
 | Cold boot to interactive < 2.5 s | ✅ First frame ~200 ms on the emulator, 377–1,050 ms on the Galaxy A55 (`am start -W`); the fade-in adds 1.75 s by design |
-| Idle RAM ≤ 150 MB with an emulator in front | ✅ 42 MB PSS in the background on the emulator; 83–122 MB on the Galaxy A55 |
+| Idle RAM ≤ 150 MB with an emulator in front | ✅ 42 MB PSS in the background on the emulator; 83–122 MB on the Galaxy A55 (84 MB on 2026-11-12, §3.21) |
 | Suspend GL on screen-off / app in background | ✅ No GL frames and 0% CPU while an emulator is in front |
 | Daemon CPU < 3% idle | n/a (no daemons yet) |
 
