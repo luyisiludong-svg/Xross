@@ -187,6 +187,13 @@ class XmbViewModel(
     }
     private val music = container.music
 
+    /** Battery level for the battery tint and `battery` context rules (Theme 2.0, 2b.3). */
+    private val batteryMonitor = BatteryMonitor(context).also { it.start() }
+    val battery: StateFlow<dev.xross.launcher.theme.BatteryLevel?> get() = batteryMonitor.level
+
+    /** For tests: a battery reading, as the system would broadcast it. */
+    internal fun reportBattery(level: dev.xross.launcher.theme.BatteryLevel?) = batteryMonitor.report(level)
+
     val media = MediaOverlayController(
         context = context,
         scope = viewModelScope,
@@ -405,6 +412,7 @@ class XmbViewModel(
 
     override fun onCleared() {
         themeWatcher.watch(null)
+        batteryMonitor.stop()
         media.close()
         super.onCleared()
     }
@@ -655,6 +663,18 @@ class XmbViewModel(
     // endregion
 
     // region Theme packs and Wave settings
+
+    private fun setQuickProfile(profile: dev.xross.launcher.theme.QuickProfile) {
+        settingsStore.update { it.copy(quickProfile = profile.name) }
+        toast("Quick profile: ${profile.label}")
+    }
+
+    /** Why a color switch has no effect right now (the quick profile turns it off), if it doesn't. */
+    private fun colorSwitchBlockedNote(which: ColorSwitch): String? {
+        val profile = dev.xross.launcher.theme.QuickProfile.byName(settingsStore.current.quickProfile)
+        val blocked = if (which == ColorSwitch.ADAPTIVE) !profile.allowsArt else !profile.allowsAmbient
+        return if (blocked) "Saved; ${profile.label} keeps it off" else null
+    }
 
     private fun applyThemePack(id: String) {
         viewModelScope.launch {
@@ -2259,6 +2279,33 @@ class XmbViewModel(
             Command.ImportThemeArchive -> emit(UiEffect.PickThemeArchive)
             Command.ReplaceImportedTheme -> resolvePendingImport(keepBoth = false)
             Command.KeepBothImportedThemes -> resolvePendingImport(keepBoth = true)
+            Command.CycleQuickProfile -> {
+                val all = dev.xross.launcher.theme.QuickProfile.entries
+                val next = all[(dev.xross.launcher.theme.QuickProfile.byName(settingsStore.current.quickProfile).ordinal + 1) % all.size]
+                setQuickProfile(next)
+            }
+            is Command.SetQuickProfile -> setQuickProfile(dev.xross.launcher.theme.QuickProfile.byName(command.name))
+            is Command.ToggleColorSwitch -> {
+                val pack = container.themes.active.value.flags
+                settingsStore.update {
+                    when (command.which) {
+                        ColorSwitch.ADAPTIVE -> it.copy(adaptiveGamePalette = !(it.adaptiveGamePalette ?: pack.adaptiveGamePalette ?: true))
+                        ColorSwitch.CIRCADIAN -> it.copy(circadianCurve = !(it.circadianCurve ?: pack.circadianCurve ?: false))
+                        ColorSwitch.BATTERY -> it.copy(batteryTint = !(it.batteryTint ?: pack.batteryTint ?: false))
+                    }
+                }
+                colorSwitchBlockedNote(command.which)?.let { toast(it) }
+            }
+            is Command.SetColorSwitch -> {
+                settingsStore.update {
+                    when (command.which) {
+                        ColorSwitch.ADAPTIVE -> it.copy(adaptiveGamePalette = command.on)
+                        ColorSwitch.CIRCADIAN -> it.copy(circadianCurve = command.on)
+                        ColorSwitch.BATTERY -> it.copy(batteryTint = command.on)
+                    }
+                }
+                colorSwitchBlockedNote(command.which)?.let { toast(it) }
+            }
             Command.CycleSurfaceStyle -> settingsStore.update {
                 // "" (the pack's own) first, then every surface the active pack offers.
                 val ids = listOf("") + container.themes.active.value.surfaces.keys
@@ -2484,6 +2531,7 @@ class XmbViewModel(
                             surfaces = active.surfaces.values.map { s -> s.id to s.label },
                             packSurface = active.surfaceId,
                             rejected = rejected.map { r -> "${r.id}: ${r.reason}" },
+                            packFlags = active.flags,
                         ),
                     )
                 }

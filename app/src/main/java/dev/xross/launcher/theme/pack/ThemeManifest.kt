@@ -61,6 +61,12 @@ data class ThemeManifest(
      * system's game tiles.
      */
     val systemOverrides: Map<String, ThemeOverride> = emptyMap(),
+    /**
+     * Context rules ([ContextRule]): category, system, battery and time-of-day selectors, applied
+     * in order above the variant and the overrides. Rules from `imports` (a `rules.json`) come
+     * first, then these.
+     */
+    val rules: List<ContextRule> = emptyList(),
 ) {
     val supported: Boolean get() = schemaVersion == SCHEMA_VERSION
 
@@ -75,6 +81,10 @@ data class ThemeManifest(
         val focusGold: String? = null,
         val textPrimary: String? = null,
         val textSecondary: String? = null,
+        /** Blend the canvas through the hourly circadian curve (Appendix A.7). Null: off unless the user turns it on. */
+        val circadianCurve: Boolean? = null,
+        /** Shift accent and glow toward amber/red below 20% battery, and pulse green while charging. */
+        val batteryTint: Boolean? = null,
     ) {
         /**
          * The colors today's renderer draws: `canvas` at the top, the wave gradient's last stop (or
@@ -99,10 +109,15 @@ data class ThemeManifest(
             focusGold = patch.focusGold ?: focusGold,
             textPrimary = patch.textPrimary ?: textPrimary,
             textSecondary = patch.textSecondary ?: textSecondary,
+            circadianCurve = patch.circadianCurve ?: circadianCurve,
+            batteryTint = patch.batteryTint ?: batteryTint,
         )
 
-        /** True when no role is set. */
+        /** True when no role and no switch is set. */
         val empty: Boolean get() = this == Palette()
+
+        /** True when any color role is set (the switches alone don't make a palette). */
+        val hasColors: Boolean get() = copy(circadianCurve = null, batteryTint = null) != Palette()
 
         /** These roles minus any color that doesn't parse, each reported in [problems] under [where]. */
         fun valid(where: String, problems: MutableList<String>): Palette {
@@ -120,6 +135,8 @@ data class ThemeManifest(
                 focusGold = check("focusGold", focusGold),
                 textPrimary = check("textPrimary", textPrimary),
                 textSecondary = check("textSecondary", textSecondary),
+                circadianCurve = circadianCurve,
+                batteryTint = batteryTint,
             )
         }
     }
@@ -150,6 +167,11 @@ data class ThemeManifest(
     data class Effects(
         /** A [SurfacePreset] id or a key of [surfaces]. */
         val surfaceStyle: String? = null,
+        /**
+         * Let the focused game's hero or wheel art drive the wave, accent and glows (Appendix A.7).
+         * Null: on, unless the user turns it off.
+         */
+        val adaptiveGamePalette: Boolean? = null,
     )
 
     companion object {

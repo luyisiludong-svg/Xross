@@ -32,6 +32,8 @@ data class WaveParams(
     val turbulence: Float = 1f,
     /** Crest, halo and strand width multiplier, 0.5–3 (`uThick`). */
     val thickness: Float = 1f,
+    /** Battery tint while charging: the sheets' color breathes gently ([WaveRenderer.CHARGE_PULSE_S]). */
+    val chargePulse: Boolean = false,
 ) {
     // Converted once per parameter change, not per frame, so the GL loop allocates nothing.
     internal val topRgb = palette.top.rgb()
@@ -65,6 +67,15 @@ class WaveRenderer(
 
     /** Vsyncs per frame, set by [WaveBackground]'s pacer. */
     @Volatile var stride = 1
+
+    /**
+     * Still-motion profiles (E-Ink): every frame drawn shows the same moment and the target colors
+     * at once, so the one frame drawn per change ([WaveBackground]) is final, with no drift.
+     */
+    @Volatile var frozen = false
+
+    /** [shownWave] scaled by the charging pulse, uploaded instead of it. */
+    private val pulsedWave = FloatArray(3)
 
     // The colors on screen, eased toward params' so a theme variant, category or system override
     // crossfades (~300 ms) instead of popping. GL thread only; the first frame snaps.
@@ -116,12 +127,13 @@ class WaveRenderer(
     override fun onDrawFrame(gl: GL10?) {
         val now = SystemClock.elapsedRealtimeNanos()
         val p = params
-        val k = if (!colorsShown || lastFrameNs == 0L) 1f else colorStep((now - lastFrameNs) / 1e9f)
+        val still = frozen
+        val k = if (still || !colorsShown || lastFrameNs == 0L) 1f else colorStep((now - lastFrameNs) / 1e9f)
         easeColor(shownTop, p.topRgb, k)
         easeColor(shownBottom, p.bottomRgb, k)
         easeColor(shownWave, p.waveRgb, k)
         colorsShown = true
-        if (lastFrameNs != 0L) {
+        if (lastFrameNs != 0L && !still) {
             stats?.record(now - lastFrameNs, stride)
             // Snap to whole vsync periods; cap long gaps (resume, hitch) to a couple of paced frames.
             val maxFrames = max(4L, 2L * stride)
@@ -141,7 +153,13 @@ class WaveRenderer(
         GLES30.glUniform1f(uTime, (time % 10_000.0).toFloat())
         GLES30.glUniform3fv(uTop, 1, shownTop, 0)
         GLES30.glUniform3fv(uBottom, 1, shownBottom, 0)
-        GLES30.glUniform3fv(uWave, 1, shownWave, 0)
+        if (p.chargePulse && !still) {
+            val beat = chargePulse(now / 1e9)
+            for (i in 0..2) pulsedWave[i] = (shownWave[i] * beat).coerceAtMost(1f)
+            GLES30.glUniform3fv(uWave, 1, pulsedWave, 0)
+        } else {
+            GLES30.glUniform3fv(uWave, 1, shownWave, 0)
+        }
         GLES30.glUniform1f(uBright, 0.8f + 0.2f * daylight)
         GLES30.glUniform1i(uLines, p.lineCount.coerceIn(0, MAX_LINES))
         GLES30.glUniform1f(uTurb, p.turbulence.coerceIn(0f, 2f))
@@ -223,6 +241,13 @@ class WaveRenderer(
 
         /** Vsyncs per frame at rest: 3 at 60 Hz, 4 at 90 Hz, 6 at 120 Hz. */
         fun idleStride(refreshRateHz: Float): Int = max(1, (refreshRateHz / IDLE_FPS).roundToInt())
+
+        /** Period of the charging pulse. */
+        const val CHARGE_PULSE_S = 2.4
+
+        /** Brightness factor of the sheets [seconds] into the charging pulse: 1.0–1.18. */
+        fun chargePulse(seconds: Double): Float =
+            (1.09 + 0.09 * kotlin.math.sin(seconds * 2 * PI / CHARGE_PULSE_S)).toFloat()
 
         /** Time constant of the color crossfade: ~95% of the way in 300 ms. */
         const val COLOR_FADE_S = 0.1f

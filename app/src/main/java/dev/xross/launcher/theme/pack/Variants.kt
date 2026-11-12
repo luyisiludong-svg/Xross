@@ -13,28 +13,45 @@ data class ResolvedVariant(
     val name: String,
     val palette: ThemeManifest.Palette? = null,
     val surfaceId: String? = null,
+    val flags: ColorFlags? = null,
 )
 
 /** A checked `categoryOverrides` / `systemOverrides` entry (its tile aspect lives in [ThemeLayout]). */
 @Immutable
-data class ThemePatch(val palette: ThemeManifest.Palette? = null, val surfaceId: String? = null)
+data class ThemePatch(
+    val palette: ThemeManifest.Palette? = null,
+    val surfaceId: String? = null,
+    /** Circadian curve, battery tint and adaptive palette switches. */
+    val flags: ColorFlags? = null,
+)
 
 /**
  * What the active pack looks like in one context, before the user's own settings: its palette
  * (null when the pack brings no colors) and its surface id.
  */
 @Immutable
-data class ThemeLook(val palette: ThemePalette?, val surfaceId: String, val variantId: String = "")
+data class ThemeLook(
+    val palette: ThemePalette?,
+    val surfaceId: String,
+    val variantId: String = "",
+    /** The pack's circadian, battery-tint and adaptive-palette switches here (null: not set). */
+    val flags: ColorFlags = ColorFlags.NONE,
+    /** The pack's layout with the tile shapes and `layout` patches of the rules that hold; null: unchanged. */
+    val layout: ThemeLayout? = null,
+    /** Indices of the context rules that hold here. */
+    val rules: List<Int> = emptyList(),
+)
 
 /**
  * The precedence cascade of Appendix A.4 for palette and effects, lowest to highest:
- * the Default pack (its surface; it has no palette), the pack's base ([roles], [surfaceId]),
- * the selected [variant], the open [category]'s override, then the focused game's [system]
- * override. The user's `settings.json` (theme color, surface style) and, in 2b.3, the game-art
- * palette sit above this; see [LoadedTheme.look].
+ * the Default pack (its surface; it has no palette), the pack's base ([roles], [surfaceId],
+ * [flags]), the selected [variant], the open [category]'s override, the focused game's [system]
+ * override, then the context [rules] that hold, in file order (the last one wins). The user's
+ * `settings.json` (theme color, quick profile, surface style) and the game-art palette sit above
+ * this; see [LoadedTheme.look] and [dev.xross.launcher.theme.ColorPipeline].
  *
- * A variant may bring the pack's first palette; category and system overrides only patch a
- * palette that exists (a pack without colors leaves the user's color theme alone).
+ * A variant may bring the pack's first palette; overrides and rules only patch a palette that
+ * exists (a pack without colors leaves the user's color theme alone).
  */
 fun cascade(
     roles: ThemeManifest.Palette?,
@@ -43,18 +60,23 @@ fun cascade(
     variant: ResolvedVariant?,
     category: ThemePatch?,
     system: ThemePatch?,
+    rules: List<ResolvedRule> = emptyList(),
+    flags: ColorFlags = ColorFlags.NONE,
 ): ThemeLook {
     var palette = roles
     var surface = surfaceId
+    var f = flags
     variant?.let { v ->
         v.palette?.let { palette = palette?.over(it) ?: it }
         v.surfaceId?.let { surface = it }
+        f = f.over(v.flags)
     }
-    for (patch in listOfNotNull(category, system)) {
+    for (patch in listOfNotNull(category, system) + rules.mapNotNull { it.patch }) {
         patch.palette?.let { p -> palette = palette?.over(p) }
         patch.surfaceId?.let { surface = it }
+        f = f.over(patch.flags)
     }
-    return ThemeLook(palette?.toPalette(wave), surface, variant?.id.orEmpty())
+    return ThemeLook(palette?.toPalette(wave), surface, variant?.id.orEmpty(), f, rules = rules.map { it.index })
 }
 
 /** Variant ids: what `settings.json` stores. */
@@ -82,7 +104,7 @@ internal fun resolveVariants(
             continue
         }
         val palette = v.palette?.valid("variants.$id.palette", problems)?.takeUnless { it.empty }
-        if (palette != null && !hasPalette && palette.canvas == null) {
+        if (palette != null && palette.hasColors && !hasPalette && palette.canvas == null) {
             problems += "variants.$id.palette needs a canvas color (the pack has no palette of its own)"
         }
         out += ResolvedVariant(
@@ -90,6 +112,7 @@ internal fun resolveVariants(
             name = v.name.trim().ifEmpty { id },
             palette = palette,
             surfaceId = surfaceOf("variants.$id", v.effects, surfaceIds, problems),
+            flags = ColorFlags.of(v.palette, v.effects).takeUnless { it.empty },
         )
     }
     return out
@@ -154,10 +177,11 @@ fun platformIdOf(key: String): String? {
     return (PlatformRegistry.byId(k.lowercase(Locale.ROOT)) ?: PlatformRegistry.forFolder(k))?.id
 }
 
-private fun patchOf(where: String, o: ThemeOverride, surfaceIds: Set<String>, problems: MutableList<String>): ThemePatch? {
-    val palette = o.palette?.valid("$where.palette", problems)?.takeUnless { it.empty }
+internal fun patchOf(where: String, o: ThemeOverride, surfaceIds: Set<String>, problems: MutableList<String>): ThemePatch? {
+    val palette = o.palette?.valid("$where.palette", problems)?.takeIf { it.hasColors }
     val surface = surfaceOf(where, o.effects, surfaceIds, problems)
-    return if (palette == null && surface == null) null else ThemePatch(palette, surface)
+    val flags = ColorFlags.of(o.palette, o.effects).takeUnless { it.empty }
+    return if (palette == null && surface == null && flags == null) null else ThemePatch(palette, surface, flags)
 }
 
 private fun surfaceOf(where: String, effects: ThemeManifest.Effects?, surfaceIds: Set<String>, problems: MutableList<String>): String? {
