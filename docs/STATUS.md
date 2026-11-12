@@ -31,7 +31,8 @@ A55** (Android 16, 120 Hz) on 2026-11-11 (§3.11–§3.14). The updated on-devic
 Galaxy A55 on 2026-11-11: 75 of 86 checks pass, and the 11 failures are Photo/Music checks that
 need a device without its own media (§3.13). On 2026-11-12 the smoke test, extended with the 2b.1
 checks, passed 112 of 112 on the API 37 emulator (§3.15), and with the Theme 2.0 (2b.2) checks 139
-of 139 (§3.18). ScreenScraper and RetroAchievements sign-in ran
+of 139 (§3.18). Since §3.20 those checks are five standalone suites (171, all passing on the
+emulator) behind a 12-check quick `smoke.sh` and a `run-all.sh` runner. ScreenScraper and RetroAchievements sign-in ran
 live; frame pacing on the A55 is 0.63% janky with 82.9 MB PSS in the background (§3.13). No physical controller, gaming handheld or real emulator install has been tested yet,
 and the portable folder and library organization passed a device run on the Galaxy A55 as an
 upgrade of a real install (§3.11); SD card, Android 9/10 and handhelds are still untested.
@@ -233,7 +234,8 @@ Added for Phase 2b.1 (20 tests, 2026-11-11; `HtmlTextTest`, 2 tests, came with t
 
 ### 3.2 Device smoke test — 75/86 on the Galaxy A55 (2026-11-11; the 11 failures are Photo/Music checks that need a device without its own media, §3.13)
 `tools/device-tests/smoke.sh` resets the app, seeds ROMs, and drives the UI with key events.
-It checks screen content through the accessibility tree. On 2026-11-11 its key counts were
+It checks screen content through the accessibility tree. (Since 2026-11-12 these checks live in
+five suites run by `run-all.sh`, and `smoke.sh` is a 12-check quick test: §3.20.) On 2026-11-11 its key counts were
 updated (Options menu, Controls, All Games) and it gained checks for Details/Metadata, the
 deadzone cycle, the Platform folders setting, the 10-button remap and the Select shortcut.
 
@@ -806,6 +808,37 @@ iridescent default), so the screen isn't fully black and white.
 morphs in motion by eye; a real battery crossing 20%; Android 9–13; wheel-only art on a device;
 the `motionProfile: INSTANT` rule patch on screen; the display matrix with the new rows.
 
+### 3.20 Device tests split into tiers (2026-11-12)
+
+The 755-line `smoke.sh`, one sequential run of 171 checks, is now three tiers in
+`tools/device-tests/` that share `lib/harness.sh`: the assertions, navigation, fixture setup
+(`setup_base_env`, `setup_media_fixtures`, `setup_theme_fixtures`) and a teardown on EXIT, INT
+and TERM. That teardown runs `dumpsys battery reset`, stops the RetroArch stub and deletes the
+seeded ROMs, `XrossSmoke` media, theme packs, `.xtheme` files, hero art and the UI dump.
+
+| Tier | Checks | Time (API 37 emulator) |
+| --- | --- | --- |
+| `smoke.sh` (quick): boot, MainActivity in front, database created, 3 systems scanned, category bar, first platform, L1/R1, same process, no crash | 12 (new) | 26–27 s |
+| `test-library.sh` | 41 | 124 s |
+| `test-theme.sh` | 88 | 243–249 s |
+| `test-media.sh` | 22 | 83 s |
+| `test-input.sh` | 11 | 43 s |
+| `test-integration.sh` | 9 | 34–37 s |
+| `run-all.sh` (= `smoke.sh --all`): the five suites, one passed / failed / skipped table, exit 1 on any failure | 171 | 8 m 58 s |
+
+Each suite clears the app and seeds its own fixtures, so it runs alone and in any order. Checks
+that need a missing host tool (ffmpeg, sqlite3) or the stub count as skipped, so the total
+stays 171. Moved: the two music-during-a-game checks went from Launch to the media suite. The
+Sound section stays in the theme suite, where it sits in the Settings flow. Stricter: the Secrets
+check now waits for the three config files and fails if one is missing, instead of passing on an
+error message.
+
+**Verified:** the check descriptions in the old script and the new suites match one-for-one
+(171 each). `shellcheck` 0.11 is clean (`.shellcheckrc` documents the suppressed house patterns).
+`test-theme.sh` passed 88 of 88 alone right after an emulator reboot. `run-all.sh` passed **171 of
+171** twice, and the quick smoke 12 of 12 both times. After each run the battery was back to its
+own state and no test file was left in `/sdcard`. Not run on the Galaxy A55 yet.
+
 ## 4. Display matrix & performance
 
 All numbers are from the Android emulator on an Apple M5 with the host GPU, using an
@@ -917,7 +950,8 @@ implemented, by phase, including the Phase 2b customization engine).
 ```bash
 ./gradlew :app:testDebugUnitTest                         # unit tests
 ./gradlew :app:installDebug :emulator-stub:installRetroarchDebug
-tools/device-tests/smoke.sh                              # device smoke test (clears app data)
+tools/device-tests/smoke.sh                              # quick device smoke test, 12 checks (clears app data)
+tools/device-tests/run-all.sh                            # full device regression: the five suites, 171 checks
 ./gradlew :app:assembleProfiling                         # optimized build for frame timing
 adb shell dumpsys gfxinfo dev.xross.launcher              # UI frame stats
 adb logcat -s WaveFrames XrossScan                        # GL pacing + scan timing (debug/profiling)
