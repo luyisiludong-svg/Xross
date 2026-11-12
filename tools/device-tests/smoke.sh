@@ -102,7 +102,7 @@ adb shell pm clear "$PKG" >/dev/null
 # Config in the Xross folder outlives pm clear and would be adopted on start; move it aside so every
 # run starts from defaults (kept under /sdcard/Xross-smoke-backup/, never deleted).
 adb shell 'if [ -d /sdcard/Xross/config ]; then b=/sdcard/Xross-smoke-backup/$(date +%Y%m%d-%H%M%S); mkdir -p $b && mv /sdcard/Xross/config $b/; fi'
-adb shell rm -rf /sdcard/Xross/themes/smoke_pack
+adb shell rm -rf /sdcard/Xross/themes/smoke_pack '/sdcard/Xross/themes/smoke-variants' '/sdcard/Xross/themes/smoke-variants-2'
 adb shell appops set --uid "$PKG" MANAGE_EXTERNAL_STORAGE allow
 adb shell 'rm -rf /sdcard/ROMs; mkdir -p /sdcard/ROMs/snes /sdcard/ROMs/gba /sdcard/ROMs/psx
   for g in "Chrono Trigger (USA)" "EarthBound (USA)" "Super Metroid (USA, Europe)"; do echo x > "/sdcard/ROMs/snes/$g.sfc"; done
@@ -244,8 +244,9 @@ expect "Sound" "Settings lists the Sound section"
 top
 
 echo "== Settings"
-# Theme rows: Theme pack, Theme color, Wave background, Wave settings, Profile customization,
-# Button hints, Platform folders, Surface style.
+# Theme rows: Theme pack, [Theme variant, only for packs with variants], Theme color, Wave
+# background, Wave settings, Profile customization, Button hints, Platform folders, Surface style,
+# Import theme (.xtheme)….
 key $(for _ in $(seq 3); do printf 'KEYCODE_DPAD_DOWN '; done) KEYCODE_DPAD_CENTER
 expect "Theme pack" "Theme section lists theme packs"
 expect "Default" "the built-in Default pack is active"
@@ -352,6 +353,104 @@ key KEYCODE_DPAD_CENTER
 pause 1.5
 expect "Default" "cycling returns to the Default pack"
 key KEYCODE_BACK
+
+echo "== Theme import and variants"
+# Two .xtheme files in Download: one with a zip-slip entry, one valid pack (wrapped in a folder)
+# with two variants, a Settings override and a SNES override under its "sfc" folder alias.
+xt=$(mktemp -d)
+python3 -I - "$xt" <<'PY'
+import sys, zipfile
+d = sys.argv[1]
+m = """{"schemaVersion": 2, "name": "Smoke Variants", "author": "smoke",
+ "palette": {"canvas": "#101830", "accent": "#FFFFFF", "accentSecondary": "#C0E0FF"},
+ "variants": [
+   {"id": "lilac", "name": "Cyber Lilac", "palette": {"canvas": "#1B1829", "accentSecondary": "#C8B6FF"}},
+   {"id": "matrix", "name": "BIOS Matrix", "palette": {"canvas": "#0A140A", "accentSecondary": "#40FF60"}, "effects": {"surfaceStyle": "OLED_TRUE_BLACK"}}],
+ "categoryOverrides": {"SETTINGS": {"effects": {"surfaceStyle": "Y2K_GLOSSY_BEZEL"}}},
+ "systemOverrides": {"sfc": {"palette": {"canvas": "#300A0A", "accentSecondary": "#FF8C42"}, "cardAspectRatio": "3:4"}}}"""
+with zipfile.ZipFile(d + "/smoke_variants.xtheme", "w", zipfile.ZIP_DEFLATED) as z:
+    z.writestr("Smoke Variants/theme.json", m)
+    z.writestr("Smoke Variants/README.md", "smoke")
+with zipfile.ZipFile(d + "/smoke_slip.xtheme", "w") as z:
+    z.writestr("theme.json", '{"schemaVersion": 2, "name": "Slip"}')
+    z.writestr("../../evil.json", "{}")
+PY
+adb shell rm -f /sdcard/Download/smoke_variants.xtheme /sdcard/Download/smoke_slip.xtheme
+adb push "$xt/smoke_variants.xtheme" "$xt/smoke_slip.xtheme" /sdcard/Download/ >/dev/null
+rm -rf "$xt"
+adb shell content call --method scan_volume --uri content://media --arg external_primary >/dev/null 2>&1
+# pick <file name> [wait]: tap that file in the system document picker, then wait (2 s default).
+pick() {
+  local b
+  for _ in 1 2 3 4; do
+    adb shell uiautomator dump /sdcard/xross-ui.xml >/dev/null 2>&1
+    b=$(adb shell cat /sdcard/xross-ui.xml | grep -o "text=\"$1\"[^>]*bounds=\"[^\"]*\"" | grep -o 'bounds="[^"]*"' | head -1)
+    [ -n "$b" ] && break
+    pause 0.8
+  done
+  if [ -z "$b" ]; then bad "the document picker lists $1"; key KEYCODE_BACK; return; fi
+  read -r x1 y1 x2 y2 <<<"$(sed 's/bounds="//; s/"//; s/\]\[/ /; s/[][]//g; s/,/ /g' <<<"$b")"
+  adb shell input tap $(((x1 + x2) / 2)) $(((y1 + y2) / 2))
+  pause "${2:-2}"
+}
+top
+key $(for _ in $(seq 3); do printf 'KEYCODE_DPAD_DOWN '; done) KEYCODE_DPAD_CENTER
+key $(for _ in $(seq 16); do printf 'KEYCODE_DPAD_DOWN '; done)
+expect "Import theme (.xtheme)" "Settings ▸ Theme ends with Import theme"
+key KEYCODE_DPAD_CENTER
+pause 2
+adb shell dumpsys activity activities | grep -m1 topResumedActivity | grep -q documentsui \
+  && ok "Import theme opens the system document picker" || bad "the document picker didn't open"
+# The rejection is a 2.6 s toast: read it straight away.
+pick smoke_slip.xtheme 0.3
+expect "Theme not imported" "a .xtheme with a ../ entry is rejected"
+adb shell ls /sdcard/Xross/themes | grep -qiE 'slip|^\.import' && bad "the rejected archive left files" || ok "a rejected archive writes nothing"
+adb shell ls /sdcard/evil.json /sdcard/Xross/evil.json >/dev/null 2>&1 && bad "zip slip wrote evil.json" || ok "no file escaped Xross/themes"
+key KEYCODE_DPAD_CENTER
+pause 2
+pick smoke_variants.xtheme
+adb shell ls /sdcard/Xross/themes/smoke-variants/theme.json >/dev/null 2>&1 \
+  && ok "a valid .xtheme unpacks into Xross/themes/smoke-variants" || bad "smoke-variants not installed"
+adb shell cat /sdcard/Xross/config/settings.json | grep -q '"themePack": "smoke-variants"' \
+  && ok "the imported pack is applied" || bad "the imported pack isn't active"
+top_list
+expect "Smoke Variants by smoke · 3 packs" "the imported pack is listed and loads without problems"
+key KEYCODE_DPAD_DOWN
+expect "Standard · 3 looks in Smoke Variants" "a pack with variants shows Theme variant"
+key KEYCODE_DPAD_CENTER KEYCODE_DPAD_CENTER
+expect "BIOS Matrix · 3 looks" "Theme variant cycles to the next variant"
+adb shell cat /sdcard/Xross/config/settings.json | grep -q '"themeVariant": "matrix"' \
+  && ok "the variant is saved to settings.json" || bad "themeVariant not in settings.json"
+key KEYCODE_BUTTON_Y
+expect "Cyber Lilac" "Theme variant Options list every variant"
+key KEYCODE_BACK
+# The same file again: ask before replacing; Keep both installs a copy.
+key $(for _ in $(seq 16); do printf 'KEYCODE_DPAD_DOWN '; done) KEYCODE_DPAD_CENTER
+pause 2
+pick smoke_variants.xtheme
+expect "is already installed" "re-importing an installed pack asks first"
+key KEYCODE_DPAD_DOWN KEYCODE_DPAD_CENTER
+pause 2
+adb shell ls /sdcard/Xross/themes/smoke-variants-2/theme.json >/dev/null 2>&1 \
+  && ok "Keep both installs the copy as smoke-variants-2" || bad "smoke-variants-2 not installed"
+# The SNES override's 3:4 tiles: a portrait game tile in Super Nintendo (colors aren't in the tree).
+home
+all_games "$(screen | grep -cxE 'Recently Played|Favorites')"
+expect "Super Nintendo" "All Games lists the SNES folder"
+key KEYCODE_DPAD_CENTER
+pause 1
+expect "Chrono Trigger" "a system override doesn't break the game list"
+# Back to Default for the rest of the run.
+category 0
+key $(for _ in $(seq 3); do printf 'KEYCODE_DPAD_DOWN '; done) KEYCODE_DPAD_CENTER
+top_list
+key KEYCODE_BUTTON_Y
+key $(for _ in $(seq 8); do printf 'KEYCODE_DPAD_UP '; done) KEYCODE_DPAD_CENTER
+pause 1.5
+expect "Default" "Theme pack Options switch back to Default"
+expect_not "Theme variant" "Default has no Theme variant row"
+key KEYCODE_BACK
+adb shell rm -rf /sdcard/Xross/themes/smoke-variants /sdcard/Xross/themes/smoke-variants-2 /sdcard/Download/smoke_variants.xtheme /sdcard/Download/smoke_slip.xtheme
 
 echo "== Secrets"
 cfg=$(adb shell cat /sdcard/Xross/config/settings.json /sdcard/Xross/config/controllers.json /sdcard/Xross/config/systems.json)

@@ -207,7 +207,7 @@ fun XmbScreen(
     onCloseAvatarStyle: () -> Unit = {},
     onCloseRaHub: () -> Unit = {},
 ) {
-    val palette = rememberActivePalette(state.theme, LocalThemePack.current?.palette)
+    val palette = rememberActivePalette(state.theme, (LocalThemeLook.current ?: LocalThemePack.current?.look())?.palette)
     val layout = LocalThemePack.current?.layout ?: ThemeLayout.DEFAULT
     val motion = layout.motion
 
@@ -709,7 +709,11 @@ private fun ItemColumn(
     val density = LocalDensity.current
     val iconDp = with(density) { m.itemIcon.toDp() }
     val textX = m.anchorX + m.itemIcon * m.itemFocusScale / 2 + m.textGap
-    val textWidth = with(density) { (m.width - textX - m.width * 0.03f).coerceAtLeast(m.s * 0.3f).toDp() }
+    // At least a readable width, but never past the screen edge (a large UI scale on a square or
+    // 4:3 screen can leave less than that), so long titles ellipsize instead of being cut off.
+    val textWidth = with(density) {
+        (m.width - textX - m.width * 0.03f).coerceAtLeast(m.s * 0.3f).coerceAtMost((m.width - textX).coerceAtLeast(1f)).toDp()
+    }
     val layout = m.layout
     val aspect = state.categories.getOrNull(state.categoryIndex)?.id?.let(layout::aspectFor)
     val chevron: () -> Float = if (layout.drillDown == DrillDownStyle.CHEVRON_COLLAPSE) depth else NoChevron
@@ -757,7 +761,10 @@ private fun ItemColumn(
                 m = m,
                 iconSize = iconDp,
                 textWidth = textWidth,
-                aspect = aspect,
+                // A system override's tile aspect shapes that system's game tiles.
+                aspect = if (layout.systemAspects.isEmpty()) aspect else {
+                    (node.action as? NodeAction.LaunchGame)?.let { state.gamePlatforms[it.gameId] }?.let(layout.systemAspects::get) ?: aspect
+                },
                 isFocused = i == state.focusedIndex,
                 focus = focus,
                 pulse = pulse,

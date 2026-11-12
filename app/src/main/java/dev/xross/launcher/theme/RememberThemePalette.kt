@@ -1,7 +1,10 @@
 package dev.xross.launcher.theme
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import kotlinx.coroutines.delay
@@ -41,4 +44,28 @@ fun rememberActivePalette(themeName: String, packPalette: ThemePalette?): ThemeP
     val theme = XrossTheme.byName(themeName)
     val dated = rememberThemePalette(theme)
     return if (themeName == PACK_THEME && packPalette != null) packPalette else dated
+}
+
+/** How long the cursor rests on a game before its system's theme override applies. */
+const val SYSTEM_LOOK_DELAY_MS = 250L
+
+/**
+ * [system] once it has held for [SYSTEM_LOOK_DELAY_MS], so scrolling through a list that mixes
+ * systems doesn't flash between their overrides; a new [category] takes its system at once.
+ */
+@Composable
+fun rememberSettledSystem(system: String?, category: String?): String? {
+    var settled by remember { mutableStateOf(system) }
+    var settledCategory by remember { mutableStateOf(category) }
+    LaunchedEffect(system, category) {
+        if (category != settledCategory) {
+            settledCategory = category
+            settled = system
+        } else if (system != settled) {
+            delay(SYSTEM_LOOK_DELAY_MS)
+            settled = system
+        }
+    }
+    // Same frame as the category switch: don't show the old system's override in the new category.
+    return if (category != settledCategory) system else settled
 }
