@@ -202,12 +202,12 @@ class WaveRenderer(
         const val ACTIVE_MAX_FPS = 60f
 
         /** Standby frame rate while the screen rests: the sheet still drifts, at a fraction of the cost. */
-        const val IDLE_FPS = 20f
+        const val IDLE_FPS = 12f
 
         /** Vsyncs per frame in use: 1 up to ~90 Hz, 2 at 120 Hz, 2 at 144 Hz (72 fps). */
         fun activeStride(refreshRateHz: Float): Int = max(1, floor(refreshRateHz / ACTIVE_MAX_FPS + 0.25f).toInt())
 
-        /** Vsyncs per frame at rest: 3 at 60 Hz, 4 at 90 Hz, 6 at 120 Hz. */
+        /** Vsyncs per frame at rest: 5 at 60 Hz, 8 at 90 Hz, 10 at 120 Hz. */
         fun idleStride(refreshRateHz: Float): Int = max(1, (refreshRateHz / IDLE_FPS).roundToInt())
 
         /** Render-target scale: keep the long side near 1280 px. */
