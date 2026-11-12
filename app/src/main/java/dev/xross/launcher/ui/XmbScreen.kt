@@ -5,21 +5,22 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -35,7 +36,9 @@ import androidx.compose.foundation.border
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -72,6 +75,8 @@ import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -84,6 +89,7 @@ import dev.xross.launcher.media.MusicPlayer
 import dev.xross.launcher.media.ThumbKind
 import dev.xross.launcher.state.MediaOverlayController
 import dev.xross.launcher.input.NavAction
+import dev.xross.launcher.state.GlyphKey
 import dev.xross.launcher.state.NodeAction
 import dev.xross.launcher.state.NodeIcon
 import dev.xross.launcher.state.RemapSession
@@ -95,6 +101,12 @@ import dev.xross.launcher.scrape.ArtKind
 import dev.xross.launcher.theme.ThemePalette
 import dev.xross.launcher.theme.XrossTheme
 import dev.xross.launcher.theme.rememberActivePalette
+import dev.xross.launcher.theme.pack.Crosshair
+import dev.xross.launcher.theme.pack.DrillDownStyle
+import dev.xross.launcher.theme.pack.FocusDividerStyle
+import dev.xross.launcher.theme.pack.Motion
+import dev.xross.launcher.theme.pack.TextOverflowMode
+import dev.xross.launcher.theme.pack.ThemeLayout
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.floor
@@ -110,28 +122,34 @@ internal val Pill = Color(0x59000000)
 
 /**
  * Layout measured from the reference screenshots (16:9): focused category column at ~22% of the
- * width, category bar at ~25% of the height, focused item at ~52%.
+ * width, category bar at ~25% of the height, focused item at ~52% (the Default pack's `layout`).
+ * A pack moves the crosshair, spacing, focus scale and overall scale with its `layout` block
+ * ([ThemeLayout]).
  *
- * Everything else scales from [s], the usable short side, so 4:3 / 1:1 / 3:2 handhelds, 21:9
- * phones, portrait and 4K TVs keep the same proportions:
- *  - the focus column always leaves room for one whole category to its left;
+ * Everything else scales from [s], the usable short side (times the UI scale), so 4:3 / 1:1 / 3:2
+ * handhelds, 21:9 phones, portrait and 4K TVs keep the same proportions:
+ *  - the focus column always leaves room for one whole category on each side ([Crosshair.clampX]);
  *  - vertical positions follow [s], not the raw height, so tall portrait screens don't open a
- *    gap between the bar and the list.
+ *    gap between the bar and the list ([Crosshair.clampY]).
  */
-internal class XmbMetrics(val width: Float, val height: Float) {
-    val s = min(height, width * 0.9f)
+internal class XmbMetrics(val width: Float, val height: Float, val layout: ThemeLayout = ThemeLayout.DEFAULT) {
+    val s = min(height, width * 0.9f) * layout.uiScale
 
     val categorySpacing = s * 0.34f
     val categoryIcon = s * 0.12f
     val categoryFocusScale = 1.38f
-    val anchorX = maxOf(width * 0.22f, categorySpacing + categoryIcon * 0.8f)
-        .coerceAtMost(width * 0.45f)
-    val barY = min(height * 0.25f, s * 0.30f)
+    val anchorX = Crosshair.clampX(layout.crosshairX, width, categorySpacing, categoryIcon)
     val itemIcon = s * 0.085f
-    val itemFocusScale = 1.32f
-    val focusedY = barY + s * 0.27f
-    val itemSpacing = s * 0.15f
+    val itemFocusScale = layout.focusedScale
+
+    /** Row pitch; the Standard 12 dp gap is the measured 0.15 of the short side (dp at a 360 dp short side). */
+    val itemSpacing = s * (0.15f + (layout.itemSpacingDp - 12f) / 360f)
     val focusGap = s * 0.05f
+
+    /** Bar to focused row. */
+    private val focusDrop = s * 0.27f
+    val barY = Crosshair.clampY(layout.crosshairY, height, s, listBelow = focusDrop + focusGap + itemSpacing + itemIcon / 2)
+    val focusedY = barY + focusDrop
     val aboveY = barY - s * 0.19f
     val textGap = s * 0.06f
     val titleSize = s * 0.047f
@@ -190,6 +208,8 @@ fun XmbScreen(
     onCloseRaHub: () -> Unit = {},
 ) {
     val palette = rememberActivePalette(state.theme, LocalThemePack.current?.palette)
+    val layout = LocalThemePack.current?.layout ?: ThemeLayout.DEFAULT
+    val motion = layout.motion
 
     // Slow "breathing" glow shared by everything that is focused. It settles and holds still while
     // the screen rests (LocalUiIdle), so an untouched home screen draws no frames for it.
@@ -207,8 +227,8 @@ fun XmbScreen(
             .graphicsLayer { alpha = reveal.value }
             .swipeNavigation(onAction),
     ) {
-        val m = remember(constraints.maxWidth, constraints.maxHeight) {
-            XmbMetrics(constraints.maxWidth.toFloat(), constraints.maxHeight.toFloat())
+        val m = remember(constraints.maxWidth, constraints.maxHeight, layout) {
+            XmbMetrics(constraints.maxWidth.toFloat(), constraints.maxHeight.toFloat(), layout)
         }
         val density = LocalDensity.current
         fun Float.sp(): TextUnit = with(density) { this@sp.toSp() }
@@ -249,8 +269,8 @@ fun XmbScreen(
         val reportCover by rememberUpdatedState(onBackdropCoverChanged)
         LaunchedEffect(covers) { reportCover(covers) }
 
-        val catPos by animateFloatAsState(state.categoryIndex.toFloat(), NavSpring, label = "category")
-        val depth by animateFloatAsState(state.depth.coerceAtMost(1).toFloat(), NavSpring, label = "depth")
+        val catPos by animateFloatAsState(state.categoryIndex.toFloat(), motion.nav(), label = "category")
+        val depth by animateFloatAsState(state.depth.coerceAtMost(1).toFloat(), motion.nav(), label = "depth")
 
         // The menu fades out under media screens so only one set of text and hints is visible.
         /** Height of the button-hint row, so the mini player can float just above it. */
@@ -258,7 +278,7 @@ fun XmbScreen(
         val menuShown = state.overlay == null && state.search == null && state.nameEntry == null && state.details == null &&
             state.waveEditor == null && state.achievements == null && state.profileCard == null &&
             state.avatarEditor == null && state.raHub == null
-        val menuAlpha by animateFloatAsState(if (menuShown) 1f else 0f, tween(220), label = "menu")
+        val menuAlpha by animateFloatAsState(if (menuShown) 1f else 0f, motion.tween(220), label = "menu")
         // The avatar's glow pulses only while the menu is in front and in use: it holds still while
         // the screen rests, under overlays, and when the activity is stopped.
         val avatarGlowRuns = started && !idle && menuShown
@@ -268,13 +288,15 @@ fun XmbScreen(
             categories = state.categories,
             categoryIndex = state.categoryIndex,
             breadcrumb = state.breadcrumb.joinToString("  ›  "),
+            folder = state.folderGlyph,
+            style = layout.drillDown,
             m = m,
             catPos = { catPos },
             depth = { depth },
             pulse = { pulse },
             onCategoryTap = onCategoryTap,
         )
-        ItemColumn(state, m, { pulse }, loadAppIcon, loadThumb, loadArt, onItemTap, onItemLongPress)
+        ItemColumn(state, m, motion, { depth }, { pulse }, loadAppIcon, loadThumb, loadArt, onItemTap, onItemLongPress)
 
         // (The "now playing" line that used to sit top-left is the floating MiniPlayerCard below.)
 
@@ -283,7 +305,7 @@ fun XmbScreen(
         // which takes the clock's and battery's place while it is open.
         val hudExpansion = animateFloatAsState(
             if (state.avatarFocused) 1f else 0f,
-            tween(260, easing = FastOutSlowInEasing),
+            if (motion.instant) snap() else tween(260, easing = FastOutSlowInEasing),
             label = "avatarHud",
         )
         val statusTop = (m.s * 0.04f).dp()
@@ -544,15 +566,21 @@ private fun lifecycleStarted(): androidx.compose.runtime.State<Boolean> {
     }
 }
 
-/** Critically damped: no overshoot, ~200 ms settle, and velocity carries across retargets. */
-private val NavSpring = spring<Float>(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = 520f)
-
-/** Takes only what it draws, so cursor moves in the item list don't recompose the bar. */
+/**
+ * Takes only what it draws, so cursor moves in the item list don't recompose the bar.
+ *
+ * Drilled into a list, [style] decides what shows where it is: the [breadcrumb] text beside the
+ * open category ([DrillDownStyle.BREADCRUMB]), the opened [folder]'s icon parked left of the list
+ * ([DrillDownStyle.XMB_FOLDER_COLUMN]), or nothing: the whole bar collapses and the focused row
+ * shows a ◀ ([DrillDownStyle.CHEVRON_COLLAPSE], drawn by the row).
+ */
 @Composable
 private fun CategoryBar(
     categories: List<XmbCategory>,
     categoryIndex: Int,
     breadcrumb: String,
+    folder: GlyphKey?,
+    style: DrillDownStyle,
     m: XmbMetrics,
     catPos: () -> Float,
     depth: () -> Float,
@@ -563,6 +591,7 @@ private fun CategoryBar(
     val iconDp = with(density) { m.categoryIcon.toDp() }
     val cellDp = with(density) { m.categorySpacing.toDp() }
     val labelSp = with(density) { m.labelSize.toSp() }
+    val collapse = style == DrillDownStyle.CHEVRON_COLLAPSE
 
     categories.forEachIndexed { i, category ->
         val focus = { 1f - abs(i - catPos()).coerceAtMost(1f) }
@@ -574,11 +603,14 @@ private fun CategoryBar(
                     // Drilling into a list slides the bar left, leaving the open category's icon.
                     val shift = depth() * m.categorySpacing * 0.85f
                     val x = m.anchorX + (i - catPos()) * m.categorySpacing - shift - m.categorySpacing / 2
-                    IntOffset(x.roundToInt(), (m.barY - m.categoryIcon / 2).roundToInt())
+                    // Collapsing, the whole bar also rises a little as it fades.
+                    val lift = if (collapse) depth() * m.s * 0.06f else 0f
+                    IntOffset(x.roundToInt(), (m.barY - m.categoryIcon / 2 - lift).roundToInt())
                 }
                 .fadeAlpha {
                     val f = focus()
-                    (0.62f + 0.38f * f) * (1f - depth() * (1f - f))
+                    val d = depth()
+                    (0.62f + 0.38f * f) * (1f - d * (1f - f)) * (if (collapse) 1f - d else 1f)
                 }
                 .clickable(remember { MutableInteractionSource() }, indication = null) { onCategoryTap(i) },
         ) {
@@ -600,8 +632,28 @@ private fun CategoryBar(
         }
     }
 
+    // XMB folder column: the opened folder's icon parks left of the list, under the open
+    // category, level with the focused row.
+    // Kept while the list closes, so the icon fades out with the depth instead of popping.
+    var parked by remember { mutableStateOf(folder) }
+    if (folder != null) parked = folder
+    val shownFolder = parked
+    if (style == DrillDownStyle.XMB_FOLDER_COLUMN && shownFolder != null) {
+        val size = with(density) { (m.itemIcon * 1.15f).toDp() }
+        Box(
+            Modifier
+                .offset {
+                    val x = m.anchorX - m.categorySpacing * 0.85f - m.itemIcon * 1.15f / 2
+                    IntOffset(x.roundToInt(), (m.focusedY - m.itemIcon * 1.15f / 2).roundToInt())
+                }
+                .fadeAlpha { depth() * 0.9f },
+        ) {
+            XmbIcon(glyphPainter(shownFolder), size, focus = { 0f }, focusScale = 1f, glow = { 0f })
+        }
+    }
+
     // Breadcrumb beside the open category while drilled in.
-    if (breadcrumb.isNotEmpty()) {
+    if (style == DrillDownStyle.BREADCRUMB && breadcrumb.isNotEmpty()) {
         GlowText(
             text = breadcrumb,
             fontSize = with(density) { m.titleSize.toSp() },
@@ -626,6 +678,8 @@ private fun CategoryBar(
 private fun ItemColumn(
     state: XmbUiState,
     m: XmbMetrics,
+    motion: Motion,
+    depth: () -> Float,
     pulse: () -> Float,
     loadAppIcon: suspend (String) -> ImageBitmap?,
     loadThumb: suspend (ThumbKind, Long, Int) -> ImageBitmap?,
@@ -637,15 +691,15 @@ private fun ItemColumn(
     val scroll = remember { Animatable(state.focusedIndex.toFloat()) }
     var lastKey by remember { mutableStateOf(state.listKey) }
     LaunchedEffect(state.listKey, state.focusedIndex) {
-        if (state.listKey != lastKey) {
+        if (state.listKey != lastKey || motion.instant) {
             lastKey = state.listKey
             scroll.snapTo(state.focusedIndex.toFloat())
         } else {
-            scroll.animateTo(state.focusedIndex.toFloat(), NavSpring)
+            scroll.animateTo(state.focusedIndex.toFloat(), motion.nav())
         }
     }
-    val enter = remember(state.listKey) { Animatable(0f) }
-    LaunchedEffect(state.listKey) { enter.animateTo(1f, tween(280, easing = FastOutSlowInEasing)) }
+    val enter = remember(state.listKey) { Animatable(if (motion.instant) 1f else 0f) }
+    LaunchedEffect(state.listKey) { if (!motion.instant) enter.animateTo(1f, tween(280, easing = FastOutSlowInEasing)) }
 
     // Compose only the rows that can be on screen for this display.
     val first by remember(m) { derivedStateOf { floor(scroll.value).toInt() - m.rowsAbove } }
@@ -656,6 +710,10 @@ private fun ItemColumn(
     val iconDp = with(density) { m.itemIcon.toDp() }
     val textX = m.anchorX + m.itemIcon * m.itemFocusScale / 2 + m.textGap
     val textWidth = with(density) { (m.width - textX - m.width * 0.03f).coerceAtLeast(m.s * 0.3f).toDp() }
+    val layout = m.layout
+    val aspect = state.categories.getOrNull(state.categoryIndex)?.id?.let(layout::aspectFor)
+    val chevron: () -> Float = if (layout.drillDown == DrillDownStyle.CHEVRON_COLLAPSE) depth else NoChevron
+    val dim = layout.unfocusedAlpha
 
     // Read through State so the remembered row modifiers below never hold a stale callback.
     val tap by rememberUpdatedState(onItemTap)
@@ -682,7 +740,9 @@ private fun ItemColumn(
                     .fadeAlpha {
                         // Items scrolled up past the top edge fade out instead of clipping.
                         val fade = (itemY(i - scroll.value, m) / m.itemSpacing).coerceIn(0f, 1f)
-                        enter.value * fade
+                        // A pack's unfocused opacity dims whole rows, icon and text alike.
+                        val rest = dim?.let { it + (1f - it) * focus() } ?: 1f
+                        enter.value * fade * rest
                     }
                     // Long-press opens the item's Options menu (touch equivalent of △ / Y).
                     .combinedClickable(
@@ -697,9 +757,11 @@ private fun ItemColumn(
                 m = m,
                 iconSize = iconDp,
                 textWidth = textWidth,
+                aspect = aspect,
                 isFocused = i == state.focusedIndex,
                 focus = focus,
                 pulse = pulse,
+                chevron = chevron,
                 loadAppIcon = loadAppIcon,
                 loadThumb = loadThumb,
                 loadArt = loadArt,
@@ -709,11 +771,16 @@ private fun ItemColumn(
     }
 }
 
+private val NoChevron: () -> Float = { 0f }
+
 private fun itemY(d: Float, m: XmbMetrics): Float = when {
     d >= 0f -> m.focusedY + d * m.itemSpacing + m.focusGap * d.coerceAtMost(1f)
     d > -1f -> m.focusedY + (m.aboveY - m.focusedY) * -d
     else -> m.aboveY + (d + 1f) * m.itemSpacing
 }
+
+/** Photo and video thumbnails without a pack aspect: a little wider than tall. */
+private const val ThumbWideAspect = 1.3f
 
 @Composable
 private fun ItemRow(
@@ -721,9 +788,13 @@ private fun ItemRow(
     m: XmbMetrics,
     iconSize: Dp,
     textWidth: Dp,
+    /** The category's tile aspect from the theme layout, or null for each icon's own. */
+    aspect: Float?,
     isFocused: Boolean,
     focus: () -> Float,
     pulse: () -> Float,
+    /** ◀ opacity beside the focused row ([DrillDownStyle.CHEVRON_COLLAPSE] while drilled in). */
+    chevron: () -> Float,
     loadAppIcon: suspend (String) -> ImageBitmap?,
     loadThumb: suspend (ThumbKind, Long, Int) -> ImageBitmap?,
     loadArt: suspend (String, List<ArtKind>, Int) -> ImageBitmap?,
@@ -732,50 +803,62 @@ private fun ItemRow(
     val density = LocalDensity.current
     val titleSp = with(density) { m.titleSize.toSp() }
     val subtitleSp = with(density) { m.subtitleSize.toSp() }
-    // A game tile is wider than the square icon slot it is centered on: the text starts further
-    // right by half the difference (at the focus scale) and gives up the same width.
+    val layout = m.layout
+    val scale = m.itemFocusScale
+    // A game tile (or a wide thumbnail) is wider than the square icon slot it is centered on: the
+    // text starts further right by half the difference (at the focus scale) and gives up the same
+    // width. Built-in thumbnails (1.3) keep their slight overhang into the gap.
     val tileHeight = iconSize * GameTileHeightScale
-    val tileOverhang = if (node.icon is NodeIcon.Tile) (tileHeight * GameTileAspect - iconSize) * m.itemFocusScale / 2 else 0.dp
+    val tileAspect = aspect ?: GameTileAspect
+    val thumbAspect = (node.icon as? NodeIcon.Thumb)?.let { aspect ?: if (it.kind == ThumbKind.ALBUM_ART) 1f else ThumbWideAspect }
+    val visualWidth = when (node.icon) {
+        is NodeIcon.Tile -> tileHeight * tileAspect
+        is NodeIcon.Thumb -> iconSize * thumbAspect!!
+        else -> iconSize
+    }
+    val tileOverhang = when (node.icon) {
+        is NodeIcon.Tile -> ((visualWidth - iconSize) * scale / 2).coerceAtLeast(0.dp)
+        is NodeIcon.Thumb -> ((visualWidth - iconSize * ThumbWideAspect) * scale / 2).coerceAtLeast(0.dp)
+        else -> 0.dp
+    }
+    val gap = with(density) { (m.textGap + m.itemIcon * (scale - 1f) / 2).toDp() } + tileOverhang
+    // How far the icon reaches past its slot on each side at full focus.
+    val reach = (visualWidth * scale - iconSize) / 2
+    val glow = { if (isFocused) pulse() * focus() else 0f }
     Row(verticalAlignment = Alignment.CenterVertically, modifier = modifier) {
         Box(Modifier.size(iconSize), contentAlignment = Alignment.Center) {
             when (val icon = node.icon) {
-                is NodeIcon.Tile -> GameTile(icon, tileHeight, focus, m.itemFocusScale, glow = { if (isFocused) pulse() * focus() else 0f }, loadArt)
+                is NodeIcon.Tile -> GameTile(icon, tileHeight, focus, scale, glow, loadArt, aspect = tileAspect)
                 is NodeIcon.Glyph -> XmbIcon(
                     painter = glyphPainter(icon.key),
                     size = iconSize,
                     focus = focus,
-                    focusScale = m.itemFocusScale,
-                    glow = { if (isFocused) pulse() * focus() else 0f },
+                    focusScale = scale,
+                    glow = glow,
                 )
-                is NodeIcon.App -> AppIcon(icon.packageName, iconSize, focus, m.itemFocusScale, loadAppIcon)
-                is NodeIcon.Thumb -> ThumbIcon(icon, iconSize, focus, m.itemFocusScale, glow = { if (isFocused) pulse() * focus() else 0f }, loadThumb)
-                is NodeIcon.Art -> ArtIcon(icon, iconSize, focus, m.itemFocusScale, glow = { if (isFocused) pulse() * focus() else 0f }, loadArt)
+                is NodeIcon.App -> AppIcon(icon.packageName, iconSize, focus, scale, loadAppIcon)
+                is NodeIcon.Thumb -> ThumbIcon(icon, iconSize, thumbAspect!!, focus, scale, glow, loadThumb)
+                is NodeIcon.Art -> ArtIcon(icon, iconSize, focus, scale, glow, loadArt)
             }
+            if (isFocused && chevron !== NoChevron) BackChevron(subtitleSp * 1.4f, reach, { chevron() * focus() })
         }
-        Spacer(Modifier.width(with(density) { (m.textGap + m.itemIcon * (m.itemFocusScale - 1f) / 2).toDp() } + tileOverhang))
+        Spacer(Modifier.width(gap))
         Column(Modifier.width((textWidth - tileOverhang).coerceAtLeast(iconSize))) {
             GlowText(
                 text = node.title,
                 fontSize = titleSp,
-                glow = { if (isFocused) pulse() * focus() else 0f },
-                modifier = Modifier.fadeAlpha { 0.72f + 0.28f * focus() },
+                glow = glow,
+                overflow = layout.textOverflow,
+                marquee = isFocused,
+                modifier = Modifier.fadeAlpha { (if (layout.unfocusedAlpha != null) 1f else 0.72f + 0.28f * focus()) },
             )
-            // Hairline under the focused title, as in the reference themes.
-            Box(
-                Modifier
-                    .padding(top = with(density) { (m.s * 0.008f).toDp() })
-                    .fillMaxWidth()
-                    .height(1.dp)
-                    .graphicsLayer { alpha = focus() }
-                    .drawBehind {
-                        drawRect(
-                            Brush.horizontalGradient(
-                                0f to Color.White.copy(alpha = 0.95f),
-                                0.7f to Color.White.copy(alpha = 0.8f),
-                                1f to Color.White.copy(alpha = 0.1f),
-                            ),
-                        )
-                    },
+            FocusDivider(
+                style = layout.focusDivider,
+                // From the icon's right edge (at full focus) to the screen's right edge.
+                lead = gap - reach,
+                screenWidth = m.width,
+                focus = focus,
+                modifier = Modifier.padding(top = with(density) { (m.s * 0.008f).toDp() }),
             )
             node.subtitle?.let {
                 Text(
@@ -790,6 +873,78 @@ private fun ItemRow(
             }
         }
     }
+}
+
+/**
+ * The hairline between the focused title and its subtitle. [lead] is the distance from the
+ * column back to the focused icon's right edge, where [FocusDividerStyle.FULL_BLEED_LINE] starts;
+ * it runs on to the screen's edge (the window clips it).
+ */
+@Composable
+private fun FocusDivider(style: FocusDividerStyle, lead: Dp, screenWidth: Float, focus: () -> Float, modifier: Modifier) {
+    Box(
+        modifier
+            .fillMaxWidth()
+            .height(1.dp)
+            .then(
+                when (style) {
+                    FocusDividerStyle.NONE -> Modifier
+                    FocusDividerStyle.TITLE_UNDERLINE -> Modifier
+                        .graphicsLayer { alpha = focus() }
+                        .drawBehind {
+                            drawRect(
+                                Brush.horizontalGradient(
+                                    0f to Color.White.copy(alpha = 0.95f),
+                                    0.7f to Color.White.copy(alpha = 0.8f),
+                                    1f to Color.White.copy(alpha = 0.1f),
+                                ),
+                            )
+                        }
+                    // ModulateAlpha: the line draws outside the box, which a layer would clip.
+                    FocusDividerStyle.FULL_BLEED_LINE -> Modifier
+                        .fadeAlpha(focus)
+                        .drawBehind {
+                            val start = -lead.toPx()
+                            val end = size.width + screenWidth
+                            drawRect(
+                                Brush.horizontalGradient(
+                                    0f to Color.White.copy(alpha = 0.9f),
+                                    1f to Color.White.copy(alpha = 0.55f),
+                                    startX = start,
+                                    endX = size.width,
+                                ),
+                                topLeft = Offset(start, 0f),
+                                size = androidx.compose.ui.geometry.Size(end - start, size.height),
+                            )
+                        }
+                },
+            ),
+    )
+}
+
+/**
+ * The ◀ left of the focused icon while drilled in with [DrillDownStyle.CHEVRON_COLLAPSE]. Takes
+ * no room: it is drawn [reach] past the icon slot's left edge, plus a small gap.
+ */
+@Composable
+private fun BoxScope.BackChevron(size: TextUnit, reach: Dp, alpha: () -> Float) {
+    Text(
+        "◀",
+        style = shadowed(size, weight = FontWeight.Bold),
+        maxLines = 1,
+        softWrap = false,
+        modifier = Modifier
+            .align(Alignment.CenterStart)
+            .layout { measurable, constraints ->
+                val p = measurable.measure(constraints.copy(minWidth = 0, maxWidth = Constraints.Infinity))
+                val x = -p.width - reach.roundToPx() - 6.dp.roundToPx()
+                // Its own size (the slot is fixed-size, so it takes no room), drawn left of the slot.
+                layout(p.width, p.height) { p.place(x, 0) }
+            }
+            // Inside the placement, so the node's bounds are where the ◀ is drawn.
+            .semantics { contentDescription = "Back" }
+            .fadeAlpha(alpha),
+    )
 }
 
 // endregion
@@ -953,6 +1108,8 @@ private fun ArtIcon(
 private fun ThumbIcon(
     icon: NodeIcon.Thumb,
     size: Dp,
+    /** Width over height of the thumbnail ([ItemRow] resolves the theme's tile aspect). */
+    aspect: Float,
     focus: () -> Float,
     focusScale: Float,
     glow: () -> Float,
@@ -965,8 +1122,7 @@ private fun ThumbIcon(
         XmbIcon(glyphPainter(icon.fallback), size, focus, focusScale, glow)
         return
     }
-    // Wider than tall for photos/videos, square for album art.
-    val wide = icon.kind != ThumbKind.ALBUM_ART
+    // Wide thumbnails keep the row height; portrait ones keep the slot height and narrow.
     Box(
         Modifier
             .size(size)
@@ -990,7 +1146,7 @@ private fun ThumbIcon(
             contentDescription = null,
             contentScale = ContentScale.Crop,
             modifier = Modifier
-                .size(width = if (wide) size * 1.3f else size, height = size)
+                .size(width = size * aspect, height = size)
                 .wrapContentSize(unbounded = true)
                 .shadow(4.dp, RoundedCornerShape(4.dp))
                 .clip(RoundedCornerShape(4.dp))
@@ -1070,6 +1226,10 @@ internal fun shadowed(size: TextUnit, color: Color = TextBright, weight: FontWei
  * White text with a dark drop shadow, plus a second pass rendered as a soft white bloom whose
  * opacity follows [glow]. Only the bloom layer's alpha animates, so the pulse never re-lays-out
  * text.
+ *
+ * A title too long for its width ends in an ellipsis ([TextOverflowMode.ELLIPSIS]), fades out at
+ * the edge ([TextOverflowMode.EDGE_FADE]), or, while [marquee] (the focused row), scrolls a few
+ * times and stops ([TextOverflowMode.MARQUEE]; other rows use the ellipsis).
  */
 @Composable
 internal fun GlowText(
@@ -1079,33 +1239,85 @@ internal fun GlowText(
     modifier: Modifier = Modifier,
     /** A font role other than body (the category bar uses `display`). */
     fontFamily: androidx.compose.ui.text.font.FontFamily? = ThemeTypography.family,
+    overflow: TextOverflowMode = TextOverflowMode.ELLIPSIS,
+    marquee: Boolean = false,
 ) {
-    Box(modifier) {
-        Text(
-            text,
-            style = TextStyle(
-                color = Color.White.copy(alpha = 0.55f),
-                fontSize = fontSize,
-                fontFamily = fontFamily,
-                shadow = Shadow(Color.White, Offset.Zero, blurRadius = 18f),
-            ),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier
-                .clearAndSetSemantics { } // decorative copy; screen readers read the text once
-                .graphicsLayer {
-                    alpha = glow()
-                    compositingStrategy = CompositingStrategy.ModulateAlpha
-                },
-        )
-        Text(
-            text,
-            style = shadowed(fontSize).copy(fontFamily = fontFamily),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
+    val mode = if (overflow == TextOverflowMode.MARQUEE && !marquee) TextOverflowMode.ELLIPSIS else overflow
+    val cut = if (mode == TextOverflowMode.ELLIPSIS) TextOverflow.Ellipsis else TextOverflow.Clip
+    var overflowing by remember { mutableStateOf(false) }
+    val clipped = when (mode) {
+        TextOverflowMode.ELLIPSIS -> Modifier
+        TextOverflowMode.MARQUEE -> Modifier.bleed(GlowBleed).basicMarquee(iterations = 3, initialDelayMillis = 1200, repeatDelayMillis = 1600)
+        TextOverflowMode.EDGE_FADE -> Modifier.bleed(GlowBleed).edgeFade { overflowing }
+    }
+    Box(modifier.then(clipped)) {
+        // The clipping modes draw inside a padded box so the bloom isn't cut at the text's edges.
+        Box(if (mode == TextOverflowMode.ELLIPSIS) Modifier else Modifier.padding(start = GlowBleed, top = GlowBleed, bottom = GlowBleed, end = if (mode == TextOverflowMode.MARQUEE) GlowBleed else 0.dp)) {
+            Text(
+                text,
+                style = TextStyle(
+                    color = Color.White.copy(alpha = 0.55f),
+                    fontSize = fontSize,
+                    fontFamily = fontFamily,
+                    shadow = Shadow(Color.White, Offset.Zero, blurRadius = 18f),
+                ),
+                maxLines = 1,
+                softWrap = mode == TextOverflowMode.ELLIPSIS,
+                overflow = cut,
+                modifier = Modifier
+                    .clearAndSetSemantics { } // decorative copy; screen readers read the text once
+                    .graphicsLayer {
+                        alpha = glow()
+                        compositingStrategy = CompositingStrategy.ModulateAlpha
+                    },
+            )
+            Text(
+                text,
+                style = shadowed(fontSize).copy(fontFamily = fontFamily),
+                maxLines = 1,
+                softWrap = mode == TextOverflowMode.ELLIPSIS,
+                overflow = cut,
+                onTextLayout = if (mode == TextOverflowMode.EDGE_FADE) ({ overflowing = it.hasVisualOverflow }) else NoLayoutCallback,
+            )
+        }
     }
 }
+
+private val NoLayoutCallback: (androidx.compose.ui.text.TextLayoutResult) -> Unit = {}
+
+/** Room for the title bloom inside a clipping text box. */
+private val GlowBleed = 8.dp
+
+/**
+ * Lets the content extend [amount] past this box's start, top and bottom without taking that room:
+ * the box reports its size minus the padding, so neighbours lay out as if it weren't there.
+ */
+private fun Modifier.bleed(amount: Dp): Modifier = layout { measurable, constraints ->
+    val pad = amount.roundToPx()
+    val p = measurable.measure(
+        constraints.copy(
+            maxWidth = if (constraints.hasBoundedWidth) constraints.maxWidth + pad else constraints.maxWidth,
+            minWidth = 0,
+            minHeight = 0,
+        ),
+    )
+    layout((p.width - pad).coerceAtLeast(0), (p.height - pad * 2).coerceAtLeast(0)) { p.place(-pad, -pad) }
+}
+
+/** Fades the last stretch of the box to transparent while [active] (the text doesn't fit). */
+private fun Modifier.edgeFade(active: () -> Boolean): Modifier = this
+    .graphicsLayer { compositingStrategy = if (active()) CompositingStrategy.Offscreen else CompositingStrategy.Auto }
+    .drawWithContent {
+        drawContent()
+        if (!active()) return@drawWithContent
+        val fade = size.height.coerceAtMost(size.width / 3)
+        drawRect(
+            Brush.horizontalGradient(0f to Color.Black, 1f to Color.Transparent, startX = size.width - fade, endX = size.width),
+            topLeft = Offset(size.width - fade, 0f),
+            size = androidx.compose.ui.geometry.Size(fade, size.height),
+            blendMode = BlendMode.DstIn,
+        )
+    }
 
 // endregion
 

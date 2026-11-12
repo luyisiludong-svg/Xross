@@ -46,6 +46,10 @@ data class ThemeManifest(
     val effects: Effects? = null,
     /** Named surfaces this pack defines ([SurfaceSpec]); `effects.surfaceStyle` may pick one. */
     val surfaces: Map<String, SurfaceSpec> = emptyMap(),
+    /** Crosshair, tile shapes, spacing, focus divider, drill-down, text overflow and motion ([LayoutSpec]). */
+    val layout: LayoutSpec? = null,
+    /** Category id (`GAMES`, `MUSIC`, …) → patches while that category is open; only `cardAspectRatio` so far. */
+    val categoryOverrides: Map<String, CategoryOverride> = emptyMap(),
 ) {
     val supported: Boolean get() = schemaVersion == SCHEMA_VERSION
 

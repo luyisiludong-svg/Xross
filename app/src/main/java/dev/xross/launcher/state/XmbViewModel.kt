@@ -75,6 +75,8 @@ data class XmbUiState(
     val categoryIndex: Int = 1,
     /** Titles of opened sub-lists below the category root. */
     val breadcrumb: List<String> = emptyList(),
+    /** Icon of the open sub-list's folder (the row it was opened from); null at a category root. */
+    val folderGlyph: GlyphKey? = null,
     val listKey: String = "",
     val items: List<XmbNode> = emptyList(),
     val focusedIndex: Int = 0,
@@ -292,6 +294,7 @@ class XmbViewModel(
             categories = categories,
             categoryIndex = n.categoryIndex,
             breadcrumb = view.breadcrumb,
+            folderGlyph = view.folderGlyph,
             listKey = view.listKey,
             items = view.items,
             focusedIndex = view.focusedIndex,
@@ -328,6 +331,7 @@ class XmbViewModel(
 
     private data class ListView(
         val breadcrumb: List<String>,
+        val folderGlyph: GlyphKey?,
         val listKey: String,
         val items: List<XmbNode>,
         val focusedIndex: Int,
@@ -339,15 +343,26 @@ class XmbViewModel(
     private fun resolve(t: MenuTree, n: NavState, lv: Live): ListView {
         val category = categories[n.categoryIndex]
         val stack = n.stack(category.id, category.title)
-        val key = stack.last().key
-        val items = when (key) {
+        fun itemsOf(key: String) = when (key) {
             MenuTree.LIBRARY -> t.library(lv.fingerprints)
             MenuTree.METADATA -> t.metadataSettings(lv.scrape)
             Categories.rootKey(Categories.MUSIC) -> t.musicRoot(lv.nowPlaying)
             else -> t.list(key)
         }
+        val items = itemsOf(stack.last().key)
+        // The row the open list came from, for the XMB folder column drill-down style.
+        val folder = stack.getOrNull(stack.size - 2)?.let { parent ->
+            when (val icon = itemsOf(parent.key).getOrNull(parent.index)?.icon) {
+                is NodeIcon.Glyph -> icon.key
+                is NodeIcon.Art -> icon.fallback
+                is NodeIcon.Tile -> icon.fallback
+                is NodeIcon.Thumb -> icon.fallback
+                is NodeIcon.App, null -> GlyphKey.FOLDER
+            }
+        }
         return ListView(
             breadcrumb = stack.drop(1).map { it.title },
+            folderGlyph = folder,
             listKey = stack.last().key,
             items = items,
             focusedIndex = stack.last().index.coerceIn(0, (items.size - 1).coerceAtLeast(0)),

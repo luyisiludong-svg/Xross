@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CutCornerShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -20,15 +21,9 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
@@ -39,6 +34,9 @@ import androidx.compose.ui.unit.dp
 import dev.xross.launcher.profile.ProfileState
 import dev.xross.launcher.state.GlyphKey
 import dev.xross.launcher.theme.AvatarStyleConfig
+import dev.xross.launcher.theme.pack.Surface
+import dev.xross.launcher.theme.pack.SurfaceShape
+import androidx.compose.ui.graphics.Shape
 import java.text.NumberFormat
 import kotlin.math.roundToInt
 
@@ -55,7 +53,8 @@ private val HudCorner = 22.dp
  * The profile avatar at the far right of the status bar, and the mini-HUD it grows into.
  *
  * Collapsed, this is just the round avatar. As [expansion] goes 0 → 1 the same container morphs
- * in place, anchored to the top-right corner, into a frosted capsule holding the
+ * in place, anchored to the top-right corner, into a capsule drawn with the active surface style
+ * (`Modifier.xrossSurface`) holding the
  * RetroAchievements user name, rank, hardcore and softcore points and the latest badges; the
  * avatar itself never moves. The status bar fades its clock and battery with the same value, so
  * the HUD replaces them and hands the space back when it collapses.
@@ -88,39 +87,15 @@ internal fun AvatarHud(
 
     Box(
         modifier
-            .graphicsLayer {
-                val t = expansion()
-                clip = t > 0.01f
-                shape = RoundedCornerShape(lerp(collapsedPx / 2, cornerPx, t))
-            }
-            .drawBehind {
-                val t = expansion()
-                if (t <= 0.01f) return@drawBehind
-                // Frosted glass, as Modifier.frostedGlass draws it, fading in with the morph.
-                drawRect(
-                    Brush.verticalGradient(
-                        0f to Color(0xFF2A2A40).copy(alpha = 0.78f * t),
-                        0.55f to Color(0xFF16161F).copy(alpha = 0.86f * t),
-                        1f to Color(0xFF0A0A12).copy(alpha = 0.92f * t),
-                    ),
-                )
-                drawRect(
-                    Brush.verticalGradient(
-                        0f to Color.White.copy(alpha = 0.10f * t),
-                        0.35f to Color.White.copy(alpha = 0.02f * t),
-                        0.36f to Color.Transparent,
-                    ),
-                )
-                val w = 1.5.dp.toPx()
-                val r = lerp(collapsedPx / 2, cornerPx, t) - w / 2
-                drawRoundRect(
-                    Brush.sweepGradient(Pastel.Iridescent.map { it.copy(alpha = 0.7f * t) }),
-                    topLeft = Offset(w / 2, w / 2),
-                    size = Size(size.width - w, size.height - w),
-                    cornerRadius = CornerRadius(r, r),
-                    style = Stroke(w),
-                )
-            }
+            // The active surface style, fading in with the morph; its shape grows from the
+            // avatar's circle (rounded surfaces) or scales its corner cuts in with the expansion.
+            .xrossSurface(
+                shape = { surface -> hudShape(surface, expansion(), collapsedPx, cornerPx) },
+                strength = expansion,
+                borderAlpha = { expansion() * 0.7f },
+                shadowAlpha = expansion,
+                clip = { expansion() > 0.01f },
+            )
             // Expanded, the capsule swallows taps so only a tap outside it collapses the HUD.
             .clickable(remember { MutableInteractionSource() }, indication = null, enabled = expanded) {}
             .layout { measurable, constraints ->
@@ -216,6 +191,23 @@ private fun HudLabel(label: String, size: androidx.compose.ui.unit.TextUnit) {
 }
 
 private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
+
+/**
+ * The HUD outline at expansion [t]: the surface's shape for a capsule with [cornerPx] corners,
+ * morphing from the [collapsedPx] avatar circle. Rounded corners shrink from the circle's radius;
+ * chamfer cuts grow from nothing (the inscribed avatar ring is never touched); a rectangle squares off.
+ */
+internal fun hudShape(surface: Surface, t: Float, collapsedPx: Float, cornerPx: Float): Shape = when (val sh = surface.shape) {
+    SurfaceShape.Component -> RoundedCornerShape(lerp(collapsedPx / 2, cornerPx, t))
+    is SurfaceShape.Rounded -> RoundedCornerShape(lerp(collapsedPx / 2, sh.radiusDp * cornerPx / HudCorner.value, t))
+    SurfaceShape.Rectangle -> RoundedCornerShape(lerp(collapsedPx / 2, 0f, t))
+    is SurfaceShape.Chamfered -> CutCornerShape(
+        (sh.cutsDp[0] * t).dp,
+        (sh.cutsDp[1] * t).dp,
+        (sh.cutsDp[2] * t).dp,
+        (sh.cutsDp[3] * t).dp,
+    )
+}
 
 /** Badge thumbnails in the HUD's recent row. */
 private const val HUD_BADGES = 6

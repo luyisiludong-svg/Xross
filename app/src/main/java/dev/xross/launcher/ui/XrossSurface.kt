@@ -46,16 +46,35 @@ internal fun Modifier.xrossSurface(
     strength: Float = 1f,
     borderAlpha: Float = 1f,
     borderScale: Float = 1f,
+): Modifier = xrossSurface(shape = { it.shapeFor(shape) }, strength = { strength }, borderAlpha = { borderAlpha }, borderScale = borderScale)
+
+/**
+ * [xrossSurface] for a component that animates it: [shape] picks the outline from the active
+ * surface (the avatar HUD morphs from a circle into its capsule), [strength] and [borderAlpha] are
+ * read while drawing, and [clip] turns the clip off (the collapsed avatar's ring isn't clipped).
+ * The shape and [shadowAlpha] are read when the drawing cache is built, so it rebuilds as they change;
+ * a component whose size changes with them rebuilds it then anyway.
+ */
+internal fun Modifier.xrossSurface(
+    shape: (Surface) -> Shape,
+    strength: () -> Float,
+    borderAlpha: () -> Float = strength,
+    borderScale: Float = 1f,
+    clip: () -> Boolean = { true },
+    /** Scales the glow and shadows; the HUD fades them in with its morph. */
+    shadowAlpha: () -> Float = { 1f },
 ): Modifier = this
     .drawWithCache {
         val s = ThemeSurfaces.active
+        val k = shadowAlpha().coerceIn(0f, 1f)
         val outer = s.borders.filter { it.kind == BorderKind.OUTER }
-        if (s.glow == null && s.shadows.isEmpty() && outer.isEmpty()) return@drawWithCache onDrawBehind { }
-        val path = Path().apply { addOutline(s.shapeFor(shape).createOutline(size, layoutDirection, this@drawWithCache)) }
+        if (k <= 0f || (s.glow == null && s.shadows.isEmpty() && outer.isEmpty())) return@drawWithCache onDrawBehind { }
+        val path = Path().apply { addOutline(shape(s).createOutline(size, layoutDirection, this@drawWithCache)) }
         val shadowPaints = (listOfNotNull(s.glow) + s.shadows).map { sh ->
             android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
                 // A translucent shadow color sets the shadow's own alpha (an opaque one would take the paint's).
-                val argb = if (sh.argb ushr 24 == 0xFF) (sh.argb and 0x00FFFFFF) or (0xFE shl 24) else sh.argb
+                val faded = dev.xross.launcher.theme.pack.withOpacity(sh.argb, k)
+                val argb = if (faded ushr 24 == 0xFF) (faded and 0x00FFFFFF) or (0xFE shl 24) else faded
                 color = argb
                 setShadowLayer(sh.blurDp.dp.toPx().coerceAtLeast(0.5f), sh.dxDp.dp.toPx(), sh.dyDp.dp.toPx(), argb)
             }
@@ -66,29 +85,33 @@ internal fun Modifier.xrossSurface(
                 if (shadowPaints.isNotEmpty()) {
                     drawIntoCanvas { c -> shadowPaints.forEach { c.nativeCanvas.drawPath(path.asAndroidPath(), it) } }
                 }
+                val a = borderAlpha().coerceIn(0f, 1f)
                 for ((b, brush) in outerBrushes) {
-                    drawPath(path, brush, alpha = borderAlpha.coerceIn(0f, 1f), style = Stroke(b.widthDp.dp.toPx() * borderScale * 2))
+                    drawPath(path, brush, alpha = a, style = Stroke(b.widthDp.dp.toPx() * borderScale * 2))
                 }
             }
         }
     }
     .graphicsLayer {
-        this.shape = ThemeSurfaces.active.shapeFor(shape)
-        clip = true
+        this.shape = shape(ThemeSurfaces.active)
+        this.clip = clip()
     }
     .drawWithCache {
         val s = ThemeSurfaces.active
-        val outline = s.shapeFor(shape).createOutline(size, layoutDirection, this)
+        val outline = shape(s).createOutline(size, layoutDirection, this)
         val fill = s.fill?.brush(size)
         val sheenHeight = s.sheen?.let { size.height * it.heightFraction } ?: 0f
         val sheen = s.sheen?.let { Brush.verticalGradient(it.colors.map(::Color), startY = 0f, endY = sheenHeight) }
         val inner = s.borders.filter { it.kind != BorderKind.OUTER }.map { it to it.paint.brush(size) }
-        val a = borderAlpha.coerceIn(0f, 1f)
-        val k = strength.coerceIn(0f, 1f)
         onDrawWithContent {
-            fill?.let { drawRect(it, alpha = k) }
-            sheen?.let { drawRect(it, size = Size(size.width, sheenHeight), alpha = k) }
+            val k = strength().coerceIn(0f, 1f)
+            val a = borderAlpha().coerceIn(0f, 1f)
+            if (k > 0f) {
+                fill?.let { drawRect(it, alpha = k) }
+                sheen?.let { drawRect(it, size = Size(size.width, sheenHeight), alpha = k) }
+            }
             drawContent()
+            if (a <= 0f) return@onDrawWithContent
             for ((b, brush) in inner) {
                 val w = b.widthDp.dp.toPx() * borderScale
                 when (b.kind) {
