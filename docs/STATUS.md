@@ -159,7 +159,7 @@ HTTPS Xross Portal (Ktor CIO), FTPS (Apache FtpServer), auth, uploads, library e
 `./gradlew :app:testDebugUnitTest` (JVM + Robolectric on SDK 35): 422 run by default, 4 opt-in live
 tests skip unless `-PliveScrape=true`. The 415 from Phase 2b.1 passed unchanged; the idle rest
 added `InactivityTrackerTest` (3 tests: timeout, input pushing it back, wave frame strides), and
-2b.2 slice 1 added 8 to `ThemePackTest` (§3.16). The table below lists the original suites; later suites
+2b.2 slice 1 added 8 to `ThemePackTest` (§3.16). Slice 2 added `ThemeLayoutTest` (13, §3.17). The table below lists the original suites; later suites
 are listed after it.
 
 | Suite | Tests | Covers |
@@ -637,6 +637,31 @@ four presets and a custom chamfered surface with a cyan glow pushed while the ap
 **Not verified:** hot reload on the Galaxy A55 (FUSE delivery differs between devices; the
 resume check is the fallback); shadow and glow cost on a low-end handheld; the `AvatarHud`
 capsule still draws its own frosted glass and doesn't follow the surface style yet.
+
+### 3.17 Phase 2b.2, slice 2: layout, motion, focus divider, drill-down (2026-11-12)
+
+On branch `feat/theme-2b2`. Spec: Roadmap Appendix A.5 and A.11.
+
+| Feature | How it works |
+| --- | --- |
+| `layout` block | `LayoutSpec` resolved into `ThemeLayout` over the Default pack's (`resolveLayout`); bad names and out-of-range numbers are reported on the pack and clamped. The Default pack declares the measured look (22% / 25%, 16:9 games, 1:1 music, 1.3 photo and video), so it looks as before |
+| Crosshair | `crosshairX` / `crosshairY`, or `preset` `CLASSIC_PS3` (0.30 / 0.35), `PSP_CENTER` (0.50 / 0.50), `MODERN_WIDESCREEN` (0.18 / 0.20). `Crosshair.clampX` keeps a whole neighbour category on each side (left only when UI scale leaves no room for both), never past the middle; `clampY` keeps the rows above the bar, the focused row and the one under it on screen |
+| Tiles | `cardAspectRatio`, `layout.tile` per category id, and `categoryOverrides.<CAT>.cardAspectRatio` (wins); `16:9`, `2:1`, `1:1`, `3:4`, `2:3`, `4:1` or a number, clamped 1:3–4:1. Game tiles and photo / video / album thumbnails follow it; square and portrait game tiles show box art first |
+| Scale and spacing | `uiScale` 50–150% (scales the short side every size follows), `itemSpacingDp` (12 = the measured pitch), `focusedScale` 1.00–1.35, `unfocusedAlpha` 10–80% (unset: the built-in mix) |
+| Focus divider | `NONE`, `FULL_BLEED_LINE` (from the focused icon's right edge to the screen edge, between title and subtitle), `TITLE_UNDERLINE` (the built-in hairline; added to the spec's enum as the default) |
+| Text overflow | `ELLIPSIS`; `EDGE_FADE` (fades the last stretch only when the title doesn't fit); `MARQUEE` (the focused title scrolls three times and stops, so a resting screen draws nothing) |
+| Motion | `motionProfile` (or `motion`) `CRISP` 520 / 1.0, `SNAPPY` 800 / 1.0, `BOUNCY` 450 / 0.75, `INSTANT` (snap, also for the list slide-in, menu fade and HUD morph); aliases `PS3_CRISP`, `PSP_SNAPPY`, `Y2K_BOUNCY`, `EINK_INSTANT`; optional `spring.stiffness` / `dampingRatio` |
+| Drill-down | `BREADCRUMB` (as before); `XMB_FOLDER_COLUMN` (no text; the opened folder's icon parks left of the list, level with the focus; `XmbUiState.folderGlyph`); `CHEVRON_COLLAPSE` (the bar fades and rises away; a ◀, described "Back", sits left of the focused icon) |
+| Avatar HUD | Drawn with `xrossSurface` (lambda overload: shape, strength, shadow and clip read while drawing). Rounded surfaces morph from the avatar circle, chamfer cuts grow in, and fill, borders and glow fade with the expansion; no clip while collapsed |
+
+**Emulator (API 37, 1080×2400 landscape, 2026-11-12):** `smoke.sh` 121/121, with three new checks
+(the inherited breadcrumb, then a hot-reloaded `CHEVRON_COLLAPSE` dropping it and showing the ◀).
+Screenshotted by hand: `CHEVRON_COLLAPSE` + `FULL_BLEED_LINE` on Settings and on a game list, and
+`PSP_CENTER` + `XMB_FOLDER_COLUMN` + 3:4 game tiles.
+
+**Not verified:** the 12-configuration display matrix wasn't re-run on the emulator (the unit
+tests check the clamping on all 12); `MARQUEE` and `EDGE_FADE` were not looked at on screen;
+`BOUNCY` feel and frame cost on a handheld; the HUD on the chamfered and E-Ink surfaces.
 
 ## 4. Display matrix & performance
 
