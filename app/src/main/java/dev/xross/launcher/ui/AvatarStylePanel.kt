@@ -92,8 +92,7 @@ internal fun AvatarStylePanel(
                     .padding(end = (m.width * 0.04f).dp())
                     .width((m.width * 0.42f).coerceAtMost(m.s * 0.95f).dp())
                     .heightIn(max = (m.height * 0.94f).dp())
-                    .frostedGlass(shape, strength = 0.85f)
-                    .iridescentBorder(shape, alpha = 0.6f)
+                    .xrossSurface(shape, strength = 0.85f, borderAlpha = 0.6f)
                     .clickable(remember { MutableInteractionSource() }, indication = null) {}
                     .padding(horizontal = (m.s * 0.04f).dp(), vertical = (m.s * 0.022f).dp()),
             ) {

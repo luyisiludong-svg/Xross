@@ -75,8 +75,7 @@ internal fun UnlockToast(
             modifier = Modifier
                 .widthIn(max = (m.width * 0.42f).dp())
                 .semantics { liveRegion = LiveRegionMode.Polite }
-                .frostedGlass(shape)
-                .iridescentBorder(shape, alpha = 0.8f)
+                .xrossSurface(shape, borderAlpha = 0.8f)
                 .padding(horizontal = 12.dp, vertical = 10.dp),
         ) {
             BadgeThumb(image, unlocked = true, size = (m.s * 0.11f).dp())

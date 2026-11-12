@@ -54,6 +54,8 @@ sealed interface UiEffect {
     data class StartActivity(val intent: Intent) : UiEffect
     data object PickFolder : UiEffect
     data object PickDatFolder : UiEffect
+    /** Pick a `.xtheme` file; answers [XmbViewModel.onThemeArchivePicked]. */
+    data object PickThemeArchive : UiEffect
     data object PickBaseRomsFolder : UiEffect
     data class PickMediaFolder(val kind: MediaFolderKind) : UiEffect
     /** Ask for text (account, key, title, search); the answer goes to [XmbViewModel.onTextEntered]. */
@@ -75,6 +77,8 @@ data class XmbUiState(
     val categoryIndex: Int = 1,
     /** Titles of opened sub-lists below the category root. */
     val breadcrumb: List<String> = emptyList(),
+    /** Icon of the open sub-list's folder (the row it was opened from); null at a category root. */
+    val folderGlyph: GlyphKey? = null,
     val listKey: String = "",
     val items: List<XmbNode> = emptyList(),
     val focusedIndex: Int = 0,
@@ -126,8 +130,16 @@ data class XmbUiState(
     val raHub: RaHubState? = null,
     /** RetroAchievements numbers of the focused game, for the badge in the bottom corner. */
     val telemetry: GameTelemetry? = null,
+    /** Game id → platform id of the library (the theme's system overrides and tile aspects). */
+    val gamePlatforms: Map<Long, String> = emptyMap(),
 ) {
     val focused: XmbNode? get() = items.getOrNull(focusedIndex)
+
+    /** Platform id of the focused game, or null when the focus isn't on a game. */
+    val focusedSystem: String? get() = (focused?.action as? NodeAction.LaunchGame)?.gameId?.let(gamePlatforms::get)
+
+    /** Id of the open category ("games"). */
+    val categoryId: String? get() = categories.getOrNull(categoryIndex)?.id
 
     /** [telemetry] when it belongs to the focused row (it trails the cursor by a moment). */
     val focusedTelemetry: GameTelemetry?
@@ -168,6 +180,11 @@ class XmbViewModel(
 ) : ViewModel(), InputSink {
 
     private val sounds = container.sounds
+
+    /** Hot reload: the active folder pack's files changed; a broken edit keeps the last good theme. */
+    private val themeWatcher = dev.xross.launcher.theme.pack.ThemeWatcher(viewModelScope) {
+        container.themes.hotReload()?.let { toast("Theme not reloaded: $it") }
+    }
     private val music = container.music
 
     val media = MediaOverlayController(
@@ -287,6 +304,7 @@ class XmbViewModel(
             categories = categories,
             categoryIndex = n.categoryIndex,
             breadcrumb = view.breadcrumb,
+            folderGlyph = view.folderGlyph,
             listKey = view.listKey,
             items = view.items,
             focusedIndex = view.focusedIndex,
@@ -318,11 +336,13 @@ class XmbViewModel(
             avatarEditor = tr.avatarEditor,
             raHub = tr.raHub,
             telemetry = tr.telemetry,
+            gamePlatforms = t.platformByGame,
         )
     }.stateIn(viewModelScope, SharingStarted.Eagerly, XmbUiState(coldBoot = coldBoot))
 
     private data class ListView(
         val breadcrumb: List<String>,
+        val folderGlyph: GlyphKey?,
         val listKey: String,
         val items: List<XmbNode>,
         val focusedIndex: Int,
@@ -334,15 +354,26 @@ class XmbViewModel(
     private fun resolve(t: MenuTree, n: NavState, lv: Live): ListView {
         val category = categories[n.categoryIndex]
         val stack = n.stack(category.id, category.title)
-        val key = stack.last().key
-        val items = when (key) {
+        fun itemsOf(key: String) = when (key) {
             MenuTree.LIBRARY -> t.library(lv.fingerprints)
             MenuTree.METADATA -> t.metadataSettings(lv.scrape)
             Categories.rootKey(Categories.MUSIC) -> t.musicRoot(lv.nowPlaying)
             else -> t.list(key)
         }
+        val items = itemsOf(stack.last().key)
+        // The row the open list came from, for the XMB folder column drill-down style.
+        val folder = stack.getOrNull(stack.size - 2)?.let { parent ->
+            when (val icon = itemsOf(parent.key).getOrNull(parent.index)?.icon) {
+                is NodeIcon.Glyph -> icon.key
+                is NodeIcon.Art -> icon.fallback
+                is NodeIcon.Tile -> icon.fallback
+                is NodeIcon.Thumb -> icon.fallback
+                is NodeIcon.App, null -> GlyphKey.FOLDER
+            }
+        }
         return ListView(
             breadcrumb = stack.drop(1).map { it.title },
+            folderGlyph = folder,
             listKey = stack.last().key,
             items = items,
             focusedIndex = stack.last().index.coerceIn(0, (items.size - 1).coerceAtLeast(0)),
@@ -373,6 +404,7 @@ class XmbViewModel(
     private var volumeJob: Job? = null
 
     override fun onCleared() {
+        themeWatcher.watch(null)
         media.close()
         super.onCleared()
     }
@@ -628,13 +660,9 @@ class XmbViewModel(
         viewModelScope.launch {
             val loaded = container.themes.select(id)
             settingsStore.update { s ->
-                var next = s.copy(themePack = loaded.id)
-                // A pack with its own colors switches to them; leaving it falls back to a fixed theme.
-                next = when {
-                    loaded.palette != null -> next.copy(theme = dev.xross.launcher.theme.PACK_THEME)
-                    s.theme == dev.xross.launcher.theme.PACK_THEME -> next.copy(theme = XrossTheme.LAVENDER.name)
-                    else -> next
-                }
+                // Another pack starts on its base look; the same pack keeps its variant.
+                var next = s.copy(themePack = loaded.id, themeVariant = if (loaded.id == s.themePack) s.themeVariant else "")
+                next = withPackColors(next, loaded.look(next.themeVariant).palette != null)
                 // Its wave defaults, keeping the user's color tint.
                 loaded.wave?.let { w -> next = WaveEditor.reset(next, w).copy(waveTint = s.waveTint, waveEnabled = s.waveEnabled) }
                 next
@@ -648,6 +676,117 @@ class XmbViewModel(
             }
         }
     }
+
+    /** A pack look with its own colors switches to them; one without falls back to a fixed theme. */
+    private fun withPackColors(s: dev.xross.launcher.data.XrossSettings, hasPalette: Boolean) = when {
+        hasPalette -> s.copy(theme = dev.xross.launcher.theme.PACK_THEME)
+        s.theme == dev.xross.launcher.theme.PACK_THEME -> s.copy(theme = XrossTheme.LAVENDER.name)
+        else -> s
+    }
+
+    private fun setThemeVariant(id: String) {
+        val pack = container.themes.active.value
+        val variant = pack.variant(id)
+        settingsStore.update { withPackColors(it.copy(themeVariant = variant?.id.orEmpty()), pack.look(variant?.id.orEmpty()).palette != null) }
+        sounds.play(UiSound.OK)
+        toast("Theme variant: ${variant?.name ?: "Standard"}")
+    }
+
+    // region .xtheme import
+
+    private val themeArchive by lazy {
+        dev.xross.launcher.theme.pack.ThemeArchive(
+            themesDir = { container.environment.current.themes },
+            check = { dir -> container.themePacks.inspect(dir) },
+        )
+    }
+
+    /** A checked import waiting for "Replace" / "Keep both" because its id is installed. */
+    private var pendingImport: dev.xross.launcher.theme.pack.StagedTheme? = null
+
+    /** The picked `.xtheme`: copied to the cache, checked, unpacked, and installed or held for a prompt. */
+    fun onThemeArchivePicked(uri: Uri?) {
+        uri ?: return
+        viewModelScope.launch {
+            pendingImport?.let { old -> withContext(Dispatchers.IO) { themeArchive.discard(old) } }
+            pendingImport = null
+            toast("Checking theme file…")
+            val result = withContext(Dispatchers.IO) { stageThemeArchive(uri) }
+            when (result) {
+                is dev.xross.launcher.theme.pack.ArchiveResult.Rejected -> fail("Theme not imported: ${result.reason}")
+                is dev.xross.launcher.theme.pack.ArchiveResult.Staged -> {
+                    val staged = result.theme
+                    if (!staged.exists) return@launch installTheme(staged, replace = false)
+                    pendingImport = staged
+                    sounds.play(UiSound.OPTION)
+                    val options = listOf(
+                        MenuOption("Replace ${staged.id}", detail = "Overwrites the installed pack's files", command = Command.ReplaceImportedTheme),
+                        MenuOption("Keep both", detail = "Installs it as ${themeArchive.asCopy(staged).id}", command = Command.KeepBothImportedThemes),
+                    )
+                    transient.update { it.copy(optionsMenu = OptionsMenuState.open("${staged.name} is already installed", options)) }
+                }
+            }
+        }
+    }
+
+    private fun stageThemeArchive(uri: Uri): dev.xross.launcher.theme.pack.ArchiveResult {
+        val name = runCatching {
+            context.contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+                if (c.moveToFirst()) c.getString(0) else null
+            }
+        }.getOrNull() ?: uri.lastPathSegment?.substringAfterLast('/') ?: "theme.xtheme"
+        val copy = File(context.cacheDir, "import.xtheme")
+        try {
+            val input = context.contentResolver.openInputStream(uri)
+                ?: return dev.xross.launcher.theme.pack.ArchiveResult.Rejected("Couldn't open $name")
+            // The compressed file can't be meaningfully bigger than the 50 MB it may unpack to.
+            val cap = dev.xross.launcher.theme.pack.ThemeArchive.MAX_BYTES + dev.xross.launcher.theme.pack.ThemeArchive.MB
+            var total = 0L
+            input.use { inp ->
+                copy.outputStream().use { out ->
+                    val buf = ByteArray(64 * 1024)
+                    while (true) {
+                        val n = inp.read(buf)
+                        if (n < 0) break
+                        total += n
+                        if (total > cap) return dev.xross.launcher.theme.pack.ArchiveResult.Rejected("$name is larger than 50 MB")
+                        out.write(buf, 0, n)
+                    }
+                }
+            }
+            return themeArchive.stage(copy, name)
+        } catch (e: java.io.IOException) {
+            return dev.xross.launcher.theme.pack.ArchiveResult.Rejected("Couldn't read $name")
+        } catch (e: SecurityException) {
+            return dev.xross.launcher.theme.pack.ArchiveResult.Rejected("No permission to read $name")
+        } finally {
+            copy.delete()
+        }
+    }
+
+    private fun resolvePendingImport(keepBoth: Boolean) {
+        val staged = pendingImport ?: return toast("Pick the theme file again")
+        pendingImport = null
+        viewModelScope.launch { installTheme(if (keepBoth) themeArchive.asCopy(staged) else staged, replace = !keepBoth) }
+    }
+
+    /** Installs [staged], rescans the packs and switches to it. */
+    private suspend fun installTheme(staged: dev.xross.launcher.theme.pack.StagedTheme, replace: Boolean) {
+        when (val r = withContext(Dispatchers.IO) { themeArchive.install(staged, replace) }) {
+            is dev.xross.launcher.theme.pack.InstallResult.Failed -> {
+                withContext(Dispatchers.IO) { themeArchive.discard(staged) }
+                fail("Theme not imported: ${r.reason}")
+            }
+            is dev.xross.launcher.theme.pack.InstallResult.Installed -> {
+                container.themes.rediscover()
+                // Replacing the pack in use: read its new files even though the id is the same.
+                if (container.themes.active.value.id == r.id) container.themes.reload()
+                applyThemePack(r.id)
+            }
+        }
+    }
+
+    // endregion
 
     private fun openWaveSettings() {
         transient.update { it.copy(waveEditor = WaveEditorState(), optionsMenu = null) }
@@ -1435,6 +1574,8 @@ class XmbViewModel(
         if (env.value.storageGranted && scanJob?.isActive != true) fingerprints.start(viewModelScope)
         if (settingsStore.current.scrapeAutomatically && scanJob?.isActive != true) container.scraper.start(viewModelScope)
         if (profileLoaded && profiles.isStale()) refreshProfile(quiet = true)
+        // Theme files edited while Xross was in the background (or events FUSE didn't deliver).
+        viewModelScope.launch { container.themes.reloadIfChanged()?.let { toast("Theme not reloaded: $it") } }
     }
 
     /** The offline profile cache has been read (see init). */
@@ -2080,7 +2221,7 @@ class XmbViewModel(
             Command.CycleTheme -> settingsStore.update {
                 // The theme pack's own colors join the cycle when the active pack has them.
                 val names = XrossTheme.entries.map { t -> t.name } +
-                    listOfNotNull(dev.xross.launcher.theme.PACK_THEME.takeIf { container.themes.active.value.palette != null })
+                    listOfNotNull(dev.xross.launcher.theme.PACK_THEME.takeIf { _ -> container.themes.active.value.look(it.themeVariant).palette != null })
                 val i = names.indexOf(it.theme).coerceAtLeast(-1)
                 it.copy(theme = names[(i + 1) % names.size])
             }
@@ -2101,7 +2242,28 @@ class XmbViewModel(
             Command.ReloadThemePacks -> viewModelScope.launch {
                 val found = container.themes.rediscover()
                 container.themes.reload()
-                toast(if (found.size == 1) "No theme packs in Xross/themes" else "${found.size} theme packs")
+                val skipped = container.themes.rejected.value
+                toast(
+                    buildString {
+                        append(if (found.size == 1) "No theme packs in Xross/themes" else "${found.size} theme packs")
+                        if (skipped.isNotEmpty()) append(" · skipped ${skipped.size}: ${skipped.first().id} (${skipped.first().reason})")
+                    },
+                )
+            }
+            Command.CycleThemeVariant -> {
+                val ids = listOf("") + container.themes.active.value.variants.map { it.id }
+                val i = ids.indexOf(container.themes.active.value.variant(settingsStore.current.themeVariant)?.id.orEmpty())
+                setThemeVariant(ids[(i + 1) % ids.size])
+            }
+            is Command.SetThemeVariant -> setThemeVariant(command.id)
+            Command.ImportThemeArchive -> emit(UiEffect.PickThemeArchive)
+            Command.ReplaceImportedTheme -> resolvePendingImport(keepBoth = false)
+            Command.KeepBothImportedThemes -> resolvePendingImport(keepBoth = true)
+            Command.CycleSurfaceStyle -> settingsStore.update {
+                // "" (the pack's own) first, then every surface the active pack offers.
+                val ids = listOf("") + container.themes.active.value.surfaces.keys
+                val i = ids.indexOf(it.surfaceStyle).coerceAtLeast(0)
+                it.copy(surfaceStyle = ids[(i + 1) % ids.size])
             }
             Command.ToggleSoundEffects -> settingsStore.update { it.copy(soundEffects = !it.soundEffects) }
             Command.CycleSoundVolume -> {
@@ -2304,8 +2466,11 @@ class XmbViewModel(
             if (coldBoot && settingsStore.current.bootSound) sounds.playCue(UiCue.OPENING, settingsStore.current.soundVolume)
         }
         viewModelScope.launch {
-            combine(container.themes.packs, container.themes.active) { packs, active -> packs to active }.collect { (packs, active) ->
+            combine(container.themes.packs, container.themes.active, container.themes.rejected) { packs, active, rejected ->
+                Triple(packs, active, rejected)
+            }.collect { (packs, active, rejected) ->
                 sounds.useTheme(active)
+                themeWatcher.watch((active.info.source as? dev.xross.launcher.theme.pack.PackSource.Folder)?.dir)
                 env.update {
                     it.copy(
                         themes = ThemeSetup(
@@ -2313,8 +2478,12 @@ class XmbViewModel(
                             activeId = active.id,
                             activeName = active.info.name,
                             activeAuthor = active.info.manifest.author,
-                            packPalette = active.palette != null,
+                            packPalette = active.palette != null || active.variants.any { v -> v.palette != null },
+                            variants = active.variants.map { v -> v.id to v.name },
                             problems = active.problems,
+                            surfaces = active.surfaces.values.map { s -> s.id to s.label },
+                            packSurface = active.surfaceId,
+                            rejected = rejected.map { r -> "${r.id}: ${r.reason}" },
                         ),
                     )
                 }

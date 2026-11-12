@@ -40,6 +40,34 @@ expect() { # expect <text> <description>
   done
   bad "$2 — '$1' not on screen"; grep -v '^[[:space:]]*$' <<<"$s" | sed 's/^/       | /' | head -12
 }
+expect_any() { # expect_any <text> <text> <description>: either text (e.g. linked or not)
+  local s
+  for _ in 1 2 3; do
+    s=$(screen)
+    if grep -qF -e "$1" -e "$2" <<<"$s"; then ok "$3"; return; fi
+    pause 0.5
+  done
+  bad "$3 — neither '$1' nor '$2' on screen"; grep -v '^[[:space:]]*$' <<<"$s" | sed 's/^/       | /' | head -12
+}
+# expect_line <text> <description>: <text> is a whole line on screen (not part of a longer one).
+expect_line() {
+  local s
+  for _ in 1 2 3; do
+    s=$(screen)
+    if grep -qxF -- "$1" <<<"$s"; then ok "$2"; return; fi
+    pause 0.5
+  done
+  bad "$2 — line '$1' not on screen"; grep -v '^[[:space:]]*$' <<<"$s" | sed 's/^/       | /' | head -12
+}
+expect_no_line() {
+  local s; s=$(screen)
+  if grep -qxF -- "$1" <<<"$s"; then bad "$2 — line '$1' unexpectedly on screen"; else ok "$2"; fi
+}
+# expect_desc <content-desc> <description>: an element described as <content-desc> (icons, glyphs).
+expect_desc() {
+  adb shell uiautomator dump /sdcard/xross-ui.xml >/dev/null 2>&1
+  if adb shell cat /sdcard/xross-ui.xml | grep -qF "content-desc=\"$1\""; then ok "$2"; else bad "$2 — no element described '$1'"; fi
+}
 expect_not() {
   local s; s=$(screen)
   if grep -qF -- "$1" <<<"$s"; then bad "$2 — '$1' unexpectedly on screen"; else ok "$2"; fi
@@ -61,7 +89,8 @@ home() { # Games category root, cursor on the first collection (just below Searc
   category 4
   key KEYCODE_DPAD_DOWN
 }
-# Games root rows below Search: [Recently Played] [Favorites] All Games [Android Games].
+# Games root rows below Search: [Recently Played] [Favorites] All Games [Android Games]
+# RetroAchievements.
 all_games() { # all_games <collections above it>: open All Games (the platform folders)
   home
   [ "${1:-0}" -gt 0 ] && key $(for _ in $(seq "$1"); do printf 'KEYCODE_DPAD_DOWN '; done)
@@ -73,7 +102,7 @@ adb shell pm clear "$PKG" >/dev/null
 # Config in the Xross folder outlives pm clear and would be adopted on start; move it aside so every
 # run starts from defaults (kept under /sdcard/Xross-smoke-backup/, never deleted).
 adb shell 'if [ -d /sdcard/Xross/config ]; then b=/sdcard/Xross-smoke-backup/$(date +%Y%m%d-%H%M%S); mkdir -p $b && mv /sdcard/Xross/config $b/; fi'
-adb shell rm -rf /sdcard/Xross/themes/smoke_pack
+adb shell rm -rf /sdcard/Xross/themes/smoke_pack '/sdcard/Xross/themes/smoke-variants' '/sdcard/Xross/themes/smoke-variants-2'
 adb shell appops set --uid "$PKG" MANAGE_EXTERNAL_STORAGE allow
 adb shell 'rm -rf /sdcard/ROMs; mkdir -p /sdcard/ROMs/snes /sdcard/ROMs/gba /sdcard/ROMs/psx
   for g in "Chrono Trigger (USA)" "EarthBound (USA)" "Super Metroid (USA, Europe)"; do echo x > "/sdcard/ROMs/snes/$g.sfc"; done
@@ -130,9 +159,11 @@ expect "Details" "Options menu offers Details"
 expect "Achievements" "Options menu offers Achievements (SNES has RetroAchievements)"
 expect "Metadata" "Options menu offers Metadata"
 key KEYCODE_DPAD_DOWN KEYCODE_DPAD_DOWN KEYCODE_DPAD_CENTER
-expect "Link your RetroAchievements account" "Achievements screen opens and asks to link an account"
+# Unlinked it asks to link; linked (an account can outlive pm clear), the test ROM is unknown.
+expect_any "Link your RetroAchievements account" "doesn't recognize this file" "Achievements screen opens"
 key KEYCODE_BACK
-expect_not "Link your RetroAchievements account" "Back closes the Achievements screen"
+expect_not "check the game's page on retroachievements.org" "Back closes the Achievements screen"
+expect_not "Link your RetroAchievements account" "Back closes the Achievements screen (unlinked text gone)"
 key KEYCODE_BUTTON_Y
 key KEYCODE_DPAD_DOWN KEYCODE_DPAD_DOWN KEYCODE_DPAD_DOWN KEYCODE_DPAD_CENTER
 pause 0.6
@@ -164,6 +195,44 @@ expect "Keyboard" "R1 moves focus to the results"
 key KEYCODE_BACK KEYCODE_BACK
 expect "Find a game by name" "Back returns to the keys, then closes search"
 
+echo "== Status-bar avatar"
+# Up from the first row of a category root focuses the avatar (it expands into the mini-HUD);
+# Down hands focus back to that first row.
+home
+key KEYCODE_DPAD_UP KEYCODE_DPAD_UP
+expect_any "No RetroAchievements account linked" "SOFTCORE" "Up from the top row expands the avatar HUD"
+key KEYCODE_DPAD_DOWN KEYCODE_DPAD_CENTER
+expect "Type to search your library" "Down leaves the avatar for the first row (Search)"
+key KEYCODE_BACK KEYCODE_BACK
+
+echo "== Game tiles and Details paging"
+all_games 1 # Favorites sits above All Games now
+key KEYCODE_DPAD_CENTER
+expect "Chrono Trigger" "Super Nintendo lists its games"
+expect "Never played" "game rows show playtime instead of the file size"
+key KEYCODE_DPAD_RIGHT
+expect "Game 1 of 3" "Right opens Details with its position in the list"
+key KEYCODE_BUTTON_R1
+expect "Game 2 of 3" "R1 pages to the next game"
+key KEYCODE_DPAD_RIGHT KEYCODE_DPAD_RIGHT
+expect "Game 3 of 3" "Right pages too and stops at the last game"
+key KEYCODE_BUTTON_L1
+expect "Game 2 of 3" "L1 pages back"
+key KEYCODE_BACK
+expect_not "Game 2 of 3" "Back closes Details"
+key KEYCODE_DPAD_RIGHT
+expect "Game 2 of 3" "the list cursor followed the paging"
+key KEYCODE_BACK KEYCODE_BACK KEYCODE_BACK
+
+echo "== RetroAchievements dashboard"
+home
+# RetroAchievements is the last row (Android Games may sit above it on a real device).
+key $(for _ in $(seq 6); do printf 'KEYCODE_DPAD_DOWN '; done) KEYCODE_DPAD_CENTER
+expect_any "Link your account with your user name" "HARDCORE POINTS" "Games ▸ RetroAchievements opens the dashboard"
+key KEYCODE_BACK
+expect_not "HARDCORE POINTS" "Back closes the dashboard"
+expect_not "Link your account with your user name" "Back closes the dashboard (unlinked text gone)"
+
 echo "== Categories"
 home
 key KEYCODE_BUTTON_R1
@@ -175,7 +244,9 @@ expect "Sound" "Settings lists the Sound section"
 top
 
 echo "== Settings"
-# Theme rows: Theme pack, Theme color, Wave background, Wave settings, Button hints, Platform folders.
+# Theme rows: Theme pack, [Theme variant, only for packs with variants], Theme color, Wave
+# background, Wave settings, Profile customization, Button hints, Platform folders, Surface style,
+# Import theme (.xtheme)….
 key $(for _ in $(seq 3); do printf 'KEYCODE_DPAD_DOWN '; done) KEYCODE_DPAD_CENTER
 expect "Theme pack" "Theme section lists theme packs"
 expect "Default" "the built-in Default pack is active"
@@ -198,12 +269,34 @@ key KEYCODE_BACK
 expect "1.1× · 6 lines" "Wave settings row summarizes the new values"
 adb shell cat /sdcard/Xross/config/settings.json | grep -q '"waveSpeed": 1.1' \
   && ok "wave uniforms are saved to settings.json" || bad "waveSpeed not in settings.json"
+key KEYCODE_DPAD_DOWN
+expect "glow on" "Profile customization row summarizes the avatar style"
+# Panel rows: Border color, Custom color…, Border width, Glow, Glow speed, Glow intensity, Reset.
+key KEYCODE_DPAD_CENTER
+expect "Live preview · saved as you change it" "Profile customization panel opens"
+key KEYCODE_DPAD_RIGHT
+expect "Neon cyan" "Border color steps to the next preset"
+key KEYCODE_DPAD_DOWN KEYCODE_DPAD_DOWN KEYCODE_DPAD_DOWN KEYCODE_DPAD_CENTER
+expect "Off" "Glow toggles off"
+key KEYCODE_BACK
+expect "Neon cyan ring" "the row summary shows the new color"
+expect "glow off" "the row summary shows the glow is off"
+adb shell cat /sdcard/Xross/config/settings.json | grep -q '"#00E5FF"' \
+  && ok "avatar style is saved to settings.json" || bad "avatar border color not in settings.json"
 key KEYCODE_DPAD_DOWN KEYCODE_DPAD_DOWN
 expect "Inside All Games" "Platform folders setting shows the All Games layout"
 key KEYCODE_DPAD_CENTER
 expect "At the top of Games (classic)" "Platform folders toggles to the classic layout"
 key KEYCODE_DPAD_CENTER
 expect "Inside All Games" "Platform folders toggles back"
+key KEYCODE_DPAD_DOWN
+expect "Theme pack (Flat glass)" "Surface style follows the theme pack (Flat glass)"
+key KEYCODE_DPAD_CENTER KEYCODE_DPAD_CENTER
+expect "Y2K glossy bezel" "Surface style cycles through the presets"
+adb shell cat /sdcard/Xross/config/settings.json | grep -q '"surfaceStyle": "Y2K_GLOSSY_BEZEL"' \
+  && ok "surface style is saved to settings.json" || bad "surfaceStyle not in settings.json"
+key KEYCODE_DPAD_CENTER KEYCODE_DPAD_CENTER KEYCODE_DPAD_CENTER
+expect "Theme pack (Flat glass)" "Surface style cycles back to the pack's own"
 key KEYCODE_BACK KEYCODE_DPAD_DOWN KEYCODE_DPAD_CENTER
 expect "Effects volume" "Sound section opens"
 key KEYCODE_DPAD_DOWN KEYCODE_DPAD_CENTER
@@ -211,12 +304,13 @@ expect "100%" "Effects volume cycles"
 key KEYCODE_BACK
 
 echo "== Theme packs"
-# A minimal pack: name, palette, wave defaults, one sound; everything else inherits from Default.
+# A minimal v2 pack: name, palette, wave defaults, one sound; everything else inherits from Default.
 pack=$(mktemp -d)
 mkdir -p "$pack/smoke_pack/sounds"
 cat > "$pack/smoke_pack/theme.json" <<'JSON'
-{"name": "Smoke Pack", "author": "smoke", "palette": {"top": "#101830", "bottom": "#3060A0", "wave": "#C0E0FF"},
- "wave": {"lineCount": 8, "turbulence": 1.4}}
+{"schemaVersion": 2, "name": "Smoke Pack", "author": "smoke",
+ "palette": {"canvas": "#101830", "accentSecondary": "#C0E0FF"},
+ "wave": {"lineCount": 8, "turbulence": 1.4, "gradient": ["#101830", "#3060A0"]}}
 JSON
 cp "$(dirname "$0")/../../app/src/main/assets/themes/default/sounds/cursor.wav" "$pack/smoke_pack/sounds/CURSOR.WAV"
 adb shell rm -rf /sdcard/Xross/themes/smoke_pack
@@ -233,15 +327,130 @@ pause 1
 key KEYCODE_DPAD_CENTER
 pause 1.5
 expect "Smoke Pack" "a pack in Xross/themes is found and applied"
+expect_line "Theme" "the inherited BREADCRUMB drill-down shows the path beside the open category"
 key KEYCODE_DPAD_DOWN
 expect "Theme pack · Smoke Pack" "the pack's palette becomes the theme color"
 key KEYCODE_DPAD_DOWN KEYCODE_DPAD_DOWN
 expect "8 lines" "the pack's wave defaults are applied"
+# Hot reload: an edit to the active pack applies without leaving Xross; a broken save keeps it.
+# The edit also switches the layout: the bar collapses while drilled in and a ◀ marks the way back.
+good='{"schemaVersion": 2, "name": "Smoke Pack Live", "author": "smoke", "palette": {"canvas": "#101830", "accentSecondary": "#C0E0FF"}, "layout": {"drillDownStyle": "CHEVRON_COLLAPSE", "focusDivider": "FULL_BLEED_LINE", "motionProfile": "PS3_CRISP"}}'
+adb shell "echo '$good' > /sdcard/Xross/themes/smoke_pack/theme.json"
+pause 1.5
+# Only the focused row shows its subtitle: Wave settings → up three rows to Theme pack.
+key KEYCODE_DPAD_UP KEYCODE_DPAD_UP KEYCODE_DPAD_UP
+expect "Smoke Pack Live" "an edited theme.json reloads while Xross is open"
+expect_no_line "Theme" "CHEVRON_COLLAPSE drops the breadcrumb"
+expect_desc "Back" "CHEVRON_COLLAPSE puts a back chevron beside the focused row"
+key KEYCODE_DPAD_DOWN KEYCODE_DPAD_DOWN KEYCODE_DPAD_DOWN
+adb shell "echo '{\"schemaVersion\": 2, \"name\": \"Smoke Pack Live\",,}' > /sdcard/Xross/themes/smoke_pack/theme.json"
+pause 0.8
+expect "Theme not reloaded" "a broken theme.json keeps the last good theme and says why"
+adb shell "echo '$good' > /sdcard/Xross/themes/smoke_pack/theme.json"
+pause 1.5
 top_list
 key KEYCODE_DPAD_CENTER
 pause 1.5
 expect "Default" "cycling returns to the Default pack"
 key KEYCODE_BACK
+
+echo "== Theme import and variants"
+# Two .xtheme files in Download: one with a zip-slip entry, one valid pack (wrapped in a folder)
+# with two variants, a Settings override and a SNES override under its "sfc" folder alias.
+xt=$(mktemp -d)
+python3 -I - "$xt" <<'PY'
+import sys, zipfile
+d = sys.argv[1]
+m = """{"schemaVersion": 2, "name": "Smoke Variants", "author": "smoke",
+ "palette": {"canvas": "#101830", "accent": "#FFFFFF", "accentSecondary": "#C0E0FF"},
+ "variants": [
+   {"id": "lilac", "name": "Cyber Lilac", "palette": {"canvas": "#1B1829", "accentSecondary": "#C8B6FF"}},
+   {"id": "matrix", "name": "BIOS Matrix", "palette": {"canvas": "#0A140A", "accentSecondary": "#40FF60"}, "effects": {"surfaceStyle": "OLED_TRUE_BLACK"}}],
+ "categoryOverrides": {"SETTINGS": {"effects": {"surfaceStyle": "Y2K_GLOSSY_BEZEL"}}},
+ "systemOverrides": {"sfc": {"palette": {"canvas": "#300A0A", "accentSecondary": "#FF8C42"}, "cardAspectRatio": "3:4"}}}"""
+with zipfile.ZipFile(d + "/smoke_variants.xtheme", "w", zipfile.ZIP_DEFLATED) as z:
+    z.writestr("Smoke Variants/theme.json", m)
+    z.writestr("Smoke Variants/README.md", "smoke")
+with zipfile.ZipFile(d + "/smoke_slip.xtheme", "w") as z:
+    z.writestr("theme.json", '{"schemaVersion": 2, "name": "Slip"}')
+    z.writestr("../../evil.json", "{}")
+PY
+adb shell rm -f /sdcard/Download/smoke_variants.xtheme /sdcard/Download/smoke_slip.xtheme
+adb push "$xt/smoke_variants.xtheme" "$xt/smoke_slip.xtheme" /sdcard/Download/ >/dev/null
+rm -rf "$xt"
+adb shell content call --method scan_volume --uri content://media --arg external_primary >/dev/null 2>&1
+# pick <file name> [wait]: tap that file in the system document picker, then wait (2 s default).
+pick() {
+  local b
+  for _ in 1 2 3 4; do
+    adb shell uiautomator dump /sdcard/xross-ui.xml >/dev/null 2>&1
+    b=$(adb shell cat /sdcard/xross-ui.xml | grep -o "text=\"$1\"[^>]*bounds=\"[^\"]*\"" | grep -o 'bounds="[^"]*"' | head -1)
+    [ -n "$b" ] && break
+    pause 0.8
+  done
+  if [ -z "$b" ]; then bad "the document picker lists $1"; key KEYCODE_BACK; return; fi
+  read -r x1 y1 x2 y2 <<<"$(sed 's/bounds="//; s/"//; s/\]\[/ /; s/[][]//g; s/,/ /g' <<<"$b")"
+  adb shell input tap $(((x1 + x2) / 2)) $(((y1 + y2) / 2))
+  pause "${2:-2}"
+}
+top
+key $(for _ in $(seq 3); do printf 'KEYCODE_DPAD_DOWN '; done) KEYCODE_DPAD_CENTER
+key $(for _ in $(seq 16); do printf 'KEYCODE_DPAD_DOWN '; done)
+expect "Import theme (.xtheme)" "Settings ▸ Theme ends with Import theme"
+key KEYCODE_DPAD_CENTER
+pause 2
+adb shell dumpsys activity activities | grep -m1 topResumedActivity | grep -q documentsui \
+  && ok "Import theme opens the system document picker" || bad "the document picker didn't open"
+# The rejection is a 2.6 s toast: read it straight away.
+pick smoke_slip.xtheme 0.3
+expect "Theme not imported" "a .xtheme with a ../ entry is rejected"
+adb shell ls /sdcard/Xross/themes | grep -qiE 'slip|^\.import' && bad "the rejected archive left files" || ok "a rejected archive writes nothing"
+adb shell ls /sdcard/evil.json /sdcard/Xross/evil.json >/dev/null 2>&1 && bad "zip slip wrote evil.json" || ok "no file escaped Xross/themes"
+key KEYCODE_DPAD_CENTER
+pause 2
+pick smoke_variants.xtheme
+adb shell ls /sdcard/Xross/themes/smoke-variants/theme.json >/dev/null 2>&1 \
+  && ok "a valid .xtheme unpacks into Xross/themes/smoke-variants" || bad "smoke-variants not installed"
+adb shell cat /sdcard/Xross/config/settings.json | grep -q '"themePack": "smoke-variants"' \
+  && ok "the imported pack is applied" || bad "the imported pack isn't active"
+top_list
+expect "Smoke Variants by smoke · 3 packs" "the imported pack is listed and loads without problems"
+key KEYCODE_DPAD_DOWN
+expect "Standard · 3 looks in Smoke Variants" "a pack with variants shows Theme variant"
+key KEYCODE_DPAD_CENTER KEYCODE_DPAD_CENTER
+expect "BIOS Matrix · 3 looks" "Theme variant cycles to the next variant"
+adb shell cat /sdcard/Xross/config/settings.json | grep -q '"themeVariant": "matrix"' \
+  && ok "the variant is saved to settings.json" || bad "themeVariant not in settings.json"
+key KEYCODE_BUTTON_Y
+expect "Cyber Lilac" "Theme variant Options list every variant"
+key KEYCODE_BACK
+# The same file again: ask before replacing; Keep both installs a copy.
+key $(for _ in $(seq 16); do printf 'KEYCODE_DPAD_DOWN '; done) KEYCODE_DPAD_CENTER
+pause 2
+pick smoke_variants.xtheme
+expect "is already installed" "re-importing an installed pack asks first"
+key KEYCODE_DPAD_DOWN KEYCODE_DPAD_CENTER
+pause 2
+adb shell ls /sdcard/Xross/themes/smoke-variants-2/theme.json >/dev/null 2>&1 \
+  && ok "Keep both installs the copy as smoke-variants-2" || bad "smoke-variants-2 not installed"
+# The SNES override's 3:4 tiles: a portrait game tile in Super Nintendo (colors aren't in the tree).
+home
+all_games "$(screen | grep -cxE 'Recently Played|Favorites')"
+expect "Super Nintendo" "All Games lists the SNES folder"
+key KEYCODE_DPAD_CENTER
+pause 1
+expect "Chrono Trigger" "a system override doesn't break the game list"
+# Back to Default for the rest of the run.
+category 0
+key $(for _ in $(seq 3); do printf 'KEYCODE_DPAD_DOWN '; done) KEYCODE_DPAD_CENTER
+top_list
+key KEYCODE_BUTTON_Y
+key $(for _ in $(seq 8); do printf 'KEYCODE_DPAD_UP '; done) KEYCODE_DPAD_CENTER
+pause 1.5
+expect "Default" "Theme pack Options switch back to Default"
+expect_not "Theme variant" "Default has no Theme variant row"
+key KEYCODE_BACK
+adb shell rm -rf /sdcard/Xross/themes/smoke-variants /sdcard/Xross/themes/smoke-variants-2 /sdcard/Download/smoke_variants.xtheme /sdcard/Download/smoke_slip.xtheme
 
 echo "== Secrets"
 cfg=$(adb shell cat /sdcard/Xross/config/settings.json /sdcard/Xross/config/controllers.json /sdcard/Xross/config/systems.json)

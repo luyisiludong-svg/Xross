@@ -92,8 +92,7 @@ internal fun UserCard(
                 Modifier
                     .width(sheetWidth.dp())
                     .heightIn(max = (m.height * 0.88f).dp())
-                    .frostedGlass(sheet)
-                    .iridescentBorder(sheet, width = 1.5.dp, alpha = 0.7f)
+                    .xrossSurface(sheet, borderAlpha = 0.7f)
                     .clickable(remember { MutableInteractionSource() }, indication = null) {}
                     .padding(horizontal = (m.s * 0.05f).dp(), vertical = (m.s * 0.04f).dp()),
             ) {

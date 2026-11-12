@@ -115,7 +115,7 @@ on screens 600 dp and wider.
 | Emulator dispatch | Done. RetroArch (per-platform core), DuckStation, NetherSX2, Dolphin, PPSSPP, Azahar, Eden, Flycast, M64Plus FZ, melonDS and ScummVM, chosen per platform or per game. ROMs go out as a path extra plus a `content://` URI with a read grant. Verified with stand-ins only |
 | Media hub | Done. Photo viewer (zoom, pan, slideshow, wallpaper), background music player with media-session controls, video player; music pauses for games and videos |
 | Wave background | Done. GLSL ES 3.0 ribbon shader with day/night palette; speed, ribbon lines, turbulence, thickness and color presets as live uniforms (Settings ▸ Theme ▸ Wave settings). Pauses whenever the launcher isn't in front or game art covers it |
-| Theme packs | Done. `Xross/themes/<id>/` with `theme.json`, fonts, SVG/PNG icons and sounds; the bundled icons and sounds are the built-in Default pack |
+| Theme packs | Done. `Xross/themes/<id>/` with a v2 `theme.json` (imports, palette roles, font roles, surfaces), fonts, SVG/PNG icons and sounds, reloaded live when edited; the bundled icons and sounds are the built-in Default pack |
 | RetroAchievements | Done. Account linking, status bar avatar with an expanding mini-HUD, User Card, Games ▸ RetroAchievements dashboard, per-game telemetry and achievement lists, unlock toasts. Linking and lists verified live on an emulator and the Galaxy A55; the 2b.1 HUD and dashboard are unit-tested only; unlock toasts not yet seen after a real session |
 | Library organization | Done. Hide apps (Options ▸ Hide, Settings ▸ Apps ▸ Hidden apps, Hide system apps), app folders (Emulators, Streaming, Tools or your own name, with emulators suggested), base ROMs folder with Create system folders, and custom Photo/Video folders that also find files MediaStore skips. Tested on the Galaxy A55 |
 | Customization | 16:9 XMB game tiles (logo, wide art or a title plate); Settings ▸ Theme ▸ Profile customization for the avatar's border and glow (`profile.avatarStyle` in `settings.json`). Theme 2.0 (layouts, palettes from game art, custom shaders, BGM, haptics) is planned, see Roadmap §4.3 |
@@ -218,8 +218,10 @@ Confirm to step through packs, or Options ▸ Look for new packs after copying o
 
 ```
 Xross/themes/<theme_id>/
-├── theme.json      name, author, version, palette, wave defaults (all optional except name)
-├── fonts/          one .ttf/.otf used for all launcher text
+├── theme.json      "schemaVersion": 2, name (required); palette, wave, typography, audio,
+│                   icons, effects, surfaces (all optional)
+├── surfaces.json   optional: any JSON file listed in "imports" is merged under theme.json
+├── fonts/          .ttf/.otf; "typography" names one per role (display, body, mono)
 ├── icons/          <icon id>.svg / .png / .webp, e.g. settings.svg, games.png
 └── sounds/         cursor.wav, confirm.wav, back.wav, option.wav, ok.wav, system_ng.wav,
                     trophy.wav, 01. opening.wav, gameboot.wav
@@ -227,19 +229,79 @@ Xross/themes/<theme_id>/
 
 ```json
 {
+  "schemaVersion": 2,
   "name": "Sakura",
   "author": "you",
   "version": "1.0",
-  "palette": { "top": "#2E0A22", "bottom": "#B04C8E", "wave": "#FFC6EA", "glow": "#FFE6F4" },
-  "wave": { "speed": 0.8, "lineCount": 7, "turbulence": 1.2, "ribbonThickness": 1.4 },
-  "font": "fonts/Rounded.ttf",
-  "sounds": { "cursor": "tick.wav" },
-  "soundGains": { "cursor": 0.6 },
-  "icons": { "album": "disc.svg" }
+  "imports": ["surfaces.json"],
+  "palette": { "canvas": "#2E0A22", "accent": "#FFE6F4", "accentSecondary": "#FFC6EA" },
+  "wave": { "speed": 0.8, "lineCount": 7, "turbulence": 1.2, "ribbonThickness": 1.4, "gradient": ["#2E0A22", "#B04C8E"] },
+  "typography": { "display": "fonts/Display.ttf", "body": "fonts/Rounded.ttf", "mono": "fonts/Mono.ttf" },
+  "audio": { "sounds": { "cursor": "tick.wav" }, "soundGains": { "cursor": 0.6 } },
+  "icons": { "album": "disc.svg" },
+  "effects": { "surfaceStyle": "petal" }
 }
 ```
 
-* Anything a pack leaves out (a sound, an icon, the font) comes from the Default pack, so a pack
+`surfaces.json` (or a `surfaces` block in `theme.json`) defines how cards, panels and toasts are
+drawn, layer by layer:
+
+```json
+{
+  "surfaces": {
+    "petal": {
+      "shape": { "type": "CHAMFERED", "cutDp": [12, 0, 12, 0] },
+      "fill": { "type": "LINEAR_GRADIENT", "angle": 180, "stops": [["#3A1030", 0.0, 0.85], ["#14060F", 1.0, 0.9]] },
+      "sheen": { "heightPercent": 0.35, "gradient": [["#FFFFFF", 0.12], ["#FFFFFF", 0.0]] },
+      "borders": [{ "type": "OUTER", "widthDp": 1.5, "brush": { "type": "SWEEP_GRADIENT", "colors": ["#FFC6EA", "#B04C8E", "#FFC6EA"] } }],
+      "shadows": [{ "offsetDp": [0, 4], "blurDp": 12, "color": "#000000", "opacity": 0.4 }],
+      "glow": { "color": "#FFC6EA", "radiusDp": 10, "intensity": 0.5 }
+    }
+  }
+}
+```
+
+* **Only `schemaVersion: 2` packs are read.** A folder with an older `theme.json` is listed as
+  skipped (Settings ▸ Theme ▸ Theme pack, and Options ▸ Look for new packs says why).
+* **Live editing:** saving any file of the active pack (in Termux, or with `adb push`) reloads it
+  within a moment, without leaving Xross. If the edit doesn't parse, Xross keeps the last good
+  version and shows the file and line of the error.
+* **Palette:** `canvas` is the top of the background, the last `wave.gradient` stop its bottom,
+  `accentSecondary` the wave and `accent` the glow. A pack with a palette switches the color
+  theme to it; its `wave` values become the wave settings.
+* **Fonts:** `display` is used for the clock and category names, `mono` for the battery figure,
+  `body` for everything else. Missing roles use `body`; with no `typography`, the first font in
+  `fonts/` is used for all three.
+* **Sounds:** a bare file name is looked up in `sounds/`, a path ("audio/tick.wav") from the pack
+  root. The Theme 2.0 names `cancel`, `optionOpen`, `gameLaunch` and `achievementUnlock` are
+  accepted for `back`, `option`, `gameboot` and `trophy`.
+* **Surfaces:** shapes `ROUNDED` (no `radiusDp`: each card keeps its own corners), `CHAMFERED`
+  (`cutDp`: top-left, top-right, bottom-right, bottom-left), `RECTANGLE`; fills and brushes
+  `SOLID`, `LINEAR_GRADIENT` (CSS angles, stops `[color, position, opacity]`), `SWEEP_GRADIENT`;
+  borders `INNER`, `OUTER` or a `side` (`TOP`, `LEFT`, `BOTTOM`, `RIGHT`). At most 3 borders and
+  2 shadows are drawn, glows up to 24 dp. Every pack also gets the built-in `FLAT_GLASS`,
+  `Y2K_GLOSSY_BEZEL`, `OLED_TRUE_BLACK` and `EINK_HIGH_CONTRAST`, and **Settings ▸ Theme ▸ Surface
+  style** picks any of them over the pack's choice. `backdropBlurDp` is accepted but not drawn yet.
+* **Variants:** `"variants": [{ "id": "bios-matrix", "name": "BIOS Matrix", "palette": {…},
+  "effects": { "surfaceStyle": "OLED_TRUE_BLACK" } }]` adds colorways that share the pack's fonts,
+  icons and sounds. **Settings ▸ Theme ▸ Theme variant** (shown only for packs that have them)
+  steps through them; the choice is saved as `display.themeVariant` in `settings.json`.
+* **Overrides:** `"categoryOverrides": { "MUSIC": {…} }` (`GAMES`, `MUSIC`, `PHOTO`, `VIDEO`,
+  `APPS`, `SETTINGS`) applies while that category is open; `"systemOverrides": { "dreamcast": {…} }`
+  (a platform id or a folder alias such as `dc`) while one of that system's games is focused, after
+  the cursor rests for a quarter second. Each may set `palette` roles, `effects.surfaceStyle` and
+  `cardAspectRatio` (a system's aspect shapes that system's game tiles). Precedence, lowest to
+  highest: Default pack → pack → variant → category → system → your own Settings (a fixed theme
+  color or a chosen surface style wins over all of them). Overrides patch a pack palette; they
+  don't add one to a pack without colors. The wave crossfades between palettes.
+* **`.xtheme` files:** a pack zipped into one file (the folder itself or its contents) installs with
+  **Settings ▸ Theme ▸ Import theme (.xtheme)…**. The archive is checked before anything is
+  written: no `..` or absolute paths, only `.json` / `.md` / `.txt` at the top and fonts, sounds
+  (or `audio/`), icons and shaders in their folders with their own file types, no programs, at most
+  50 MB unpacked, and a valid `schemaVersion: 2` `theme.json`. It unpacks into
+  `Xross/themes/<id>/` (the id is made from the pack's name) and is switched to; if that id is
+  installed, Xross asks whether to replace it or keep both.
+* Anything a pack leaves out (a sound, an icon, the fonts) comes from the Default pack, so a pack
   can be as small as one `theme.json` and a font.
 * Icon ids are the lower-case glyph names: `settings`, `games`, `apps`, `photo`, `music`, `video`,
   `album`, `artist`, `shuffle`, `search`, `platform`, `game_cart`, `game_disc`, `favorites`,
@@ -249,8 +311,7 @@ Xross/themes/<theme_id>/
   circles, ellipses and polygons with translate/scale transforms; black fills are treated as a
   backdrop and dropped. PNG/WebP icons are scaled to 256 px.
 * File names are matched without regard to case, and a pack can't reach files outside its
-  folder. A pack with its own `palette` switches the color theme to it; its `wave` values become
-  the wave settings.
+  folder (imports included).
 * **Albums**: an album found in more than one folder (the same rip as FLAC and MP3, say) shows
   once per folder, labelled by format ("… · FLAC") or, when the formats match, by folder name.
 * **Media**: Settings ▸ Media sets the slideshow interval, whether music resumes after a game or

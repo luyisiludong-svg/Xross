@@ -25,11 +25,20 @@ class ThemeRuntime(
     /** Default first, then `Xross/themes/` packs; refreshed by [rediscover]. */
     val packs: StateFlow<List<ThemePackInfo>> = _packs.asStateFlow()
 
+    private val _rejected = MutableStateFlow<List<RejectedPack>>(emptyList())
+    /** Folders in `Xross/themes/` that aren't offered (v1 packs, broken JSON), from [rediscover]. */
+    val rejected: StateFlow<List<RejectedPack>> = _rejected.asStateFlow()
+
     private val lock = Mutex()
+
+    /** [ThemePackLoader.fingerprint] of the active pack when it was loaded. */
+    private var loadedPrint = 0L
 
     /** Rescans `Xross/themes/`. */
     suspend fun rediscover(): List<ThemePackInfo> = withContext(io) {
-        loader.discover().also { _packs.value = it }
+        val scan = loader.scan()
+        _rejected.value = scan.rejected
+        scan.packs.also { _packs.value = it }
     }
 
     /**
@@ -38,15 +47,46 @@ class ThemeRuntime(
      */
     suspend fun select(id: String): LoadedTheme = lock.withLock {
         if (_active.value.id == id && id == ThemePackLoader.DEFAULT_ID) return@withLock _active.value
-        val loaded = withContext(io) { loader.load(id) }
+        val loaded = withContext(io) { loader.load(id).also { loadedPrint = loader.fingerprint(it.id) } }
         _active.value = loaded
         loaded
     }
 
     /** Reloads the active pack from disk (its files were edited). */
     suspend fun reload(): LoadedTheme = lock.withLock {
-        val loaded = withContext(io) { loader.load(_active.value.id) }
+        val loaded = withContext(io) { loader.load(_active.value.id).also { loadedPrint = loader.fingerprint(it.id) } }
         _active.value = loaded
         loaded
+    }
+
+    /**
+     * Hot reload after the active pack's files changed: the new theme replaces the active one only
+     * if it loads. Returns null on success, or why the last good theme was kept.
+     */
+    suspend fun hotReload(): String? = lock.withLock {
+        val id = _active.value.id
+        if (id == ThemePackLoader.DEFAULT_ID) return@withLock null
+        withContext(io) {
+            val print = loader.fingerprint(id)
+            when (val r = loader.loadStrict(id)) {
+                is PackLoad.Ok -> {
+                    loadedPrint = print
+                    _active.value = r.theme
+                    null
+                }
+                is PackLoad.Failed -> {
+                    loadedPrint = print // don't repeat the same error on every resume
+                    r.reason
+                }
+            }
+        }
+    }
+
+    /** [hotReload] if the active pack changed on disk since it was loaded (missed file events). */
+    suspend fun reloadIfChanged(): String? {
+        val id = _active.value.id
+        if (id == ThemePackLoader.DEFAULT_ID) return null
+        val print = withContext(io) { loader.fingerprint(id) }
+        return if (print != loadedPrint) hotReload() else null
     }
 }
