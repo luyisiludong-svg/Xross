@@ -592,9 +592,27 @@ a resting value and stop (`rememberBreathing`), and the wave drops to ~20 fps; i
 near 60 fps on panels above 90 Hz. Both rates are paced on vsync by a Choreographer callback that
 wakes once per wave frame. Resting CPU on the emulator: 21.9% before, 2.5–2.8% after.
 
-**Not verified:** any of the above on a real device; the HUD morph for jitter; L1/R1 paging on a
-real controller; the dashboard with a large library; idle CPU and the smoothness of the 20 fps
-standby wave on the Galaxy A55 (the emulator drops frames at rest even without the change).
+**Galaxy A55 (2026-11-12, Android 17, 120 Hz, profiling build, real library):**
+
+| Measure | Before (`cddf975`) | After |
+| --- | --- | --- |
+| Process CPU resting on the Games root (20 s windows, 2 runs) | 114–124% | 13–19%; 12% after a few minutes (GL thread 5.7%, main 3.3%, binder 1.7%) |
+| Process CPU while pressing keys | 79–114% | 105–108% |
+| Wave in use | 120 fps | 60 fps: p50 16.7 ms, p95 18.2–18.8 ms, 1–3 missed per 300 |
+| Wave at rest | 120 fps | 20 fps: p50 50.0 ms, p95 51.9 ms |
+| UI while in use | | 0.27% janky, p50 7 ms, p95 9 ms; 0 UI frames per 5 s at rest |
+
+Screenshots on the A55: the HUD expands with the clock and battery hidden; logo tiles with
+"Never played"; Details paging Chrono Trigger → EarthBound with art and facts changing, and the
+list cursor on EarthBound after Back; the dashboard with the live profile and library completion
+(1 of 377 supported games checked so far). Two layout bugs found and fixed: the Details hints
+wrapped "Scroll" mid-word at 2340 px (now a `FlowRow`, and hint labels never wrap), and the
+dashboard's identity card cut off its "Updated …" line at 1080 px tall (now pinned at the bottom,
+with the identity block above it scrolling if needed and slightly tighter spacing).
+
+**Not verified:** whether the HUD morph and the Details crossfade animate without jitter (checked
+by screenshot only, not by eye); L1/R1 on a physical controller; the < 10% idle-CPU target is not
+met (12%); the dashboard with many achievements.
 
 ## 4. Display matrix & performance
 

@@ -1141,7 +1141,7 @@ internal fun Hint(glyph: String, label: String, size: TextUnit) {
                 .padding(horizontal = 7.dp, vertical = 2.dp),
         )
         Spacer(Modifier.width(6.dp))
-        Text(label, style = shadowed(size))
+        Text(label, style = shadowed(size), maxLines = 1, softWrap = false)
     }
 }
 

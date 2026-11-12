@@ -16,6 +16,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -206,7 +207,8 @@ private fun DetailsPage(
                     )
                 }
                 Spacer(Modifier.height((m.s * 0.03f).dp()))
-                Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                // Wraps whole hints onto a second line when they don't fit (narrow column, large text).
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Box(Modifier.clickable(onClick = onPlay)) { Hint(confirmGlyph, "Play", m.subtitleSize.sp()) }
                     // Position in the list this was opened from; the bumpers and ←/→ page through it.
                     if (d.count > 1) Hint("L1 R1", "Game ${d.position + 1} of ${d.count}", m.subtitleSize.sp())
