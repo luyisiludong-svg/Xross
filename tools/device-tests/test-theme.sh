@@ -122,6 +122,8 @@ expect "On · Amber to red below 20%" "Battery alert tint turns on"
 settings_has '"batteryTint": true' && ok "the battery tint is saved to settings.json" || bad "batteryTint not in settings.json"
 adb logcat -c
 adb shell dumpsys battery unplug
+# A phone on USB keeps reporting "charging" (status 2) after unplug; Xross reads the status.
+adb shell dumpsys battery set status 3
 adb shell dumpsys battery set level 12
 pause 1.5
 colors | grep -q "batteryLow=true" && ok "a 12% battery tints the colors" || bad "no low-battery tint"
@@ -186,18 +188,29 @@ section "Theme import and variants"
 adb shell rm -f /sdcard/Download/smoke_variants.xtheme /sdcard/Download/smoke_slip.xtheme
 adb push "$FIX/smoke_variants.xtheme" "$FIX/smoke_slip.xtheme" /sdcard/Download/ >/dev/null
 media_scan
-# pick <file name> [wait]: tap that file in the system document picker, then wait (2 s default).
-pick() {
+# tap_attr <attr="value">: tap the first on-screen node with that attribute (needs a fresh dump).
+tap_attr() {
   local b
-  for _ in 1 2 3 4; do
-    dump
-    b=$(adb shell cat /sdcard/xross-ui.xml | grep -o "text=\"$1\"[^>]*bounds=\"[^\"]*\"" | grep -o 'bounds="[^"]*"' | head -1)
-    [ -n "$b" ] && break
-    pause 0.8
-  done
-  if [ -z "$b" ]; then bad "the document picker lists $1"; key KEYCODE_BACK; return; fi
+  b=$(adb shell cat /sdcard/xross-ui.xml | grep -o "$1[^>]*bounds=\"[^\"]*\"" | grep -o 'bounds="[^"]*"' | head -1)
+  [ -n "$b" ] || return 1
   read -r x1 y1 x2 y2 <<<"$(sed 's/bounds="//; s/"//; s/\]\[/ /; s/[][]//g; s/,/ /g' <<<"$b")"
   adb shell input tap $(((x1 + x2) / 2)) $(((y1 + y2) / 2))
+}
+# pick <file name> [wait]: tap that file in the system document picker, then wait (2 s default).
+# The emulator's picker lists the pushed file under Recent; a phone's may open on an empty Recent
+# (Galaxy A55) or a busy Downloads, so after two looks it searches for the file by name.
+pick() {
+  local found=
+  for i in 1 2 3 4 5 6; do
+    dump
+    tap_attr "text=\"$1\"" && { found=1; break; }
+    if [ "$i" -eq 2 ] && tap_attr 'content-desc="Search"'; then
+      pause 1; adb shell input text "${1%.*}"; adb shell input keyevent KEYCODE_ENTER; pause 1.5
+    else
+      pause 0.8
+    fi
+  done
+  if [ -z "$found" ]; then bad "the document picker lists $1"; key KEYCODE_BACK; return; fi
   pause "${2:-2}"
 }
 top

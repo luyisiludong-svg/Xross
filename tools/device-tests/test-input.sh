@@ -64,6 +64,10 @@ pause 0.6
 expect "All Games" "swipe right comes back (one category per swipe)"
 adb shell input swipe $((SW * 42 / 100)) $((SH * 65 / 100)) $((SW * 42 / 100)) $((SH * 28 / 100)) 250
 pause 0.6
-expect "All Games" "vertical drag scrolls the list"
+# The drag ends on the last row. Check the first row scrolled away rather than naming the row
+# above it: a device with installed games has an Android Games row there instead of All Games.
+s=$(screen)
+if grep -qxF "RetroAchievements" <<<"$s" && ! grep -qxF "Search" <<<"$s"; then ok "vertical drag scrolls the list"
+else bad "vertical drag scrolls the list (to RetroAchievements, Search scrolled away)"; show "$s"; fi
 
 suite_end
