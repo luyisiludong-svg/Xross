@@ -142,7 +142,13 @@ class AppContainer(context: Context) {
             },
         )
     }
-    val snaps: SnapPlayer by lazy { SnapPlayer(appContext, music) }
+    /** Every volume and pause decision across effects, cues, music and snaps. */
+    val audio: dev.xross.launcher.audio.AudioDirector by lazy {
+        dev.xross.launcher.audio.AudioDirector(music, sounds) { settings.current }
+    }
+    val snaps: SnapPlayer by lazy {
+        SnapPlayer(appContext) { active -> if (active) audio.onSnapStarted() else audio.onSnapStopped() }
+    }
     private val http: HttpClient by lazy { UrlConnectionHttp("Xross/${BuildConfig.VERSION_NAME} (Android)") }
 
     val screenScraper: ScreenScraperProvider by lazy {

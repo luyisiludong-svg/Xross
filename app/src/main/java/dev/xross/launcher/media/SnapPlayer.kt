@@ -14,12 +14,13 @@ import java.io.File
 /**
  * Short looping video previews ("snaps") for a focused game.
  *
- * - Doesn't take audio focus, so background music keeps playing, only ducked ([MusicPlayer.setDucked]).
+ * - Doesn't take audio focus. It reports when it starts and stops through [onActive], and
+ *   [dev.xross.launcher.audio.AudioDirector] decides what music does meanwhile.
  * - One player at a time, created on [play] and released on [stop]: an idle launcher holds no
  *   decoder, which keeps memory low and frees the hardware decoder before an emulator starts.
  * - Main thread only, like ExoPlayer itself.
  */
-class SnapPlayer(private val context: Context, private val music: MusicPlayer) {
+class SnapPlayer(private val context: Context, private val onActive: (Boolean) -> Unit) {
 
     private val handler = android.os.Handler(android.os.Looper.getMainLooper())
     private var ramp: Runnable? = null
@@ -53,7 +54,7 @@ class SnapPlayer(private val context: Context, private val music: MusicPlayer) {
         p.setMediaItem(MediaItem.fromUri(android.net.Uri.fromFile(video)))
         p.prepare()
         p.playWhenReady = true
-        music.setDucked(true)
+        onActive(true)
         _player.value = p
     }
 
@@ -80,7 +81,7 @@ class SnapPlayer(private val context: Context, private val music: MusicPlayer) {
         _player.value = null
         file = null
         p.release()
-        music.setDucked(false)
+        onActive(false)
     }
 
     private companion object {
