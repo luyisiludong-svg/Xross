@@ -108,6 +108,7 @@ internal fun GameTile(
         }
     }
     val shown by animateFloatAsState(if (art != null) 1f else 0f, tween(320), label = "tileArt")
+    val frame = LocalFocusFrame.current
 
     Box(
         Modifier
@@ -117,23 +118,9 @@ internal fun GameTile(
                 scaleX = s
                 scaleY = s
             }
-            // Focus glow: soft white rings spreading from the plate's edge, breathing with the pulse.
-            .drawBehind {
-                val g = glow()
-                if (g <= 0f) return@drawBehind
-                val corner = 6.dp.toPx()
-                val step = 2.5.dp.toPx()
-                for (i in 1..4) {
-                    val spread = step * i
-                    drawRoundRect(
-                        Color.White.copy(alpha = 0.22f * g / i),
-                        topLeft = Offset(-spread, -spread),
-                        size = Size(size.width + spread * 2, size.height + spread * 2),
-                        cornerRadius = CornerRadius(corner + spread, corner + spread),
-                        style = Stroke(step * 1.2f),
-                    )
-                }
-            },
+            // Focus frame (2b.4d): soft white rings breathing with the pulse by default, or the
+            // theme's steady neon, hard shadow or gold bezel.
+            .drawBehind { drawPlateFrame(frame, glow(), 6.dp.toPx()) },
     ) {
         Box(
             contentAlignment = Alignment.Center,

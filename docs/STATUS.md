@@ -23,6 +23,7 @@ Legend: ✅ done and verified · ◐ partial · ❌ not started · 🧪 verified
 | Phase 2b.4a (shader host & watchdog): multi-program GL host, public uniforms, `ASCII_MATRIX` / `BOKEH` / `STARFIELD` / `CRT` / `CUSTOM` presets, ahead-of-time compile, frame-budget watchdog, crash-loop canary | ✅ on `feat/theme-2b4` (2026-11-12): 535 unit tests, `validateShaders` (glslangValidator); `smoke.sh` 12/12 and the theme suite 88/88 on the API 37 emulator; `smoke.sh` 12/12 on the **Galaxy A55** (profiling build, timer-query watchdog): presets 1.3–3.0 ms GPU p90, a custom shader, hot reload, a compile error, the watchdog and crash recovery checked by hand on both (§3.22) |
 | Phase 2b.4b (audio-reactive uniforms): `uAudioBass` / `uAudioBeat` from Xross's own music player, no `RECORD_AUDIO`; a tap in ExoPlayer's audio sink, 150 Hz 4th-order low-pass, beat detector, latency-compensated ring buffer | ✅ on `feat/theme-2b4` (2026-11-12): 558 unit tests; media suite 24/24 (two new checks: the music drives both uniforms, a pause binds 0) and `smoke.sh` 12/12 on the API 37 emulator, where the analysis ran 475–507 ms ahead of the speaker and was compensated. Not yet on the Galaxy A55 (§3.23) |
 | Phase 2b.4c (wallpapers and frosted surfaces): `wallpaper.png` / `effects.wallpaperPath`, Set as Xross wallpaper (`display.customWallpaper`), the shader resting under an opaque wallpaper, `backdropBlurDp` as a pre-blurred slice on every Android version | ✅ 🧪 on `feat/theme-2b4` (2026-11-12): 578 unit tests; theme suite 94/94, media suite 31/31 and `smoke.sh` 12/12 on the API 37 emulator, frosting checked by eye. Not yet on the Galaxy A55 (§3.24) |
+| Phase 2b.4d (focus frames and icon masks): `effects.focusFrameStyle` (`BREATHING_HALO`, `STATIC_NEON`, `HARD_SHADOW`, `GOLD_BEZEL` in `palette.focusGold`), `effects.iconMask` (`SQUIRCLE`, `CIRCLE`, `Y2K_CHROME_FRAME`) and `effects.iconFilter` (`DUOTONE`, `MONOCHROME`) through the cascade, icons cached by package, style and size | ✅ 🧪 on `feat/theme-2b4` (2026-11-12): 603 unit tests; theme suite 98/98 and library suite 41/41 on the API 37 emulator; Apps list 0.5% janky on the profiling build with the cache cold or warm. Not yet on the Galaxy A55 (§3.25) |
 | Phase 3 (dual screen, hot-swap, RetroAchievements, Web Portal, FTPS) | ◐ RetroAchievements account linking, status bar avatar and User Card (§3.12), per-game achievement lists and unlock toasts (§3.13), live on the emulator and the Galaxy A55 (§3.14); hot-swap and live resolution change done; dual screen, docking, Portal and FTPS not started |
 | Phase 4 (onboarding, triage, profiling, plugin API) | ◐ app triage and performance work started |
 
@@ -1075,6 +1076,60 @@ photo, memory with a 2560 px wallpaper held), frame pacing on the profiling buil
 sliding with `graphicsLayer` (its slice follows positioning callbacks), Android 9–11 on hardware,
 and the `.xtheme` change on a device (unit-tested only). The Options panel and the button-hint
 pill aren't themed surfaces, so they don't frost.
+
+### 3.25 Phase 2b.4d: focus frames and icon masks (2026-11-12)
+
+Draw-phase cosmetics: how the focused item is framed, and how installed apps' icons are cut and
+colored.
+
+- **Manifest and cascade:** `effects.focusFrameStyle` (alias `focusFrame`), `effects.iconMask`
+  and `effects.iconFilter`, read ignoring case, `-` and spaces; unknown names are reported and
+  left unset. They form a `Cosmetics` bundle carried by the base, variants, category and system
+  overrides and rules like the shader (the last layer naming a value wins), resolved into
+  `ThemeLook.cosmetics`; `ThemeLook.focusGold` is the cascaded `palette.focusGold`.
+- **Focus frames (`ui/FocusHalo.kt`):** `LocalFocusFrame` (style, neon and gold colors) from
+  MainActivity. `rememberFocusPulse` runs the breathing animation only for `BREATHING_HALO`;
+  every other style returns a constant pulse that isn't snapshot state, so a resting focused item
+  draws no frames. `drawPlateFrame` draws the four styles around game tiles, thumbnails, art icons
+  (fitted to the art) and RetroAchievements badges: the old white rings; a crisp neon core with a
+  short falloff (accent, else the wave color when the accent is white, else the game-art tint);
+  a solid shadow 2 dp down-right clipped to outside the plate (translucent tiles aren't darkened);
+  a 3 dp metal bezel in `palette.focusGold` (the mastery gold by default) with a beveled edge.
+  Glyph icons get the halo tinted neon or gold, or a solid offset copy under `HARD_SHADOW`.
+- **App icons (`data/IconStyler.kt`):** masks are a superellipse (n = 4), a circle, or a squircle
+  in an 8.5% chrome bezel with a gloss lens; the cut is anti-aliased (mask filled, content drawn
+  `SRC_IN`). Adaptive icons are rebuilt from their layers drawn 1.5× (a quarter past each edge);
+  legacy icons with opaque corners are cut whole, others shrunk to 70% onto a plate of their
+  average color lifted 82% toward white. Filters are one `ColorMatrix` mapping Rec. 709 luma onto
+  canvas → accent (`DUOTONE`) or black → accent (`MONOCHROME`), applied to the artwork, not the
+  bezel. `AppRepository.icon` keys a 12 MB `LruCache` by package, `IconStyle` (mask, filter and
+  the two colors, zeroed when the filter doesn't use them) and size; the drawable loads on IO and
+  renders on `Dispatchers.Default`. MainActivity remembers the loader per style, so rows reload only
+  when the style changes.
+- Debug and profiling builds log `XrossCosmetics` (`frame=GOLD_BEZEL mask=Y2K_CHROME_FRAME
+  filter=DUOTONE gold=#E0B040`) and `XrossIcons` (`drew com.android.camera2 Y2K_CHROME_FRAME/DUOTONE
+  144px in 0.7 ms`).
+
+**Unit tests:** `FocusFrameIconMaskTest` (25): names and problems, defaults, each layer
+overriding only what it names, an override with only cosmetics; the breathing pulse moves, the
+three steady ones hold at 1 and aren't snapshot state; neon and gold colors; the filter matrices
+(endpoints, alpha, luma) and a rendered duotone; masks pixel by pixel (corners, edges, circle vs
+squircle, the whole shape), adaptive layer bounds, a padded legacy icon's plate, the chrome ring,
+bounds restored; the cache (one load and render per key, every key part distinct, misses not
+cached). 603 unit tests in all.
+
+**Emulator (API 37, host GPU):** theme suite **98/98** on the debug build, with four new checks:
+the three keys and `focusGold` hot-reload with the pack; 16 Apps icons drawn in the chrome frame,
+duotoned; scrolling the list again draws none; removing the keys brings the halo and plain icons
+back. Library suite **41/41**. By eye: the chrome bezel and navy-to-cyan duotone on the Apps list,
+gold halos on glyphs and the gold bezel on a focused game tile. Profiling build, Apps list, 20 rows
+down and back: **0.51% janky** with every icon drawn on the way (18 icons, 0.7 ms average, 1.0 ms
+max, off the main thread) and **0.52%** from the cache (none drawn); p90 16–19 ms, as the wave
+alone gives on this emulator.
+
+**Not covered:** the Galaxy A55 and handhelds (120 Hz, a real app drawer, OEM legacy icons),
+`STATIC_NEON` and `HARD_SHADOW` checked only in unit tests, the RA badge frames by eye, and a
+Settings ▸ Theme row for these keys (2b.4f). App icons have no focus frame (as before).
 
 ## 4. Display matrix & performance
 

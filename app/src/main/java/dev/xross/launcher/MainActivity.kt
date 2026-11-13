@@ -1,5 +1,6 @@
 package dev.xross.launcher
 
+import androidx.compose.ui.graphics.toArgb
 import android.Manifest
 import android.content.ActivityNotFoundException
 import android.content.BroadcastReceiver
@@ -247,9 +248,30 @@ class MainActivity : ComponentActivity() {
                     health = container.shaderHealth,
                     audio = container.music.energy,
                 )
+                // Focus frame and app-icon look (2b.4d): the look's, colored by the active palette.
+                val cosmetics = look.cosmetics
+                val focusFrame = androidx.compose.runtime.remember(cosmetics.frame, base, look.focusGold) {
+                    dev.xross.launcher.ui.focusFrameOf(cosmetics.frame, base, look.focusGold)
+                }
+                val iconStyle = androidx.compose.runtime.remember(cosmetics.mask, cosmetics.filter, base) {
+                    dev.xross.launcher.data.IconStyle.of(cosmetics.mask, cosmetics.filter, canvas = base.top, accent = base.glow)
+                }
+                androidx.compose.runtime.LaunchedEffect(focusFrame, iconStyle) {
+                    if (BuildConfig.PERF_LOG) {
+                        android.util.Log.i(
+                            "XrossCosmetics",
+                            "frame=${focusFrame.style} mask=${iconStyle.mask} filter=${iconStyle.filter} " +
+                                "gold=#%06X".format(focusFrame.gold.toArgb() and 0xFFFFFF),
+                        )
+                    }
+                }
+                // Remembered per style: rows reload their icon only when the style changes.
+                val loadAppIcon: suspend (String) -> androidx.compose.ui.graphics.ImageBitmap? =
+                    androidx.compose.runtime.remember(iconStyle) { { pkg -> container.apps.icon(pkg, ICON_PX, iconStyle) } }
+                androidx.compose.runtime.CompositionLocalProvider(dev.xross.launcher.ui.LocalFocusFrame provides focusFrame) {
                 XmbScreen(
                     state = state,
-                    loadAppIcon = { pkg -> container.apps.icon(pkg, ICON_PX) },
+                    loadAppIcon = loadAppIcon,
                     loadThumb = { kind, id, px -> container.media.thumbnail(kind, id, px) },
                     loadArt = { uuid, kinds, px -> container.art.load(uuid, kinds, px) },
                     media = viewModel.media,
@@ -301,6 +323,7 @@ class MainActivity : ComponentActivity() {
                     onCloseAvatarStyle = viewModel::closeAvatarStyle,
                     onCloseRaHub = viewModel::closeRaHub,
                 )
+                }
             }
             }
         }

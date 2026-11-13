@@ -185,6 +185,15 @@ data class ThemeManifest(
          * pack root, or `none`. Unset: the pack's `wallpaper.png` if it has one.
          */
         @kotlinx.serialization.json.JsonNames("wallpaper") val wallpaperPath: String? = null,
+        /**
+         * The focused item's frame ([FocusFrameStyle], 2b.4d): `BREATHING_HALO` (default),
+         * `STATIC_NEON`, `HARD_SHADOW` or `GOLD_BEZEL`.
+         */
+        @kotlinx.serialization.json.JsonNames("focusFrame") val focusFrameStyle: String? = null,
+        /** Installed apps' icon shape ([IconMask]): `NONE` (default), `SQUIRCLE`, `CIRCLE`, `Y2K_CHROME_FRAME`. */
+        val iconMask: String? = null,
+        /** Installed apps' icon colors ([IconFilter]): `NONE` (default), `DUOTONE`, `MONOCHROME`. */
+        val iconFilter: String? = null,
     )
 
     companion object {
