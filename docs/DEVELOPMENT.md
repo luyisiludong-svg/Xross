@@ -4,7 +4,8 @@ Building, testing and finding your way around the Xross source.
 
 Related documents: [`Roadmap.md`](../Roadmap.md) (the plan), [`STATUS.md`](STATUS.md) (test
 suites, device runs and measurements), [`HARDWARE_TESTING.md`](HARDWARE_TESTING.md) (device
-testing in depth).
+testing in depth) and [`ARCHITECTURE_ASSESSMENT.md`](ARCHITECTURE_ASSESSMENT.md) (structure,
+tech debt and refactoring proposals).
 
 ## Build and run
 
@@ -112,7 +113,9 @@ tools/device-tests/  adb-driven device tests: quick smoke, five suites, run-all.
 ```
 
 The tree lists the main classes per package; 2b.4 added shader, effect and cache classes to
-`ui/`, `theme/` and `audio/`.
+`ui/`, `theme/` and `audio/`; see
+[`ARCHITECTURE_ASSESSMENT.md`](ARCHITECTURE_ASSESSMENT.md) for package sizes and a proposed
+reorganization.
 
 The Default theme pack and the icon tooling are described in the
 [Theme 2.0 specification](THEME_SPECIFICATION.md#14-the-default-pack-and-icon-tooling).

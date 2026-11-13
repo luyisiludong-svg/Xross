@@ -110,6 +110,7 @@ Upgrading from **Wave**? The project was renamed on 2026-11-11 and the app ID ch
 | [Roadmap and backlog](Roadmap.md) | The plan: what is done, known issues, order of work, scope decisions and upcoming specs |
 | [Implementation status and benchmarks](docs/STATUS.md) | Test suites, device runs, frame-timing measurements, bugs found and fixed |
 | [Hardware testing checklist](docs/HARDWARE_TESTING.md) | Testing on a physical handheld, and what to send back |
+| [Architecture assessment](docs/ARCHITECTURE_ASSESSMENT.md) | Structure, tech debt and a prioritized refactoring plan |
 | [XMB fidelity analysis](docs/XMB_FIDELITY.md) | How close Xross is to the original menu, checked against the console manuals |
 | [ScreenScraper API guide](docs/SCREENSCRAPER_API.md) | English summary of ScreenScraper's API rules |
 | [Ricing and Web Studio proposal](docs/THEME_RICING_AND_WEB_STUDIO.md) | Plain-text themes, a browser theme studio and a desktop build (proposal) |
