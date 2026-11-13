@@ -124,6 +124,8 @@ class MusicPlayer(private val context: Context) : dev.xross.launcher.audio.Music
     /** A song is playing, or buffering to play (a user-paused or empty player is not). */
     override val playing: Boolean get() = player.playWhenReady && player.mediaItemCount > 0
 
+    override val loaded: Boolean get() = player.mediaItemCount > 0
+
     /** Game starting: pause and remember to resume. */
     override fun pauseForGame() {
         if (player.isPlaying) {

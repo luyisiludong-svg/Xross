@@ -13,6 +13,9 @@ interface MusicOutput {
     /** A song is playing or about to (not paused by anyone, queue not empty). */
     val playing: Boolean
 
+    /** A song is in the queue, playing or paused (theme music waits until the queue is cleared, 2b.5c). */
+    val loaded: Boolean
+
     /** A video snap paused the song and nothing has touched playback since. */
     val pausedForSnap: Boolean
 
@@ -35,4 +38,25 @@ interface MusicOutput {
      * return when [resume], else it stays paused. The snap ending afterwards no longer resumes it.
      */
     fun handSnapPauseToGame(resume: Boolean)
+}
+
+/**
+ * What [AudioDirector] needs from the theme music player ([dev.xross.launcher.media.ThemeBgm],
+ * 2b.5c). Main thread only.
+ */
+interface BgmOutput {
+    /**
+     * Moves to [state] at [volume] for [track] (null: the look has none, release the player),
+     * fading over [fadeMs]. A different [track] while playing crossfades over [BgmPolicy.FADE_IN_MS].
+     */
+    fun apply(track: dev.xross.launcher.theme.pack.BgmTrack?, state: BgmState, volume: Float, fadeMs: Long)
+
+    /** Theme music players actually playing now (two during a crossfade), for [PlaybackCensus]. */
+    val activePlayers: Int
+
+    /** Told when [activePlayers] changes. */
+    var onActiveChanged: (() -> Unit)?
+
+    /** Frees the players (the activity is destroyed). */
+    fun release()
 }

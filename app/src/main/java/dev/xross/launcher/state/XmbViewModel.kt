@@ -1946,8 +1946,12 @@ class XmbViewModel(
 
     private var backupJob: Job? = null
 
+    /** The launcher is visible again (`onStart`): theme music may continue. */
+    fun onStarted() = audio.onStarted(true)
+
     /** The launcher is no longer visible: back up the library shortly after, if it changed. */
     fun onStopped() {
+        audio.onStarted(false)
         backupJob?.cancel()
         backupJob = viewModelScope.launch {
             delay(BACKUP_DELAY_MS)
@@ -2178,6 +2182,7 @@ class XmbViewModel(
     /** The emulator couldn't be started after all (uninstalled meanwhile, refused the URI). */
     fun onLaunchFailed(message: String) {
         container.sessions.disarm()
+        audio.onLaunchFailed()
         transient.update { it.copy(booting = null) }
         fail(message)
     }
@@ -2580,6 +2585,11 @@ class XmbViewModel(
         viewModelScope.launch {
             settingsStore.settings.collect(audio::onSettingsChanged)
         }
+        // Theme music (2b.5c) waits for the music player's queue and the full-screen video player.
+        viewModelScope.launch { music.state.collect { audio.onMusicChanged() } }
+        viewModelScope.launch {
+            media.overlay.map { it is MediaOverlay.VideoPlayback }.distinctUntilChanged().collect(audio::onFullScreenVideo)
+        }
         // Keep open search results in step with the library (favorites, playtime, rescans).
         viewModelScope.launch {
             tree.collect { if (transient.value.search?.query?.isNotBlank() == true) runSearch(0) }
@@ -2615,6 +2625,7 @@ class XmbViewModel(
                             rejected = rejected.map { r -> "${r.id}: ${r.reason}" },
                             packFlags = active.flags,
                             packWallpaper = active.hasWallpaper,
+                            packMusic = active.hasBgm,
                             looks = (listOf("") + active.variants.map { v -> v.id }).associateWith { v -> active.look(v) },
                         ),
                     )

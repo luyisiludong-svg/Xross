@@ -59,7 +59,8 @@ Xross/themes/<theme_id>/
 │                   gameboot.wav
 ├── shader.frag     optional: a CUSTOM background shader (or effects.shaderPath)
 ├── postprocess.agsl optional: a CUSTOM UI filter, Android 13+ (or effects.uiFilterPath)
-└── wallpaper.png   optional: drawn behind the menu (or .jpg / .webp, or effects.wallpaperPath)
+├── wallpaper.png   optional: drawn behind the menu (or .jpg / .webp, or effects.wallpaperPath)
+└── bgm.ogg         optional: ambient music loop, at most 20 MB (or bgm.mp3, or audio.bgmFile)
 ```
 
 * File names are matched without regard to case, and a pack can't reach files outside its folder
@@ -173,19 +174,32 @@ Sounds (`audio/UiSounds.kt`) come from the active theme pack:
   listed with the pack's problems.
 * **Gains through the cascade:** variants, `categoryOverrides`, `systemOverrides` and `rules`
   (`apply`) may carry `"audio": { "soundGains": { … } }`; the last layer that names a role wins
-  (§7 order). Only gains change there: files, panning and jitter are the pack's.
+  (§7 order), and so may `bgmFile`. Only gains and the music loop change there: sound files,
+  panning and jitter are the pack's.
 * `audio.panAmount` (0–1, default 0.35): effects pan with the crosshair's X position across the
   screen, times this amount, so a centred XMB stays centred; a category switch leans a little
   further toward the direction of travel. 0 keeps every effect centred.
 * `audio.cursorJitter` (default false): the `cursor` and `category_switch` ticks play at a random
   rate between 0.98 and 1.02, so a long scroll sounds less mechanical.
+* **Theme music** (`audio.bgmFile`, alias `bgm`): a loop played on repeat behind the menu, gapless.
+  Unset, a `bgm.ogg` or `bgm.mp3` at the pack root; `"none"` turns it off. Any of `.ogg`, `.mp3`,
+  `.m4a`, `.aac`, `.opus`, `.flac`, `.wav`, at most 20 MB, from the pack root. Variants, overrides
+  and rules may name another loop or `none` (`"audio": { "bgmFile": "games.ogg" }` in
+  `categoryOverrides.GAMES` gives Games its own); a change while it plays crossfades over 600 ms.
+  It plays at Settings ▸ Sound ▸ Theme music (`sound.bgmVolume`, 60% by default) only while
+  nothing else does: no song in Xross's music player (a paused song counts; stop it from Now
+  Playing with ↓), no other app playing media, no game, no full-screen video. It takes no audio
+  focus, so it never pauses another app. Under a game's video snap it pauses, or plays at 20% with
+  Music during video snaps ▸ Lower; it stops for a game and starts over afterwards. Master loops
+  near −16 LUFS like the cues, a little quieter if the pack is meant as a backdrop.
 
 ```json
 "audio": {
   "sounds": { "cursor": "tick.wav", "categorySwitch": "swish.wav" },
   "soundGains": { "cursor": 0.5, "drillIn": 0.7 },
   "panAmount": 0.35,
-  "cursorJitter": true
+  "cursorJitter": true,
+  "bgmFile": "audio/ambient_loop.ogg"
 }
 ```
 
@@ -363,7 +377,7 @@ a quarter second.
 Each may set `palette` roles, `effects.surfaceStyle`, `effects.shaderPreset`,
 `effects.wallpaperPath`, `effects.focusFrameStyle`, `iconMask`, `iconFilter`,
 `foregroundParticles`, `backgroundFilter`, `uiFilter` and `cardAspectRatio` (a system's aspect
-shapes that system's game tiles), and `audio.soundGains` (§5).
+shapes that system's game tiles), `audio.soundGains` and `audio.bgmFile` (§5).
 
 Precedence, lowest to highest: Default pack → pack → variant → category → system → your own
 Settings (a fixed theme color, a chosen surface style or any effect picked in Settings ▸ Theme wins
@@ -446,7 +460,8 @@ A pack zipped into one file (the folder itself or its contents) installs with **
 Import theme (.xtheme)…**. The archive is checked before anything is written:
 
 * no `..` or absolute paths;
-* only `.json` / `.md` / `.txt`, `wallpaper.png`, `shader.frag` and `postprocess.agsl` at the top,
+* only `.json` / `.md` / `.txt`, `wallpaper.png`, `bgm.ogg` / `bgm.mp3` (at most 20 MB),
+  `shader.frag` and `postprocess.agsl` at the top,
   and fonts, sounds (or `audio/`), icons, shaders and `wallpapers/` in their folders with their
   own file types;
 * no programs;

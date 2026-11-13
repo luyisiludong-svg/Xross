@@ -240,7 +240,7 @@ png(d + "/heroes/EarthBound (USA).png", (12, 60, 24), (230, 40, 200))
 PY
 }
 remove_theme_fixtures() {
-  adb shell rm -rf /sdcard/Xross/themes/smoke_pack /sdcard/Xross/themes/smoke-variants /sdcard/Xross/themes/smoke-variants-2 \
+  adb shell rm -rf /sdcard/Xross/themes/smoke_pack /sdcard/Xross/themes/smoke-variants /sdcard/Xross/themes/smoke-variants-2 /sdcard/Xross/themes/smoke_bgm \
     /sdcard/Download/smoke_variants.xtheme /sdcard/Download/smoke_slip.xtheme \
     "'/sdcard/Xross/media/heroes/snes/Chrono Trigger (USA).png'" "'/sdcard/Xross/media/heroes/snes/EarthBound (USA).png'" \
     "'/sdcard/Xross/media/snaps/snes/Chrono Trigger (USA).mp4'" /data/local/tmp/xross-smoke.db

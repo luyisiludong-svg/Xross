@@ -164,8 +164,10 @@ data class ThemeManifest(
     /**
      * The `audio` block (Appendix A.9). Role keys are [SoundRole] keys in any case, with or
      * without underscores (`system_ng`, `systemNg`), or a spec alias (`cancel`, `optionOpen`).
-     * Variants, overrides and rules may carry an `audio` block too, but only its [soundGains].
+     * Variants, overrides and rules may carry an `audio` block too, but only its [soundGains] and
+     * [bgmFile].
      */
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
     @Serializable
     data class Audio(
         /** [SoundRole] key (or a spec alias) → a file in `sounds/`, or a path from the pack root. */
@@ -179,10 +181,15 @@ data class ThemeManifest(
         val panAmount: Float? = null,
         /** A random playback rate in 0.98–1.02 for `cursor` and `category_switch`, so long scrolls sound less mechanical. */
         val cursorJitter: Boolean? = null,
+        /**
+         * The ambient music loop ([BgmRef], 2b.5c): an audio file from the pack root, or `none`.
+         * Unset: the pack's `bgm.ogg` / `bgm.mp3` if it has one.
+         */
+        @kotlinx.serialization.json.JsonNames("bgm") val bgmFile: String? = null,
     ) {
         companion object {
             /** Every property `audio` recognizes; others are reported like unknown `effects` keys. */
-            val KEYS: Set<String> = setOf("sounds", "soundGains", "panAmount", "cursorJitter")
+            val KEYS: Set<String> = setOf("sounds", "soundGains", "panAmount", "cursorJitter", "bgmFile", "bgm")
 
             /** Problems for the keys of every `audio` block in [root] that aren't in [KEYS]. */
             fun unknownKeys(root: JsonObject): List<String> = blockProblems(root, "audio") { where, key ->
@@ -335,7 +342,7 @@ data class ThemeVariant(
     val name: String = "",
     val palette: ThemeManifest.Palette? = null,
     val effects: ThemeManifest.Effects? = null,
-    /** Only `soundGains` (2b.5a): this colorway's level per sound role. */
+    /** Only `soundGains` (2b.5a) and `bgmFile` (2b.5c): this colorway's sound levels and music. */
     val audio: ThemeManifest.Audio? = null,
 )
 
@@ -348,7 +355,7 @@ data class ThemeOverride(
     val palette: ThemeManifest.Palette? = null,
     val effects: ThemeManifest.Effects? = null,
     val cardAspectRatio: String? = null,
-    /** Only `soundGains` (2b.5a): sound levels while this category is open or this system's game is focused. */
+    /** Only `soundGains` (2b.5a) and `bgmFile` (2b.5c): sound levels and music while this category is open or this system's game is focused. */
     val audio: ThemeManifest.Audio? = null,
 )
 
