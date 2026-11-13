@@ -2,6 +2,7 @@
   "surfaces": {
     "FLAT_GLASS": {
       "label": "Flat glass",
+      "backdropBlurDp": 14,
       "fill": {
         "type": "LINEAR_GRADIENT",
         "angle": 180,

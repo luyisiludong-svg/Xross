@@ -7,7 +7,11 @@ import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
+import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.audio.AudioSink
+import androidx.media3.exoplayer.audio.DefaultAudioSink
+import dev.xross.launcher.media.energy.MusicEnergy
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -28,9 +32,15 @@ data class NowPlaying(
  * App-wide music engine. Owns one ExoPlayer for audio (with audio focus, so videos and games
  * that take focus pause it) and connects [PlaybackService] the first time music plays, which
  * keeps playback alive with a media notification while games or other apps are in front.
+ *
+ * [energy] taps the decoded PCM in the player's audio sink for the background shader's
+ * `uAudioBass` / `uAudioBeat` (2b.4b): Xross's own music only, no `RECORD_AUDIO`.
  */
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 class MusicPlayer(private val context: Context) {
-    val player: ExoPlayer = ExoPlayer.Builder(context)
+    val energy = MusicEnergy()
+
+    val player: ExoPlayer = ExoPlayer.Builder(context, EnergyRenderersFactory(context, energy))
         .setAudioAttributes(
             AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).build(),
             /* handleAudioFocus = */ true,
@@ -152,4 +162,15 @@ class MusicPlayer(private val context: Context) {
     private companion object {
         const val DUCK_VOLUME = 0.2f
     }
+}
+
+/** The default renderers, with the music sink built through [MusicEnergy.buildSink]. */
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
+private class EnergyRenderersFactory(context: Context, private val energy: MusicEnergy) : DefaultRenderersFactory(context) {
+    override fun buildAudioSink(context: Context, enableFloatOutput: Boolean, enableAudioTrackPlaybackParams: Boolean): AudioSink =
+        energy.buildSink(
+            DefaultAudioSink.Builder(context)
+                .setEnableFloatOutput(enableFloatOutput)
+                .setEnableAudioOutputPlaybackParameters(enableAudioTrackPlaybackParams),
+        )
 }

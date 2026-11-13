@@ -9,6 +9,9 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import dev.xross.launcher.state.GlyphKey
 import dev.xross.launcher.theme.ThemePalette
+import dev.xross.launcher.theme.shader.ShaderLibrary
+import dev.xross.launcher.theme.shader.ShaderPreset
+import dev.xross.launcher.theme.shader.ShaderRef
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -77,6 +80,22 @@ data class LoadedTheme(
     val categoryPatches: Map<String, ThemePatch> = emptyMap(),
     /** `systemOverrides` by Xross platform id ("dreamcast"). */
     val systemPatches: Map<String, ThemePatch> = emptyMap(),
+    /** `rules`, checked, in order (imported files first). */
+    val rules: List<ResolvedRule> = emptyList(),
+    /** The pack's own `palette.circadianCurve`, `palette.batteryTint` and `effects.adaptiveGamePalette`. */
+    val flags: ColorFlags = ColorFlags.NONE,
+    /** The pack's own `effects.shaderPreset` (2b.4a); variants, overrides and rules may pick others. */
+    val shader: ShaderRef = ShaderRef.WAVE,
+    /** Text of each CUSTOM shader file the pack names, by its pack-relative path (unreadable ones absent). */
+    val customShaders: Map<String, String> = emptyMap(),
+    /** The pack's own wallpaper (2b.4c): `effects.wallpaperPath`, else its `wallpaper.png`, else none. */
+    val wallpaper: WallpaperRef = WallpaperRef.NONE,
+    /** Each wallpaper file the pack names, by its pack-relative path (missing ones absent). */
+    val wallpapers: Map<String, File> = emptyMap(),
+    /** The pack's own focus frame, icon mask and icon filter (2b.4d), over the Default pack's. */
+    val cosmetics: Cosmetics = Cosmetics.NONE,
+    /** Text of each CUSTOM UI filter (`postprocess.agsl`, 2b.4f) the pack names, by pack-relative path. */
+    val customUiFilters: Map<String, String> = emptyMap(),
     /** What the pack declared but couldn't be used (bad font, unreadable icon), for Settings. */
     val problems: List<String> = emptyList(),
     /** Bumped on every load, so a hot reload of the same files still counts as a change. */
@@ -90,19 +109,66 @@ data class LoadedTheme(
     /** The variant [id] names, or null for the pack's base look (blank or unknown ids). */
     fun variant(id: String?): ResolvedVariant? = id?.takeIf { it.isNotBlank() }?.let { v -> variants.firstOrNull { it.id == v } }
 
-    private val looks = java.util.concurrent.ConcurrentHashMap<Triple<String, String, String>, ThemeLook>()
+    private data class LookKey(val variant: String, val category: String, val system: String, val rules: List<Int>, val layoutRules: List<Int>, val layoutContext: String)
+
+    private val looks = java.util.concurrent.ConcurrentHashMap<LookKey, ThemeLook>()
+
+    /** Every background program the base, a variant, an override or a rule can show. */
+    val shadersUsed: Set<ShaderRef>
+        get() = buildSet {
+            add(shader)
+            variants.forEach { v -> v.shader?.let(::add) }
+            (categoryPatches.values + systemPatches.values).forEach { p -> p.shader?.let(::add) }
+            rules.forEach { r -> r.patch?.shader?.let(::add) }
+        }
+
+    /** [shadersUsed] as programs, compiled ahead of time when this pack becomes active. */
+    val shaderLibrary: ShaderLibrary by lazy { ShaderLibrary.of(shadersUsed, customShaders) }
+
+    /**
+     * [shaderLibrary] plus [extra] (the user's Settings ▸ Theme ▸ Background shader, 2b.4f), so
+     * a preset the pack never names is compiled ahead of time too. The same object without one.
+     */
+    fun shaderLibrary(extra: ShaderPreset?): ShaderLibrary =
+        if (extra == null || extra == ShaderPreset.CUSTOM || shadersUsed.any { it.preset == extra }) shaderLibrary
+        else ShaderLibrary.of(shadersUsed + ShaderRef(extra), customShaders)
+
+    /** True when the base, a variant, an override or a rule can show a wallpaper. */
+    val hasWallpaper: Boolean get() = wallpapers.isNotEmpty()
+
+    /** The file of [ref] (the look's wallpaper); null for none or a file that wasn't found. */
+    fun wallpaperFile(ref: WallpaperRef): File? = ref.path?.let(wallpapers::get)
+
+    /** Some rule depends on the battery. */
+    val usesBattery: Boolean get() = rules.any { it.battery != null }
+
+    /** Some rule depends on the time of day. */
+    val usesClock: Boolean get() = rules.any { it.time != null }
 
     /**
      * The pack's look with variant [variantId] (blank or unknown: the base), while [category] is
-     * open and a game of [system] is focused ([cascade]). Cached, so calling it on every focus
-     * change costs a map lookup.
+     * open, a game of [system] is focused, the battery is at [battery] and the local time is
+     * [minuteOfDay] ([cascade], then the context rules that hold). Cached by the rules that hold,
+     * so calling it on every focus change or battery tick costs a scan of the rules and a lookup.
      */
-    fun look(variantId: String = "", category: String? = null, system: String? = null): ThemeLook {
+    fun look(
+        variantId: String = "",
+        category: String? = null,
+        system: String? = null,
+        battery: dev.xross.launcher.theme.BatteryLevel? = null,
+        minuteOfDay: Int? = null,
+    ): ThemeLook {
         val v = variant(variantId)
         val cat = category?.takeIf { it in categoryPatches }.orEmpty()
         val sys = system?.takeIf { it in systemPatches }.orEmpty()
-        return looks.getOrPut(Triple(v?.id.orEmpty(), cat, sys)) {
-            cascade(roles, surfaceId, wave, v, categoryPatches[cat], systemPatches[sys])
+        val ctx = RuleContext(category, system, battery, minuteOfDay)
+        val held = if (rules.isEmpty()) emptyList() else rules.filter { it.matches(ctx) }
+        val layoutHeld = if (rules.isEmpty()) emptyList() else rules.filter { it.changesLayout && it.matchesExceptSystem(ctx) }.map { it.index }
+        // Category-wide tile shapes and focused-system layout patches depend on those two as well.
+        val layoutContext = if (layoutHeld.isEmpty()) "" else "${category.orEmpty()}/${system.orEmpty()}"
+        return looks.getOrPut(LookKey(v?.id.orEmpty(), cat, sys, held.map { it.index }, layoutHeld, layoutContext)) {
+            cascade(roles, surfaceId, wave, v, categoryPatches[cat], systemPatches[sys], held, flags, shader, wallpaper, cosmetics)
+                .copy(layout = if (layoutHeld.isEmpty()) null else applyRuleLayout(layout, rules, ctx))
         }
     }
 
@@ -143,6 +209,8 @@ sealed interface PackLoad {
  *   icons/       <icon id>.svg / .png / .webp, e.g. settings.svg, games.png
  *   sounds/      cursor.wav, confirm.wav, back.wav, option.wav, ok.wav, system_ng.wav,
  *                trophy.wav, 01. opening.wav, gameboot.wav
+ *   shader.frag  GLSL ES 3.0 fragment shader for "effects": { "shaderPreset": "CUSTOM" } (or effects.shaderPath)
+ *   wallpaper.png  static wallpaper behind the menu (or .jpg / .webp, or effects.wallpaperPath)
  * ```
  *
  * File lookups ignore case (FAT-formatted SD cards and hand-made packs disagree on it) and never
@@ -233,7 +301,7 @@ class ThemePackLoader(
 
     private fun resolve(pack: ThemePackInfo, base: LoadedTheme?): LoadedTheme {
         val m = pack.manifest
-        val problems = ArrayList<String>()
+        val problems = ArrayList<String>(m.schemaProblems)
 
         val sounds = LinkedHashMap<SoundRole, SoundSource>()
         val gains = LinkedHashMap<SoundRole, Float>()
@@ -262,7 +330,7 @@ class ThemePackLoader(
         }
 
         val fonts = fonts(pack, m.typography, base?.fonts, problems)
-        val palette = m.palette?.let { p ->
+        val palette = m.palette?.takeIf { it.hasColors }?.let { p ->
             p.toPalette(m.wave).also { if (it == null) problems += "Palette needs a canvas color, and colors must be #RRGGBB" }
         }
 
@@ -278,6 +346,35 @@ class ThemePackLoader(
         if (wanted.isNotEmpty() && wanted !in surfaces) problems += "effects.surfaceStyle: no surface named $wanted"
         val surfaceId = wanted.takeIf { it in surfaces } ?: base?.surfaceId ?: SurfacePreset.FLAT_GLASS.name
         val systems = resolveSystemKeys(m.systemOverrides, problems)
+        val (layout, rules) = foldRuleAspects(
+            resolveLayout(m.layout, m.categoryOverrides, base?.layout ?: ThemeLayout.DEFAULT, problems, systems),
+            resolveRules(m.rules, surfaces.keys, base?.layout ?: ThemeLayout.DEFAULT, problems),
+        )
+
+        val shader = ShaderRef.of("theme", m.effects?.shaderPreset, m.effects?.shaderPath, problems) ?: base?.shader ?: ShaderRef.WAVE
+        val variants = resolveVariants(m.variants, palette != null, surfaces.keys, problems)
+        val categoryPatches = resolveCategoryPatches(m.categoryOverrides, surfaces.keys, problems)
+        val systemPatches = resolveSystemPatches(systems, surfaces.keys, problems)
+        val customPaths = (listOf(shader) + variants.mapNotNull { it.shader } + (categoryPatches.values + systemPatches.values).mapNotNull { it.shader } +
+            rules.mapNotNull { it.patch?.shader })
+            .filter { it.preset == ShaderPreset.CUSTOM }.map { it.path }.distinct()
+        val customShaders = LinkedHashMap<String, String>()
+        for (path in customPaths) shaderText(pack, path, problems)?.let { customShaders[path] = it }
+
+        val folder = (pack.source as? PackSource.Folder)?.dir
+        val wallpaper = WallpaperRef.of("theme", m.effects?.wallpaperPath, problems)
+            ?: folder?.let(WallpaperRef::defaultIn)?.let(::WallpaperRef)
+            ?: WallpaperRef.NONE
+        val wallpaperRefs = listOf(wallpaper) + variants.mapNotNull { it.wallpaper } +
+            (categoryPatches.values + systemPatches.values).mapNotNull { it.wallpaper } + rules.mapNotNull { it.patch?.wallpaper }
+        val wallpapers = wallpaperFiles(folder, wallpaperRefs, problems)
+        val cosmetics = (base?.cosmetics ?: Cosmetics.NONE).over(Cosmetics.of("theme", m.effects, problems))
+        // 2b.4f: the AGSL of each CUSTOM UI filter the base, a variant, an override or a rule names.
+        val uiFilterPaths = (listOf(cosmetics) + variants.mapNotNull { it.cosmetics } +
+            (categoryPatches.values + systemPatches.values).mapNotNull { it.cosmetics } + rules.mapNotNull { it.patch?.cosmetics })
+            .mapNotNull { it.uiFilter }.filter { it.filter == UiFilter.CUSTOM }.map { it.path }.distinct()
+        val customUiFilters = LinkedHashMap<String, String>()
+        for (path in uiFilterPaths) packText(pack, "UI filter", path, problems)?.let { customUiFilters[path] = it }
 
         return LoadedTheme(
             info = pack,
@@ -289,17 +386,55 @@ class ThemePackLoader(
             gains = gains,
             surfaces = surfaces,
             surfaceId = surfaceId,
-            layout = resolveLayout(m.layout, m.categoryOverrides, base?.layout ?: ThemeLayout.DEFAULT, problems, systems),
+            layout = layout,
             roles = if (palette != null) m.palette else null,
-            variants = resolveVariants(m.variants, palette != null, surfaces.keys, problems),
-            categoryPatches = resolveCategoryPatches(m.categoryOverrides, surfaces.keys, problems),
-            systemPatches = resolveSystemPatches(systems, surfaces.keys, problems),
+            variants = variants,
+            categoryPatches = categoryPatches,
+            systemPatches = systemPatches,
+            rules = rules,
+            flags = ColorFlags.of(m.palette, m.effects),
+            shader = shader,
+            customShaders = customShaders,
+            wallpaper = wallpaper,
+            wallpapers = wallpapers,
+            cosmetics = cosmetics,
+            customUiFilters = customUiFilters,
             problems = problems,
             revision = revisions.incrementAndGet(),
         )
     }
 
     // region Files inside a pack
+
+    /**
+     * A CUSTOM shader's text, read at load so a hot reload (ThemeWatcher) picks up an edit. Only
+     * folder packs carry one; a missing, oversized or binary file is reported and left out (the
+     * renderer then shows the wave and says why).
+     */
+    private fun shaderText(pack: ThemePackInfo, path: String, problems: MutableList<String>): String? =
+        packText(pack, "Shader", path, problems)
+
+    /** A pack's source file (a CUSTOM shader, or a CUSTOM UI filter's AGSL, 2b.4f) as text; see [shaderText]. */
+    private fun packText(pack: ThemePackInfo, what: String, path: String, problems: MutableList<String>): String? {
+        val dir = (pack.source as? PackSource.Folder)?.dir ?: run {
+            problems += if (what == "Shader") "Shader $path: only folder packs can bring a CUSTOM shader" else "$what $path: only folder packs can bring their own code"
+            return null
+        }
+        val file = inside(dir, path)?.takeIf { it.isFile } ?: run {
+            problems += "$what $path not found in the pack"
+            return null
+        }
+        if (file.length() > MAX_SHADER_BYTES) {
+            problems += "$what $path is larger than ${MAX_SHADER_BYTES / 1024} KB"
+            return null
+        }
+        val text = runCatching { file.readText() }.getOrNull()
+        if (text == null || text.any { it == '\u0000' }) {
+            problems += "$what $path can't be read as text"
+            return null
+        }
+        return text
+    }
 
     /** A bare file name is looked up in `sounds/`; a path ("audio/tick.wav") from the pack root. */
     private fun soundFile(pack: ThemePackInfo, name: String): SoundSource? {
@@ -423,6 +558,8 @@ class ThemePackLoader(
             is Parsed.Bad -> return Read.Bad(p.reason)
         }
         var merged = JsonObject(emptyMap())
+        // `rules` add up across files (imports first) instead of the last file's replacing the rest.
+        val rules = ArrayList<kotlinx.serialization.json.JsonElement>()
         val imports = (root["imports"] as? JsonArray).orEmpty()
         if (imports.size > MAX_IMPORTS) return Read.Bad("$manifestName: at most $MAX_IMPORTS imports")
         for (entry in imports) {
@@ -433,16 +570,19 @@ class ThemePackLoader(
                 is Parsed.Ok -> p.obj
                 is Parsed.Bad -> return Read.Bad(p.reason)
             }
-            merged = ThemeManifest.merge(merged, JsonObject(obj - "imports"))
+            (obj["rules"] as? JsonArray)?.let(rules::addAll)
+            merged = ThemeManifest.merge(merged, JsonObject(obj - "imports" - "rules"))
         }
-        merged = ThemeManifest.merge(merged, root)
+        (root["rules"] as? JsonArray)?.let(rules::addAll)
+        merged = ThemeManifest.merge(merged, JsonObject(root - "rules"))
+        if (rules.isNotEmpty()) merged = JsonObject(merged + ("rules" to JsonArray(rules)))
         val version = (merged["schemaVersion"] as? JsonPrimitive)?.intOrNull
         if (version != ThemeManifest.SCHEMA_VERSION) {
             return Read.Bad(if (version == null) "theme.json has no \"schemaVersion\": 2 (v1 packs aren't supported)" else "schemaVersion $version isn't supported (use 2)")
         }
         return try {
             val m = ThemeManifest.JSON.decodeFromJsonElement(ThemeManifest.serializer(), merged)
-            if (m.name.isBlank()) Read.Bad("theme.json needs a \"name\"") else Read.Ok(m)
+            if (m.name.isBlank()) Read.Bad("theme.json needs a \"name\"") else Read.Ok(m.copy(schemaProblems = ThemeManifest.Effects.unknownKeys(merged)))
         } catch (e: SerializationException) {
             Read.Bad("$manifestName: ${e.message?.lineSequence()?.firstOrNull() ?: "invalid"}")
         } catch (e: IllegalArgumentException) {
@@ -481,6 +621,7 @@ class ThemePackLoader(
         private val ID = Regex("[A-Za-z0-9_. -]{1,64}")
         private val SURFACE_ID = Regex("[A-Za-z0-9_-]{1,48}")
         private const val MAX_JSON_BYTES = 256L * 1024
+        private const val MAX_SHADER_BYTES = 64L * 1024
         private const val MAX_IMPORTS = 8
         private val revisions = java.util.concurrent.atomic.AtomicLong()
 

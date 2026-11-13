@@ -151,7 +151,9 @@ class WaveSettingsTest {
             ),
         )
         val rows = tree.list(MenuTree.DISPLAY)
-        assertEquals(listOf("disp:pack", "disp:theme", "disp:wave", "disp:wavesettings", "disp:avatar", "disp:hints", "disp:allgames", "disp:surface", "disp:import"), rows.map { it.id })
+        assertEquals(listOf("disp:pack", "disp:theme", "disp:wave", "disp:wavesettings", "disp:avatar", "disp:hints", "disp:allgames", "disp:surface", "disp:profile", "disp:adaptive", "disp:circadian", "disp:battery",
+            "disp:fx:shader", "disp:fx:background_filter", "disp:fx:ui_filter", "disp:fx:focus_frame", "disp:fx:particles", "disp:fx:icon_mask",
+            "disp:wallpaper", "disp:reset", "disp:import"), rows.map { it.id })
         val pack = rows[0]
         assertEquals("Sakura by me · 2 packs", pack.subtitle)
         assertEquals(NodeAction.Run(Command.CycleThemePack), pack.action)

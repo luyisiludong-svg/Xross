@@ -219,7 +219,7 @@ private fun PhotoViewer(
                         "←→" to "Photo",
                         "L1/R1" to "Zoom",
                         "Start" to "Slideshow",
-                        "@options" to "Wallpaper",
+                        "@options" to "Wallpaper…",
                     ),
                 )
             }
@@ -273,6 +273,7 @@ private fun Modifier.photoGestures(controller: MediaOverlayController, zoomed: B
 // region Video player
 
 @Composable
+@androidx.annotation.OptIn(markerClass = [androidx.media3.common.util.UnstableApi::class])
 private fun VideoPlayerScreen(
     o: MediaOverlay.VideoPlayback,
     controller: MediaOverlayController,

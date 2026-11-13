@@ -96,7 +96,8 @@ class ThemeArchiveTest {
     @Test fun onlyKnownFoldersAndTypesAreAccepted() {
         for ((path, why) in listOf(
             "scripts/setup.json" to "unexpected folder scripts/",
-            "wallpaper.png" to "only .json at the top level",
+            "cover.png" to "only .json, wallpaper.png, shader.frag and postprocess.agsl at the top level",
+            "wallpapers/night.gif" to "wallpapers/ holds jpeg, jpg, png, webp",
             "fonts/readme.pdf" to "fonts/ holds otf, ttf",
             "icons/a/b/c/deep.svg" to "nested too deep",
         )) {
@@ -119,6 +120,9 @@ class ThemeArchiveTest {
                 "icons/settings.svg" to text("<svg/>"),
                 "icons/platforms/dc.png" to text("png"),
                 "shaders/shader.frag" to text("void main(){}"),
+                "shader.frag" to text("void main(){}"),
+                "wallpaper.png" to text("png"),
+                "wallpapers/night.webp" to text("webp"),
                 "__MACOSX/._theme.json" to text("junk"),
                 "icons/.DS_Store" to text("junk"),
             ),
@@ -132,6 +136,8 @@ class ThemeArchiveTest {
         // Hidden: discovery doesn't offer a half-finished import.
         assertEquals(listOf(ThemePackLoader.DEFAULT_ID), loader.discover().map { it.id })
         assertTrue(File(s.dir, "icons/platforms/dc.png").isFile)
+        // 2b.4c: the pack-root wallpaper and the default CUSTOM shader file come along.
+        assertTrue(File(s.dir, "wallpaper.png").isFile && File(s.dir, "shader.frag").isFile && File(s.dir, "wallpapers/night.webp").isFile)
         assertFalse(File(s.dir, "__MACOSX").exists())
         assertFalse(File(s.dir, "icons/.DS_Store").exists())
     }

@@ -60,6 +60,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.BlurredEdgeTreatment
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import dev.xross.launcher.theme.pack.FocusFrameStyle
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
@@ -84,9 +86,11 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.currentStateAsState
 import dev.xross.launcher.input.ConfirmLayout
 import dev.xross.launcher.media.MusicPlayer
 import dev.xross.launcher.media.ThumbKind
+import dev.xross.launcher.state.MediaOverlay
 import dev.xross.launcher.state.MediaOverlayController
 import dev.xross.launcher.input.NavAction
 import dev.xross.launcher.state.GlyphKey
@@ -193,8 +197,13 @@ fun XmbScreen(
     onMiniPlayerTap: () -> Unit = {},
     onMiniPlayerLongPress: () -> Unit = {},
     loadBadge: suspend (String, Int) -> ImageBitmap? = { _, _ -> null },
-    /** Opaque hero art or a video snap covers the screen: the wave can stop rendering. */
+    /** Opaque hero art, a video snap or an opaque wallpaper covers the screen: the wave can stop rendering. */
     onBackdropCoverChanged: (Boolean) -> Unit = {},
+    /** The wallpaper behind the menu (the user's Xross wallpaper or the pack's); null: none. */
+    wallpaper: dev.xross.launcher.theme.WallpaperSource? = null,
+    /** The pack's wallpaper, shown when [wallpaper] (the user's) can't be read. */
+    packWallpaper: dev.xross.launcher.theme.WallpaperSource? = null,
+    loadWallpaper: suspend (dev.xross.launcher.theme.WallpaperSource, Int) -> Wallpaper? = { _, _ -> null },
     onWaveRowTap: (Int) -> Unit = {},
     onWaveSlider: (Int, Float) -> Unit = { _, _ -> },
     onCloseWaveSettings: () -> Unit = {},
@@ -206,25 +215,40 @@ fun XmbScreen(
     onAvatarSlider: (Int, Float) -> Unit = { _, _ -> },
     onCloseAvatarStyle: () -> Unit = {},
     onCloseRaHub: () -> Unit = {},
+    /** No input for [ParticleRest.IDLE_AFTER_MS]: the foreground particles rest. */
+    particlesIdle: Boolean = false,
+    /** A UI filter (2b.4f) couldn't be built: (key, toast text), announced once per key. */
+    onUiFilterError: (String, String) -> Unit = { _, _ -> },
 ) {
     val palette = rememberActivePalette(state.theme, (LocalThemeLook.current ?: LocalThemePack.current?.look())?.palette)
-    val layout = LocalThemePack.current?.layout ?: ThemeLayout.DEFAULT
+    // The pack's layout with the context rules that hold and the quick profile's motion (MainActivity).
+    val layout = LocalThemeLayout.current ?: LocalThemePack.current?.layout ?: ThemeLayout.DEFAULT
     val motion = layout.motion
 
     // Slow "breathing" glow shared by everything that is focused. It settles and holds still while
-    // the screen rests (LocalUiIdle), so an untouched home screen draws no frames for it.
+    // the screen rests (LocalUiIdle), so an untouched home screen draws no frames for it. Only the
+    // breathing halo breathes: the other focus frames (2b.4d) hold a steady glow and never run it.
     val started by lifecycleStarted()
     val idle = LocalUiIdle.current
-    val pulse by rememberBreathing(running = started && !idle, low = 0.35f, high = 1f, halfPeriodMs = 1700, rest = PULSE_REST)
+    val pulse by rememberFocusPulse(running = started && !idle)
 
     // Cold boot: fade the whole interface in once per process start.
     val reveal = remember { Animatable(if (state.coldBoot) 0f else 1f) }
     LaunchedEffect(Unit) { reveal.animateTo(1f, tween(1400, delayMillis = 350, easing = LinearEasing)) }
 
+    // The experimental UI filter (2b.4f, Android 13+): an AGSL RenderEffect on the whole menu.
+    // Static filters never animate; a custom one that reads uTime rests with the screen.
+    val filterRef = LocalThemeLook.current?.cosmetics?.screenFilter ?: dev.xross.launcher.theme.pack.UiFilterRef.OFF
+    val filterSource = filterRef.takeIf { it.filter == dev.xross.launcher.theme.pack.UiFilter.CUSTOM }
+        ?.let { LocalThemePack.current?.customUiFilters?.get(it.path) }
+    val filterStill = LocalStillMotion.current
+
     BoxWithConstraints(
         Modifier
             .fillMaxSize()
+            .uiFilter(filterRef, filterSource, started, idle, filterStill, onUiFilterError)
             .graphicsLayer { alpha = reveal.value }
+            .frostHost()
             .swipeNavigation(onAction),
     ) {
         val m = remember(constraints.maxWidth, constraints.maxHeight, layout) {
@@ -247,10 +271,23 @@ fun XmbScreen(
             state.avatarEditor == null && state.raHub == null
         var heroCovers by remember { mutableStateOf(false) }
         var videoCovers by remember { mutableStateOf(false) }
+        var wallpaperCovers by remember { mutableStateOf(false) }
+        val viewport = androidx.compose.ui.geometry.Size(m.width, m.height)
+        // Layer 3: the wallpaper, hidden while the wave editor shows the wave it edits.
+        WallpaperBackdrop(
+            source = wallpaper,
+            fallback = packWallpaper,
+            shown = state.waveEditor == null,
+            maxPx = minOf(maxOf(m.width, m.height), 2560f).toInt(),
+            viewport = viewport,
+            load = loadWallpaper,
+            onCovering = { wallpaperCovers = it },
+        )
         FocusBackdrop(
             uuid = focusedArt?.uuid?.takeIf { quiet && state.details == null },
             artVersion = focusedArt?.version ?: 0L,
             maxPx = minOf(maxOf(m.width, m.height), 1600f).toInt(),
+            viewport = viewport,
             loadArt = loadArt,
             onCovering = { heroCovers = it },
         )
@@ -265,7 +302,28 @@ fun XmbScreen(
             playing?.let { SnapVideo(it, Modifier.fillMaxSize(), scrim = 0.55f, onCovering = { c -> videoCovers = c }) }
             if (playing == null) videoCovers = false
         }
-        val covers = heroCovers || videoCovers
+        // Frosted surfaces show blurred art only where a still image is what's behind them:
+        // not over a video snap or a media screen.
+        val snapOn = snap?.player?.collectAsState()?.value != null
+        val frostOff = snapOn || state.overlay != null
+        androidx.compose.runtime.SideEffect { FrostedBackdrop.suppressed = frostOff }
+        // Layer 4: ambient particles over the art (2b.4e), hidden under a snap, full-screen media,
+        // the wave editor and E-Ink, resting when stopped or after 10 s without input.
+        val particlePreset = (LocalThemeLook.current?.cosmetics ?: dev.xross.launcher.theme.pack.Cosmetics.NONE).particleField
+        if (particlePreset != dev.xross.launcher.theme.pack.ParticlePreset.NONE) {
+            val stillMotion = LocalStillMotion.current
+            val particleState = ParticleRest.of(
+                preset = particlePreset,
+                stillMotion = stillMotion,
+                snapPlaying = snapOn,
+                covered = state.waveEditor != null ||
+                    state.overlay is MediaOverlay.Photos || state.overlay is MediaOverlay.VideoPlayback,
+                started = started,
+                idle = particlesIdle,
+            )
+            AmbientParticles(particlePreset, particleState, Color(palette.glow), stillMotion)
+        }
+        val covers = heroCovers || videoCovers || wallpaperCovers
         val reportCover by rememberUpdatedState(onBackdropCoverChanged)
         LaunchedEffect(covers) { reportCover(covers) }
 
@@ -550,20 +608,13 @@ fun XmbScreen(
 /** The focused row's scraped art, for the hero backdrop and the video snap. */
 private data class FocusedArt(val uuid: String, val version: Long)
 
-/** Where the focus glow holds while the screen rests: a little above the middle of its swing. */
-private const val PULSE_REST = 0.7f
 
 /** True while the activity is at least started; animations tied to it stop in the background. */
 @Composable
 private fun lifecycleStarted(): androidx.compose.runtime.State<Boolean> {
     val owner = androidx.lifecycle.compose.LocalLifecycleOwner.current
-    return produceState(owner.lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED), owner) {
-        val observer = androidx.lifecycle.LifecycleEventObserver { source, _ ->
-            value = source.lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)
-        }
-        owner.lifecycle.addObserver(observer)
-        awaitDispose { owner.lifecycle.removeObserver(observer) }
-    }
+    val state = owner.lifecycle.currentStateAsState()
+    return remember(state) { derivedStateOf { state.value.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED) } }
 }
 
 /**
@@ -972,6 +1023,8 @@ private fun XmbIcon(
     glow: () -> Float,
 ) {
     val canBlur = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    val frame = LocalFocusFrame.current
+    val neon = frame.style == FocusFrameStyle.STATIC_NEON
     Box(
         Modifier
             .size(size)
@@ -981,27 +1034,39 @@ private fun XmbIcon(
                 scaleY = s
             },
     ) {
-        // Halo.
-        Box(
-            Modifier
-                .fillMaxSize()
-                .graphicsLayer {
-                    alpha = glow()
-                    scaleX = 1.9f
-                    scaleY = 1.9f
+        // Halo (2b.4d: white and breathing, or the neon / gold frame's color held steady).
+        if (frame.style != FocusFrameStyle.HARD_SHADOW) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        alpha = glow()
+                        scaleX = if (neon) 1.6f else 1.9f
+                        scaleY = if (neon) 1.6f else 1.9f
+                    }
+                    .drawBehind {
+                        val c = frame.bloomColor() ?: return@drawBehind
+                        val core = if (neon) 0.6f else 0.42f
+                        drawCircle(
+                            Brush.radialGradient(
+                                0f to c.copy(alpha = core),
+                                0.45f to c.copy(alpha = core / 3f),
+                                1f to Color.Transparent,
+                            ),
+                        )
+                    },
+            )
+            if (canBlur) {
+                val tint = when (frame.style) {
+                    FocusFrameStyle.STATIC_NEON -> frame.neon
+                    FocusFrameStyle.GOLD_BEZEL -> frame.gold
+                    else -> Color.White
                 }
-                .drawBehind {
-                    drawCircle(
-                        Brush.radialGradient(
-                            0f to Color.White.copy(alpha = 0.42f),
-                            0.45f to Color.White.copy(alpha = 0.14f),
-                            1f to Color.Transparent,
-                        ),
-                    )
-                },
-        )
-        if (canBlur) {
-            BlurredCopy(painter, size, Color.White, blur = 6.dp, alpha = { glow() * 0.9f })
+                BlurredCopy(painter, size, tint, blur = if (neon) 3.dp else 6.dp, alpha = { glow() * 0.9f })
+            }
+        } else {
+            // A solid copy 2 dp down and right, no blur.
+            BlurredCopy(painter, size, Color.Black, blur = 0.dp, alpha = { glow() * 0.85f }, offset = IntOffset(2, 2))
         }
         // Drop shadow.
         BlurredCopy(
@@ -1087,12 +1152,18 @@ private fun ArtIcon(
                 },
             contentAlignment = Alignment.Center,
         ) {
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .graphicsLayer { alpha = glow(); scaleX = 1.6f; scaleY = 1.6f }
-                    .drawBehind { drawCircle(Brush.radialGradient(0f to Color.White.copy(alpha = 0.3f), 1f to Color.Transparent)) },
-            )
+            val frame = LocalFocusFrame.current
+            if (frame.style == FocusFrameStyle.BREATHING_HALO || frame.style == FocusFrameStyle.STATIC_NEON) {
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .graphicsLayer { alpha = glow(); scaleX = 1.6f; scaleY = 1.6f }
+                        .drawBehind {
+                            val c = frame.bloomColor() ?: return@drawBehind
+                            drawCircle(Brush.radialGradient(0f to c.copy(alpha = 0.3f), 1f to Color.Transparent))
+                        },
+                )
+            }
             // Exactly the glyph's footprint, so tall capsules and wide boxes never reach the
             // neighbouring rows (the focus scale is applied by the layer above, as for glyphs).
             Image(
@@ -1101,6 +1172,7 @@ private fun ArtIcon(
                 contentScale = ContentScale.Fit,
                 modifier = Modifier
                     .size(size)
+                    .then(if (frame.framesPlates) Modifier.drawBehind { fittedFrame(frame, glow(), image.width, image.height) } else Modifier)
                     .shadow(6.dp, RoundedCornerShape(3.dp), clip = false),
             )
         }
@@ -1140,14 +1212,18 @@ private fun ThumbIcon(
             },
         contentAlignment = Alignment.Center,
     ) {
-        Box(
-            Modifier
-                .fillMaxSize()
-                .graphicsLayer { alpha = glow(); scaleX = 1.7f; scaleY = 1.7f }
-                .drawBehind {
-                    drawCircle(Brush.radialGradient(0f to Color.White.copy(alpha = 0.35f), 1f to Color.Transparent))
-                },
-        )
+        val frame = LocalFocusFrame.current
+        if (frame.style == FocusFrameStyle.BREATHING_HALO || frame.style == FocusFrameStyle.STATIC_NEON) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .graphicsLayer { alpha = glow(); scaleX = 1.7f; scaleY = 1.7f }
+                    .drawBehind {
+                        val c = frame.bloomColor() ?: return@drawBehind
+                        drawCircle(Brush.radialGradient(0f to c.copy(alpha = 0.35f), 1f to Color.Transparent))
+                    },
+            )
+        }
         Image(
             image,
             contentDescription = null,
@@ -1155,10 +1231,25 @@ private fun ThumbIcon(
             modifier = Modifier
                 .size(width = size * aspect, height = size)
                 .wrapContentSize(unbounded = true)
+                .then(if (frame.framesPlates) Modifier.drawBehind { drawPlateFrame(frame, glow(), 4.dp.toPx()) } else Modifier)
                 .shadow(4.dp, RoundedCornerShape(4.dp))
                 .clip(RoundedCornerShape(4.dp))
                 .border(1.dp, Color.White.copy(alpha = 0.85f), RoundedCornerShape(4.dp)),
         )
+    }
+}
+
+/**
+ * [drawPlateFrame] around an image of [imageW] × [imageH] drawn with [ContentScale.Fit] in this
+ * scope (centered), so the frame hugs the art rather than the square slot.
+ */
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.fittedFrame(frame: FocusFrame, glow: Float, imageW: Int, imageH: Int) {
+    if (glow <= 0f || imageW <= 0 || imageH <= 0) return
+    val k = minOf(size.width / imageW, size.height / imageH)
+    val w = imageW * k
+    val h = imageH * k
+    translate((size.width - w) / 2, (size.height - h) / 2) {
+        drawPlateFrame(frame, glow, 3.dp.toPx(), androidx.compose.ui.geometry.Size(w, h))
     }
 }
 
@@ -1192,7 +1283,8 @@ private fun AppIcon(
     focusScale: Float,
     loadAppIcon: suspend (String) -> ImageBitmap?,
 ) {
-    val bitmap by produceState<ImageBitmap?>(null, packageName) { value = loadAppIcon(packageName) }
+    // Keyed on the loader too: it changes with the theme's icon mask and filter (2b.4d).
+    val bitmap by produceState<ImageBitmap?>(null, packageName, loadAppIcon) { value = loadAppIcon(packageName) }
     bitmap?.let {
         Image(
             it,
@@ -1260,24 +1352,7 @@ internal fun GlowText(
     Box(modifier.then(clipped)) {
         // The clipping modes draw inside a padded box so the bloom isn't cut at the text's edges.
         Box(if (mode == TextOverflowMode.ELLIPSIS) Modifier else Modifier.padding(start = GlowBleed, top = GlowBleed, bottom = GlowBleed, end = if (mode == TextOverflowMode.MARQUEE) GlowBleed else 0.dp)) {
-            Text(
-                text,
-                style = TextStyle(
-                    color = Color.White.copy(alpha = 0.55f),
-                    fontSize = fontSize,
-                    fontFamily = fontFamily,
-                    shadow = Shadow(Color.White, Offset.Zero, blurRadius = 18f),
-                ),
-                maxLines = 1,
-                softWrap = mode == TextOverflowMode.ELLIPSIS,
-                overflow = cut,
-                modifier = Modifier
-                    .clearAndSetSemantics { } // decorative copy; screen readers read the text once
-                    .graphicsLayer {
-                        alpha = glow()
-                        compositingStrategy = CompositingStrategy.ModulateAlpha
-                    },
-            )
+            GlowBloom(text, fontSize, fontFamily, mode, cut, glow)
             Text(
                 text,
                 style = shadowed(fontSize).copy(fontFamily = fontFamily),
@@ -1291,6 +1366,42 @@ internal fun GlowText(
 }
 
 private val NoLayoutCallback: (androidx.compose.ui.text.TextLayoutResult) -> Unit = {}
+
+/**
+ * The bloom copy behind a [GlowText]: its color is [ThemeAccent.haloTarget] (white unless game
+ * art, a quick profile or the battery tint colors it), switched at once rather than morphed, since
+ * each new shadow color blurs the text again. Its own composable, so a color change recomposes
+ * this one text and nothing around it.
+ */
+@Composable
+private fun GlowBloom(
+    text: String,
+    fontSize: TextUnit,
+    fontFamily: androidx.compose.ui.text.font.FontFamily?,
+    mode: TextOverflowMode,
+    cut: TextOverflow,
+    glow: () -> Float,
+) {
+    val halo = ThemeAccent.haloTarget
+    Text(
+        text,
+        style = TextStyle(
+            color = halo.copy(alpha = 0.55f),
+            fontSize = fontSize,
+            fontFamily = fontFamily,
+            shadow = Shadow(halo, Offset.Zero, blurRadius = 18f),
+        ),
+        maxLines = 1,
+        softWrap = mode == TextOverflowMode.ELLIPSIS,
+        overflow = cut,
+        modifier = Modifier
+            .clearAndSetSemantics { } // decorative copy; screen readers read the text once
+            .graphicsLayer {
+                alpha = glow()
+                compositingStrategy = CompositingStrategy.ModulateAlpha
+            },
+    )
+}
 
 /** Room for the title bloom inside a clipping text box. */
 private val GlowBleed = 8.dp

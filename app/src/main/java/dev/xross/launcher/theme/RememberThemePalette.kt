@@ -69,3 +69,31 @@ fun rememberSettledSystem(system: String?, category: String?): String? {
     // Same frame as the category switch: don't show the old system's override in the new category.
     return if (category != settledCategory) system else settled
 }
+
+/** Local minutes since midnight, 0–1439. */
+fun minuteOfDay(now: java.time.LocalTime = java.time.LocalTime.now()): Int = now.hour * 60 + now.minute
+
+/** Time until just after the next whole minute (never less than a second). */
+internal fun millisUntilNextMinute(now: java.time.LocalTime): Long =
+    (60_000L - (now.second * 1_000L + now.nano / 1_000_000L) + 50L).coerceAtLeast(1_000L)
+
+/**
+ * The local minute of the day while [active] (null otherwise), checked once a minute with a plain
+ * delay. The value only changes when [bucket] of the new minute differs from the shown one, so a
+ * reader keyed to it (the context rules) updates only when its answer would change.
+ */
+@Composable
+fun rememberMinuteOfDay(active: Boolean, key: Any? = null, bucket: (Int) -> Any? = { it }): androidx.compose.runtime.State<Int?> =
+    produceState<Int?>(if (active) minuteOfDay() else null, active, key) {
+        if (!active) {
+            value = null
+            return@produceState
+        }
+        value = minuteOfDay()
+        while (true) {
+            delay(millisUntilNextMinute(java.time.LocalTime.now()))
+            val m = minuteOfDay()
+            val shown = value
+            if (shown == null || bucket(m) != bucket(shown)) value = m
+        }
+    }

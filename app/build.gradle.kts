@@ -103,6 +103,8 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     // Portable config files in Xross/config/ (settings.json, controllers.json, systems.json).
     implementation(libs.kotlinx.serialization.json)
+    // Theme 2.0 contextual palette: swatches from the focused game's hero or wheel art.
+    implementation(libs.androidx.palette.ktx)
 
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
@@ -129,6 +131,9 @@ dependencies {
     testImplementation(libs.robolectric)
     testImplementation(libs.androidx.test.core)
     testImplementation(libs.room.testing)
+    // Compose under Robolectric: animation tests (E-Ink still motion).
+    testImplementation(libs.compose.ui.test.junit4)
+    debugImplementation(libs.compose.ui.test.manifest)
 }
 
 // ScreenScraperLiveTest makes real API calls; it only runs with -PliveScrape=true.
@@ -141,3 +146,51 @@ tasks.withType<Test>().configureEach {
 tasks.configureEach {
     if (name == "mergeDebugAssets") dependsOn("kspDebugKotlin")
 }
+
+// Theme 2.0 2b.4a: every built-in background shader compiles as GLSL ES 3.00 under glslangValidator,
+// composed the way the renderer composes it (prelude.glsl in front of each preset body). Part of
+// `check`; needs glslangValidator on PATH (brew install glslang, apt install glslang-tools) or
+// -PglslangValidator=/path/to/it.
+abstract class ValidateShaders : DefaultTask() {
+    @get:InputDirectory @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val shaderDir: DirectoryProperty
+
+    @get:Input
+    abstract val validator: Property<String>
+
+    @get:OutputDirectory
+    abstract val workDir: DirectoryProperty
+
+    @TaskAction
+    fun validate() {
+        val src = shaderDir.get().asFile
+        val out = workDir.get().asFile.apply { deleteRecursively(); mkdirs() }
+        val prelude = File(src, "prelude.glsl").readText()
+        val units = src.listFiles().orEmpty().filter { it.extension == "frag" || it.extension == "vert" }.sortedBy { it.name }
+        if (units.none { it.extension == "frag" }) throw GradleException("No .frag presets in $src")
+        val failures = ArrayList<String>()
+        for (unit in units) {
+            val body = unit.readText()
+            val composed = File(out, unit.name)
+            composed.writeText(if (body.trimStart().startsWith("#version")) body else prelude.trimEnd() + "\n" + body)
+            val process = try {
+                ProcessBuilder(validator.get(), composed.absolutePath).redirectErrorStream(true).start()
+            } catch (e: java.io.IOException) {
+                throw GradleException("glslangValidator not found (${validator.get()}): install glslang or pass -PglslangValidator=<path>", e)
+            }
+            val log = process.inputStream.bufferedReader().readText()
+            if (process.waitFor() != 0) failures += "${unit.name}:\n" + log.lines().filter { it.contains("ERROR") }.joinToString("\n")
+        }
+        if (failures.isNotEmpty()) throw GradleException("Built-in shaders don't compile:\n" + failures.joinToString("\n"))
+        logger.lifecycle("glslangValidator: ${units.size} built-in shaders OK")
+    }
+}
+
+val validateShaders by tasks.registering(ValidateShaders::class) {
+    group = "verification"
+    description = "Compiles the built-in GLSL ES background shaders (assets/shaders) with glslangValidator."
+    shaderDir.set(layout.projectDirectory.dir("src/main/assets/shaders"))
+    validator.set(providers.gradleProperty("glslangValidator").orElse("glslangValidator"))
+    workDir.set(layout.buildDirectory.dir("shaderValidation"))
+}
+tasks.named("check") { dependsOn(validateShaders) }

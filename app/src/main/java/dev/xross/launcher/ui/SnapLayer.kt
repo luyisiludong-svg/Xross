@@ -63,6 +63,7 @@ internal fun SnapDriver(
  * the first frame is ready. [onCovering] reports when it is fully opaque.
  */
 @Composable
+@androidx.annotation.OptIn(markerClass = [androidx.media3.common.util.UnstableApi::class])
 internal fun SnapVideo(player: ExoPlayer, modifier: Modifier = Modifier, scrim: Float = 0f, onCovering: (Boolean) -> Unit = {}) {
     var videoSize by remember(player) { mutableStateOf(player.videoSize) }
     var ready by remember(player) { mutableStateOf(false) }
