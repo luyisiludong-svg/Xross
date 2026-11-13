@@ -24,6 +24,7 @@ Legend: ✅ done and verified · ◐ partial · ❌ not started · 🧪 verified
 | Phase 2b.4b (audio-reactive uniforms): `uAudioBass` / `uAudioBeat` from Xross's own music player, no `RECORD_AUDIO`; a tap in ExoPlayer's audio sink, 150 Hz 4th-order low-pass, beat detector, latency-compensated ring buffer | ✅ on `feat/theme-2b4` (2026-11-12): 558 unit tests; media suite 24/24 (two new checks: the music drives both uniforms, a pause binds 0) and `smoke.sh` 12/12 on the API 37 emulator, where the analysis ran 475–507 ms ahead of the speaker and was compensated. Not yet on the Galaxy A55 (§3.23) |
 | Phase 2b.4c (wallpapers and frosted surfaces): `wallpaper.png` / `effects.wallpaperPath`, Set as Xross wallpaper (`display.customWallpaper`), the shader resting under an opaque wallpaper, `backdropBlurDp` as a pre-blurred slice on every Android version | ✅ 🧪 on `feat/theme-2b4` (2026-11-12): 578 unit tests; theme suite 94/94, media suite 31/31 and `smoke.sh` 12/12 on the API 37 emulator, frosting checked by eye. Not yet on the Galaxy A55 (§3.24) |
 | Phase 2b.4d (focus frames and icon masks): `effects.focusFrameStyle` (`BREATHING_HALO`, `STATIC_NEON`, `HARD_SHADOW`, `GOLD_BEZEL` in `palette.focusGold`), `effects.iconMask` (`SQUIRCLE`, `CIRCLE`, `Y2K_CHROME_FRAME`) and `effects.iconFilter` (`DUOTONE`, `MONOCHROME`) through the cascade, icons cached by package, style and size | ✅ 🧪 on `feat/theme-2b4` (2026-11-12): 603 unit tests; theme suite 98/98 and library suite 41/41 on the API 37 emulator; Apps list 0.5% janky on the profiling build with the cache cold or warm. Not yet on the Galaxy A55 (§3.25) |
+| Phase 2b.4e (foreground particles): `effects.foregroundParticles` (`SNOW`, `BOKEH`, `DUST_MOTES`) as layer 4, ≤48 particles in flat arrays drawn in one `graphicsLayer`; resting after 10 s without input, in the background, and hidden under a snap, full-screen media and E-Ink | ✅ 🧪 on `feat/theme-2b4` (2026-11-13): 622 unit tests; theme suite 102/102 on the API 37 emulator; profiling build: UI thread 0.3 ms p50 per frame with or without particles, 0.2–0.4% janky in most windows (as without). Not yet on the Galaxy A55 (§3.26) |
 | Phase 3 (dual screen, hot-swap, RetroAchievements, Web Portal, FTPS) | ◐ RetroAchievements account linking, status bar avatar and User Card (§3.12), per-game achievement lists and unlock toasts (§3.13), live on the emulator and the Galaxy A55 (§3.14); hot-swap and live resolution change done; dual screen, docking, Portal and FTPS not started |
 | Phase 4 (onboarding, triage, profiling, plugin API) | ◐ app triage and performance work started |
 
@@ -1130,6 +1131,67 @@ alone gives on this emulator.
 **Not covered:** the Galaxy A55 and handhelds (120 Hz, a real app drawer, OEM legacy icons),
 `STATIC_NEON` and `HARD_SHADOW` checked only in unit tests, the RA badge frames by eye, and a
 Settings ▸ Theme row for these keys (2b.4f). App icons have no focus frame (as before).
+
+### 3.26 Phase 2b.4e: foreground particles (2026-11-13)
+
+Layer 4 of the Theme 2.0 stack: a light particle layer over the wallpaper, hero art and snap and
+under the menu's surfaces.
+
+- **Manifest and cascade:** `effects.foregroundParticles` (alias `particles`): `NONE` (default),
+  `SNOW`, `BOKEH`, `DUST_MOTES`, read ignoring case, `-` and spaces. It is a fourth field of the
+  2b.4d `Cosmetics` bundle (`ParticlePreset`), so the base, variants, category and system
+  overrides and rules carry it like the focus frame; `ThemeLook.cosmetics.particleField`.
+- **Field (`ui/AmbientParticles.kt`, `ParticleField`):** flat `FloatArray`s for position, speed,
+  size, alpha, drift, sway, frequency and phase; positions are fractions of the layer and speeds
+  layer heights per second, horizontal motion divided by the aspect ratio. 40 flakes, 14 discs or
+  28 motes, hard-capped at 48 whatever is asked. Snow falls 0.035–0.09 heights/s and sways on its
+  own sine (nearer flakes bigger, brighter, faster); bokeh rises 0.006–0.02 heights/s with
+  14–46 dp discs (nearer ones bigger, fainter and faster), drawn as a skirt, a flat disc and a
+  brighter 1 dp rim in the accent; dust drifts every way, twinkles, and is brightest in a
+  diagonal shaft from the top left. A particle that passes the margin (2% of the height, 16% for
+  bokeh) re-enters at the opposite edge at a random spot. Steps are clamped to 50 ms.
+- **Drawing:** a `withFrameNanos` loop steps the field once per display frame and bumps one
+  `mutableLongStateOf` read only in `drawBehind`, inside a `graphicsLayer` with
+  `CompositingStrategy.ModulateAlpha` (no offscreen buffer): each frame re-records that layer and
+  never recomposes. A hide or show fades the layer 400 ms (instant under E-Ink); hidden, it
+  leaves the composition.
+- **Resting (`ParticleRest`):** hidden for `NONE`, a still-motion profile (`MONOCHROME_EINK`), a
+  playing video snap, full-screen photos or video and the wave editor; resting when the activity
+  is stopped or after 10 s without input (`ParticleRest.IDLE_AFTER_MS`, a second
+  `InactivityTracker` fed by the same key, stick and touch events as the 3 s one; music doesn't
+  keep particles going). Resting eases the field to a stop over 0.6 s (a smoothstep "gait") and
+  then ends the loop: no frames until the next input, which eases them back over 0.6 s.
+- Debug and profiling builds log `XrossParticles` (`state=RUNNING preset=SNOW n=40`, and `rest
+  preset=SNOW n=40 settleFrames=34` when the loop ends).
+
+**Unit tests:** `AmbientParticlesTest` (19): names, aliases and problems; the cascade through a
+variant, a category override and a rule, leaving other cosmetics alone; the default pack has
+none; counts and the 48 cap; start spread over the layer; same seed, same field; each preset's
+direction and bokeh's depth scale; the sway's bounds; dust alpha under its peak; wrapping at the
+bottom, top and sides; two minutes in portrait staying inside the margins; a 30 s gap stepping
+50 ms; the hidden / resting / running table; resting easing to a stop then wanting no frames and
+freezing positions and clock; resuming from rest with monotonically rising steps up to full
+speed; the 10 s tracker. 622 unit tests in all.
+
+**Emulator (API 37, host GPU, profiling build):** a `SNOW` pack (40 flakes), `BOKEH` and
+`DUST_MOTES` checked by eye in landscape 2400×1080. Rest after 10 s without input, settled in 34
+frames, then **0 frames** rendered over 5 s; the next key logs `RUNNING`; another app in front
+logs `RESTING` and coming back `RUNNING`; under Monochrome E-Ink the layer isn't composed and the
+app drew 1 frame in 4 s. Frame timing, interleaved passes of `NONE`, `SNOW`, `BOKEH` and
+`DUST_MOTES` (8 s with only the particles moving, then 36 D-pad presses across categories and
+lists): **0.15–0.42% janky** (deadline) in 22 of 24 windows, `NONE` 0.18–1.30%; two consecutive
+windows in one round (dust 19.6%, snow 14.1%) dropped frames together and the next rounds were
+clean. Per-frame `framestats` over 120 frames each, four interleaved pairs: UI thread (animation
+to sync) **0.29–0.37 ms p50, ≤0.83 ms p90** with snow vs 0.23–0.56 / ≤0.79 ms without; recording
+the draw 0.09 vs 0.08 ms; the render thread (~15 ms, vsync-bound on the emulator) and late frame
+starts (up to 26–38 ms) the same with and without particles, so the burst came from the host.
+Theme suite **102/102** on the debug build, with four new checks: the preset hot-reloads with
+the pack (40 flakes running), they rest after 10 s, draw no frames while resting, and the next
+key wakes them.
+
+**Not covered:** the Galaxy A55 and handhelds (120 Hz pacing, Mali and Adreno), a playing video
+snap hiding the layer (no scraped games on the emulator; unit-tested), and a Settings ▸ Theme row
+for the preset (2b.4f).
 
 ## 4. Display matrix & performance
 

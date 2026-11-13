@@ -194,6 +194,11 @@ data class ThemeManifest(
         val iconMask: String? = null,
         /** Installed apps' icon colors ([IconFilter]): `NONE` (default), `DUOTONE`, `MONOCHROME`. */
         val iconFilter: String? = null,
+        /**
+         * Ambient particles over the art and wallpaper ([ParticlePreset], 2b.4e, layer 4): `NONE`
+         * (default), `SNOW`, `BOKEH` or `DUST_MOTES`.
+         */
+        @kotlinx.serialization.json.JsonNames("particles") val foregroundParticles: String? = null,
     )
 
     companion object {

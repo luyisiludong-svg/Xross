@@ -74,6 +74,18 @@ class MainActivity : ComponentActivity() {
     /** No input for a few seconds: the wave drops to a standby rate and the glows hold still. */
     private val inactivity = InactivityTracker(now = android.os.SystemClock::uptimeMillis)
 
+    /** No input for 10 s: the foreground particles (2b.4e) settle and stop. */
+    private val particleInactivity = InactivityTracker(
+        timeoutMs = dev.xross.launcher.ui.ParticleRest.IDLE_AFTER_MS,
+        now = android.os.SystemClock::uptimeMillis,
+    )
+
+    /** Any key, stick or touch input: wakes both idle timers. */
+    private fun noteInput() {
+        inactivity.onInput()
+        particleInactivity.onInput()
+    }
+
     /** When the gamepad handler last consumed a KEYCODE_BACK (see the back callback). */
     private var lastBackKeyAt = 0L
 
@@ -125,7 +137,7 @@ class MainActivity : ComponentActivity() {
         // Every nav action, including held-stick repeats, counts as input for the idle timer.
         val sink = object : InputSink by viewModel {
             override fun onAction(action: NavAction) {
-                inactivity.onInput()
+                noteInput()
                 viewModel.onAction(action)
             }
         }
@@ -162,6 +174,9 @@ class MainActivity : ComponentActivity() {
         }
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) { inactivity.run() }
+        }
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) { particleInactivity.run() }
         }
 
         setContent {
@@ -208,6 +223,8 @@ class MainActivity : ComponentActivity() {
             val music by container.music.state.collectAsStateWithLifecycle()
             val snapPlaying by container.snaps.player.collectAsStateWithLifecycle()
             val uiIdle = noInput && !music.isPlaying && snapPlaying == null
+            // The particles rest on input alone (music doesn't keep them going), after 10 s.
+            val particlesIdle by particleInactivity.idle.collectAsStateWithLifecycle()
             androidx.compose.runtime.CompositionLocalProvider(
                 dev.xross.launcher.ui.LocalThemePack provides pack,
                 dev.xross.launcher.ui.LocalThemeLook provides look,
@@ -322,6 +339,7 @@ class MainActivity : ComponentActivity() {
                     onAvatarSlider = viewModel::onAvatarSliderChanged,
                     onCloseAvatarStyle = viewModel::closeAvatarStyle,
                     onCloseRaHub = viewModel::closeRaHub,
+                    particlesIdle = particlesIdle,
                 )
                 }
             }
@@ -336,7 +354,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        inactivity.onInput()
+        noteInput()
         // Picks up permission grants, installed emulators, and newly mounted drives, and resumes
         // background fingerprinting.
         viewModel.onForeground()
@@ -373,14 +391,14 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        inactivity.onInput()
+        noteInput()
         val handled = gamepad.onKeyEvent(event)
         if (handled && event.keyCode == KeyEvent.KEYCODE_BACK) lastBackKeyAt = android.os.SystemClock.uptimeMillis()
         return handled || super.dispatchKeyEvent(event)
     }
 
     override fun dispatchTouchEvent(event: MotionEvent): Boolean {
-        inactivity.onInput()
+        noteInput()
         return super.dispatchTouchEvent(event)
     }
 

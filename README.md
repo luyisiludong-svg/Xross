@@ -316,6 +316,13 @@ drawn, layer by layer:
   `DUOTONE` (shadows in the canvas color, highlights in the accent) or `MONOCHROME` (black to the
   accent). Each icon is drawn once per mask, filter, palette and size and then cached, so scrolling
   the Apps list costs nothing. Names are matched ignoring case and dashes (`gold-bezel`).
+* **Foreground particles:** `effects.foregroundParticles` (alias `particles`) drifts a light layer
+  of particles over the wallpaper and hero art, under the menu: `SNOW` (flakes falling and
+  swaying), `BOKEH` (large faint discs in the accent rising slowly, nearer ones bigger and
+  fainter) or `DUST_MOTES` (specks drifting and twinkling, brightest in a shaft of light from the
+  top left); `NONE` by default. At most 48 particles. They ease to a stop after 10 s without
+  input and draw nothing until the next key or touch, stop in the background, and are hidden
+  under a playing video snap, full-screen photos and video, and the Monochrome E-Ink profile.
 * **Variants:** `"variants": [{ "id": "bios-matrix", "name": "BIOS Matrix", "palette": {…},
   "effects": { "surfaceStyle": "OLED_TRUE_BLACK" } }]` adds colorways that share the pack's fonts,
   icons and sounds. **Settings ▸ Theme ▸ Theme variant** (shown only for packs that have them)
@@ -325,7 +332,7 @@ drawn, layer by layer:
   (a platform id or a folder alias such as `dc`) while one of that system's games is focused, after
   the cursor rests for a quarter second. Each may set `palette` roles, `effects.surfaceStyle`,
   `effects.shaderPreset`, `effects.wallpaperPath`, `effects.focusFrameStyle`, `iconMask`,
-  `iconFilter` and `cardAspectRatio` (a system's aspect shapes that system's game tiles). Precedence, lowest to
+  `iconFilter`, `foregroundParticles` and `cardAspectRatio` (a system's aspect shapes that system's game tiles). Precedence, lowest to
   highest: Default pack → pack → variant → category → system → your own Settings (a fixed theme
   color or a chosen surface style wins over all of them). Overrides patch a pack palette; they
   don't add one to a pack without colors. The wave crossfades between palettes.

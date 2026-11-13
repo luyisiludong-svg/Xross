@@ -4,7 +4,7 @@
 # circadian curve, battery tint and charging pulse through `dumpsys battery`), the Sound section,
 # v2 theme packs and hot reload (and a pack's wallpaper.png, which stops the wave and is pre-blurred
 # for frosted surfaces; a pack's focus frame, icon mask and icon filter, with the Apps list's icons
-# drawn once per style), .xtheme import (zip-slip, variants, overrides, Keep both), and the
+# drawn once per style; a pack's foreground particles, resting after 10 s), .xtheme import (zip-slip, variants, overrides, Keep both), and the
 # game-art palette (hero PNGs, scraped flags patched into the database, extraction cache, debounce).
 #
 #   tools/device-tests/test-theme.sh
@@ -15,7 +15,7 @@
 # The battery override is always reset at exit, even after Ctrl-C.
 set -u
 . "$(dirname "$0")/lib/harness.sh"
-suite_begin theme 98
+suite_begin theme 102
 
 setup_base_env
 setup_theme_fixtures
@@ -231,6 +231,29 @@ pause 1.5
 adb logcat -d -s XrossCosmetics:I | tail -1 | grep -q "frame=BREATHING_HALO mask=NONE filter=NONE" \
   && ok "without them the breathing halo and plain icons are back" \
   || bad "cosmetics stayed ($(adb logcat -d -s XrossCosmetics:I | tail -1))"
+# 2b.4e: the pack's foreground particles start on reload, rest after 10 s without input (easing to
+# a stop, then no frames at all), and the next key wakes them.
+adb logcat -c
+parts='{"schemaVersion": 2, "name": "Smoke Pack Live", "author": "smoke", "palette": {"canvas": "#101830", "accentSecondary": "#C0E0FF"}, "effects": {"foregroundParticles": "snow"}}'
+adb shell "echo '$parts' > /sdcard/Xross/themes/smoke_pack/theme.json"
+pause 1.5
+adb logcat -d -s XrossParticles:I | grep -q "state=RUNNING preset=SNOW n=40" \
+  && ok "effects.foregroundParticles reloads with the pack (40 snowflakes running)" \
+  || bad "particles not running ($(adb logcat -d -s XrossParticles:I | tail -1))"
+pause 11
+adb logcat -d -s XrossParticles:I | grep -q "rest preset=SNOW n=40 settleFrames=" \
+  && ok "10 s without input: the particles ease to a stop" \
+  || bad "the particles didn't rest ($(adb logcat -d -s XrossParticles:I | tail -1))"
+frames() { adb shell dumpsys gfxinfo "$PKG" | grep -m1 "Total frames rendered" | grep -o "[0-9]*"; }
+f0=$(frames); pause 3; f1=$(frames)
+[ "$f0" = "$f1" ] && ok "resting particles draw no frames" || bad "$((f1 - f0)) frames drawn while resting"
+adb logcat -c
+key KEYCODE_DPAD_DOWN
+key KEYCODE_DPAD_UP
+adb logcat -d -s XrossParticles:I | grep -q "state=RUNNING preset=SNOW" \
+  && ok "the next key wakes the particles" || bad "the particles stayed at rest ($(adb logcat -d -s XrossParticles:I | tail -1))"
+adb shell "echo '$good' > /sdcard/Xross/themes/smoke_pack/theme.json"
+pause 1.5
 top_list
 key KEYCODE_DPAD_CENTER
 pause 1.5
