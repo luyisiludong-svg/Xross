@@ -1,7 +1,7 @@
 # Project Xross — Implementation Status
 
-Status of the codebase against [`project_scope.md`](../project_scope.md), as of **2026-11-11**
-(commit `2c142d6`, Phase 2b.1). It is the evidence file: what has been built, how it was verified,
+Status of the codebase against [`project_scope.md`](../project_scope.md), as of **2026-11-13**
+(commit `41f64dc`, Phase 2b.4). It is the evidence file: what has been built, how it was verified,
 measured performance across device classes, and known limitations. Plans, the backlog and the
 order of work are in [`Roadmap.md`](../Roadmap.md).
 
@@ -21,11 +21,11 @@ Legend: ✅ done and verified · ◐ partial · ❌ not started · 🧪 verified
 | Phase 2b.2 (Theme 2.0 foundation): v2 manifest, imports, surfaces, hot reload, layout block, motion, drill-down, variants, category and system overrides, `.xtheme` import | ✅ 🧪 on `feat/theme-2b2` (2026-11-12): unit tests, `smoke.sh` 139/139 and the 12-configuration display matrix on the API 37 emulator; not yet on a phone or handheld (§3.16–§3.18) |
 | Phase 2b.3 (color intelligence): game-art palette, `rules` context engine, circadian curve, battery tint, quick profiles | ✅ on `feat/theme-2b3` (2026-11-12): 499 unit tests; 171/171 on the API 37 emulator (§3.19, §3.20); on the **Galaxy A55 at 120 Hz** 160/171 (the 11 are seeded-media checks), game navigation 0.12–0.19% janky with game-art colors, GPU p50 6 ms; wheel-only art, Details as the source and a rule's layout patch checked on the device (§3.21). Idle CPU at rest is 16–21% (target < 10%) except under E-Ink (0%). Open items: [`PHASE_2B3_PENDING_TESTS.md`](PHASE_2B3_PENDING_TESTS.md) |
 | Phase 2b.4a (shader host & watchdog): multi-program GL host, public uniforms, `ASCII_MATRIX` / `BOKEH` / `STARFIELD` / `CRT` / `CUSTOM` presets, ahead-of-time compile, frame-budget watchdog, crash-loop canary | ✅ on `feat/theme-2b4` (2026-11-12): 535 unit tests, `validateShaders` (glslangValidator); `smoke.sh` 12/12 and the theme suite 88/88 on the API 37 emulator; `smoke.sh` 12/12 on the **Galaxy A55** (profiling build, timer-query watchdog): presets 1.3–3.0 ms GPU p90, a custom shader, hot reload, a compile error, the watchdog and crash recovery checked by hand on both (§3.22) |
-| Phase 2b.4b (audio-reactive uniforms): `uAudioBass` / `uAudioBeat` from Xross's own music player, no `RECORD_AUDIO`; a tap in ExoPlayer's audio sink, 150 Hz 4th-order low-pass, beat detector, latency-compensated ring buffer | ✅ on `feat/theme-2b4` (2026-11-12): 558 unit tests; media suite 24/24 (two new checks: the music drives both uniforms, a pause binds 0) and `smoke.sh` 12/12 on the API 37 emulator, where the analysis ran 475–507 ms ahead of the speaker and was compensated. Not yet on the Galaxy A55 (§3.23) |
-| Phase 2b.4c (wallpapers and frosted surfaces): `wallpaper.png` / `effects.wallpaperPath`, Set as Xross wallpaper (`display.customWallpaper`), the shader resting under an opaque wallpaper, `backdropBlurDp` as a pre-blurred slice on every Android version | ✅ 🧪 on `feat/theme-2b4` (2026-11-12): 578 unit tests; theme suite 94/94, media suite 31/31 and `smoke.sh` 12/12 on the API 37 emulator, frosting checked by eye. Not yet on the Galaxy A55 (§3.24) |
-| Phase 2b.4d (focus frames and icon masks): `effects.focusFrameStyle` (`BREATHING_HALO`, `STATIC_NEON`, `HARD_SHADOW`, `GOLD_BEZEL` in `palette.focusGold`), `effects.iconMask` (`SQUIRCLE`, `CIRCLE`, `Y2K_CHROME_FRAME`) and `effects.iconFilter` (`DUOTONE`, `MONOCHROME`) through the cascade, icons cached by package, style and size | ✅ 🧪 on `feat/theme-2b4` (2026-11-12): 603 unit tests; theme suite 98/98 and library suite 41/41 on the API 37 emulator; Apps list 0.5% janky on the profiling build with the cache cold or warm. Not yet on the Galaxy A55 (§3.25) |
-| Phase 2b.4e (foreground particles): `effects.foregroundParticles` (`SNOW`, `BOKEH`, `DUST_MOTES`) as layer 4, ≤48 particles in flat arrays drawn in one `graphicsLayer`; resting after 10 s without input, in the background, and hidden under a snap, full-screen media and E-Ink | ✅ 🧪 on `feat/theme-2b4` (2026-11-13): 622 unit tests; theme suite 102/102 on the API 37 emulator; profiling build: UI thread 0.3 ms p50 per frame with or without particles, 0.2–0.4% janky in most windows (as without). Not yet on the Galaxy A55 (§3.26) |
-| Phase 2b.4f (post-processing and Settings rows): `effects.backgroundFilter` (`SCANLINES`, `CRT`, `LCD_GRID`) as a GL pass snapped to render pixels, `effects.uiFilter` (`SCANLINES_UI`, `BLOOM`, custom `postprocess.agsl`) as an AGSL `RenderEffect` on Android 13+, Settings ▸ Theme rows for every 2b.4 effect (`display.effects`), Pick custom wallpaper, Reset to theme defaults, the `effects` schema | ✅ 🧪 on `feat/theme-2b4` (2026-11-13): 645 unit tests; 226/226 device checks on the API 37 emulator (theme 134/134); `palette-perf.sh` 0.30–0.45% janky, the same as the build before it, and 0.30–0.44% with CRT and Bloom on. `lintDebug` still fails on 10 older errors. Not yet on the Galaxy A55 (§3.27). **2b.4 is complete on the emulator** |
+| Phase 2b.4b (audio-reactive uniforms): `uAudioBass` / `uAudioBeat` from Xross's own music player, no `RECORD_AUDIO`; a tap in ExoPlayer's audio sink, 150 Hz 4th-order low-pass, beat detector, latency-compensated ring buffer | ✅ on `feat/theme-2b4` (2026-11-12): 558 unit tests; media suite 24/24 (two new checks: the music drives both uniforms, a pause binds 0) and `smoke.sh` 12/12 on the API 37 emulator, where the analysis ran 475–507 ms ahead of the speaker and was compensated. **Galaxy A55** (2026-11-13): media checks pass; the user's own music drives both, 369–406 ms ahead of the speaker (§3.23, §3.28) |
+| Phase 2b.4c (wallpapers and frosted surfaces): `wallpaper.png` / `effects.wallpaperPath`, Set as Xross wallpaper (`display.customWallpaper`), the shader resting under an opaque wallpaper, `backdropBlurDp` as a pre-blurred slice on every Android version | ✅ 🧪 on `feat/theme-2b4` (2026-11-12): 578 unit tests; theme suite 94/94, media suite 31/31 and `smoke.sh` 12/12 on the API 37 emulator, frosting checked by eye. **Galaxy A55** (2026-11-13): a 3220×4830 photo decodes to 1610×2415, blurred copy in 165–192 ms off the main thread (§3.24, §3.28) |
+| Phase 2b.4d (focus frames and icon masks): `effects.focusFrameStyle` (`BREATHING_HALO`, `STATIC_NEON`, `HARD_SHADOW`, `GOLD_BEZEL` in `palette.focusGold`), `effects.iconMask` (`SQUIRCLE`, `CIRCLE`, `Y2K_CHROME_FRAME`) and `effects.iconFilter` (`DUOTONE`, `MONOCHROME`) through the cascade, icons cached by package, style and size | ✅ 🧪 on `feat/theme-2b4` (2026-11-12): 603 unit tests; theme suite 98/98 and library suite 41/41 on the API 37 emulator; Apps list 0.5% janky on the profiling build with the cache cold or warm. **Galaxy A55** (2026-11-13): real apps' icons 3–11 ms each (chrome), 2–4 ms (squircle), off the main thread (§3.25, §3.28) |
+| Phase 2b.4e (foreground particles): `effects.foregroundParticles` (`SNOW`, `BOKEH`, `DUST_MOTES`) as layer 4, ≤48 particles in flat arrays drawn in one `graphicsLayer`; resting after 10 s without input, in the background, and hidden under a snap, full-screen media and E-Ink | ✅ 🧪 on `feat/theme-2b4` (2026-11-13): 622 unit tests; theme suite 102/102 on the API 37 emulator; profiling build: UI thread 0.3 ms p50 per frame with or without particles, 0.2–0.4% janky in most windows (as without). **Galaxy A55** (2026-11-13): 120 Hz, 0 frames at rest, hidden under a playing snap; during game navigation 7 of 16 passes doubled the render time (deadline jank unchanged, §3.28) |
+| Phase 2b.4f (post-processing and Settings rows): `effects.backgroundFilter` (`SCANLINES`, `CRT`, `LCD_GRID`) as a GL pass snapped to render pixels, `effects.uiFilter` (`SCANLINES_UI`, `BLOOM`, custom `postprocess.agsl`) as an AGSL `RenderEffect` on Android 13+, Settings ▸ Theme rows for every 2b.4 effect (`display.effects`), Pick custom wallpaper, Reset to theme defaults, the `effects` schema | ✅ 🧪 on `feat/theme-2b4` (2026-11-13): 645 unit tests; 226/226 device checks on the API 37 emulator (theme 134/134); `palette-perf.sh` 0.30–0.45% janky, the same as the build before it, and 0.30–0.44% with CRT and Bloom on. **Galaxy A55** (2026-11-13): 645 unit tests, `lintDebug` 0 errors, **215/226** device checks (theme 134/134; the 11 are seeded-media checks), every slice checked by hand, `palette-perf.sh` 0.12–0.19% janky (0.06–0.19% with CRT and Bloom) (§3.28). **2b.4 is complete on the emulator and the A55** |
 | Phase 3 (dual screen, hot-swap, RetroAchievements, Web Portal, FTPS) | ◐ RetroAchievements account linking, status bar avatar and User Card (§3.12), per-game achievement lists and unlock toasts (§3.13), live on the emulator and the Galaxy A55 (§3.14); hot-swap and live resolution change done; dual screen, docking, Portal and FTPS not started |
 | Phase 4 (onboarding, triage, profiling, plugin API) | ◐ app triage and performance work started |
 
@@ -1292,7 +1292,56 @@ on `dispatchKeyEvent`, Media3 opt-ins in `MediaScreens.kt` and `SnapLayer.kt`,
 
 **Not covered:** the Galaxy A55 and handhelds (Adreno, Mali, 120 Hz) for both filters; AGSL on a
 real Android 13–16 device (only API 37 here) and the picker on a phone; Bloom's GPU time on a slow
-GPU (each change renders the menu offscreen and blurs it).
+GPU (each change renders the menu offscreen and blurs it). The A55 is covered in §3.28.
+
+### 3.28 Phase 2b.4 on the Galaxy A55 (2026-11-13)
+
+All of 2b.4 on the user's Galaxy A55 (Android 17 / API 37, Xclipse 530, 1080×2340 at 120 Hz,
+450 dpi), on `main` at `41f64dc`. The phone's ROMs, app data and `Xross/config` were backed up
+first and restored after; the RetroArch stub was installed for the launch checks and removed.
+
+**Host:** `./gradlew check`: **645 unit tests** pass (4 skipped), `validateShaders` passes,
+`lintDebug` **0 errors** (61 warnings; the 10 older errors were fixed in `5281d15`).
+
+**Device suites (`run-all.sh`, debug build): 215/226.** Library 41/41, theme **134/134**, input
+11/11, integration 9/9, media 20/31. The 11 media failures are the Photo and Music listing checks,
+which expect the seeded `XrossSmoke` files to be the only media (the phone has its own photos and
+music). Every 2b.4 check passed, including the AGSL UI filters (a custom `postprocess.agsl`
+animating, resting with 0 frames and failing safely), Pick custom wallpaper through the phone's
+picker, Set as Xross wallpaper from a photo, and the music driving `uAudioBass` / `uAudioBeat`.
+
+**By hand, on the user's library (370 arcade games with scraped art and 260 video snaps):**
+
+| Slice | Result |
+|---|---|
+| 2b.4a presets | All linked at pack load; watchdog GPU p90 (timer query, GPU at its 450 MHz floor) BOKEH 2.90 ms, STARFIELD 3.00, ASCII_MATRIX 1.32, CRT 1.25 (limit 10 ms), unchanged by a background filter |
+| 2b.4b audio | The user's songs read bass 0.96–1.00 and 1–3 beats per 2 s; the analysis ran **369–406 ms** ahead of the phone's speaker (475–507 ms on the emulator) and was compensated. A quiet intro logs nothing until the bass moves, as designed. Sync not judged by eye; Bluetooth not tried |
+| 2b.4c wallpaper | A 3220×4830 (15.5 MP) photo set from the viewer decodes to 1610×2415, opaque, full-bleed; pre-blurred copy (192×288) in 165 ms warm, 192 ms after a cold start, off the main thread; the GL loop stops. Graphics memory +46 MB with it set after a cold start (83 → 128 MB); the viewer's full-size image is released on leaving Photo |
+| 2b.4d icons | Real third-party icons with `Y2K_CHROME_FRAME` drew in 3–11 ms each (one 24 ms outlier; 68 ms on the first run after install), `SQUIRCLE` 2–4 ms, `CIRCLE` 4 ms, all on `Dispatchers.Default`. Chrome bezel, `GOLD_BEZEL` on the focused glyph and `STATIC_NEON` (game-art tint on a game tile) checked by eye |
+| 2b.4e particles | `SNOW`, `BOKEH` and `DUST_MOTES` run at 120 Hz (~620 frames in 5 s, 0–0.16% janky even on the debug build), settle in 74 frames (0.6 s), draw **0 frames** at rest and wake on the next key. A playing video snap hides them (`state=HIDDEN`), which had only been unit-tested |
+| 2b.4f filters | `pxPerDp` = 1.54 on this panel: 2 px scanlines, 1 px stripes, 5 px LCD cells; the CRT grille is even with no moiré; the `CRT` preset skips the filter pass. `SCANLINES_UI` and `BLOOM` (AGSL) compile and run on real API 37 hardware, are built once (`STATIC`), and a resting menu under them draws 0 frames |
+
+**Frame pacing (`palette-perf.sh`, profiling build, 12 seeded SNES games, game-art colors on/off):**
+no effects **0.12–0.19% janky** (deadline) in all 6 passes, p50 12 ms, GPU p50 6–7 ms;
+`backgroundFilter: CRT` + `uiFilter: BLOOM` **0.06–0.19%** in 4 passes (p50 11–14 ms; legacy jank
+12–52% while colors morph, as Bloom re-blurs the menu each morph frame).
+
+**Particles during game navigation (open finding):** with `foregroundParticles: SNOW` (alone or
+with `BOKEH`), 7 of 16 passes ran in a slow mode: render thread ~16 ms per frame instead of ~11,
+`dequeueBuffer` waits ~3.6–4.7 ms, gfxinfo GPU p50 9 ms instead of 6, p50 18–19 ms, legacy jank
+80–99%. The other 9 particle passes and all 16 passes without particles (none, BOKEH alone, CRT +
+Bloom) were normal. Deadline jank stayed 0–0.19% in every pass, so no frames visibly drop; the cost
+is latency and power. A time-boxed look found no app-side cause: the UI thread is 2.5–3.4 ms in
+both modes (no recomposition: one `mutableLongStateOf` read in `drawBehind`), the draw is ≤40
+circles with no per-frame allocation for snow (Bokeh allocates one `Stroke` per frame), and the
+mode is per launch, not per preset. It is not thermal (AP flat at 40 °C) or the compositor: in a
+slow and a normal pass SurfaceFlinger composited both Xross's window and the wave's `SurfaceView`
+as `DEVICE` layers, and `gpu_busy` read 39–46% in both. The leading guess is the phase between the
+120 Hz UI frames and the wave's 60 Hz GL frames (`PACED stride=2`) on the shared GPU queue, which
+a Perfetto GPU-queue trace would confirm.
+
+**Not covered:** sync of the audio uniforms judged by eye, Bluetooth output latency, E-Ink with a
+pack shader, `HARD_SHADOW` and the RA badge frames by eye, handhelds (Adreno, Mali).
 
 ## 4. Display matrix & performance
 
@@ -1390,6 +1439,9 @@ Unisoc T618) before calling it final.**
 9. **The RetroAchievements Web API key is not encrypted at rest.** It is in app-private
    preferences excluded from backups, like the scraper passwords, but a rooted device can read it.
    `API_GetUserSummary`, used only for the rank, is documented as slow.
+10. **Foreground particles can double frame time while navigating on the Galaxy A55.** In 7 of 16
+   game-navigation passes with particles, render time rose from ~11 to ~16 ms and p50 from 12 to
+   19 ms, with no extra missed deadlines; the cause isn't found yet (§3.28).
 
 ---
 
@@ -1406,7 +1458,7 @@ implemented, by phase, including the Phase 2b customization engine).
 ./gradlew :app:testDebugUnitTest                         # unit tests
 ./gradlew :app:installDebug :emulator-stub:installRetroarchDebug
 tools/device-tests/smoke.sh                              # quick device smoke test, 12 checks (clears app data)
-tools/device-tests/run-all.sh                            # full device regression: the five suites, 171 checks
+tools/device-tests/run-all.sh                            # full device regression: the five suites, 226 checks
 ./gradlew :app:assembleProfiling                         # optimized build for frame timing
 adb shell dumpsys gfxinfo dev.xross.launcher              # UI frame stats
 adb logcat -s WaveFrames XrossScan                        # GL pacing + scan timing (debug/profiling)
