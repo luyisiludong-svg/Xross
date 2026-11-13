@@ -142,6 +142,57 @@ Differences from the prompt below:
 
 ## Slice 2b.5a: Sound roles, panning, jitter, levels
 
+**Status (2026-11-13, `feat/theme-2b5`):** done in code, unit-tested (683 tests, lint 0 errors),
+device-checked on the A55 (profiling build over the user's data; a temporary
+`xross-2b5a-test` pack with only `cursor.wav` and `drill_in.wav`, removed afterwards and
+`settings.json` restored):
+- Fallbacks: `role=category_switch file=cursor.wav gain=0.50` (the pack's cursor),
+  `role=drill_in file=drill_in.wav` (its own), `role=drill_out file=back.wav gain=0.60` (Default pack).
+- Pan: base −0.20 at the Default crosshair (X 0.22 clamped to ≈0.21 of the width × 0.35); category
+  switches −0.05 (right) and −0.35 (left).
+- Hot reload of `audio.soundGains.cursor` 0.5 → 0.2 and `cursorJitter: true`: the next clicks log
+  `gain=0.20` (category switch too, through the link) and rates 0.996–1.014, no restart.
+- `system_ng` followed by six clicks within 300 ms: every click logs the same gain (0.50), so the
+  code doesn't duck them. **By ear not done yet** (masking by the tail or the speaker limiter), nor
+  the option click against a game snap: both need a listener on the A55.
+
+Default pack levels (`tools/audio/relevel-default-sounds.sh`, originals kept in
+`assets/sounds/original/`):
+
+| File | Length | Before | After (peak / true peak / LUFS) |
+|---|---|---|---|
+| `cursor.wav` | 39 ms | −20.5 dBFS | −3.0 / −2.9 dBTP / short |
+| `back.wav` | 39 ms | −27.0 dBFS | −3.0 / −2.4 dBTP / short |
+| `ok.wav` | 301 ms | −31.3 dBFS | −3.0 / −3.0 dBTP / short |
+| `system_ng.wav` | 800 ms | −23.0 dBFS, −36.6 LUFS | −2.4 / −2.4 dBTP / −16.0 LUFS |
+| `trophy.wav` | 1000 ms | −5.9 dBFS, −20.9 LUFS | −1.0 / −1.0 dBTP / −16.0 LUFS |
+| `01. opening.wav` | 4001 ms | −6.8 dBFS, −17.2 LUFS | −5.6 / −5.6 dBTP / −16.0 LUFS |
+| `gameboot.wav` | 3040 ms | −17.7 dBFS, −29.7 LUFS | −4.1 / −4.0 dBTP / −16.0 LUFS |
+
+`ok.wav` (300 ms) is peak-normalized like the clicks: EBU R128 can't read under 400 ms. Default
+`soundGains`: cursor 0.5, category_switch 0.6, confirm 0.7, option 0.7, back 0.6, ok 0.6,
+system_ng 0.6, trophy 0.8 (drill in/out follow confirm/back). At the same Effects volume the option
+click is about 14 dB louder than before, the cursor about 17 dB.
+
+Call-site audit (`XmbViewModel`):
+
+| Call site | Before | After |
+|---|---|---|
+| `moveCategory` (Left/Right at a root, L1/R1, a tapped category, Left/Right from the avatar HUD) | `MOVE` | `CATEGORY`, pan leaning ±0.15 toward the move |
+| `activate` → `OpenList` (Confirm or Right on a folder) | `ENTER` | `DRILL_IN` |
+| `back` (Back, or Left inside a folder) | `BACK` | `DRILL_OUT` |
+| `onCategoryTapped` on the open category inside a folder | `BACK` | `DRILL_OUT` |
+| `activate` → `Run`, `openMedia`, search, name entry, options, details, info, overlays | `ENTER` / `MOVE` / `BACK` / … | unchanged |
+
+Differences from the prompt below:
+- Role keys ignore case, `_` and `-`, so every camelCase key of A.9 resolves without its own alias
+  (only `cancel`, `optionOpen`, `gameLaunch`, `achievementUnlock` are real aliases).
+- A role borrowing its fallback's file also takes its gain and follows it through the cascade
+  (`LoadedTheme.soundLinks`), unless a layer names the role.
+- Variants, overrides and rules accept `audio.soundGains` only; `sounds`, `panAmount` and
+  `cursorJitter` there are reported. Unknown `audio` properties are reported like `effects` ones.
+- Panning applies to every SoundPool effect; the streamed cues stay centred.
+
 ```markdown
 ### Task: Implement Phase 2b.5a — sound roles, panning, pitch jitter and Default pack levels
 

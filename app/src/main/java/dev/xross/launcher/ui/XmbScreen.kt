@@ -219,6 +219,8 @@ fun XmbScreen(
     particlesIdle: Boolean = false,
     /** A UI filter (2b.4f) couldn't be built: (key, toast text), announced once per key. */
     onUiFilterError: (String, String) -> Unit = { _, _ -> },
+    /** The crosshair's X over the screen width (0–1) as laid out, for panning the UI sounds (2b.5a). */
+    onCrosshairX: (Float) -> Unit = {},
 ) {
     val palette = rememberActivePalette(state.theme, (LocalThemeLook.current ?: LocalThemePack.current?.look())?.palette)
     // The pack's layout with the context rules that hold and the quick profile's motion (MainActivity).
@@ -254,6 +256,8 @@ fun XmbScreen(
         val m = remember(constraints.maxWidth, constraints.maxHeight, layout) {
             XmbMetrics(constraints.maxWidth.toFloat(), constraints.maxHeight.toFloat(), layout)
         }
+        val reportCrosshair by rememberUpdatedState(onCrosshairX)
+        LaunchedEffect(m.anchorX, m.width) { if (m.width > 0f) reportCrosshair(m.anchorX / m.width) }
         val density = LocalDensity.current
         fun Float.sp(): TextUnit = with(density) { this@sp.toSp() }
         fun Float.dp(): Dp = with(density) { this@dp.toDp() }

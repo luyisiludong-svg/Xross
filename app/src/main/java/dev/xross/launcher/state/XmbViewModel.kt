@@ -1607,7 +1607,7 @@ class XmbViewModel(
     fun onCategoryTapped(index: Int) {
         if (index == nav.value.categoryIndex) {
             val category = categories[index]
-            if (nav.value.stack(category.id, category.title).size > 1) sounds.play(UiSound.BACK)
+            if (nav.value.stack(category.id, category.title).size > 1) sounds.play(UiSound.DRILL_OUT)
             nav.value = nav.value.jumpTo(index, category.id, category.title, frame = null)
         } else {
             moveCategory(index - nav.value.categoryIndex)
@@ -2100,7 +2100,8 @@ class XmbViewModel(
         val after = before.moveCategory(delta, categories.size)
         if (after.categoryIndex != before.categoryIndex) {
             nav.value = after
-            sounds.play(UiSound.MOVE)
+            // Leans toward the direction of travel (2b.5a).
+            sounds.play(UiSound.CATEGORY, sounds.pan(travel = delta))
         }
     }
 
@@ -2108,7 +2109,7 @@ class XmbViewModel(
         val category = categories[nav.value.categoryIndex]
         nav.value.pop(category.id, category.title)?.let {
             nav.value = it
-            sounds.play(UiSound.BACK)
+            sounds.play(UiSound.DRILL_OUT)
         }
     }
 
@@ -2117,7 +2118,7 @@ class XmbViewModel(
             is NodeAction.OpenList -> {
                 val category = categories[nav.value.categoryIndex]
                 nav.update { it.push(category.id, category.title, Frame(action.key, node.title)) }
-                sounds.play(UiSound.ENTER)
+                sounds.play(UiSound.DRILL_IN)
             }
             is NodeAction.LaunchGame -> launchGame(action.gameId)
             is NodeAction.LaunchApp -> launchApp(action.packageName, action.activityName)

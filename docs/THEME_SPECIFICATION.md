@@ -54,8 +54,9 @@ Xross/themes/<theme_id>/
 ├── surfaces.json   optional: any JSON file listed in "imports" is merged under theme.json
 ├── fonts/          .ttf/.otf; "typography" names one per role (display, body, mono)
 ├── icons/          <icon id>.svg / .png / .webp, e.g. settings.svg, games.png
-├── sounds/         cursor.wav, confirm.wav, back.wav, option.wav, ok.wav, system_ng.wav,
-│                   trophy.wav, 01. opening.wav, gameboot.wav
+├── sounds/         cursor.wav, category_switch.wav, confirm.wav, drill_in.wav, drill_out.wav,
+│                   back.wav, option.wav, ok.wav, system_ng.wav, trophy.wav, 01. opening.wav,
+│                   gameboot.wav
 ├── shader.frag     optional: a CUSTOM background shader (or effects.shaderPath)
 ├── postprocess.agsl optional: a CUSTOM UI filter, Android 13+ (or effects.uiFilterPath)
 └── wallpaper.png   optional: drawn behind the menu (or .jpg / .webp, or effects.wallpaperPath)
@@ -145,22 +146,49 @@ drawn, layer by layer:
 
 Sounds (`audio/UiSounds.kt`) come from the active theme pack:
 
-| Event | Pack file |
-| --- | --- |
-| Every D-pad step, horizontal and vertical (cursor and category moves) | `cursor.wav` |
-| Opening a list or running an item | `confirm.wav` (Default: `cursor.wav`) |
-| Back | `back.wav` |
-| Options menu | `option.wav` (Default: `cursor.wav`) |
-| A setting saved, an action that worked | `ok.wav` |
-| Errors and actions that aren't allowed (Options on a row without a menu, Confirm on an information row, a slider at its end) | `system_ng.wav` |
-| Achievement unlocked | `trophy.wav` |
-| Startup, with the fade-in | `01. opening.wav` |
-| Game start | `gameboot.wav` |
+| Event | Role | Pack file | If the pack has no file |
+| --- | --- | --- | --- |
+| A step up or down a list, or through an overlay | `cursor` | `cursor.wav` | Default pack |
+| Left / Right between categories | `category_switch` | `category_switch.wav` | the pack's `cursor` |
+| Running an item, confirming a choice | `confirm` | `confirm.wav` | Default pack (its `cursor.wav`) |
+| Into a folder or sub-list | `drill_in` | `drill_in.wav` | the pack's `confirm` |
+| Out of a folder or sub-list | `drill_out` | `drill_out.wav` | the pack's `back` |
+| Back, closing an overlay | `back` | `back.wav` | Default pack |
+| Options menu | `option` | `option.wav` | Default pack (its `cursor.wav`) |
+| A setting saved, an action that worked | `ok` | `ok.wav` | Default pack |
+| Errors and actions that aren't allowed (Options on a row without a menu, Confirm on an information row, a slider at its end) | `system_ng` | `system_ng.wav` | Default pack |
+| Achievement unlocked | `trophy` | `trophy.wav` | Default pack |
+| Startup, with the fade-in | `opening` | `01. opening.wav` | Default pack |
+| Game start | `gameboot` | `gameboot.wav` | Default pack |
 
 * In `audio.sounds`, a bare file name is looked up in `sounds/`, a path ("audio/tick.wav") from the
-  pack root. `audio.soundGains` scales a role's volume.
-* The Theme 2.0 names `cancel`, `optionOpen`, `gameLaunch` and `achievementUnlock` are accepted for
-  `back`, `option`, `gameboot` and `trophy`.
+  pack root. `audio.soundGains` sets a role's level, 0–1 (it can only lower a sample, so ship
+  files at full level: short clicks peaking near −3 dBFS, longer cues near −16 LUFS).
+* A role with a fallback (`category_switch`, `drill_in`, `drill_out`) that the pack has no file for
+  plays the fallback's file **from the same pack**, at the fallback's gain, before the Default
+  pack's: a pack with only `cursor.wav` ticks with it on category switches too.
+* Role keys ignore case, `_` and `-` (`system_ng`, `systemNg` and `SYSTEM_NG` are one key), and
+  the Theme 2.0 names `cancel`, `optionOpen`, `gameLaunch` and `achievementUnlock` are accepted for
+  `back`, `option`, `gameboot` and `trophy`. Unknown role keys, and unknown `audio` properties, are
+  listed with the pack's problems.
+* **Gains through the cascade:** variants, `categoryOverrides`, `systemOverrides` and `rules`
+  (`apply`) may carry `"audio": { "soundGains": { … } }`; the last layer that names a role wins
+  (§7 order). Only gains change there: files, panning and jitter are the pack's.
+* `audio.panAmount` (0–1, default 0.35): effects pan with the crosshair's X position across the
+  screen, times this amount, so a centred XMB stays centred; a category switch leans a little
+  further toward the direction of travel. 0 keeps every effect centred.
+* `audio.cursorJitter` (default false): the `cursor` and `category_switch` ticks play at a random
+  rate between 0.98 and 1.02, so a long scroll sounds less mechanical.
+
+```json
+"audio": {
+  "sounds": { "cursor": "tick.wav", "categorySwitch": "swish.wav" },
+  "soundGains": { "cursor": 0.5, "drillIn": 0.7 },
+  "panAmount": 0.35,
+  "cursorJitter": true
+}
+```
+
 * **Settings ▸ Sound** toggles effects, volume, the startup sound and the game-start sound.
 
 ## 6. Wave background and Wave settings
@@ -335,7 +363,7 @@ a quarter second.
 Each may set `palette` roles, `effects.surfaceStyle`, `effects.shaderPreset`,
 `effects.wallpaperPath`, `effects.focusFrameStyle`, `iconMask`, `iconFilter`,
 `foregroundParticles`, `backgroundFilter`, `uiFilter` and `cardAspectRatio` (a system's aspect
-shapes that system's game tiles).
+shapes that system's game tiles), and `audio.soundGains` (§5).
 
 Precedence, lowest to highest: Default pack → pack → variant → category → system → your own
 Settings (a fixed theme color, a chosen surface style or any effect picked in Settings ▸ Theme wins

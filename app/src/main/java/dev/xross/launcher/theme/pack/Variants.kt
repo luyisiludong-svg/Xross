@@ -21,6 +21,8 @@ data class ResolvedVariant(
     val wallpaper: WallpaperRef? = null,
     /** `effects.focusFrameStyle`, `iconMask`, `iconFilter` (2b.4d) and `foregroundParticles` (2b.4e), checked. */
     val cosmetics: Cosmetics? = null,
+    /** `audio.soundGains` (2b.5a), checked. */
+    val gains: Map<SoundRole, Float>? = null,
 )
 
 /** A checked `categoryOverrides` / `systemOverrides` entry (its tile aspect lives in [ThemeLayout]). */
@@ -36,6 +38,8 @@ data class ThemePatch(
     val wallpaper: WallpaperRef? = null,
     /** Focus frame, icon mask and icon filter while this patch holds (2b.4d). */
     val cosmetics: Cosmetics? = null,
+    /** Sound levels while this patch holds (`audio.soundGains`, 2b.5a). */
+    val gains: Map<SoundRole, Float>? = null,
 )
 
 /**
@@ -61,6 +65,8 @@ data class ThemeLook(
     val cosmetics: Cosmetics = Cosmetics.NONE,
     /** `palette.focusGold` here (ARGB), for [FocusFrameStyle.GOLD_BEZEL]; null: the built-in gold. */
     val focusGold: Int? = null,
+    /** Every sound role's gain here (2b.5a, [cascadeGains]); empty: the pack's [LoadedTheme.gains]. */
+    val gains: Map<SoundRole, Float> = emptyMap(),
 )
 
 /**
@@ -86,6 +92,8 @@ fun cascade(
     shader: ShaderRef = ShaderRef.WAVE,
     wallpaper: WallpaperRef = WallpaperRef.NONE,
     cosmetics: Cosmetics = Cosmetics.NONE,
+    gains: Map<SoundRole, Float> = emptyMap(),
+    gainLinks: Map<SoundRole, SoundRole> = emptyMap(),
 ): ThemeLook {
     var palette = roles
     var surface = surfaceId
@@ -109,10 +117,12 @@ fun cascade(
         patch.wallpaper?.let { backdrop = it }
         look = look.over(patch.cosmetics)
     }
+    val gainPatches = listOfNotNull(variant?.gains, category?.gains, system?.gains) + rules.mapNotNull { it.patch?.gains }
     return ThemeLook(
         palette?.toPalette(wave), surface, variant?.id.orEmpty(), f,
         rules = rules.map { it.index }, shader = program, wallpaper = backdrop,
         cosmetics = look, focusGold = palette?.focusGold?.let(ThemeManifest::parseColor),
+        gains = cascadeGains(gains, gainLinks, gainPatches),
     )
 }
 
@@ -153,6 +163,7 @@ internal fun resolveVariants(
             shader = ShaderRef.of("variants.$id", v.effects?.shaderPreset, v.effects?.shaderPath, problems),
             wallpaper = WallpaperRef.of("variants.$id", v.effects?.wallpaperPath, problems),
             cosmetics = Cosmetics.of("variants.$id", v.effects, problems),
+            gains = resolveGainPatch("variants.$id", v.audio, problems),
         )
     }
     return out
@@ -224,10 +235,11 @@ internal fun patchOf(where: String, o: ThemeOverride, surfaceIds: Set<String>, p
     val shader = ShaderRef.of(where, o.effects?.shaderPreset, o.effects?.shaderPath, problems)
     val wallpaper = WallpaperRef.of(where, o.effects?.wallpaperPath, problems)
     val cosmetics = Cosmetics.of(where, o.effects, problems)
-    return if (palette == null && surface == null && flags == null && shader == null && wallpaper == null && cosmetics == null) {
+    val gains = resolveGainPatch(where, o.audio, problems)
+    return if (palette == null && surface == null && flags == null && shader == null && wallpaper == null && cosmetics == null && gains == null) {
         null
     } else {
-        ThemePatch(palette, surface, flags, shader, wallpaper, cosmetics)
+        ThemePatch(palette, surface, flags, shader, wallpaper, cosmetics, gains)
     }
 }
 

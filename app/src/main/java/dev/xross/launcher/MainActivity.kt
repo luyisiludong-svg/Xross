@@ -243,6 +243,8 @@ class MainActivity : ComponentActivity() {
                 }
             }
             val layout = resolved.layout
+            // Sound levels follow the look too (variant, category, system, rules: 2b.5a).
+            androidx.compose.runtime.LaunchedEffect(pack, look.gains) { container.sounds.useLook(pack, look) }
             // Read in the draw phase only, so a category or system switch redraws without recomposing.
             androidx.compose.runtime.LaunchedEffect(resolved.surface) {
                 dev.xross.launcher.ui.ThemeSurfaces.active = resolved.surface
@@ -371,6 +373,7 @@ class MainActivity : ComponentActivity() {
                     onCloseRaHub = viewModel::closeRaHub,
                     particlesIdle = particlesIdle,
                     onUiFilterError = container.shaderHealth::notice,
+                    onCrosshairX = container.sounds::setCrosshair,
                 )
                 }
             }

@@ -81,7 +81,7 @@ class ThemePackTest {
         assertEquals("themes/default/sounds/cursor.wav", path(SoundRole.CURSOR))
         assertEquals("themes/default/sounds/01. opening.wav", path(SoundRole.OPENING))
         assertEquals("themes/default/sounds/system_ng.wav", path(SoundRole.SYSTEM_NG))
-        assertEquals(0.55f, theme.gains[SoundRole.CURSOR]!!, 1e-6f)
+        assertEquals(0.5f, theme.gains[SoundRole.CURSOR]!!, 1e-6f)
 
         val sounds = UiSounds(context)
         sounds.useTheme(theme)
@@ -140,7 +140,7 @@ class ThemePackTest {
         assertEquals(0.4f, theme.gains[SoundRole.CURSOR]!!, 1e-6f)
         // What it lacks comes from Default, gains included.
         assertEquals(SoundSource.Asset("themes/default/sounds/system_ng.wav"), theme.sounds[SoundRole.SYSTEM_NG])
-        assertEquals(0.8f, theme.gains[SoundRole.SYSTEM_NG]!!, 1e-6f)
+        assertEquals(0.6f, theme.gains[SoundRole.SYSTEM_NG]!!, 1e-6f)
         assertTrue(theme.icons[GlyphKey.SETTINGS] is ThemeIcon.Vector)
         assertEquals(GlyphKey.entries.size, theme.icons.size)
         assertEquals(9, theme.wave?.lineCount)
