@@ -66,6 +66,8 @@ sealed interface Command {
     /** Games ▸ RetroAchievements: the profile dashboard. */
     data object OpenRaHub : Command
     data object CycleTheme : Command
+    /** Settings ▸ Theme ▸ Colors ▸ Theme color ▸ Options: an [dev.xross.launcher.theme.XrossTheme] name or PACK. */
+    data class SetTheme(val name: String) : Command
     data object CycleThemePack : Command
     data class SetThemePack(val id: String) : Command
     data object ReloadThemePacks : Command

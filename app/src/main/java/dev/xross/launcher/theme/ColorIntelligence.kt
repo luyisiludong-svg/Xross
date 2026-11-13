@@ -259,6 +259,17 @@ data class GameColors(val accent: Int, val accentSecondary: Int, val canvas: Int
  * off ([allowsArt]). [stillMotion] profiles freeze every infinite animation and the wave's
  * render loop, for E-Ink panels that ghost on continuous redraws.
  */
+/** A Settings ▸ Theme setting a [QuickProfile] can take over; [label] is the row's title. */
+enum class ProfileField(val label: String) {
+    THEME_COLOR("Theme color"),
+    SURFACE("Surface style"),
+    /** Animations and the wave's motion (Wave settings' speed has no effect while the wave is still). */
+    MOTION("Motion"),
+    ADAPTIVE_COLORS("Adaptive colors"),
+    CIRCADIAN("Circadian curve"),
+    BATTERY_TINT("Battery alert tint"),
+}
+
 enum class QuickProfile(
     val label: String,
     val palette: ThemePalette?,
@@ -295,6 +306,25 @@ enum class QuickProfile(
         allowsAmbient = false,
     ),
     ;
+
+    /**
+     * The settings this profile takes over, and only these: every other Settings ▸ Theme row keeps
+     * the user's value while the profile is on. Derived from the constructor, so the table can't
+     * drift from what [ThemeLookResolver] and [ColorPipeline] actually apply.
+     */
+    val fields: Set<ProfileField>
+        get() = buildSet {
+            if (palette != null) add(ProfileField.THEME_COLOR)
+            if (surface != null) add(ProfileField.SURFACE)
+            if (motion != null || stillMotion) add(ProfileField.MOTION)
+            if (!allowsArt) add(ProfileField.ADAPTIVE_COLORS)
+            if (!allowsAmbient) {
+                add(ProfileField.CIRCADIAN)
+                add(ProfileField.BATTERY_TINT)
+            }
+        }
+
+    fun sets(field: ProfileField): Boolean = field in fields
 
     /** [base] (the pack's layout) as this profile draws it: E-Ink moves instantly and never scrolls text. */
     fun layout(base: ThemeLayout): ThemeLayout {

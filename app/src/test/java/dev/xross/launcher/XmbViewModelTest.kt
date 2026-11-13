@@ -8,6 +8,7 @@ import dev.xross.launcher.input.ConnectedController
 import dev.xross.launcher.input.ControllerKey
 import dev.xross.launcher.input.NavAction
 import dev.xross.launcher.state.Categories
+import dev.xross.launcher.state.MenuTree
 import dev.xross.launcher.state.RemapSession
 import dev.xross.launcher.state.XmbUiState
 import dev.xross.launcher.state.XmbViewModel
@@ -201,8 +202,11 @@ class XmbViewModelTest {
         vm.await("the Settings root") { s -> s.items.any { it.title == "Theme" } }
         vm.press(NavAction.DOWN, times = vm.state.value.items.indexOfFirst { it.title == "Theme" } - vm.state.value.focusedIndex)
         vm.press(NavAction.CONFIRM)
-        vm.await("the Theme list") { s -> s.items.any { it.id == "disp:wavesettings" } }
+        vm.await("the Theme list") { s -> s.items.any { it.id == MenuTree.DISPLAY_BACKGROUND } }
         assertEquals("disp:pack", vm.state.value.items.first().id)
+        vm.press(NavAction.DOWN, times = vm.state.value.items.indexOfFirst { it.id == MenuTree.DISPLAY_BACKGROUND } - vm.state.value.focusedIndex)
+        vm.press(NavAction.CONFIRM)
+        vm.await("Theme ▸ Background") { s -> s.items.any { it.id == "disp:wavesettings" } }
         vm.press(NavAction.DOWN, times = vm.state.value.items.indexOfFirst { it.id == "disp:wavesettings" } - vm.state.value.focusedIndex)
         vm.press(NavAction.CONFIRM)
         assertNotNull(vm.state.value.waveEditor)

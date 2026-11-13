@@ -2292,6 +2292,10 @@ class XmbViewModel(
                 val i = names.indexOf(it.theme).coerceAtLeast(-1)
                 it.copy(theme = names[(i + 1) % names.size])
             }
+            is Command.SetTheme -> {
+                val known = command.name == dev.xross.launcher.theme.PACK_THEME || XrossTheme.entries.any { it.name == command.name }
+                if (known) settingsStore.update { it.copy(theme = command.name) }
+            }
             Command.CycleThemePack -> {
                 val packs = container.themes.packs.value
                 if (packs.size <= 1) {

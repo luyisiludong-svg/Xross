@@ -38,6 +38,11 @@ enum class XrossTheme(
     AMBER("Amber", ThemePalette(0xFF2E1600.toInt(), 0xFFC07010.toInt(), 0xFFFFD27A.toInt())),
     ROSE("Rose", ThemePalette(0xFF2E0A22.toInt(), 0xFFB04C8E.toInt(), 0xFFFFC6EA.toInt())),
     MIDNIGHT("Midnight", ThemePalette(0xFF040406.toInt(), 0xFF22222E.toInt(), 0xFFA6A6C0.toInt())),
+    TEAL("Teal", ThemePalette(0xFF012427.toInt(), 0xFF117A80.toInt(), 0xFFA8F4F0.toInt())),
+    VIOLET("Violet", ThemePalette(0xFF16062E.toInt(), 0xFF6A2DB8.toInt(), 0xFFDCC4FF.toInt())),
+    CORAL("Coral", ThemePalette(0xFF2E0E08.toInt(), 0xFFD0583E.toInt(), 0xFFFFC9B8.toInt())),
+    SLATE("Slate", ThemePalette(0xFF10151C.toInt(), 0xFF4A5A6E.toInt(), 0xFFCFDAE6.toInt())),
+    COPPER("Copper", ThemePalette(0xFF241005.toInt(), 0xFF9A5428.toInt(), 0xFFFFD7B0.toInt())),
 
     /** Changes with the month. [fixed] is only a fallback; [palette] computes the real colors. */
     ORIGINAL("Original", ThemePalette(0xFF2B2850.toInt(), 0xFF5D5994.toInt(), 0xFFD9D6FF.toInt()), dynamic = true);

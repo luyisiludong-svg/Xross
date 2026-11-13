@@ -171,7 +171,7 @@ class Phase2bFeaturesTest {
     }
 
     @Test fun profileCustomizationOpensFromThemeSettingsAndSavesAtOnce() {
-        val row = MenuTree(MenuSnapshot()).list(MenuTree.DISPLAY).single { it.id == "disp:avatar" }
+        val row = MenuTree(MenuSnapshot()).themeRows().single { it.id == "disp:avatar" }
         assertEquals("Profile customization", row.title)
         assertEquals("Pastel pink ring · 2 dp · glow on", row.subtitle)
         assertEquals(NodeAction.Run(Command.OpenAvatarStyle), row.action)
@@ -183,6 +183,10 @@ class Phase2bFeaturesTest {
         val theme = vm.state.value.items.indexOfFirst { (it.action as? NodeAction.OpenList)?.key == MenuTree.DISPLAY }
         vm.press(NavAction.DOWN, times = theme)
         vm.press(NavAction.CONFIRM)
+        vm.await("the Theme list") { s -> s.items.any { it.id == MenuTree.DISPLAY_MENU } }
+        vm.press(NavAction.DOWN, times = vm.state.value.items.indexOfFirst { it.id == MenuTree.DISPLAY_MENU })
+        vm.press(NavAction.CONFIRM)
+        vm.await("Theme ▸ Menu and profile") { s -> s.items.any { it.id == "disp:avatar" } }
         val avatar = vm.state.value.items.indexOfFirst { it.id == "disp:avatar" }
         vm.press(NavAction.DOWN, times = avatar)
         vm.press(NavAction.CONFIRM)

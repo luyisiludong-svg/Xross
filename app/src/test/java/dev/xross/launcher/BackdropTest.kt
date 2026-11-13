@@ -168,7 +168,7 @@ class BackdropTest {
                 settings = XrossSettings(customWallpaper = custom),
                 themes = ThemeSetup(activeId = "night", activeName = "Night", packWallpaper = packWallpaper),
             ),
-        ).list(MenuTree.DISPLAY).single { it.id == "disp:wallpaper" }
+        ).themeRows().single { it.id == "disp:wallpaper" }
 
         assertEquals(NodeAction.Run(Command.ResetXrossWallpaper), row("content://x", true).action)
         assertTrue(row("", true).subtitle!!.startsWith("From Night"))

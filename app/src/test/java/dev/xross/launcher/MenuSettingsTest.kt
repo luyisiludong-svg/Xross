@@ -66,20 +66,20 @@ class MenuSettingsTest {
     }
 
     @Test fun themeSettingShowsThemeLabel() {
-        val node = MenuTree(MenuSnapshot(settings = XrossSettings(theme = "CRIMSON"))).list(MenuTree.DISPLAY).single { it.id == "disp:theme" }
+        val node = MenuTree(MenuSnapshot(settings = XrossSettings(theme = "CRIMSON"))).themeRows().single { it.id == "disp:theme" }
         assertEquals("Crimson", node.subtitle)
         assertEquals(NodeAction.Run(Command.CycleTheme), node.action)
         assertEquals(XrossTheme.LAVENDER, XrossTheme.byName("nonsense"))
     }
 
     @Test fun originalThemeSaysItChangesMonthly() {
-        val node = MenuTree(MenuSnapshot(settings = XrossSettings(theme = "ORIGINAL"))).list(MenuTree.DISPLAY).single { it.id == "disp:theme" }
+        val node = MenuTree(MenuSnapshot(settings = XrossSettings(theme = "ORIGINAL"))).themeRows().single { it.id == "disp:theme" }
         assertEquals("Original · changes every month", node.subtitle)
     }
 
     @Test fun buttonHintsCanBeHidden() {
         fun row(show: Boolean) = MenuTree(MenuSnapshot(settings = XrossSettings(showButtonHints = show)))
-            .list(MenuTree.DISPLAY).single { it.id == "disp:hints" }
+            .themeRows().single { it.id == "disp:hints" }
         assertEquals(NodeAction.Run(Command.ToggleButtonHints), row(true).action)
         assertEquals("Hidden", row(false).subtitle)
         assertTrue(row(true).subtitle!!.startsWith("Shown"))
