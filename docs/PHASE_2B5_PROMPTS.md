@@ -57,7 +57,23 @@ launch; new sound roles fall back as in A.9; camelCase aliases resolve.
 ## Slice 2b.5-prep: Groundwork
 
 **Status (2026-11-13, `refactor/2b5-prep`):** done in code, unit-tested (654 tests, lint 0
-errors); device checks not run yet. Differences from the prompt below:
+errors), device-checked on the A55 (profiling builds, the user's own library and settings, no
+data seeded):
+- Frame pacing, Games ▸ All Games ▸ Super Nintendo, 20 Down + 20 Up at 450 ms, 4 interleaved
+  rounds: deadline jank main 0.17 / 0.03 / 0.11 / 0.07 %, prep 0.11 / 0.11 / 0.18 / 0.07 %. One
+  pass of each build hit the known slow GPU mode (legacy 57 % / 75 %, p50 14–15 ms; see the
+  particle note in STATUS); the others p50 7–10 ms on both. No difference.
+- Quick profiles (NONE, OLED, Y2K, E-Ink): `XrossColors` shows each profile's palette (OLED
+  `#000000` / `#E6E6FF`, Y2K `#1B1829` / `#FFB5C5`, E-Ink black / white) and the user's Emerald
+  `#01261A` with none. Every Theme row reads as intended ("Set by …", "Off (set by Monochrome
+  E-Ink)", "Still in Monochrome E-Ink"; wave background, shader and particles unlabelled).
+  Confirm on Quick profile changed only `display.quickProfile` in `settings.json`.
+- Snap ducking: **not verified on the device.** The phone's games have no scraped art, so the
+  menu starts no snaps (same on main). `AudioDirector` logs `XrossMix music=… snap=…` in debug
+  and profiling builds for when a seeded library is available; `AudioDirectorTest` pins the
+  0.2 duck. Music pausing for a game launch wasn't run either (it launches a real emulator).
+
+Differences from the prompt below:
 - Lint: the 10 errors were already fixed in `5281d15`, and AGP's `check` already runs
   `lintDebug`, so requirement 1 needed no change.
 - `ThemeLookResolver` is a pure `resolve(LookInputs): ResolvedLook` that `MainActivity` calls

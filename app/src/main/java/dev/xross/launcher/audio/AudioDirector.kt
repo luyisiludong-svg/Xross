@@ -57,5 +57,16 @@ class AudioDirector(
     /** Back in Xross: music a game launch paused picks up again. */
     fun onReturnFromGame() = music.resumeAfterGame()
 
-    private fun applyMusic() = music.setVolume(mix().music)
+    private fun applyMusic() {
+        val m = mix()
+        music.setVolume(m.music)
+        // Debug and profiling builds: one line per change, for the device checks (a player's
+        // own volume isn't visible in dumpsys audio).
+        if (dev.xross.launcher.BuildConfig.PERF_LOG && m.music != lastMusic) {
+            android.util.Log.i("XrossMix", "music=%.2f snap=%s snapVolume=%.2f".format(java.util.Locale.ROOT, m.music, snapActive, m.snap))
+        }
+        lastMusic = m.music
+    }
+
+    private var lastMusic = -1f
 }
