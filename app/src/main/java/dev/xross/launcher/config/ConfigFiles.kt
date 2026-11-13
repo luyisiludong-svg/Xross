@@ -78,6 +78,11 @@ data class SettingsFile(
         val themeVariant: String = D.themeVariant,
         /** Xross wallpaper: a photo's content:// URI or a file path; empty = the theme pack's wallpaper. */
         val customWallpaper: String = D.customWallpaper,
+        /**
+         * Overrides of the pack's effects (Settings ▸ Theme): `shaderPreset`, `backgroundFilter`,
+         * `uiFilter`, `focusFrameStyle`, `foregroundParticles`, `iconMask`; empty = the pack's.
+         */
+        val effects: dev.xross.launcher.theme.pack.EffectOverrides = D.effectOverrides,
         /** NONE, OLED_TRUE_BLACK, Y2K_CYBER_PASTEL or MONOCHROME_EINK. */
         val quickProfile: String = D.quickProfile,
         /** Colors from the focused game's art; null = the theme pack's choice (on by default). */
@@ -235,6 +240,7 @@ object ConfigCodec {
             surfaceStyle = s.surfaceStyle,
             themeVariant = s.themeVariant,
             customWallpaper = s.customWallpaper,
+            effects = s.effectOverrides,
             quickProfile = s.quickProfile,
             adaptiveGamePalette = s.adaptiveGamePalette,
             circadianCurve = s.circadianCurve,
@@ -277,6 +283,7 @@ object ConfigCodec {
         surfaceStyle = f.display.surfaceStyle.trim().take(48),
         themeVariant = f.display.themeVariant.trim().take(48),
         customWallpaper = f.display.customWallpaper.trim().take(MAX_WALLPAPER_CHARS),
+        effectOverrides = f.display.effects.normalized(),
         quickProfile = dev.xross.launcher.theme.QuickProfile.normalize(f.display.quickProfile),
         adaptiveGamePalette = f.display.adaptiveGamePalette,
         circadianCurve = f.display.circadianCurve,

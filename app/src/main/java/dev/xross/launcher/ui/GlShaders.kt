@@ -40,6 +40,8 @@ internal class GlProgram(val spec: ShaderSpec) {
     var uAccent = -1; var uGlow = -1; var uBatteryLevel = -1; var uAudioBass = -1
     var uAudioBeat = -1; var uTransition = -1; var uTravel = -1
     var uBright = -1; var uLines = -1; var uTurb = -1; var uThick = -1
+    /** CRT's own: render pixels per dp (2b.4f). */
+    var uPxPerDp = -1
 
     fun fail(cause: ShaderStatus.Cause, error: String) {
         this.cause = cause
@@ -104,6 +106,7 @@ internal class GlProgram(val spec: ShaderSpec) {
         uBatteryLevel = loc("uBatteryLevel"); uAudioBass = loc("uAudioBass"); uAudioBeat = loc("uAudioBeat")
         uTransition = loc("uTransition"); uTravel = loc("uTravel")
         uBright = loc("uBright"); uLines = loc("uLines"); uTurb = loc("uTurb"); uThick = loc("uThick")
+        uPxPerDp = loc("uPxPerDp")
         state = ProgramState.READY
         return null
     }
@@ -119,6 +122,89 @@ internal class GlProgram(val spec: ShaderSpec) {
     companion object {
         /** `GL_KHR_parallel_shader_compile`. */
         const val GL_COMPLETION_STATUS_KHR = 0x91B1
+    }
+}
+
+/**
+ * The background filter (2b.4f): `screen_filter.frag` drawn over the frame with a multiplying
+ * blend, so it only ever darkens what the background program drew. Compiled once per context;
+ * if it fails the frame is drawn without it (logged, no toast: it is built in).
+ */
+internal class ScreenFilterPass {
+    private var handle = 0
+    private var uResolution = -1
+    private var uPxPerDp = -1
+    private var uMode = -1
+    private var uStrength = -1
+
+    val ready: Boolean get() = handle != 0
+
+    /** Compiles [source] (null: missing from the APK) against [vertex]; the last context's handle is gone already. */
+    fun compile(vertex: Int, source: String?) {
+        handle = 0
+        if (source == null) {
+            android.util.Log.e("XrossShader", "screen_filter.frag is missing from the app")
+            return
+        }
+        val fs = GLES30.glCreateShader(GLES30.GL_FRAGMENT_SHADER)
+        val program = GLES30.glCreateProgram()
+        if (fs == 0 || program == 0) return
+        GLES30.glShaderSource(fs, source)
+        GLES30.glCompileShader(fs)
+        GLES30.glAttachShader(program, vertex)
+        GLES30.glAttachShader(program, fs)
+        GLES30.glLinkProgram(program)
+        val status = IntArray(1)
+        GLES30.glGetProgramiv(program, GLES30.GL_LINK_STATUS, status, 0)
+        GLES30.glDetachShader(program, fs)
+        GLES30.glDeleteShader(fs)
+        if (status[0] == 0) {
+            android.util.Log.e("XrossShader", "screen filter: ${GLES30.glGetProgramInfoLog(program).trim()}")
+            GLES30.glDeleteProgram(program)
+            return
+        }
+        handle = program
+        uResolution = GLES30.glGetUniformLocation(program, "uResolution")
+        uPxPerDp = GLES30.glGetUniformLocation(program, "uPxPerDp")
+        uMode = GLES30.glGetUniformLocation(program, "uMode")
+        uStrength = GLES30.glGetUniformLocation(program, "uStrength")
+    }
+
+    fun draw(filter: dev.xross.launcher.theme.pack.BackgroundFilter, width: Int, height: Int, pxPerDp: Float, strength: Float = 1f) {
+        if (handle == 0) return
+        val mode = mode(filter)
+        if (mode == 0) return
+        GLES30.glUseProgram(handle)
+        GLES30.glUniform2f(uResolution, width.toFloat(), height.toFloat())
+        GLES30.glUniform1f(uPxPerDp, pxPerDp)
+        GLES30.glUniform1i(uMode, mode)
+        GLES30.glUniform1f(uStrength, strength.coerceIn(0f, 1f))
+        GLES30.glEnable(GLES30.GL_BLEND)
+        GLES30.glBlendFunc(GLES30.GL_DST_COLOR, GLES30.GL_ZERO)
+        GLES30.glDrawArrays(GLES30.GL_TRIANGLES, 0, 3)
+        GLES30.glDisable(GLES30.GL_BLEND)
+    }
+
+    companion object {
+        /** `uMode` of [filter]: 0 none, 1 scanlines, 2 CRT, 3 LCD grid (as in the shader). */
+        fun mode(filter: dev.xross.launcher.theme.pack.BackgroundFilter): Int = when (filter) {
+            dev.xross.launcher.theme.pack.BackgroundFilter.NONE -> 0
+            dev.xross.launcher.theme.pack.BackgroundFilter.SCANLINES -> 1
+            dev.xross.launcher.theme.pack.BackgroundFilter.CRT -> 2
+            dev.xross.launcher.theme.pack.BackgroundFilter.LCD_GRID -> 3
+        }
+
+        /** The shader's `pitch(dp, minPx)`: [dp] in whole render pixels, at least [minPx]. */
+        fun pitchPx(dp: Float, pxPerDp: Float, minPx: Int): Int = maxOf(minPx, kotlin.math.floor(dp * pxPerDp + 0.5f).toInt())
+
+        /** Scanline pitch: 1.5 dp, at least 2 px. */
+        fun linePitchPx(pxPerDp: Float) = pitchPx(1.5f, pxPerDp, 2)
+
+        /** Aperture-grille stripe: 0.5 dp, at least 1 px. */
+        fun stripePx(pxPerDp: Float) = pitchPx(0.5f, pxPerDp, 1)
+
+        /** LCD cell: 3 dp, at least 3 px. */
+        fun cellPx(pxPerDp: Float) = pitchPx(3f, pxPerDp, 3)
     }
 }
 

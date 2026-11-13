@@ -82,7 +82,10 @@ fun WaveBackground(
                 val h = b - t
                 if (w > 0 && h > 0) {
                     val scale = WaveRenderer.renderScale(w, h)
-                    (v as GLSurfaceView).holder.setFixedSize((w * scale).roundToInt(), (h * scale).roundToInt())
+                    val rw = (w * scale).roundToInt()
+                    (v as GLSurfaceView).holder.setFixedSize(rw, (h * scale).roundToInt())
+                    // Lines and stripes are sized in dp, snapped to the render target's pixels (2b.4f).
+                    renderer.pxPerDp = v.resources.displayMetrics.density * rw / w
                 }
             }
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO

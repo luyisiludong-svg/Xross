@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# Theme suite (88 checks): Settings ▸ Theme rows (theme color, wave and avatar panels, platform
-# folders, surface style), quick profiles (OLED, Y2K, E-Ink), color layers (adaptive colors,
+# Theme suite (134 checks): Settings ▸ Theme rows (theme color, wave and avatar panels, platform
+# folders, surface style, the 2b.4f effect rows, Pick custom wallpaper, Reset to theme defaults), quick profiles (OLED, Y2K, E-Ink), color layers (adaptive colors,
 # circadian curve, battery tint and charging pulse through `dumpsys battery`), the Sound section,
 # v2 theme packs and hot reload (and a pack's wallpaper.png, which stops the wave and is pre-blurred
 # for frosted surfaces; a pack's focus frame, icon mask and icon filter, with the Apps list's icons
-# drawn once per style; a pack's foreground particles, resting after 10 s), .xtheme import (zip-slip, variants, overrides, Keep both), and the
+# drawn once per style; a pack's foreground particles, resting after 10 s; a pack's background
+# filter and custom postprocess.agsl, resting and failing safely), .xtheme import (zip-slip, variants, overrides, Keep both), and the
 # game-art palette (hero PNGs, scraped flags patched into the database, extraction cache, debounce).
 #
 #   tools/device-tests/test-theme.sh
@@ -15,7 +16,7 @@
 # The battery override is always reset at exit, even after Ctrl-C.
 set -u
 . "$(dirname "$0")/lib/harness.sh"
-suite_begin theme 102
+suite_begin theme 134
 
 setup_base_env
 setup_theme_fixtures
@@ -26,7 +27,9 @@ category 0
 section "Settings"
 # Theme rows: Theme pack, [Theme variant, only for packs with variants], Theme color, Wave
 # background, Wave settings, Profile customization, Button hints, Platform folders, Surface style,
-# Quick profile, Adaptive colors, Circadian curve, Battery alert tint, Xross wallpaper, Import theme (.xtheme)….
+# Quick profile, Adaptive colors, Circadian curve, Battery alert tint, Background shader,
+# Background filter, UI filter, Focus frame style, Ambient particles, App icon mask, Xross
+# wallpaper, Reset to theme defaults, Import theme (.xtheme)….
 press DPAD_DOWN 3 KEYCODE_DPAD_CENTER
 expect "Theme pack" "Theme section lists theme packs"
 expect "Default" "the built-in Default pack is active"
@@ -189,10 +192,11 @@ adb logcat -d -s WaveLoop:I | tail -1 | grep -q "mode=STOPPED" \
   && ok "an opaque wallpaper stops the wave's GL loop" || bad "the wave still runs ($(adb logcat -d -s WaveLoop:I | tail -1))"
 adb logcat -d -s XrossFrost:I | grep -q "WALLPAPER radius=[1-9][0-9]* copy=192x108" \
   && ok "frosted surfaces get a 192 px pre-blurred copy of it" || bad "no pre-blurred copy ($(adb logcat -d -s XrossFrost:I | tail -1))"
-# Xross wallpaper sits just above Import theme (the last row); then back to Wave settings.
-press DPAD_DOWN 20 KEYCODE_DPAD_UP
+# Xross wallpaper sits two rows above Import theme (the last row, below Reset to theme defaults);
+# then back to Wave settings.
+press DPAD_DOWN 30 KEYCODE_DPAD_UP KEYCODE_DPAD_UP
 expect "From Smoke Pack Live" "Settings ▸ Theme ▸ Xross wallpaper names the pack"
-press DPAD_UP 25 KEYCODE_DPAD_DOWN KEYCODE_DPAD_DOWN KEYCODE_DPAD_DOWN
+press DPAD_UP 30 KEYCODE_DPAD_DOWN KEYCODE_DPAD_DOWN KEYCODE_DPAD_DOWN
 adb logcat -c
 adb shell rm /sdcard/Xross/themes/smoke_pack/wallpaper.png
 pause 2.5
@@ -252,6 +256,56 @@ key KEYCODE_DPAD_DOWN
 key KEYCODE_DPAD_UP
 adb logcat -d -s XrossParticles:I | grep -q "state=RUNNING preset=SNOW" \
   && ok "the next key wakes the particles" || bad "the particles stayed at rest ($(adb logcat -d -s XrossParticles:I | tail -1))"
+# 2b.4f: the pack's background filter (a GL pass under the menu) and a custom UI filter
+# (postprocess.agsl, AGSL on Android 13+) hot-reload. One that reads uTime animates only while the
+# screen is in use and rests after 3 s without input (no frames); a broken one is turned off with
+# a toast.
+sdk=$(adb shell getprop ro.build.version.sdk | tr -d '\r')
+cat > "$XT_TMP/postprocess.agsl" <<'AGSL'
+// A slow brightness wave down the menu.
+uniform shader content;
+uniform float uTime;
+uniform float2 uResolution;
+half4 main(float2 p) {
+    half4 c = content.eval(p);
+    float k = 0.92 + 0.08 * sin(uTime * 2.0 + p.y / uResolution.y * 6.2831);
+    return half4(c.rgb * half(k), c.a);
+}
+AGSL
+adb push "$XT_TMP/postprocess.agsl" /sdcard/Xross/themes/smoke_pack/postprocess.agsl >/dev/null
+adb logcat -c
+fx='{"schemaVersion": 2, "name": "Smoke Pack Live", "author": "smoke", "palette": {"canvas": "#101830", "accentSecondary": "#C0E0FF"}, "effects": {"backgroundFilter": "LCD_GRID", "uiFilter": "CUSTOM"}}'
+adb shell "echo '$fx' > /sdcard/Xross/themes/smoke_pack/theme.json"
+pause 1.5
+key KEYCODE_DPAD_DOWN
+key KEYCODE_DPAD_UP
+pause 0.5
+adb logcat -d -s XrossFilter:I | tail -1 | grep -qE "background=LCD_GRID .*cellPx=[3-9]" \
+  && ok "effects.backgroundFilter draws an LCD grid over the background, in whole render pixels" \
+  || bad "no LCD grid ($(adb logcat -d -s XrossFilter:I | tail -1))"
+if [ "$sdk" -ge 33 ]; then
+  adb logcat -d -s XrossUiFilter:I | grep -q "filter=CUSTOM state=ANIMATING" \
+    && ok "a pack's postprocess.agsl that reads uTime animates over the menu" \
+    || bad "the custom UI filter isn't animating ($(adb logcat -d -s XrossUiFilter:I | tail -1))"
+  pause 4
+  adb logcat -d -s XrossUiFilter:I | tail -1 | grep -q "filter=CUSTOM state=RESTING" \
+    && ok "3 s without input: the UI filter rests" || bad "the UI filter didn't rest ($(adb logcat -d -s XrossUiFilter:I | tail -1))"
+  f0=$(frames); pause 3; f1=$(frames)
+  [ "$f0" = "$f1" ] && ok "a resting UI filter draws no frames" || bad "$((f1 - f0)) frames drawn under a resting UI filter"
+  adb logcat -c
+  adb shell "echo 'uniform shader content; half4 main(float2 p) { return content.eval(p) * nope; }' > /sdcard/Xross/themes/smoke_pack/postprocess.agsl"
+  adb shell "echo '$fx' > /sdcard/Xross/themes/smoke_pack/theme.json"
+  pause 1
+  expect "UI filter postprocess.agsl" "a broken postprocess.agsl is reported in a toast"
+  adb logcat -d -s XrossUiFilter:I | grep -q "filter=CUSTOM state=FAILED" \
+    && ok "an AGSL error turns the UI filter off (the menu is drawn without it)" \
+    || bad "no FAILED state ($(adb logcat -d -s XrossUiFilter:I | tail -1))"
+else
+  adb logcat -d -s XrossUiFilter:I | grep -q "filter=CUSTOM state=UNSUPPORTED" \
+    && ok "below Android 13 the UI filter stays off" || bad "UI filter state ($(adb logcat -d -s XrossUiFilter:I | tail -1))"
+  skip 4 "AGSL UI filters need Android 13 (this device runs API $sdk)"
+fi
+adb shell rm -f /sdcard/Xross/themes/smoke_pack/postprocess.agsl
 adb shell "echo '$good' > /sdcard/Xross/themes/smoke_pack/theme.json"
 pause 1.5
 top_list
@@ -281,7 +335,8 @@ pick() {
   local found=
   for i in 1 2 3 4 5 6; do
     dump
-    tap_attr "text=\"$1\"" && { found=1; break; }
+    # A list shows the name as text; the image picker's grid only as a thumbnail's description.
+    { tap_attr "text=\"$1\"" || tap_attr "content-desc=\"$1,"; } && { found=1; break; }
     if [ "$i" -eq 2 ] && tap_attr 'content-desc="Search"'; then
       pause 1; adb shell input text "${1%.*}"; adb shell input keyevent KEYCODE_ENTER; pause 1.5
     else
@@ -326,7 +381,7 @@ key KEYCODE_BUTTON_Y
 expect "Cyber Lilac" "Theme variant Options list every variant"
 key KEYCODE_BACK
 # The same file again: ask before replacing; Keep both installs a copy.
-press DPAD_DOWN 20 KEYCODE_DPAD_CENTER
+press DPAD_DOWN 30 KEYCODE_DPAD_CENTER
 pause 2
 pick smoke_variants.xtheme
 expect "is already installed" "re-importing an installed pack asks first"
@@ -352,6 +407,95 @@ expect "Default" "Theme pack Options switch back to Default"
 expect_not "Theme variant" "Default has no Theme variant row"
 key KEYCODE_BACK
 adb shell rm -rf /sdcard/Xross/themes/smoke-variants /sdcard/Xross/themes/smoke-variants-2 /sdcard/Download/smoke_variants.xtheme /sdcard/Download/smoke_slip.xtheme
+
+section "Effects in Settings ▸ Theme (2b.4f)"
+# Rows after Battery alert tint: Background shader, Background filter, UI filter (experimental),
+# Focus frame style, Ambient particles, App icon mask, Xross wallpaper, Reset to theme defaults.
+# Each cycles "Theme pack (…)" first, then its choices; all are saved as display.effects.
+category 0
+press DPAD_DOWN 3 KEYCODE_DPAD_CENTER
+top_list
+press DPAD_DOWN 12
+expect "Theme pack (Wave) · Behind the menu" "Background shader follows the pack (Wave)"
+adb logcat -c
+press DPAD_CENTER 3
+expect "Bokeh · Behind the menu" "Background shader cycles Wave, Matrix, Bokeh"
+settings_has '"shaderPreset": "BOKEH"' && ok "the shader is saved as display.effects.shaderPreset" || bad "shaderPreset not in settings.json"
+adb logcat -d -s XrossEffects:I | tail -1 | grep -q "shader=BOKEH .*user=true" \
+  && ok "the user's shader replaces the pack's" || bad "shader not applied ($(adb logcat -d -s XrossEffects:I | tail -1))"
+key KEYCODE_DPAD_DOWN
+press DPAD_CENTER 2
+expect "Scanlines · Over the background only" "Background filter cycles to Scanlines"
+pause 0.5
+adb logcat -d -s XrossFilter:I | tail -1 | grep -qE "background=SCANLINES .*linePx=[2-9]" \
+  && ok "scanlines are drawn on the GL side, at least 2 render pixels apart" || bad "no scanline pass ($(adb logcat -d -s XrossFilter:I | tail -1))"
+key KEYCODE_DPAD_DOWN
+press DPAD_CENTER 3
+expect_any "Bloom · Over the whole menu" "Bloom · Needs Android 13" "UI filter cycles to Bloom"
+if [ "$sdk" -ge 33 ]; then
+  adb logcat -d -s XrossUiFilter:I | tail -1 | grep -q "filter=BLOOM state=STATIC" \
+    && ok "Bloom is built once (static)" || bad "Bloom state ($(adb logcat -d -s XrossUiFilter:I | tail -1))"
+else
+  adb logcat -d -s XrossUiFilter:I | tail -1 | grep -q "filter=BLOOM state=UNSUPPORTED" \
+    && ok "Bloom stays off below Android 13" || bad "Bloom state ($(adb logcat -d -s XrossUiFilter:I | tail -1))"
+fi
+pause 4
+f0=$(frames); pause 3; f1=$(frames)
+[ "$f0" = "$f1" ] && ok "with Bloom on, a resting menu draws no frames" || bad "$((f1 - f0)) frames drawn at rest under Bloom"
+key KEYCODE_DPAD_DOWN
+press DPAD_CENTER 2
+expect "Static neon · Around the focused item" "Focus frame style cycles to Static neon"
+adb logcat -d -s XrossCosmetics:I | tail -1 | grep -q "frame=STATIC_NEON" \
+  && ok "the user's focus frame is drawn" || bad "frame not applied ($(adb logcat -d -s XrossCosmetics:I | tail -1))"
+key KEYCODE_DPAD_DOWN
+press DPAD_CENTER 2
+expect "Snow · Over the art" "Ambient particles cycle to Snow"
+adb logcat -d -s XrossParticles:I | grep -q "preset=SNOW" \
+  && ok "the user's particles run" || bad "no particles ($(adb logcat -d -s XrossParticles:I | tail -1))"
+key KEYCODE_DPAD_DOWN
+press DPAD_CENTER 3
+expect "Circle · Installed apps' icons" "App icon mask cycles System, Squircle, Circle"
+adb logcat -d -s XrossCosmetics:I | tail -1 | grep -q "mask=CIRCLE" \
+  && ok "the user's icon mask is used" || bad "mask not applied ($(adb logcat -d -s XrossCosmetics:I | tail -1))"
+key KEYCODE_DPAD_DOWN
+expect "None (the background shader shows) · Confirm to pick one" "Xross wallpaper offers to pick a picture"
+adb push "$FIX/smoke_wallpaper.png" /sdcard/Download/smoke_pick.png >/dev/null
+media_scan
+key KEYCODE_DPAD_CENTER
+pause 2
+adb shell dumpsys activity activities | grep -m1 topResumedActivity | grep -q documentsui \
+  && ok "Pick custom opens the system picker" || bad "the picker didn't open"
+adb logcat -c
+pick smoke_pick.png 0.3
+expect "Xross wallpaper set" "a picked picture becomes the Xross wallpaper"
+for _ in $(seq 10); do settings_has '"customWallpaper": "content://' && break; pause 0.5; done
+settings_has '"customWallpaper": "content://' && ok "its URI is saved as display.customWallpaper" || bad "customWallpaper not saved"
+pause 1.5
+adb logcat -d -s XrossWallpaper:I | tail -1 | grep -q "wallpaper=custom .*opaque=true" \
+  && ok "the picked picture shows behind the menu" || bad "no custom wallpaper ($(adb logcat -d -s XrossWallpaper:I | tail -1))"
+# The picker's grant is kept: after a restart the picture still loads.
+adb shell am force-stop "$PKG"
+adb logcat -c
+start_app
+adb logcat -d -s XrossWallpaper:I | grep -q "wallpaper=custom .*opaque=true" \
+  && ok "after a restart the picked picture still loads (persisted read grant)" \
+  || bad "the picked picture didn't load after a restart ($(adb logcat -d -s XrossWallpaper:I | tail -1))"
+category 0
+press DPAD_DOWN 3 KEYCODE_DPAD_CENTER
+top_list
+press DPAD_DOWN 19
+expect "Clears 6 effects" "Reset to theme defaults says what it would clear"
+adb logcat -c
+key KEYCODE_DPAD_CENTER
+expect "Default's own look" "Reset to theme defaults confirms in a toast"
+for _ in $(seq 10); do settings_has '"customWallpaper": ""' && break; pause 0.5; done
+settings_has '"shaderPreset": ""' && settings_has '"customWallpaper": ""' \
+  && ok "every override is cleared from settings.json" || bad "overrides left in settings.json"
+adb logcat -d -s XrossEffects:I | tail -1 | grep -q "shader=WAVE bgFilter=NONE uiFilter=NONE frame=BREATHING_HALO particles=NONE mask=NONE user=false" \
+  && ok "the pack's own effects are back" || bad "effects not reset ($(adb logcat -d -s XrossEffects:I | tail -1))"
+expect "Nothing overrides Default" "the Reset row shows nothing is overridden"
+key KEYCODE_BACK
+adb shell rm -f /sdcard/Download/smoke_pick.png
 
 section "Game-art palette"
 # Two SNES games get hero art (a blue banner with an orange logo, a green one with a magenta logo)

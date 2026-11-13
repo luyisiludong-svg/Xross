@@ -84,7 +84,16 @@ data class ThemeSetup(
     val packFlags: dev.xross.launcher.theme.pack.ColorFlags = dev.xross.launcher.theme.pack.ColorFlags.NONE,
     /** The active pack brings a wallpaper (`wallpaper.png` or `effects.wallpaperPath`). */
     val packWallpaper: Boolean = false,
-)
+    /**
+     * The pack's own look per variant id ("" = its base), no category open, before the user's
+     * picks (2b.4f): what the effect rows call "Theme pack (…)".
+     */
+    val looks: Map<String, dev.xross.launcher.theme.pack.ThemeLook> = emptyMap(),
+) {
+    /** The look of [variant], else the base look, else a plain default. */
+    fun packLook(variant: String): dev.xross.launcher.theme.pack.ThemeLook =
+        looks[variant] ?: looks[""] ?: dev.xross.launcher.theme.pack.ThemeLook(palette = null, surfaceId = packSurface)
+}
 
 /** What Settings ▸ Accounts shows (public profile data only, never the Web API key). */
 data class AccountsSetup(
@@ -901,7 +910,9 @@ class MenuTree(private val s: MenuSnapshot) {
         colorSwitchRow("disp:adaptive", "Adaptive colors", ColorSwitch.ADAPTIVE, "Colors follow the focused game's art"),
         colorSwitchRow("disp:circadian", "Circadian curve", ColorSwitch.CIRCADIAN, "Colors shift with the time of day"),
         colorSwitchRow("disp:battery", "Battery alert tint", ColorSwitch.BATTERY, "Amber to red below 20%, green while charging"),
+    ) + dev.xross.launcher.theme.pack.EffectSlot.entries.map(::effectRow) + listOf(
         wallpaperRow(),
+        resetThemeRow(),
         setting(
             "disp:import", "Import theme (.xtheme)…",
             "Pick a theme file; it is checked, then unpacked into Xross/themes",
@@ -910,18 +921,73 @@ class MenuTree(private val s: MenuSnapshot) {
     )
 
     /**
+     * One of the effect rows (2b.4f): Background shader, Background filter, UI filter, Focus frame
+     * style, Ambient particles, App icon mask. Confirm cycles "Theme pack (…)" then each choice;
+     * Options lists them all. Saved as `display.effects` in settings.json.
+     */
+    private fun effectRow(slot: dev.xross.launcher.theme.pack.EffectSlot): XmbNode {
+        val own = s.settings.effectOverrides[slot]
+        val look = s.themes.packLook(s.settings.themeVariant)
+        val shown = if (own.isEmpty()) slot.packLabel(look) else slot.label(own)
+        val note = when (slot) {
+            dev.xross.launcher.theme.pack.EffectSlot.SHADER -> if (s.settings.waveEnabled) "Behind the menu" else "Wave background is off"
+            dev.xross.launcher.theme.pack.EffectSlot.BACKGROUND_FILTER -> "Over the background only"
+            dev.xross.launcher.theme.pack.EffectSlot.UI_FILTER ->
+                if (dev.xross.launcher.ui.UiFilterSupport.supported()) "Over the whole menu" else "Needs Android 13"
+            dev.xross.launcher.theme.pack.EffectSlot.FOCUS_FRAME -> "Around the focused item"
+            dev.xross.launcher.theme.pack.EffectSlot.PARTICLES -> "Over the art, resting when idle"
+            dev.xross.launcher.theme.pack.EffectSlot.ICON_MASK -> "Installed apps' icons"
+        }
+        val id = "disp:fx:" + slot.name.lowercase(Locale.ROOT)
+        return XmbNode(
+            id = id,
+            title = slot.title,
+            subtitle = "$shown · $note",
+            icon = NodeIcon.Glyph(GlyphKey.DISPLAY),
+            action = NodeAction.Run(Command.CycleEffect(slot)),
+            menu = listOf(
+                MenuOption(slot.packLabel(look), command = Command.SetEffect(slot, ""), selected = own.isEmpty()),
+            ) + slot.choices.map { (name, label) ->
+                MenuOption(label, command = Command.SetEffect(slot, name), selected = own == name)
+            },
+        )
+    }
+
+    /** Reset to theme defaults: what it would clear, or that nothing is overridden. */
+    private fun resetThemeRow(): XmbNode {
+        val st = s.settings
+        val changed = buildList {
+            val fx = dev.xross.launcher.theme.pack.EffectSlot.entries.count { st.effectOverrides[it].isNotEmpty() }
+            if (fx > 0) add(countOf(fx, "effect"))
+            if (st.surfaceStyle.isNotEmpty()) add("surface")
+            val layers = listOf(st.adaptiveGamePalette, st.circadianCurve, st.batteryTint).count { it != null }
+            if (layers > 0) add(countOf(layers, "color layer"))
+            if (st.customWallpaper.isNotBlank()) add("wallpaper")
+        }
+        val summary = if (changed.isEmpty()) "Nothing overrides ${s.themes.activeName}" else "Clears " + changed.joinToString(", ")
+        return setting("disp:reset", "Reset to theme defaults", summary, GlyphKey.DISPLAY, Command.ResetThemeDefaults)
+    }
+
+    /**
      * Xross wallpaper: the photo set from Photo ▸ Options, the theme's, or none. Confirm on a
      * custom one goes back to the theme's; otherwise it says where to set one.
      */
     private fun wallpaperRow(): XmbNode {
         val custom = s.settings.customWallpaper.isNotBlank()
         val summary = when {
-            custom -> "A photo you chose · Confirm to use the theme's"
-            s.themes.packWallpaper -> "From ${s.themes.activeName} · set your own from Photo ▸ Options"
-            else -> "None (the background shader shows) · set one from Photo ▸ Options"
+            custom -> "A picture you chose · Confirm to use the theme's"
+            s.themes.packWallpaper -> "From ${s.themes.activeName} · Confirm to pick your own"
+            else -> "None (the background shader shows) · Confirm to pick one"
         }
-        val action = if (custom) NodeAction.Run(Command.ResetXrossWallpaper) else NodeAction.None
-        return XmbNode("disp:wallpaper", "Xross wallpaper", summary, NodeIcon.Glyph(GlyphKey.PHOTO), action)
+        val action = NodeAction.Run(if (custom) Command.ResetXrossWallpaper else Command.PickXrossWallpaper)
+        val theirs = if (s.themes.packWallpaper) "Reset to theme" else "Reset to theme (none)"
+        return XmbNode(
+            "disp:wallpaper", "Xross wallpaper", summary, NodeIcon.Glyph(GlyphKey.PHOTO), action,
+            menu = listOf(
+                MenuOption("Pick custom…", detail = "Any picture, through the file picker", command = Command.PickXrossWallpaper),
+                MenuOption(theirs, command = Command.ResetXrossWallpaper, selected = !custom),
+            ),
+        )
     }
 
     /** Theme variant, only while the active pack has variants; its Options list them all. */

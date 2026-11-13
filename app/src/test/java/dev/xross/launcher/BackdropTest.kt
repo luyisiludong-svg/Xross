@@ -172,7 +172,8 @@ class BackdropTest {
 
         assertEquals(NodeAction.Run(Command.ResetXrossWallpaper), row("content://x", true).action)
         assertTrue(row("", true).subtitle!!.startsWith("From Night"))
-        assertEquals(NodeAction.None, row("", true).action)
+        // 2b.4f: without a picture of the user's, Confirm opens the picker (Pick custom).
+        assertEquals(NodeAction.Run(Command.PickXrossWallpaper), row("", true).action)
         assertTrue(row("", false).subtitle!!.startsWith("None"))
     }
 

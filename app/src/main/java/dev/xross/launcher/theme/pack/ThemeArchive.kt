@@ -36,7 +36,7 @@ sealed interface InstallResult {
  * - **Zip slip:** an entry whose path contains `..`, starts with `/` or `\`, has a drive letter
  *   or a NUL is rejected, and every written file is checked to stay inside the staging folder.
  * - **Known folders only:** `.json` (and `.md` / `.txt` notes), `wallpaper.png` / `.jpg` /
- *   `.webp` and `shader.frag` at the root; fonts, sounds (also `audio/`, as in the spec's manifest
+ *   `.webp`, `shader.frag` and `postprocess.agsl` at the root; fonts, sounds (also `audio/`, as in the spec's manifest
  *   example), icons, shaders and wallpapers in their folders, with their own file types. Programs (`.apk`, `.dex`, `.so`, `.sh`, …) and anything else abort the import.
  *   macOS `__MACOSX/` and `.DS_Store` litter is skipped.
  * - **Size cap:** at most [maxBytes] (50 MB) uncompressed, checked against the declared sizes and
@@ -196,7 +196,7 @@ class ThemeArchive(
         private val ROOT_TYPES = setOf("json", "md", "txt")
 
         /** Files the loader looks for at the pack root by name: the wallpaper and the CUSTOM shader. */
-        private val ROOT_FILES = WallpaperRef.DEFAULT_NAMES.toSet() + "shader.frag"
+        private val ROOT_FILES = WallpaperRef.DEFAULT_NAMES.toSet() + "shader.frag" + UiFilterRef.DEFAULT_FILE
         private val PROGRAMS = setOf(
             "apk", "apks", "xapk", "aab", "dex", "odex", "vdex", "oat", "jar", "class", "so", "elf", "bin",
             "sh", "bash", "zsh", "bat", "cmd", "ps1", "exe", "dll", "msi", "py", "js", "lua", "pl", "rb",
@@ -218,7 +218,7 @@ class ThemeArchive(
             if (ext in PROGRAMS) return "$path is a program; theme packs hold data only"
             if (parts.size == 1) {
                 val ok = ext in ROOT_TYPES || parts[0].lowercase(Locale.ROOT) in ROOT_FILES
-                return if (ok) null else "unexpected file $path (only .json, wallpaper.png and shader.frag at the top level)"
+                return if (ok) null else "unexpected file $path (only .json, wallpaper.png, shader.frag and postprocess.agsl at the top level)"
             }
             val types = FOLDERS[parts[0].lowercase(Locale.ROOT)]
                 ?: return "unexpected folder ${parts[0]}/ (use fonts/, sounds/, audio/, icons/, shaders/ or wallpapers/)"

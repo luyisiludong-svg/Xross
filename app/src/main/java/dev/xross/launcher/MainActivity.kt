@@ -105,6 +105,11 @@ class MainActivity : ComponentActivity() {
         viewModel.onThemeArchivePicked(it)
     }
 
+    /** Settings ▸ Theme ▸ Xross wallpaper ▸ Pick a picture (2b.4f): a document, so its read grant can persist. */
+    private val pickWallpaperImage = registerForActivityResult(ActivityResultContracts.OpenDocument()) {
+        viewModel.onWallpaperPicked(it)
+    }
+
     private val pickBaseRomsFolder = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) {
         viewModel.onBaseRomsFolderPicked(it)
     }
@@ -204,8 +209,23 @@ class MainActivity : ComponentActivity() {
             val ruleMinute by dev.xross.launcher.theme.rememberMinuteOfDay(active = pack.usesClock, key = pack) { m ->
                 pack.rules.filter { r -> r.time?.contains(m) == true }.map { it.index }
             }
-            val look = androidx.compose.runtime.remember(pack, state.settings.themeVariant, categoryId, system, ruleBattery, ruleMinute) {
-                pack.look(state.settings.themeVariant, categoryId, system, ruleBattery, ruleMinute)
+            // The user's Settings ▸ Theme picks (2b.4f: shader, filters, focus frame, particles, icon
+            // mask) sit on top of the pack's look in every context.
+            val userEffects = state.settings.effectOverrides
+            val look = androidx.compose.runtime.remember(pack, state.settings.themeVariant, categoryId, system, ruleBattery, ruleMinute, userEffects) {
+                userEffects.applyTo(pack.look(state.settings.themeVariant, categoryId, system, ruleBattery, ruleMinute))
+            }
+            // The pack's programs plus the user's background shader, all compiled ahead of time.
+            val shaderLibrary = androidx.compose.runtime.remember(pack, userEffects.shader) { pack.shaderLibrary(userEffects.shader) }
+            if (BuildConfig.PERF_LOG) {
+                androidx.compose.runtime.LaunchedEffect(look.shader, look.cosmetics) {
+                    val c = look.cosmetics
+                    android.util.Log.i(
+                        "XrossEffects",
+                        "shader=${look.shader.preset} bgFilter=${c.bgFilter} uiFilter=${c.screenFilter.filter} frame=${c.frame} " +
+                            "particles=${c.particleField} mask=${c.mask} user=${!userEffects.empty}",
+                    )
+                }
             }
             val profile = dev.xross.launcher.theme.QuickProfile.byName(state.settings.quickProfile)
             val layout = androidx.compose.runtime.remember(pack, look, profile) { profile.layout(look.layout ?: pack.layout) }
@@ -259,11 +279,12 @@ class MainActivity : ComponentActivity() {
                     enabled = state.waveEnabled && !fullscreenMedia,
                     paused = backdropCovers && state.waveEditor == null,
                     idle = uiIdle,
-                    shaders = pack.shaderLibrary,
-                    shader = pack.shaderLibrary.keyOf(look.shader),
+                    shaders = shaderLibrary,
+                    shader = shaderLibrary.keyOf(look.shader),
                     category = categoryId,
                     health = container.shaderHealth,
                     audio = container.music.energy,
+                    filter = look.cosmetics.bgFilter,
                 )
                 // Focus frame and app-icon look (2b.4d): the look's, colored by the active palette.
                 val cosmetics = look.cosmetics
@@ -340,6 +361,7 @@ class MainActivity : ComponentActivity() {
                     onCloseAvatarStyle = viewModel::closeAvatarStyle,
                     onCloseRaHub = viewModel::closeRaHub,
                     particlesIdle = particlesIdle,
+                    onUiFilterError = container.shaderHealth::notice,
                 )
                 }
             }
@@ -415,6 +437,7 @@ class MainActivity : ComponentActivity() {
                 pickThemeArchive.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream", "application/x-xtheme"))
             }
             UiEffect.PickBaseRomsFolder -> runCatching { pickBaseRomsFolder.launch(null) }
+            UiEffect.PickWallpaperImage -> runCatching { pickWallpaperImage.launch(arrayOf("image/png", "image/jpeg", "image/webp")) }
             is UiEffect.PickMediaFolder -> {
                 pendingMediaFolder = effect.kind
                 runCatching { pickMediaFolder.launch(null) }

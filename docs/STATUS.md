@@ -25,6 +25,7 @@ Legend: ✅ done and verified · ◐ partial · ❌ not started · 🧪 verified
 | Phase 2b.4c (wallpapers and frosted surfaces): `wallpaper.png` / `effects.wallpaperPath`, Set as Xross wallpaper (`display.customWallpaper`), the shader resting under an opaque wallpaper, `backdropBlurDp` as a pre-blurred slice on every Android version | ✅ 🧪 on `feat/theme-2b4` (2026-11-12): 578 unit tests; theme suite 94/94, media suite 31/31 and `smoke.sh` 12/12 on the API 37 emulator, frosting checked by eye. Not yet on the Galaxy A55 (§3.24) |
 | Phase 2b.4d (focus frames and icon masks): `effects.focusFrameStyle` (`BREATHING_HALO`, `STATIC_NEON`, `HARD_SHADOW`, `GOLD_BEZEL` in `palette.focusGold`), `effects.iconMask` (`SQUIRCLE`, `CIRCLE`, `Y2K_CHROME_FRAME`) and `effects.iconFilter` (`DUOTONE`, `MONOCHROME`) through the cascade, icons cached by package, style and size | ✅ 🧪 on `feat/theme-2b4` (2026-11-12): 603 unit tests; theme suite 98/98 and library suite 41/41 on the API 37 emulator; Apps list 0.5% janky on the profiling build with the cache cold or warm. Not yet on the Galaxy A55 (§3.25) |
 | Phase 2b.4e (foreground particles): `effects.foregroundParticles` (`SNOW`, `BOKEH`, `DUST_MOTES`) as layer 4, ≤48 particles in flat arrays drawn in one `graphicsLayer`; resting after 10 s without input, in the background, and hidden under a snap, full-screen media and E-Ink | ✅ 🧪 on `feat/theme-2b4` (2026-11-13): 622 unit tests; theme suite 102/102 on the API 37 emulator; profiling build: UI thread 0.3 ms p50 per frame with or without particles, 0.2–0.4% janky in most windows (as without). Not yet on the Galaxy A55 (§3.26) |
+| Phase 2b.4f (post-processing and Settings rows): `effects.backgroundFilter` (`SCANLINES`, `CRT`, `LCD_GRID`) as a GL pass snapped to render pixels, `effects.uiFilter` (`SCANLINES_UI`, `BLOOM`, custom `postprocess.agsl`) as an AGSL `RenderEffect` on Android 13+, Settings ▸ Theme rows for every 2b.4 effect (`display.effects`), Pick custom wallpaper, Reset to theme defaults, the `effects` schema | ✅ 🧪 on `feat/theme-2b4` (2026-11-13): 645 unit tests; 226/226 device checks on the API 37 emulator (theme 134/134); `palette-perf.sh` 0.30–0.45% janky, the same as the build before it, and 0.30–0.44% with CRT and Bloom on. `lintDebug` still fails on 10 older errors. Not yet on the Galaxy A55 (§3.27). **2b.4 is complete on the emulator** |
 | Phase 3 (dual screen, hot-swap, RetroAchievements, Web Portal, FTPS) | ◐ RetroAchievements account linking, status bar avatar and User Card (§3.12), per-game achievement lists and unlock toasts (§3.13), live on the emulator and the Galaxy A55 (§3.14); hot-swap and live resolution change done; dual screen, docking, Portal and FTPS not started |
 | Phase 4 (onboarding, triage, profiling, plugin API) | ◐ app triage and performance work started |
 
@@ -1192,6 +1193,106 @@ key wakes them.
 **Not covered:** the Galaxy A55 and handhelds (120 Hz pacing, Mali and Adreno), a playing video
 snap hiding the layer (no scraped games on the emulator; unit-tested), and a Settings ▸ Theme row
 for the preset (2b.4f).
+
+### 3.27 Phase 2b.4f: post-processing, Settings rows (2026-11-13)
+
+The last slice of 2b.4: full-screen filters on both sides of the GL / Compose split, the Settings ▸
+Theme rows for every 2b.4 effect, and the `effects` schema. 2b.4 is complete on the emulator.
+
+- **Background filter (GL side):** `effects.backgroundFilter`: `NONE` (default), `SCANLINES`,
+  `CRT` (scanlines, an RGB aperture grille, the tube's vignette), `LCD_GRID`. The wave's
+  `GLSurfaceView` is its own surface under the window, so a Compose effect can't reach it; the
+  filter is `assets/shaders/screen_filter.frag`, drawn after the background program as a second
+  full-screen triangle with `glBlendFunc(GL_DST_COLOR, GL_ZERO)` (it can only darken). Compiled
+  with the wave when the context is created (`ScreenFilterPass`), skipped over the `CRT` preset.
+  Pitches are given in dp and snapped to whole render pixels through `uPxPerDp` = display density
+  × the surface's render scale (set by `WaveBackground` on layout): lines 1.5 dp (≥ 2 px), stripes
+  0.5 dp (≥ 1 px), LCD cells 3 dp (≥ 3 px), sampled at pixel centers so a 2 px pitch is one lit
+  row and one dark. On the 2400×1080 emulator (2.625 dp, rendered at 1280×576) that is 1.40 px/dp:
+  2 px lines, 1 px stripes, 4 px cells. The `CRT` preset now sizes its scanlines and grille the
+  same way instead of a fixed 270 lines and 1 px stripes, which beat into moiré once upscaled.
+- **UI filter (AGSL, Android 13+):** `effects.uiFilter` (alias `postProcess`): `SCANLINES_UI`,
+  `BLOOM`, or `CUSTOM` from `postprocess.agsl` / `effects.uiFilterPath`, read at load like a
+  custom shader (folder packs, ≤ 64 KB; `.xtheme` archives accept it at the root). Applied by
+  `Modifier.uiFilter` (`ui/ScreenFilter.kt`) as a `RenderEffect` on the menu's root layer:
+  scanlines are one `RuntimeShader`; bloom is a bright pass, a blur (8 dp) and a `PLUS` blend over
+  the content. Below API 33 it is off (`UiFilterSupport.active`), with a note on the row. A
+  `RenderEffect` snapshots its shader's uniforms, so the effect is rebuilt only for a new size or
+  time; built-in filters have no time and are built once, so the layer re-renders only when the
+  menu under it changes. A custom file that declares `uniform float uTime;` advances it at ≤ 30 fps
+  only while the menu is in use (started, not idle, not E-Ink): it rests with the focus pulse.
+- **Uniforms are never probed:** on the API 37 emulator, `RuntimeShader.setFloatUniform` with a
+  name the shader doesn't declare aborts the process (JNI: the "unable to find uniform named"
+  message is built from a freed string) instead of throwing. Xross reads which of `uResolution`
+  (`float2`/`vec2`/`half2`), `uTime` and `uPxPerDp` (`float`/`half`) a file declares from its text
+  with comments removed, and sets only those; `uniform shader content;` is required. AGSL compile
+  errors still throw (`IllegalArgumentException`): the filter is off and `ShaderHealth.notice`
+  toasts the compiler's first line once per file version.
+- **Schema:** `ThemeManifest.Effects` gains `backgroundFilter`, `uiFilter`, `uiFilterPath` (alias
+  `postProcessPath`); `Effects.KEYS` lists every property and alias, and `unknownKeys` reports any
+  other key under the base, a variant, an override or a rule's `apply` with the pack's problems
+  (a typo such as `shaderPrest` used to be dropped silently). Both filters ride the `Cosmetics`
+  bundle, so variants, overrides and rules carry them.
+- **Settings ▸ Theme rows:** after Battery alert tint: Background shader (Wave, Matrix, Bokeh,
+  Starfield, CRT), Background filter (Off, Scanlines, CRT grille, LCD grid), UI filter
+  (experimental: Off, Scanlines, Bloom), Focus frame style, Ambient particles, App icon mask
+  (System, Squircle, Circle, Chrome). Confirm cycles "Theme pack (…)" (the pack's value for the
+  chosen variant) then each choice; Options list them. Saved as `display.effects` in
+  `settings.json` (`EffectOverrides`, names normalized, a typo or `CUSTOM` follows the pack) and
+  applied over the pack's look in every context (`EffectOverrides.applyTo`); a user shader the
+  pack never names joins its ahead-of-time library (`LoadedTheme.shaderLibrary(extra)`).
+  Xross wallpaper: Confirm opens the system picker when none is set (Options: Pick custom…, Reset
+  to theme); the picked document's read grant is persisted and released when replaced or reset.
+  Reset to theme defaults (`ThemeDefaults.reset`) clears the six effects, the surface style, the
+  three color layers and the Xross wallpaper, and keeps the pack, variant, theme color, quick
+  profile and wave settings; its row says what it would clear.
+- Debug and profiling builds log `XrossFilter` (`background=SCANLINES program=BOKEH pxPerDp=1.40
+  linePx=2 …`), `XrossUiFilter` (`filter=BLOOM state=STATIC sdk=37`; states OFF, UNSUPPORTED,
+  FAILED, STATIC, ANIMATING, RESTING) and `XrossEffects` (the resolved shader, filters, frame,
+  particles and mask, and whether the user overrides any).
+
+**Unit tests:** `PostProcessSettingsTest` (23): filter names and aliases, `uiFilterPath` implying
+CUSTOM and staying in the pack, unknown names reported; the cascade through a variant, a category
+override and a rule; `postprocess.agsl` read at load; unknown `effects` keys reported in the base,
+a variant, a system override and a rule (aliases accepted), and every `Effects` field in `KEYS`;
+pitch snapping at three densities; the filter and CRT sources; API 33 gating; static presets
+never animating; a custom filter animating only while in use; uniform detection ignoring comments
+and wrong types; the `content` check; the shipped AGSL; overrides winning in every category
+(System over a pack's mask); the user shader in the library; normalization; the settings.json
+round trip; row cycling and labels; the Settings ▸ Theme rows, their order and summaries; Reset to
+theme defaults. Two older tests updated for the new rows and the wallpaper row's action. 645 unit
+tests in all.
+
+**Emulator (API 37, host GPU):** device totals 194 → 226. `run-all.sh`: library 41/41, theme
+**134/134** (32 new checks), media 30/31, input 11/11, integration 9/9; the media miss was its
+wallpaper-row check still expecting the old row position and wording, fixed and rerun **31/31**.
+New theme checks: a pack's `LCD_GRID` hot-reloads (4 px cells); a `postprocess.agsl` reading
+`uTime` animates, rests after 3 s, draws **0 frames** at rest, and a broken one toasts and turns
+off; each Settings row cycles, saves to `display.effects` and changes the log; scanlines are 2 px
+apart; Bloom is static and a resting menu under it draws **0 frames**; Pick custom opens the
+picker, the picture is saved as a document URI, shows, and **still loads after a restart**; Reset
+to theme defaults clears everything and the pack's own effects come back. Checked by eye: CRT
+grille plus Bloom over the menu (screenshot).
+
+**Frame pacing (`palette-perf.sh`, profiling build, game navigation, 3 pairs):** the first run
+read 0.89–33% janky in both arms, worsening pass by pass; a rerun was 0.30–0.44% in 5 of 6 passes.
+An A/B against the `HEAD` build before this slice on the same emulator gave 0.30–0.45% (p50 16
+ms, GPU p50 13–14 ms) and a third run of this branch **0.30–0.45% in all six** (p50 16 ms, GPU
+p50 14 ms): with no effects set, unchanged, within the 0–1.5% target. With
+`backgroundFilter: CRT` and `uiFilter: BLOOM` (`PERF_EFFECTS`, 2 pairs): **0.30–0.44% janky**
+(deadline), but p90 19–21 ms and legacy 7–30% while game-art colors morph, as Bloom re-blurs the
+whole menu on each frame of the morph; flat (p90 17 ms) with adaptive colors off.
+`palette-perf.sh` now resets `display.effects` unless `PERF_EFFECTS` names some.
+
+**`./gradlew check`:** unit tests and `validateShaders` (7 shaders, now with
+`screen_filter.frag`) pass; `lintDebug` fails on 10 errors that predate this slice (RestrictedApi
+on `dispatchKeyEvent`, Media3 opt-ins in `MediaScreens.kt` and `SnapLayer.kt`,
+`LifecycleCurrentStateInComposition`, `UnusedBoxWithConstraintsScope`, a byte-order mark in
+`DatParser.kt`); no new lint findings in this slice's code.
+
+**Not covered:** the Galaxy A55 and handhelds (Adreno, Mali, 120 Hz) for both filters; AGSL on a
+real Android 13–16 device (only API 37 here) and the picker on a phone; Bloom's GPU time on a slow
+GPU (each change renders the menu offscreen and blurs it).
 
 ## 4. Display matrix & performance
 

@@ -56,12 +56,12 @@ adb logcat -d -s XrossWallpaper:I | tail -1 | grep -q "wallpaper=custom .* opaqu
   && ok "the Xross wallpaper is decoded and shown" || bad "no custom wallpaper ($(adb logcat -d -s XrossWallpaper:I | tail -1))"
 adb logcat -d -s WaveLoop:I | tail -1 | grep -q "mode=STOPPED" \
   && ok "an opaque wallpaper stops the wave's GL loop" || bad "the wave still runs under the wallpaper ($(adb logcat -d -s WaveLoop:I | tail -1))"
-# Settings ▸ Theme ▸ Xross wallpaper (just above Import theme, the last row) says where it comes
-# from; Confirm goes back to the theme's.
+# Settings ▸ Theme ▸ Xross wallpaper (two rows above Import theme, the last row, below Reset to
+# theme defaults) says where it comes from; Confirm goes back to the theme's.
 category 0
 press DPAD_DOWN 3 KEYCODE_DPAD_CENTER
-press DPAD_DOWN 20 KEYCODE_DPAD_UP
-expect "A photo you chose" "Settings ▸ Theme shows the Xross wallpaper"
+press DPAD_DOWN 30 KEYCODE_DPAD_UP KEYCODE_DPAD_UP
+expect "A picture you chose" "Settings ▸ Theme shows the Xross wallpaper"
 key KEYCODE_DPAD_CENTER
 for _ in $(seq 10); do settings_has '"customWallpaper": ""' && break; pause 0.5; done
 settings_has '"customWallpaper": ""' && ok "Confirm goes back to the theme's wallpaper" || bad "customWallpaper not cleared"

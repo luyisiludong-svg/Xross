@@ -10,6 +10,7 @@ import dev.xross.launcher.BuildConfig
 import dev.xross.launcher.media.energy.AudioLevels
 import dev.xross.launcher.theme.ThemePalette
 import dev.xross.launcher.theme.XrossTheme
+import dev.xross.launcher.theme.pack.BackgroundFilter
 import dev.xross.launcher.theme.rgb
 import dev.xross.launcher.theme.shader.FrameBudgetWatchdog
 import dev.xross.launcher.theme.shader.ProgramState
@@ -53,6 +54,8 @@ data class WaveParams(
     val category: String? = null,
     /** `uBatteryLevel`, 0–1 (1 where unknown). */
     val battery: Float = 1f,
+    /** The GL-side post-process over the background program (2b.4f, `effects.backgroundFilter`). */
+    val filter: BackgroundFilter = BackgroundFilter.NONE,
 ) {
     // Converted once per parameter change, not per frame, so the GL loop allocates nothing.
     internal val topRgb = palette.top.rgb()
@@ -81,6 +84,13 @@ data class WaveParams(
  *    over 60% of the active frame budget retires it for the session ([FrameBudgetWatchdog]).
  *  - Crash-loop guard: a pack's own program is armed in the [ShaderCanary] while it compiles and
  *    until it has drawn [ShaderCanary.PROVEN_FRAMES] frames in a row.
+ *
+ * Background filter (2b.4f): [WaveParams.filter] draws `screen_filter.frag` as a second
+ * full-screen pass multiplied into the frame (scanlines, a CRT aperture grille, an LCD grid). The
+ * GL surface sits under the Compose UI, so this is the one place a filter can reach the
+ * background; it never touches the menu. Its pitches are whole render pixels from [pxPerDp]. It
+ * is compiled with the wave when the context is created and skipped over the CRT preset, which
+ * draws its own lines.
  *
  * Audio (2b.4b): `uAudioBass` / `uAudioBeat` are read from [audio] once per frame, as heard at
  * the frame's time (latency-compensated, see [dev.xross.launcher.media.energy.MusicEnergy]); 0
@@ -123,6 +133,13 @@ class WaveRenderer(
      */
     @Volatile var frozen = false
 
+    /**
+     * Render pixels per dp: the display density times the surface's render scale ([renderScale]),
+     * set by [WaveBackground] on layout. Bound as `uPxPerDp`, so CRT and the filter pass size their
+     * lines in dp but snap them to whole pixels.
+     */
+    @Volatile var pxPerDp = 1f
+
     /** The programs the active pack can show; set from the main thread, compiled by [prepare]. */
     @Volatile var library: ShaderLibrary = ShaderLibrary.DEFAULT
 
@@ -155,6 +172,8 @@ class WaveRenderer(
     private var timer: GpuTimer? = null
     private var finishSample = 0
     private var lastReport: ShaderStatus? = null
+    private val filterPass = ScreenFilterPass()
+    private var loggedFilter: BackgroundFilter? = null
 
     // Survive a context loss: a verdict is about the program's text on this GPU, not its handle.
     private val verdicts = HashMap<String, FrameBudgetWatchdog.Verdict>()
@@ -199,6 +218,9 @@ class WaveRenderer(
         timer = GpuTimer(extensions)
         vertex = compileVertex()
         if (vertex != 0) start(ShaderLibrary.WAVE_SPEC, blocking = true)
+        // The filter pass is tiny; compiled with the wave so picking one never waits on the driver.
+        if (vertex != 0) filterPass.compile(vertex, asset(FILTER_FILE))
+        loggedFilter = null
         sync()
         lastFrameNs = 0L
         colorsShown = false
@@ -293,6 +315,23 @@ class WaveRenderer(
             return
         }
         draw(program, p, still, now)
+        drawFilter(program, p.filter)
+    }
+
+    /** The background filter over [program]'s frame; none over CRT, which has its own lines. */
+    private fun drawFilter(program: GlProgram, filter: BackgroundFilter) {
+        val shown = if (program.spec.preset == ShaderPreset.CRT) BackgroundFilter.NONE else filter
+        if (BuildConfig.PERF_LOG && shown != loggedFilter) {
+            loggedFilter = shown
+            val ppd = pxPerDp
+            Log.i(
+                "XrossFilter",
+                "background=$shown program=${program.spec.key} pxPerDp=%.2f linePx=%d stripePx=%d cellPx=%d ready=%s"
+                    .format(ppd, ScreenFilterPass.linePitchPx(ppd), ScreenFilterPass.stripePx(ppd), ScreenFilterPass.cellPx(ppd), filterPass.ready),
+            )
+        }
+        if (shown == BackgroundFilter.NONE) return
+        filterPass.draw(shown, width, height, pxPerDp)
     }
 
     // region Programs
@@ -501,6 +540,7 @@ class WaveRenderer(
         GLES30.glUniform1f(program.uAudioBeat, audioLevels[1])
         GLES30.glUniform1f(program.uTransition, if (still) 0f else transition)
         GLES30.glUniform1f(program.uTravel, travel.toFloat())
+        GLES30.glUniform1f(program.uPxPerDp, pxPerDp)
         // WAVE's own.
         GLES30.glUniform1f(program.uBright, 0.8f + 0.2f * daylight)
         GLES30.glUniform1i(program.uLines, p.lineCount.coerceIn(0, MAX_LINES))
@@ -587,6 +627,9 @@ class WaveRenderer(
         const val ASSET_DIR = "shaders"
         const val PRELUDE_FILE = "prelude.glsl"
         const val VERTEX_FILE = "fullscreen.vert"
+
+        /** The background filter pass (2b.4f), with its own `#version` and uniforms. */
+        const val FILTER_FILE = "screen_filter.frag"
 
         /** Without timer queries, every n-th frame of a program under watch is timed with glFinish. */
         private const val FINISH_SAMPLE_EVERY = 3
