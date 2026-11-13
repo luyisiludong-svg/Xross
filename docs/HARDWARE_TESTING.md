@@ -55,11 +55,11 @@ seeds its own fixtures, so any of them runs on its own and in any order.
 | --- | --- | --- | --- |
 | `tools/device-tests/smoke.sh` | 12 | ~30 s | Quick sanity: Xross starts, creates its database, scans the seeded ROMs, draws the category bar and Games root, opens the first platform, L1/R1, no crash. No media, theme, database or battery fixtures |
 | `tools/device-tests/test-library.sh` | 41 | ~2 min | Platform detection, `.cue`/`.bin` pairing, title cleaning, favorites, per-game emulator, search, game tiles and Details paging, categories, rescan and fingerprinting |
-| `tools/device-tests/test-theme.sh` | 94 | ~4 min | Settings ▸ Theme rows, quick profiles, color layers (circadian, `dumpsys battery` tint and charging pulse), Sound, v2 packs and hot reload (a pack's `wallpaper.png`: shown, stops the wave, pre-blurred), `.xtheme` import and variants, game-art palette |
+| `tools/device-tests/test-theme.sh` | 98 | ~4 min | Settings ▸ Theme rows, quick profiles, color layers (circadian, `dumpsys battery` tint and charging pulse), Sound, v2 packs and hot reload (a pack's `wallpaper.png`: shown, stops the wave, pre-blurred; focus frame, icon mask and filter with the Apps icons cached), `.xtheme` import and variants, game-art palette |
 | `tools/device-tests/test-media.sh` | 31 | ~2 min | Photo viewer and zoom, Set as Xross wallpaper and back to the theme's, music from tags, the music driving the shader's audio uniforms (0 when paused), Now Playing, Select shortcut and mini-player, music pausing for video and games |
 | `tools/device-tests/test-input.sh` | 11 | ~45 s | Deadzone cycle, ten-button remap and its saved mapping, touch swipes and drag |
 | `tools/device-tests/test-integration.sh` | 9 | ~35 s | Avatar mini-HUD, RetroAchievements dashboard, no secrets in `Xross/config`, RetroArch launch through the stub |
-| `tools/device-tests/run-all.sh` (or `smoke.sh --all`) | 186 | ~10 min | Every suite in sequence with one summary; exit 0 only when nothing failed |
+| `tools/device-tests/run-all.sh` (or `smoke.sh --all`) | 190 | ~10 min | Every suite in sequence with one summary; exit 0 only when nothing failed |
 
 `smoke.sh <suite>` runs one suite (`smoke.sh theme`); `run-all.sh theme input` runs a chosen set.
 

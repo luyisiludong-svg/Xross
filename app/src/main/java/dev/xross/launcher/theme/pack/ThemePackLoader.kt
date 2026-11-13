@@ -92,6 +92,8 @@ data class LoadedTheme(
     val wallpaper: WallpaperRef = WallpaperRef.NONE,
     /** Each wallpaper file the pack names, by its pack-relative path (missing ones absent). */
     val wallpapers: Map<String, File> = emptyMap(),
+    /** The pack's own focus frame, icon mask and icon filter (2b.4d), over the Default pack's. */
+    val cosmetics: Cosmetics = Cosmetics.NONE,
     /** What the pack declared but couldn't be used (bad font, unreadable icon), for Settings. */
     val problems: List<String> = emptyList(),
     /** Bumped on every load, so a hot reload of the same files still counts as a change. */
@@ -155,7 +157,7 @@ data class LoadedTheme(
         // Category-wide tile shapes and focused-system layout patches depend on those two as well.
         val layoutContext = if (layoutHeld.isEmpty()) "" else "${category.orEmpty()}/${system.orEmpty()}"
         return looks.getOrPut(LookKey(v?.id.orEmpty(), cat, sys, held.map { it.index }, layoutHeld, layoutContext)) {
-            cascade(roles, surfaceId, wave, v, categoryPatches[cat], systemPatches[sys], held, flags, shader, wallpaper)
+            cascade(roles, surfaceId, wave, v, categoryPatches[cat], systemPatches[sys], held, flags, shader, wallpaper, cosmetics)
                 .copy(layout = if (layoutHeld.isEmpty()) null else applyRuleLayout(layout, rules, ctx))
         }
     }
@@ -356,6 +358,7 @@ class ThemePackLoader(
         val wallpaperRefs = listOf(wallpaper) + variants.mapNotNull { it.wallpaper } +
             (categoryPatches.values + systemPatches.values).mapNotNull { it.wallpaper } + rules.mapNotNull { it.patch?.wallpaper }
         val wallpapers = wallpaperFiles(folder, wallpaperRefs, problems)
+        val cosmetics = (base?.cosmetics ?: Cosmetics.NONE).over(Cosmetics.of("theme", m.effects, problems))
 
         return LoadedTheme(
             info = pack,
@@ -378,6 +381,7 @@ class ThemePackLoader(
             customShaders = customShaders,
             wallpaper = wallpaper,
             wallpapers = wallpapers,
+            cosmetics = cosmetics,
             problems = problems,
             revision = revisions.incrementAndGet(),
         )

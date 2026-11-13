@@ -304,6 +304,18 @@ drawn, layer by layer:
   Xross wallpaper** (in a photo list or the viewer) puts a photo there instead of the pack's,
   saved as `display.customWallpaper` (a `content://` URI or a file path) and separate from the
   Android wallpaper; **Settings ▸ Theme ▸ Xross wallpaper** goes back to the theme's.
+* **Focus frames and app icons:** `effects.focusFrameStyle` (alias `focusFrame`) frames the focused
+  item: `BREATHING_HALO` (the default soft, pulsing glow), `STATIC_NEON` (a crisp glow in the
+  accent, or the wave color when the accent is white, that holds still), `HARD_SHADOW` (a solid
+  shadow 2 dp down and right, no blur) or `GOLD_BEZEL` (a metal frame in `palette.focusGold`
+  around game tiles and RetroAchievements badges). Only the breathing halo animates; the others
+  draw no frames while the cursor rests. `effects.iconMask` cuts installed apps' icons to
+  `SQUIRCLE`, `CIRCLE` or `Y2K_CHROME_FRAME` (a squircle in a glossy chrome bezel), or leaves them
+  as shipped (`NONE`): adaptive icons are rebuilt from their layers, legacy icons with transparent
+  corners are shrunk onto a plate tinted from their own colors. `effects.iconFilter` recolors them:
+  `DUOTONE` (shadows in the canvas color, highlights in the accent) or `MONOCHROME` (black to the
+  accent). Each icon is drawn once per mask, filter, palette and size and then cached, so scrolling
+  the Apps list costs nothing. Names are matched ignoring case and dashes (`gold-bezel`).
 * **Variants:** `"variants": [{ "id": "bios-matrix", "name": "BIOS Matrix", "palette": {…},
   "effects": { "surfaceStyle": "OLED_TRUE_BLACK" } }]` adds colorways that share the pack's fonts,
   icons and sounds. **Settings ▸ Theme ▸ Theme variant** (shown only for packs that have them)
@@ -312,7 +324,8 @@ drawn, layer by layer:
   `APPS`, `SETTINGS`) applies while that category is open; `"systemOverrides": { "dreamcast": {…} }`
   (a platform id or a folder alias such as `dc`) while one of that system's games is focused, after
   the cursor rests for a quarter second. Each may set `palette` roles, `effects.surfaceStyle`,
-  `effects.shaderPreset`, `effects.wallpaperPath` and `cardAspectRatio` (a system's aspect shapes that system's game tiles). Precedence, lowest to
+  `effects.shaderPreset`, `effects.wallpaperPath`, `effects.focusFrameStyle`, `iconMask`,
+  `iconFilter` and `cardAspectRatio` (a system's aspect shapes that system's game tiles). Precedence, lowest to
   highest: Default pack → pack → variant → category → system → your own Settings (a fixed theme
   color or a chosen surface style wins over all of them). Overrides patch a pack palette; they
   don't add one to a pack without colors. The wave crossfades between palettes.
@@ -321,7 +334,7 @@ drawn, layer by layer:
   any of `category` (`MUSIC`), `system` (a platform id or folder alias), `battery` (`<= 20`, `< 15`,
   `>= 80`, `charging`, `discharging`, `full`) and `time` (`21:00..06:00`, wrapping past midnight;
   start included, end excluded); every selector given must hold. `apply` takes `palette` roles,
-  `effects.surfaceStyle`, `cardAspectRatio` and any `layout` key. Rules sit above the variant and
+  any `effects` key above, `cardAspectRatio` and any `layout` key. Rules sit above the variant and
   the overrides, in file order, so the last matching rule wins. A rule whose selector can't be read
   is reported and dropped, never applied everywhere. Battery and time are re-checked when they
   change and once a minute, never per frame.

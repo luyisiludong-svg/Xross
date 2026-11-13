@@ -19,6 +19,8 @@ data class ResolvedVariant(
     val shader: ShaderRef? = null,
     /** `effects.wallpaperPath`, checked ([WallpaperRef.NONE] turns the pack's off). */
     val wallpaper: WallpaperRef? = null,
+    /** `effects.focusFrameStyle`, `iconMask` and `iconFilter`, checked (2b.4d). */
+    val cosmetics: Cosmetics? = null,
 )
 
 /** A checked `categoryOverrides` / `systemOverrides` entry (its tile aspect lives in [ThemeLayout]). */
@@ -32,6 +34,8 @@ data class ThemePatch(
     val shader: ShaderRef? = null,
     /** The wallpaper while this patch holds ([WallpaperRef.NONE]: none). */
     val wallpaper: WallpaperRef? = null,
+    /** Focus frame, icon mask and icon filter while this patch holds (2b.4d). */
+    val cosmetics: Cosmetics? = null,
 )
 
 /**
@@ -53,6 +57,10 @@ data class ThemeLook(
     val shader: ShaderRef = ShaderRef.WAVE,
     /** The pack's wallpaper here (2b.4c), resolved through [LoadedTheme.wallpaperFile]. */
     val wallpaper: WallpaperRef = WallpaperRef.NONE,
+    /** Focus frame, icon mask and icon filter here (2b.4d); unset values draw the defaults. */
+    val cosmetics: Cosmetics = Cosmetics.NONE,
+    /** `palette.focusGold` here (ARGB), for [FocusFrameStyle.GOLD_BEZEL]; null: the built-in gold. */
+    val focusGold: Int? = null,
 )
 
 /**
@@ -77,18 +85,21 @@ fun cascade(
     flags: ColorFlags = ColorFlags.NONE,
     shader: ShaderRef = ShaderRef.WAVE,
     wallpaper: WallpaperRef = WallpaperRef.NONE,
+    cosmetics: Cosmetics = Cosmetics.NONE,
 ): ThemeLook {
     var palette = roles
     var surface = surfaceId
     var f = flags
     var program = shader
     var backdrop = wallpaper
+    var look = cosmetics
     variant?.let { v ->
         v.palette?.let { palette = palette?.over(it) ?: it }
         v.surfaceId?.let { surface = it }
         f = f.over(v.flags)
         v.shader?.let { program = it }
         v.wallpaper?.let { backdrop = it }
+        look = look.over(v.cosmetics)
     }
     for (patch in listOfNotNull(category, system) + rules.mapNotNull { it.patch }) {
         patch.palette?.let { p -> palette = palette?.over(p) }
@@ -96,10 +107,12 @@ fun cascade(
         f = f.over(patch.flags)
         patch.shader?.let { program = it }
         patch.wallpaper?.let { backdrop = it }
+        look = look.over(patch.cosmetics)
     }
     return ThemeLook(
         palette?.toPalette(wave), surface, variant?.id.orEmpty(), f,
         rules = rules.map { it.index }, shader = program, wallpaper = backdrop,
+        cosmetics = look, focusGold = palette?.focusGold?.let(ThemeManifest::parseColor),
     )
 }
 
@@ -139,6 +152,7 @@ internal fun resolveVariants(
             flags = ColorFlags.of(v.palette, v.effects).takeUnless { it.empty },
             shader = ShaderRef.of("variants.$id", v.effects?.shaderPreset, v.effects?.shaderPath, problems),
             wallpaper = WallpaperRef.of("variants.$id", v.effects?.wallpaperPath, problems),
+            cosmetics = Cosmetics.of("variants.$id", v.effects, problems),
         )
     }
     return out
@@ -209,10 +223,11 @@ internal fun patchOf(where: String, o: ThemeOverride, surfaceIds: Set<String>, p
     val flags = ColorFlags.of(o.palette, o.effects).takeUnless { it.empty }
     val shader = ShaderRef.of(where, o.effects?.shaderPreset, o.effects?.shaderPath, problems)
     val wallpaper = WallpaperRef.of(where, o.effects?.wallpaperPath, problems)
-    return if (palette == null && surface == null && flags == null && shader == null && wallpaper == null) {
+    val cosmetics = Cosmetics.of(where, o.effects, problems)
+    return if (palette == null && surface == null && flags == null && shader == null && wallpaper == null && cosmetics == null) {
         null
     } else {
-        ThemePatch(palette, surface, flags, shader, wallpaper)
+        ThemePatch(palette, surface, flags, shader, wallpaper, cosmetics)
     }
 }
 

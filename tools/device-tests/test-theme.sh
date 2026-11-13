@@ -3,7 +3,8 @@
 # folders, surface style), quick profiles (OLED, Y2K, E-Ink), color layers (adaptive colors,
 # circadian curve, battery tint and charging pulse through `dumpsys battery`), the Sound section,
 # v2 theme packs and hot reload (and a pack's wallpaper.png, which stops the wave and is pre-blurred
-# for frosted surfaces), .xtheme import (zip-slip, variants, overrides, Keep both), and the
+# for frosted surfaces; a pack's focus frame, icon mask and icon filter, with the Apps list's icons
+# drawn once per style), .xtheme import (zip-slip, variants, overrides, Keep both), and the
 # game-art palette (hero PNGs, scraped flags patched into the database, extraction cache, debounce).
 #
 #   tools/device-tests/test-theme.sh
@@ -14,7 +15,7 @@
 # The battery override is always reset at exit, even after Ctrl-C.
 set -u
 . "$(dirname "$0")/lib/harness.sh"
-suite_begin theme 94
+suite_begin theme 98
 
 setup_base_env
 setup_theme_fixtures
@@ -199,6 +200,37 @@ adb logcat -d -s XrossWallpaper:I | tail -1 | grep -q "wallpaper=none" \
   && ok "removing wallpaper.png hides it" || bad "the wallpaper stayed ($(adb logcat -d -s XrossWallpaper:I | tail -1))"
 adb logcat -d -s WaveLoop:I | tail -1 | grep -qE "mode=(CONTINUOUS|PACED)" \
   && ok "the wave runs again" || bad "the wave didn't resume ($(adb logcat -d -s WaveLoop:I | tail -1))"
+# 2b.4d: the pack's focus frame, icon mask and icon filter hot-reload; the Apps list draws each
+# icon once in that style, so scrolling back over it draws none (the cache holds them).
+adb logcat -c
+cos='{"schemaVersion": 2, "name": "Smoke Pack Live", "author": "smoke", "palette": {"canvas": "#101830", "accentSecondary": "#C0E0FF", "focusGold": "#E0B040"}, "effects": {"focusFrameStyle": "GOLD_BEZEL", "iconMask": "Y2K_CHROME_FRAME", "iconFilter": "DUOTONE"}, "layout": {"drillDownStyle": "CHEVRON_COLLAPSE", "focusDivider": "FULL_BLEED_LINE", "motionProfile": "PS3_CRISP"}}'
+adb shell "echo '$cos' > /sdcard/Xross/themes/smoke_pack/theme.json"
+pause 1.5
+adb logcat -d -s XrossCosmetics:I | tail -1 | grep -q "frame=GOLD_BEZEL mask=Y2K_CHROME_FRAME filter=DUOTONE gold=#E0B040" \
+  && ok "effects.focusFrameStyle, iconMask, iconFilter and palette.focusGold reload with the pack" \
+  || bad "cosmetics not applied ($(adb logcat -d -s XrossCosmetics:I | tail -1))"
+category 5
+press DPAD_DOWN 12
+press DPAD_UP 12
+pause 1
+drew=$(adb logcat -d -s XrossIcons:I | grep -c "Y2K_CHROME_FRAME/DUOTONE")
+[ "$drew" -gt 0 ] && ok "app icons are drawn in the chrome frame, duotoned ($drew icons)" \
+  || bad "no icon drawn in the pack's style ($(adb logcat -d -s XrossIcons:I | tail -1))"
+adb logcat -c
+press DPAD_DOWN 12
+press DPAD_UP 12
+pause 1
+again=$(adb logcat -d -s XrossIcons:I | grep -c "drew")
+[ "$again" -eq 0 ] && ok "scrolling the Apps list again draws no icon (all from the cache)" \
+  || bad "$again icons drawn again ($(adb logcat -d -s XrossIcons:I | tail -1))"
+category 0
+press DPAD_DOWN 3 KEYCODE_DPAD_CENTER
+adb logcat -c
+adb shell "echo '$good' > /sdcard/Xross/themes/smoke_pack/theme.json"
+pause 1.5
+adb logcat -d -s XrossCosmetics:I | tail -1 | grep -q "frame=BREATHING_HALO mask=NONE filter=NONE" \
+  && ok "without them the breathing halo and plain icons are back" \
+  || bad "cosmetics stayed ($(adb logcat -d -s XrossCosmetics:I | tail -1))"
 top_list
 key KEYCODE_DPAD_CENTER
 pause 1.5

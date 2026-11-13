@@ -60,6 +60,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.BlurredEdgeTreatment
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import dev.xross.launcher.theme.pack.FocusFrameStyle
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
@@ -218,10 +220,11 @@ fun XmbScreen(
     val motion = layout.motion
 
     // Slow "breathing" glow shared by everything that is focused. It settles and holds still while
-    // the screen rests (LocalUiIdle), so an untouched home screen draws no frames for it.
+    // the screen rests (LocalUiIdle), so an untouched home screen draws no frames for it. Only the
+    // breathing halo breathes: the other focus frames (2b.4d) hold a steady glow and never run it.
     val started by lifecycleStarted()
     val idle = LocalUiIdle.current
-    val pulse by rememberBreathing(running = started && !idle, low = 0.35f, high = 1f, halfPeriodMs = 1700, rest = PULSE_REST)
+    val pulse by rememberFocusPulse(running = started && !idle)
 
     // Cold boot: fade the whole interface in once per process start.
     val reveal = remember { Animatable(if (state.coldBoot) 0f else 1f) }
@@ -575,8 +578,6 @@ fun XmbScreen(
 /** The focused row's scraped art, for the hero backdrop and the video snap. */
 private data class FocusedArt(val uuid: String, val version: Long)
 
-/** Where the focus glow holds while the screen rests: a little above the middle of its swing. */
-private const val PULSE_REST = 0.7f
 
 /** True while the activity is at least started; animations tied to it stop in the background. */
 @Composable
@@ -997,6 +998,8 @@ private fun XmbIcon(
     glow: () -> Float,
 ) {
     val canBlur = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    val frame = LocalFocusFrame.current
+    val neon = frame.style == FocusFrameStyle.STATIC_NEON
     Box(
         Modifier
             .size(size)
@@ -1006,27 +1009,39 @@ private fun XmbIcon(
                 scaleY = s
             },
     ) {
-        // Halo.
-        Box(
-            Modifier
-                .fillMaxSize()
-                .graphicsLayer {
-                    alpha = glow()
-                    scaleX = 1.9f
-                    scaleY = 1.9f
+        // Halo (2b.4d: white and breathing, or the neon / gold frame's color held steady).
+        if (frame.style != FocusFrameStyle.HARD_SHADOW) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        alpha = glow()
+                        scaleX = if (neon) 1.6f else 1.9f
+                        scaleY = if (neon) 1.6f else 1.9f
+                    }
+                    .drawBehind {
+                        val c = frame.bloomColor() ?: return@drawBehind
+                        val core = if (neon) 0.6f else 0.42f
+                        drawCircle(
+                            Brush.radialGradient(
+                                0f to c.copy(alpha = core),
+                                0.45f to c.copy(alpha = core / 3f),
+                                1f to Color.Transparent,
+                            ),
+                        )
+                    },
+            )
+            if (canBlur) {
+                val tint = when (frame.style) {
+                    FocusFrameStyle.STATIC_NEON -> frame.neon
+                    FocusFrameStyle.GOLD_BEZEL -> frame.gold
+                    else -> Color.White
                 }
-                .drawBehind {
-                    drawCircle(
-                        Brush.radialGradient(
-                            0f to Color.White.copy(alpha = 0.42f),
-                            0.45f to Color.White.copy(alpha = 0.14f),
-                            1f to Color.Transparent,
-                        ),
-                    )
-                },
-        )
-        if (canBlur) {
-            BlurredCopy(painter, size, Color.White, blur = 6.dp, alpha = { glow() * 0.9f })
+                BlurredCopy(painter, size, tint, blur = if (neon) 3.dp else 6.dp, alpha = { glow() * 0.9f })
+            }
+        } else {
+            // A solid copy 2 dp down and right, no blur.
+            BlurredCopy(painter, size, Color.Black, blur = 0.dp, alpha = { glow() * 0.85f }, offset = IntOffset(2, 2))
         }
         // Drop shadow.
         BlurredCopy(
@@ -1112,12 +1127,18 @@ private fun ArtIcon(
                 },
             contentAlignment = Alignment.Center,
         ) {
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .graphicsLayer { alpha = glow(); scaleX = 1.6f; scaleY = 1.6f }
-                    .drawBehind { drawCircle(Brush.radialGradient(0f to Color.White.copy(alpha = 0.3f), 1f to Color.Transparent)) },
-            )
+            val frame = LocalFocusFrame.current
+            if (frame.style == FocusFrameStyle.BREATHING_HALO || frame.style == FocusFrameStyle.STATIC_NEON) {
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .graphicsLayer { alpha = glow(); scaleX = 1.6f; scaleY = 1.6f }
+                        .drawBehind {
+                            val c = frame.bloomColor() ?: return@drawBehind
+                            drawCircle(Brush.radialGradient(0f to c.copy(alpha = 0.3f), 1f to Color.Transparent))
+                        },
+                )
+            }
             // Exactly the glyph's footprint, so tall capsules and wide boxes never reach the
             // neighbouring rows (the focus scale is applied by the layer above, as for glyphs).
             Image(
@@ -1126,6 +1147,7 @@ private fun ArtIcon(
                 contentScale = ContentScale.Fit,
                 modifier = Modifier
                     .size(size)
+                    .then(if (frame.framesPlates) Modifier.drawBehind { fittedFrame(frame, glow(), image.width, image.height) } else Modifier)
                     .shadow(6.dp, RoundedCornerShape(3.dp), clip = false),
             )
         }
@@ -1165,14 +1187,18 @@ private fun ThumbIcon(
             },
         contentAlignment = Alignment.Center,
     ) {
-        Box(
-            Modifier
-                .fillMaxSize()
-                .graphicsLayer { alpha = glow(); scaleX = 1.7f; scaleY = 1.7f }
-                .drawBehind {
-                    drawCircle(Brush.radialGradient(0f to Color.White.copy(alpha = 0.35f), 1f to Color.Transparent))
-                },
-        )
+        val frame = LocalFocusFrame.current
+        if (frame.style == FocusFrameStyle.BREATHING_HALO || frame.style == FocusFrameStyle.STATIC_NEON) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .graphicsLayer { alpha = glow(); scaleX = 1.7f; scaleY = 1.7f }
+                    .drawBehind {
+                        val c = frame.bloomColor() ?: return@drawBehind
+                        drawCircle(Brush.radialGradient(0f to c.copy(alpha = 0.35f), 1f to Color.Transparent))
+                    },
+            )
+        }
         Image(
             image,
             contentDescription = null,
@@ -1180,10 +1206,25 @@ private fun ThumbIcon(
             modifier = Modifier
                 .size(width = size * aspect, height = size)
                 .wrapContentSize(unbounded = true)
+                .then(if (frame.framesPlates) Modifier.drawBehind { drawPlateFrame(frame, glow(), 4.dp.toPx()) } else Modifier)
                 .shadow(4.dp, RoundedCornerShape(4.dp))
                 .clip(RoundedCornerShape(4.dp))
                 .border(1.dp, Color.White.copy(alpha = 0.85f), RoundedCornerShape(4.dp)),
         )
+    }
+}
+
+/**
+ * [drawPlateFrame] around an image of [imageW] × [imageH] drawn with [ContentScale.Fit] in this
+ * scope (centered), so the frame hugs the art rather than the square slot.
+ */
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.fittedFrame(frame: FocusFrame, glow: Float, imageW: Int, imageH: Int) {
+    if (glow <= 0f || imageW <= 0 || imageH <= 0) return
+    val k = minOf(size.width / imageW, size.height / imageH)
+    val w = imageW * k
+    val h = imageH * k
+    translate((size.width - w) / 2, (size.height - h) / 2) {
+        drawPlateFrame(frame, glow, 3.dp.toPx(), androidx.compose.ui.geometry.Size(w, h))
     }
 }
 
@@ -1217,7 +1258,8 @@ private fun AppIcon(
     focusScale: Float,
     loadAppIcon: suspend (String) -> ImageBitmap?,
 ) {
-    val bitmap by produceState<ImageBitmap?>(null, packageName) { value = loadAppIcon(packageName) }
+    // Keyed on the loader too: it changes with the theme's icon mask and filter (2b.4d).
+    val bitmap by produceState<ImageBitmap?>(null, packageName, loadAppIcon) { value = loadAppIcon(packageName) }
     bitmap?.let {
         Image(
             it,
