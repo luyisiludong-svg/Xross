@@ -21,6 +21,7 @@ material and link back here rather than keeping their own to-do lists.
 | [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md) | Using Xross: the `Xross/` folder, storage, library, metadata, RetroAchievements, media, apps, feature status |
 | [`docs/THEME_SPECIFICATION.md`](docs/THEME_SPECIFICATION.md) | Theme pack format as implemented: `theme.json` v2, surfaces, sounds, Wave settings, effects, rules, quick profiles, `.xtheme` |
 | [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) | Building, unit/live/device tests, emulator stand-ins, source layout |
+| [`docs/ARCHITECTURE_ASSESSMENT.md`](docs/ARCHITECTURE_ASSESSMENT.md) | Structure review after 2b.4 (2026-11-13): module and package boundaries, state flow, tech debt, prioritized refactorings (a proposal; decisions go here) |
 | [`docs/STATUS.md`](docs/STATUS.md) | Evidence: test suites, device runs, measurements, bugs found and fixed |
 | [`docs/PHASE_2B3_PENDING_TESTS.md`](docs/PHASE_2B3_PENDING_TESTS.md) | What Phase 2b.3 still needs verified (frame pacing, hardware, by-eye checks, smoke flakes) and how |
 | [`docs/PHASE_2B4_PROMPTS.md`](docs/PHASE_2B4_PROMPTS.md) | Phase 2b.4 (shaders, effects, materials) split into slices 2b.4a–2b.4f, each with its scope and checks |
