@@ -16,3 +16,9 @@ docs/SCREENSCRAPER_api_docs.pdf
 
 # Local reference material (screenshots, design docs), not part of the repo
 assets/docs/
+
+# Dev notes
+dev_notes/
+
+# Kotlin Language Server cache
+kls_database.db
