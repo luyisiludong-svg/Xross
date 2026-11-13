@@ -17,7 +17,10 @@ material and link back here rather than keeping their own to-do lists.
 | --- | --- |
 | [`Roadmap.md`](Roadmap.md) (this file) | Status, known issues, backlog, order of work, scope decisions, and the specs for upcoming features (Appendix A) |
 | [`project_scope.md`](project_scope.md) | The original product scope. Where this roadmap disagrees, §5 records the decision |
-| [`README.md`](README.md) | Building, running and using Xross; the `Xross/` folder; theme pack format |
+| [`README.md`](README.md) | The project's front page: features, quick start, links to every guide |
+| [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md) | Using Xross: the `Xross/` folder, storage, library, metadata, RetroAchievements, media, apps, feature status |
+| [`docs/THEME_SPECIFICATION.md`](docs/THEME_SPECIFICATION.md) | Theme pack format as implemented: `theme.json` v2, surfaces, sounds, Wave settings, effects, rules, quick profiles, `.xtheme` |
+| [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) | Building, unit/live/device tests, emulator stand-ins, source layout |
 | [`docs/STATUS.md`](docs/STATUS.md) | Evidence: test suites, device runs, measurements, bugs found and fixed |
 | [`docs/PHASE_2B3_PENDING_TESTS.md`](docs/PHASE_2B3_PENDING_TESTS.md) | What Phase 2b.3 still needs verified (frame pacing, hardware, by-eye checks, smoke flakes) and how |
 | [`docs/PHASE_2B4_PROMPTS.md`](docs/PHASE_2B4_PROMPTS.md) | Phase 2b.4 (shaders, effects, materials) split into slices 2b.4a–2b.4f, each with its scope and checks |
@@ -148,7 +151,7 @@ All 11 recipes are verified only against the test stand-ins, not real emulator i
 | --- | --- | --- |
 | Wave background (GLSL ES 3.0) | ✅ | Stops whenever Xross isn't in front, and while focused-game art or a snap covers it. Capped near 60 fps on high-refresh panels (vsync-paced: 120 Hz → 60, 144 Hz → 72); ~20 fps standby after 3 s without input |
 | Wave shader uniforms | ✅ 📱 | Speed (0.5×–2×), ribbon lines (0–12), turbulence, thickness, color presets and a custom gradient, in `settings.json` and Settings ▸ Theme ▸ Wave settings with a live preview |
-| Theme packs | ✅ 📱 | `Xross/themes/<id>/` (theme.json v2, fonts per role, SVG/PNG icons, sounds, imported JSON files), case-insensitive and contained lookups; partial packs inherit from the built-in Default pack; the active pack reloads live when its files change; variants, category and system overrides, and single-file `.xtheme` import with safety checks (2b.2). Format in README "Theme packs" |
+| Theme packs | ✅ 📱 | `Xross/themes/<id>/` (theme.json v2, fonts per role, SVG/PNG icons, sounds, imported JSON files), case-insensitive and contained lookups; partial packs inherit from the built-in Default pack; the active pack reloads live when its files change; variants, category and system overrides, and single-file `.xtheme` import with safety checks (2b.2). Format in [`docs/THEME_SPECIFICATION.md`](docs/THEME_SPECIFICATION.md) |
 | Audio roles | ✅ | Nine roles in `SoundRole`: `cursor` (every D-pad step), `confirm`, `back`, `option`, `ok`, `system_ng` (errors and refused actions), `trophy`, and the streamed `opening` (startup) and `gameboot` cues |
 | Day/night brightness shift | ✅ | |
 | Color intelligence (2b.3) | ✅ 🧪 | Game-art palette (Jetpack Palette, 250 ms debounce, 100-game cache) morphing the wave, halos, avatar glow and battery outline; `rules` context engine (category, system, battery, time); hourly circadian curve; battery tint; quick profiles OLED True Black, Y2K Cyber-Pastel and Monochrome E-Ink (no motion, wave a single frame). STATUS §3.19 |
