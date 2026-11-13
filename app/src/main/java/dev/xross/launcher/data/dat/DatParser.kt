@@ -62,7 +62,7 @@ object DatParser {
         val sniff = ByteArray(4096)
         val read = buffered.read(sniff).coerceAtLeast(0)
         buffered.reset()
-        val first = String(sniff, 0, read, Charsets.UTF_8).trimStart('﻿', ' ', '\t', '\r', '\n').firstOrNull()
+        val first = String(sniff, 0, read, Charsets.UTF_8).trimStart('\uFEFF', ' ', '\t', '\r', '\n').firstOrNull()
         return when (first) {
             '<' -> parseXml(buffered, fallbackName, onGame)
             null -> throw DatFormatException("Empty file")

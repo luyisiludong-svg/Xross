@@ -86,6 +86,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.currentStateAsState
 import dev.xross.launcher.input.ConfirmLayout
 import dev.xross.launcher.media.MusicPlayer
 import dev.xross.launcher.media.ThumbKind
@@ -612,13 +613,8 @@ private data class FocusedArt(val uuid: String, val version: Long)
 @Composable
 private fun lifecycleStarted(): androidx.compose.runtime.State<Boolean> {
     val owner = androidx.lifecycle.compose.LocalLifecycleOwner.current
-    return produceState(owner.lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED), owner) {
-        val observer = androidx.lifecycle.LifecycleEventObserver { source, _ ->
-            value = source.lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)
-        }
-        owner.lifecycle.addObserver(observer)
-        awaitDispose { owner.lifecycle.removeObserver(observer) }
-    }
+    val state = owner.lifecycle.currentStateAsState()
+    return remember(state) { derivedStateOf { state.value.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED) } }
 }
 
 /**

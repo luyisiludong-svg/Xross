@@ -15,7 +15,6 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -170,7 +169,7 @@ private fun WaveRowView(
 @Composable
 internal fun SettingSlider(fraction: Float, focused: Boolean, onChange: (Float) -> Unit) {
     val change by rememberUpdatedState(onChange)
-    BoxWithConstraints(
+    Box(
         Modifier
             .fillMaxWidth()
             .height(18.dp)
