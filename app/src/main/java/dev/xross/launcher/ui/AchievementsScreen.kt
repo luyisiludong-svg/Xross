@@ -40,6 +40,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import dev.xross.launcher.theme.pack.FocusFrameStyle
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Brush
@@ -258,6 +259,9 @@ private fun BadgeCell(
     val image by produceState<ImageBitmap?>(null, a.badgeName, px) { value = loadBadge(a.badgeName, px) }
     val lift by animateFloatAsState(if (focused) 1f else 0f, tween(160), label = "badgeLift")
     val shape = RoundedCornerShape(12.dp)
+    // The theme's focus frame (2b.4d): the amber bloom (breathing or steady), a hard shadow or a gold bezel.
+    val frame = LocalFocusFrame.current
+    val bloom = frame.style == FocusFrameStyle.BREATHING_HALO || frame.style == FocusFrameStyle.STATIC_NEON
     Box(
         Modifier
             .aspectRatio(1f)
@@ -267,7 +271,8 @@ private fun BadgeCell(
                 scaleY = s
             }
             .drawBehind {
-                if (lift > 0f) {
+                if (lift <= 0f) return@drawBehind
+                if (bloom) {
                     drawCircle(
                         Brush.radialGradient(
                             0.5f to Pastel.Amber.copy(alpha = 0.45f * lift * (0.6f + 0.4f * pulse())),
@@ -275,13 +280,19 @@ private fun BadgeCell(
                         ),
                         radius = size.minDimension * 0.85f,
                     )
+                } else {
+                    drawPlateFrame(frame, lift, 12.dp.toPx())
                 }
             }
             .clip(shape)
             .background(Color(0xFF1C1C28))
             .border(
                 if (focused) 3.dp else 1.dp,
-                if (focused) Brush.verticalGradient(listOf(Pastel.Amber, Pastel.AmberDeep)) else Brush.verticalGradient(listOf(Color(0x66FFB547), Color(0x33FFB547))),
+                when {
+                    !focused -> Brush.verticalGradient(listOf(Color(0x66FFB547), Color(0x33FFB547)))
+                    frame.style == FocusFrameStyle.GOLD_BEZEL -> metalBrush(frame.gold, androidx.compose.ui.geometry.Offset.Zero, androidx.compose.ui.geometry.Offset.Infinite)
+                    else -> Brush.verticalGradient(listOf(Pastel.Amber, Pastel.AmberDeep))
+                },
                 shape,
             )
             .clickable(remember { MutableInteractionSource() }, indication = null, onClick = onTap),

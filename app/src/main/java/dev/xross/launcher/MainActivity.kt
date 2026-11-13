@@ -1,5 +1,6 @@
 package dev.xross.launcher
 
+import androidx.compose.ui.graphics.toArgb
 import android.Manifest
 import android.content.ActivityNotFoundException
 import android.content.BroadcastReceiver
@@ -44,9 +45,14 @@ import dev.xross.launcher.storage.VolumeMonitor
 import dev.xross.launcher.state.XmbViewModel
 import dev.xross.launcher.theme.XrossTheme
 import dev.xross.launcher.theme.rememberActivePalette
-import dev.xross.launcher.ui.WaveBackground
 import dev.xross.launcher.ui.XmbScreen
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+
+/** Indices of [pack]'s battery rules that hold at [b]; equal sets mean the same look. */
+private fun batteryRulesHeld(pack: dev.xross.launcher.theme.pack.LoadedTheme, b: dev.xross.launcher.theme.BatteryLevel?): List<Int> =
+    if (b == null) emptyList() else pack.rules.filter { r -> r.battery?.holds(b) == true }.map { it.index }
 
 class MainActivity : ComponentActivity() {
 
@@ -68,6 +74,18 @@ class MainActivity : ComponentActivity() {
     /** No input for a few seconds: the wave drops to a standby rate and the glows hold still. */
     private val inactivity = InactivityTracker(now = android.os.SystemClock::uptimeMillis)
 
+    /** No input for 10 s: the foreground particles (2b.4e) settle and stop. */
+    private val particleInactivity = InactivityTracker(
+        timeoutMs = dev.xross.launcher.ui.ParticleRest.IDLE_AFTER_MS,
+        now = android.os.SystemClock::uptimeMillis,
+    )
+
+    /** Any key, stick or touch input: wakes both idle timers. */
+    private fun noteInput() {
+        inactivity.onInput()
+        particleInactivity.onInput()
+    }
+
     /** When the gamepad handler last consumed a KEYCODE_BACK (see the back callback). */
     private var lastBackKeyAt = 0L
 
@@ -85,6 +103,11 @@ class MainActivity : ComponentActivity() {
     /** Settings ▸ Theme ▸ Import theme: `.xtheme` files have no registered type, so octet-stream too. */
     private val pickThemeArchive = registerForActivityResult(ActivityResultContracts.OpenDocument()) {
         viewModel.onThemeArchivePicked(it)
+    }
+
+    /** Settings ▸ Theme ▸ Xross wallpaper ▸ Pick a picture (2b.4f): a document, so its read grant can persist. */
+    private val pickWallpaperImage = registerForActivityResult(ActivityResultContracts.OpenDocument()) {
+        viewModel.onWallpaperPicked(it)
     }
 
     private val pickBaseRomsFolder = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) {
@@ -119,7 +142,7 @@ class MainActivity : ComponentActivity() {
         // Every nav action, including held-stick repeats, counts as input for the idle timer.
         val sink = object : InputSink by viewModel {
             override fun onAction(action: NavAction) {
-                inactivity.onInput()
+                noteInput()
                 viewModel.onAction(action)
             }
         }
@@ -157,6 +180,9 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) { inactivity.run() }
         }
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) { particleInactivity.run() }
+        }
 
         setContent {
             val state by viewModel.state.collectAsStateWithLifecycle()
@@ -173,13 +199,42 @@ class MainActivity : ComponentActivity() {
             // list doesn't flicker). The user's settings (theme color, surface style) win over it.
             val categoryId = state.categoryId
             val system = dev.xross.launcher.theme.rememberSettledSystem(state.focusedSystem, categoryId)
-            val look = androidx.compose.runtime.remember(pack, state.settings.themeVariant, categoryId, system) {
-                pack.look(state.settings.themeVariant, categoryId, system)
+            // Battery and clock for the pack's context rules: read only when it has such rules, and
+            // passed on only when the set of rules that hold changes (not on every percent or minute).
+            val ruleBattery by androidx.compose.runtime.remember(pack) {
+                viewModel.battery
+                    .map { b -> b.takeIf { pack.usesBattery } }
+                    .distinctUntilChanged { a, b -> batteryRulesHeld(pack, a) == batteryRulesHeld(pack, b) }
+            }.collectAsStateWithLifecycle(initialValue = null)
+            val ruleMinute by dev.xross.launcher.theme.rememberMinuteOfDay(active = pack.usesClock, key = pack) { m ->
+                pack.rules.filter { r -> r.time?.contains(m) == true }.map { it.index }
             }
-            // The user's surface choice (Settings ▸ Theme ▸ Surface style), else the look's. Read in
-            // the draw phase only, so a category or system switch redraws without recomposing.
-            androidx.compose.runtime.LaunchedEffect(pack, look, state.settings.surfaceStyle) {
-                dev.xross.launcher.ui.ThemeSurfaces.active = pack.surfaceFor(look, state.settings.surfaceStyle)
+            // The user's Settings ▸ Theme picks (2b.4f: shader, filters, focus frame, particles, icon
+            // mask) sit on top of the pack's look in every context.
+            val userEffects = state.settings.effectOverrides
+            val look = androidx.compose.runtime.remember(pack, state.settings.themeVariant, categoryId, system, ruleBattery, ruleMinute, userEffects) {
+                userEffects.applyTo(pack.look(state.settings.themeVariant, categoryId, system, ruleBattery, ruleMinute))
+            }
+            // The pack's programs plus the user's background shader, all compiled ahead of time.
+            val shaderLibrary = androidx.compose.runtime.remember(pack, userEffects.shader) { pack.shaderLibrary(userEffects.shader) }
+            if (BuildConfig.PERF_LOG) {
+                androidx.compose.runtime.LaunchedEffect(look.shader, look.cosmetics) {
+                    val c = look.cosmetics
+                    android.util.Log.i(
+                        "XrossEffects",
+                        "shader=${look.shader.preset} bgFilter=${c.bgFilter} uiFilter=${c.screenFilter.filter} frame=${c.frame} " +
+                            "particles=${c.particleField} mask=${c.mask} user=${!userEffects.empty}",
+                    )
+                }
+            }
+            val profile = dev.xross.launcher.theme.QuickProfile.byName(state.settings.quickProfile)
+            val layout = androidx.compose.runtime.remember(pack, look, profile) { profile.layout(look.layout ?: pack.layout) }
+            // The quick profile's surface, else the user's choice (Settings ▸ Theme ▸ Surface style),
+            // else the look's. Read in the draw phase only, so a category or system switch redraws
+            // without recomposing.
+            androidx.compose.runtime.LaunchedEffect(pack, look, state.settings.surfaceStyle, profile) {
+                dev.xross.launcher.ui.ThemeSurfaces.active =
+                    profile.surface?.let { pack.surfaces[it.name] } ?: pack.surfaceFor(look, state.settings.surfaceStyle)
             }
             var backdropCovers by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
             // Resting: no input for a few seconds and nothing playing. Music and video snaps keep
@@ -188,10 +243,14 @@ class MainActivity : ComponentActivity() {
             val music by container.music.state.collectAsStateWithLifecycle()
             val snapPlaying by container.snaps.player.collectAsStateWithLifecycle()
             val uiIdle = noInput && !music.isPlaying && snapPlaying == null
+            // The particles rest on input alone (music doesn't keep them going), after 10 s.
+            val particlesIdle by particleInactivity.idle.collectAsStateWithLifecycle()
             androidx.compose.runtime.CompositionLocalProvider(
                 dev.xross.launcher.ui.LocalThemePack provides pack,
                 dev.xross.launcher.ui.LocalThemeLook provides look,
                 dev.xross.launcher.ui.LocalUiIdle provides uiIdle,
+                dev.xross.launcher.ui.LocalThemeLayout provides layout,
+                dev.xross.launcher.ui.LocalStillMotion provides profile.stillMotion,
             ) {
             Box(Modifier.fillMaxSize()) {
                 // The wave is hidden (and its GL loop stopped) under full-screen photos and video,
@@ -202,24 +261,55 @@ class MainActivity : ComponentActivity() {
                 val wavePalette = androidx.compose.runtime.remember(base, s.waveTint, s.waveColors) {
                     dev.xross.launcher.theme.wavePalette(base, dev.xross.launcher.theme.WaveTint.byName(s.waveTint), s.waveColors)
                 }
-                val params = androidx.compose.runtime.remember(wavePalette, s.waveSpeed, s.waveLineCount, s.waveTurbulence, s.waveThickness) {
-                    dev.xross.launcher.ui.WaveParams(
-                        speed = s.waveSpeed,
-                        palette = wavePalette,
-                        lineCount = s.waveLineCount,
-                        turbulence = s.waveTurbulence,
-                        thickness = s.waveThickness,
-                    )
+                val switches = androidx.compose.runtime.remember(look.flags, s.circadianCurve, s.batteryTint, s.adaptiveGamePalette, profile) {
+                    dev.xross.launcher.theme.ColorSwitches.resolve(look.flags, s.circadianCurve, s.batteryTint, s.adaptiveGamePalette, profile)
                 }
-                WaveBackground(
+                // Game-art palette: the focused game's (or the Details screen's) art, debounced 250 ms.
+                val artKey = dev.xross.launcher.ui.adaptiveArtKey(state)
+                androidx.compose.runtime.LaunchedEffect(artKey, switches.adaptive) {
+                    container.gamePalette.focus(artKey.takeIf { switches.adaptive })
+                }
+                dev.xross.launcher.ui.AdaptiveWave(
+                    themed = wavePalette,
+                    profile = profile,
+                    switches = switches,
+                    art = container.gamePalette.colors,
+                    battery = viewModel.battery,
+                    settings = s,
                     enabled = state.waveEnabled && !fullscreenMedia,
-                    params = params,
                     paused = backdropCovers && state.waveEditor == null,
                     idle = uiIdle,
+                    shaders = shaderLibrary,
+                    shader = shaderLibrary.keyOf(look.shader),
+                    category = categoryId,
+                    health = container.shaderHealth,
+                    audio = container.music.energy,
+                    filter = look.cosmetics.bgFilter,
                 )
+                // Focus frame and app-icon look (2b.4d): the look's, colored by the active palette.
+                val cosmetics = look.cosmetics
+                val focusFrame = androidx.compose.runtime.remember(cosmetics.frame, base, look.focusGold) {
+                    dev.xross.launcher.ui.focusFrameOf(cosmetics.frame, base, look.focusGold)
+                }
+                val iconStyle = androidx.compose.runtime.remember(cosmetics.mask, cosmetics.filter, base) {
+                    dev.xross.launcher.data.IconStyle.of(cosmetics.mask, cosmetics.filter, canvas = base.top, accent = base.glow)
+                }
+                androidx.compose.runtime.LaunchedEffect(focusFrame, iconStyle) {
+                    if (BuildConfig.PERF_LOG) {
+                        android.util.Log.i(
+                            "XrossCosmetics",
+                            "frame=${focusFrame.style} mask=${iconStyle.mask} filter=${iconStyle.filter} " +
+                                "gold=#%06X".format(focusFrame.gold.toArgb() and 0xFFFFFF),
+                        )
+                    }
+                }
+                // Remembered per style: rows reload their icon only when the style changes.
+                val loadAppIcon: suspend (String) -> androidx.compose.ui.graphics.ImageBitmap? =
+                    androidx.compose.runtime.remember(iconStyle) { { pkg -> container.apps.icon(pkg, ICON_PX, iconStyle) } }
+                androidx.compose.runtime.CompositionLocalProvider(dev.xross.launcher.ui.LocalFocusFrame provides focusFrame) {
                 XmbScreen(
                     state = state,
-                    loadAppIcon = { pkg -> container.apps.icon(pkg, ICON_PX) },
+                    loadAppIcon = loadAppIcon,
                     loadThumb = { kind, id, px -> container.media.thumbnail(kind, id, px) },
                     loadArt = { uuid, kinds, px -> container.art.load(uuid, kinds, px) },
                     media = viewModel.media,
@@ -252,6 +342,13 @@ class MainActivity : ComponentActivity() {
                     onMiniPlayerLongPress = viewModel::onMiniPlayerLongPressed,
                     loadBadge = { name, px -> badgeImages.load(name, px) },
                     onBackdropCoverChanged = { backdropCovers = it },
+                    wallpaper = androidx.compose.runtime.remember(state.settings.customWallpaper, pack, look) {
+                        dev.xross.launcher.theme.WallpaperSource.resolve(state.settings.customWallpaper, pack, look)
+                    },
+                    packWallpaper = androidx.compose.runtime.remember(pack, look) {
+                        dev.xross.launcher.theme.WallpaperSource.packWallpaper(pack, look)
+                    },
+                    loadWallpaper = { source, px -> container.wallpapers.load(source, px) },
                     onWaveRowTap = viewModel::onWaveRowTapped,
                     onWaveSlider = viewModel::onWaveSliderChanged,
                     onCloseWaveSettings = viewModel::closeWaveSettings,
@@ -263,7 +360,10 @@ class MainActivity : ComponentActivity() {
                     onAvatarSlider = viewModel::onAvatarSliderChanged,
                     onCloseAvatarStyle = viewModel::closeAvatarStyle,
                     onCloseRaHub = viewModel::closeRaHub,
+                    particlesIdle = particlesIdle,
+                    onUiFilterError = container.shaderHealth::notice,
                 )
+                }
             }
             }
         }
@@ -276,7 +376,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        inactivity.onInput()
+        noteInput()
         // Picks up permission grants, installed emulators, and newly mounted drives, and resumes
         // background fingerprinting.
         viewModel.onForeground()
@@ -312,15 +412,17 @@ class MainActivity : ComponentActivity() {
         super.onDestroy()
     }
 
+    // ComponentActivity re-declares dispatchKeyEvent under @RestrictTo; overriding the public Activity method is fine.
+    @android.annotation.SuppressLint("RestrictedApi")
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        inactivity.onInput()
+        noteInput()
         val handled = gamepad.onKeyEvent(event)
         if (handled && event.keyCode == KeyEvent.KEYCODE_BACK) lastBackKeyAt = android.os.SystemClock.uptimeMillis()
         return handled || super.dispatchKeyEvent(event)
     }
 
     override fun dispatchTouchEvent(event: MotionEvent): Boolean {
-        inactivity.onInput()
+        noteInput()
         return super.dispatchTouchEvent(event)
     }
 
@@ -337,6 +439,7 @@ class MainActivity : ComponentActivity() {
                 pickThemeArchive.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream", "application/x-xtheme"))
             }
             UiEffect.PickBaseRomsFolder -> runCatching { pickBaseRomsFolder.launch(null) }
+            UiEffect.PickWallpaperImage -> runCatching { pickWallpaperImage.launch(arrayOf("image/png", "image/jpeg", "image/webp")) }
             is UiEffect.PickMediaFolder -> {
                 pendingMediaFolder = effect.kind
                 runCatching { pickMediaFolder.launch(null) }

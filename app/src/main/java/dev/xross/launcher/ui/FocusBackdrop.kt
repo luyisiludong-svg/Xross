@@ -3,7 +3,6 @@ package dev.xross.launcher.ui
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -14,9 +13,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import dev.xross.launcher.scrape.ArtKind
@@ -60,6 +60,8 @@ internal fun FocusBackdrop(
     uuid: String?,
     artVersion: Long,
     maxPx: Int,
+    /** The box the art fills, for the frosted surfaces' blur radius. */
+    viewport: Size,
     loadArt: suspend (String, List<ArtKind>, Int) -> ImageBitmap?,
     onCovering: (Boolean) -> Unit,
 ) {
@@ -84,14 +86,13 @@ internal fun FocusBackdrop(
 
     val image = shown ?: return
     if (alpha <= 0f) return
+    // Frosted surfaces draw a pre-blurred slice of this art (2b.4c).
+    val key = "hero:${FrostedBackdrop.idOf(image)}"
+    val opaque = remember(image) { !image.asAndroidBitmap().hasAlpha() }
+    FrostLayerEffect(FrostSlot.HERO, key, image, viewport, opaque, BackdropScrim.HERO) { alpha }
     Box(Modifier.fillMaxSize().graphicsLayer { this.alpha = alpha }) {
         Image(image, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
         // Scrim: darker behind the menu column and the status bar, so text stays readable.
-        Box(
-            Modifier.fillMaxSize().background(
-                Brush.horizontalGradient(0f to Color(0xA6000000), 0.55f to Color(0x73000000), 1f to Color(0x4D000000)),
-            ),
-        )
-        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0f to Color(0x59000000), 0.25f to Color.Transparent)))
+        Box(Modifier.fillMaxSize().drawBehind { BackdropScrim.HERO.draw(this, size, 1f) })
     }
 }

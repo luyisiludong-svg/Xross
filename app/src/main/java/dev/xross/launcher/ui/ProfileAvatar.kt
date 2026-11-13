@@ -97,15 +97,17 @@ fun ProfileAvatar(
             .drawBehind {
                 val center = Offset(this.size.width / 2, this.size.height / 2)
                 if (glowOn && styleColor != null) {
-                    // Halo in the ring color: both its reach (the "blur") and its opacity breathe.
+                    // Halo in the ring color (leaning toward the game-art accent while one shows):
+                    // both its reach (the "blur") and its opacity breathe.
                     val phase = glowPhase.value
+                    val haloColor = androidx.compose.ui.graphics.lerp(styleColor, ThemeAccent.halo.value, ThemeAccent.adaptiveMix.value)
                     val k = style!!.glowIntensity
                     val picture = pictureSize.toPx() / 2
                     val reach = picture * (1.15f + 0.55f * k * (0.65f + 0.35f * phase))
                     drawCircle(
                         Brush.radialGradient(
-                            0f to styleColor.copy(alpha = (0.3f + 0.7f * k) * (0.45f + 0.55f * phase)),
-                            (picture / reach) * 0.92f to styleColor.copy(alpha = (0.25f + 0.65f * k) * (0.4f + 0.6f * phase)),
+                            0f to haloColor.copy(alpha = (0.3f + 0.7f * k) * (0.45f + 0.55f * phase)),
+                            (picture / reach) * 0.92f to haloColor.copy(alpha = (0.25f + 0.65f * k) * (0.4f + 0.6f * phase)),
                             1f to Color.Transparent,
                             center = center,
                             radius = reach,
@@ -119,7 +121,7 @@ fun ProfileAvatar(
                 // Glow: a white halo fading outwards, its strength following the shared pulse.
                 drawCircle(
                     Brush.radialGradient(
-                        0.55f to Color.White.copy(alpha = 0.45f * focus * (0.5f + 0.5f * pulse())),
+                        0.55f to ThemeAccent.halo.value.copy(alpha = 0.45f * focus * (0.5f + 0.5f * pulse())),
                         1f to Color.Transparent,
                         center = center,
                         radius = r,

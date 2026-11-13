@@ -45,8 +45,10 @@ internal fun BusyIndicator(busy: Boolean, size: Dp, modifier: Modifier = Modifie
     }
     AnimatedVisibility(visible, enter = fadeIn(tween(240)), exit = fadeOut(tween(360)), modifier = modifier) {
         var step by remember { mutableIntStateOf(0) }
-        LaunchedEffect(Unit) {
-            while (true) {
+        val still = LocalStillMotion.current
+        LaunchedEffect(still) {
+            // E-Ink: a still ring, no stepping.
+            while (!still) {
                 delay(STEP_MS)
                 step = (step + 1) % DOTS
             }

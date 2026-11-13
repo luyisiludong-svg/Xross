@@ -59,6 +59,25 @@ data class XrossSettings(
     val surfaceStyle: String = "",
     /** The active pack's variant id (Settings ▸ Theme ▸ Theme variant); empty or unknown = the pack's base look. */
     val themeVariant: String = "",
+    /**
+     * Xross's own wallpaper (Photo ▸ Options ▸ Set as Xross wallpaper): a photo's content URI or a
+     * file path, drawn behind the menu instead of the theme pack's. Empty uses the pack's
+     * wallpaper, if it has one. Separate from the Android system wallpaper.
+     */
+    val customWallpaper: String = "",
+    /**
+     * Settings ▸ Theme picks over the pack's effects (2b.4f): background shader and filter, UI
+     * filter, focus frame, particles, app icon mask. Empty values follow the pack.
+     */
+    val effectOverrides: dev.xross.launcher.theme.pack.EffectOverrides = dev.xross.launcher.theme.pack.EffectOverrides.NONE,
+    /** [dev.xross.launcher.theme.QuickProfile] name (Settings ▸ Theme ▸ Quick profile); NONE = the theme's own look. */
+    val quickProfile: String = dev.xross.launcher.theme.QuickProfile.NONE.name,
+    /** Colors from the focused game's art; null follows the pack's `effects.adaptiveGamePalette` (on by default). */
+    val adaptiveGamePalette: Boolean? = null,
+    /** The hourly circadian curve; null follows the pack's `palette.circadianCurve` (off by default). */
+    val circadianCurve: Boolean? = null,
+    /** The low-battery and charging tint; null follows the pack's `palette.batteryTint` (off by default). */
+    val batteryTint: Boolean? = null,
     /** [dev.xross.launcher.theme.XrossTheme] name, or [dev.xross.launcher.theme.PACK_THEME] for the theme pack's own colors. */
     val theme: String = "LAVENDER",
     /** The pill of button hints in the bottom corner of the home menu. */

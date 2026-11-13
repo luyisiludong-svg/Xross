@@ -113,12 +113,12 @@ on screens 600 dp and wider.
 | DAT verification | Done. No-Intro, Redump and MAME DATs (Logiqx XML or clrmamepro, plain or zipped) matched by SHA-1, MD5, CRC32 + size or arcade set name; Room schema v5 |
 | Scraping and art | Done. Hasheous, SteamGridDB and ScreenScraper with per-service pacing and quotas; art cached on disk per game; box art on game rows; Details screen with paging between games; manual match and title override; hero art and video snaps behind the focused game. All three services verified live |
 | Emulator dispatch | Done. RetroArch (per-platform core), DuckStation, NetherSX2, Dolphin, PPSSPP, Azahar, Eden, Flycast, M64Plus FZ, melonDS and ScummVM, chosen per platform or per game. ROMs go out as a path extra plus a `content://` URI with a read grant. Verified with stand-ins only |
-| Media hub | Done. Photo viewer (zoom, pan, slideshow, wallpaper), background music player with media-session controls, video player; music pauses for games and videos |
+| Media hub | Done. Photo viewer (zoom, pan, slideshow, Set as Xross or Android wallpaper), background music player with media-session controls, video player; music pauses for games and videos |
 | Wave background | Done. GLSL ES 3.0 ribbon shader with day/night palette; speed, ribbon lines, turbulence, thickness and color presets as live uniforms (Settings ▸ Theme ▸ Wave settings). Pauses whenever the launcher isn't in front or game art covers it |
 | Theme packs | Done. `Xross/themes/<id>/` with a v2 `theme.json` (imports, palette roles, font roles, surfaces), fonts, SVG/PNG icons and sounds, reloaded live when edited; the bundled icons and sounds are the built-in Default pack |
 | RetroAchievements | Done. Account linking, status bar avatar with an expanding mini-HUD, User Card, Games ▸ RetroAchievements dashboard, per-game telemetry and achievement lists, unlock toasts. Linking and lists verified live on an emulator and the Galaxy A55; the 2b.1 HUD and dashboard are unit-tested only; unlock toasts not yet seen after a real session |
 | Library organization | Done. Hide apps (Options ▸ Hide, Settings ▸ Apps ▸ Hidden apps, Hide system apps), app folders (Emulators, Streaming, Tools or your own name, with emulators suggested), base ROMs folder with Create system folders, and custom Photo/Video folders that also find files MediaStore skips. Tested on the Galaxy A55 |
-| Customization | 16:9 XMB game tiles (logo, wide art or a title plate); Settings ▸ Theme ▸ Profile customization for the avatar's border and glow (`profile.avatarStyle` in `settings.json`). Theme 2.0 (layouts, palettes from game art, custom shaders, BGM, haptics) is planned, see Roadmap §4.3 |
+| Customization | 16:9 XMB game tiles (logo, wide art or a title plate); Settings ▸ Theme ▸ Profile customization for the avatar's border and glow (`profile.avatarStyle` in `settings.json`). Theme 2.0 packs with variants, overrides and context rules, palettes from game art, an hourly circadian curve, a battery tint and quick profiles (OLED True Black, Y2K Cyber-Pastel, Monochrome E-Ink); background shader presets and a pack's own `shader.frag` (music-reactive through Xross's player), a pack wallpaper or a picture set as Xross wallpaper, frosted surfaces over art and wallpapers, focus frames, icon masks, ambient particles, a GL background filter (scanlines, CRT, LCD grid) and an experimental AGSL filter over the menu on Android 13+, each also pickable in Settings ▸ Theme. BGM and haptics are planned, see Roadmap §4.3 |
 | Extras | Android apps (games sorted into Games ▸ Android Games), 8 color themes including Original (a color per month), busy indicator, optional button hints, Information screen, can be set as the HOME launcher, Android TV leanback entry |
 | XMB fidelity | Closer. The home menu's layout, motion, navigation, status bar and options panel match the XMB; games show their own tiles, and focusing one brings up its art and video. An XMB-style typeface, Resume/Quit Game and the folder drill-down are missing |
 | Not started | On-screen controller, dual screen, Xross Portal, FTPS |
@@ -141,7 +141,9 @@ on screens 600 dp and wider.
 ./gradlew :app:testDebugUnitTest --tests '*ScreenScraperLiveTest*' -PliveScrape=true   # real API calls, uses .env and localTestMedia/Roms/
 ./gradlew :app:testDebugUnitTest --tests '*RetroAchievementsLiveTest*' -PliveScrape=true
 ./gradlew :app:installDebug :emulator-stub:installRetroarchDebug
-tools/device-tests/smoke.sh                       # on-device smoke test (see warning below)
+tools/device-tests/smoke.sh                       # quick on-device smoke test, ~30 s (see warning below)
+tools/device-tests/test-theme.sh                  # one suite: test-{library,theme,media,input,integration}.sh
+tools/device-tests/run-all.sh                     # full device regression, all 173 checks (= smoke.sh --all)
 ./gradlew :app:assembleProfiling                  # R8-optimized build for frame timing
 ```
 
@@ -153,9 +155,17 @@ only when its credentials are in `.env`: ScreenScraper works with the developer 
 profile and loads a game's achievements. `localTestMedia/` (ROMs, music and video for local testing) is never
 committed.
 
-> **`smoke.sh` is for a throwaway emulator.** It clears Xross's data and runs
-> `rm -rf /sdcard/ROMs` (plus `XrossSmoke` folders under Pictures, Music and Movies) to seed its
-> own test files. Never run it on a device that holds a real ROM collection.
+> **The device tests are for a throwaway emulator.** Each one clears Xross's data and runs
+> `rm -rf /sdcard/ROMs` (the media suite also uses `XrossSmoke` folders under Pictures, Music and
+> Movies) to seed its own test files, and deletes them at the end. Never run them on a device that
+> holds a real ROM collection.
+
+The device tests come in three tiers that share `tools/device-tests/lib/harness.sh`: `smoke.sh`
+(12 checks: boot, database, library scan, category bar, no crash) for everyday work; five suites
+that each start from a reset and run on their own (`test-library.sh` 41, `test-theme.sh` 88,
+`test-media.sh` 22, `test-input.sh` 11, `test-integration.sh` 9); and `run-all.sh`, which runs them
+all with one passed / failed / skipped summary and exits non-zero on any failure. Details and
+optional host tools: [`docs/HARDWARE_TESTING.md`](docs/HARDWARE_TESTING.md) §2a.
 
 Measure smoothness only on the `profiling` build. The debug build is debuggable, and Compose runs
 several times slower there, so it shows stutter that the optimized build doesn't have.
@@ -223,8 +233,11 @@ Xross/themes/<theme_id>/
 ├── surfaces.json   optional: any JSON file listed in "imports" is merged under theme.json
 ├── fonts/          .ttf/.otf; "typography" names one per role (display, body, mono)
 ├── icons/          <icon id>.svg / .png / .webp, e.g. settings.svg, games.png
-└── sounds/         cursor.wav, confirm.wav, back.wav, option.wav, ok.wav, system_ng.wav,
-                    trophy.wav, 01. opening.wav, gameboot.wav
+├── sounds/         cursor.wav, confirm.wav, back.wav, option.wav, ok.wav, system_ng.wav,
+│                   trophy.wav, 01. opening.wav, gameboot.wav
+├── shader.frag     optional: a CUSTOM background shader (or effects.shaderPath)
+├── postprocess.agsl optional: a CUSTOM UI filter, Android 13+ (or effects.uiFilterPath)
+└── wallpaper.png   optional: drawn behind the menu (or .jpg / .webp, or effects.wallpaperPath)
 ```
 
 ```json
@@ -281,7 +294,56 @@ drawn, layer by layer:
   borders `INNER`, `OUTER` or a `side` (`TOP`, `LEFT`, `BOTTOM`, `RIGHT`). At most 3 borders and
   2 shadows are drawn, glows up to 24 dp. Every pack also gets the built-in `FLAT_GLASS`,
   `Y2K_GLOSSY_BEZEL`, `OLED_TRUE_BLACK` and `EINK_HIGH_CONTRAST`, and **Settings ▸ Theme ▸ Surface
-  style** picks any of them over the pack's choice. `backdropBlurDp` is accepted but not drawn yet.
+  style** picks any of them over the pack's choice. `backdropBlurDp` (0–48) frosts a surface:
+  over hero art or a wallpaper it shows a blurred slice of the image behind it under its fill;
+  over the live shader it keeps its tint. The blur is made once per image, small and off the main
+  thread, so it costs nothing per frame and works on every Android version. `FLAT_GLASS` uses 14.
+* **Wallpaper:** a `wallpaper.png` (or `.jpg` / `.webp`) at the pack root is drawn full-bleed
+  behind the menu, over the background shader and under the focused game's hero art;
+  `effects.wallpaperPath` names another file in the pack (`wallpaper` is accepted too), and
+  `"none"` turns it off. Variants, overrides and rules may set it like the shader. An opaque
+  wallpaper stops the shader's GL loop while it covers the screen. **Photo ▸ Options ▸ Set as
+  Xross wallpaper** (in a photo list or the viewer) puts a photo there instead of the pack's,
+  saved as `display.customWallpaper` (a `content://` URI or a file path) and separate from the
+  Android wallpaper; **Settings ▸ Theme ▸ Xross wallpaper** goes back to the theme's.
+* **Focus frames and app icons:** `effects.focusFrameStyle` (alias `focusFrame`) frames the focused
+  item: `BREATHING_HALO` (the default soft, pulsing glow), `STATIC_NEON` (a crisp glow in the
+  accent, or the wave color when the accent is white, that holds still), `HARD_SHADOW` (a solid
+  shadow 2 dp down and right, no blur) or `GOLD_BEZEL` (a metal frame in `palette.focusGold`
+  around game tiles and RetroAchievements badges). Only the breathing halo animates; the others
+  draw no frames while the cursor rests. `effects.iconMask` cuts installed apps' icons to
+  `SQUIRCLE`, `CIRCLE` or `Y2K_CHROME_FRAME` (a squircle in a glossy chrome bezel), or leaves them
+  as shipped (`NONE`): adaptive icons are rebuilt from their layers, legacy icons with transparent
+  corners are shrunk onto a plate tinted from their own colors. `effects.iconFilter` recolors them:
+  `DUOTONE` (shadows in the canvas color, highlights in the accent) or `MONOCHROME` (black to the
+  accent). Each icon is drawn once per mask, filter, palette and size and then cached, so scrolling
+  the Apps list costs nothing. Names are matched ignoring case and dashes (`gold-bezel`).
+* **Foreground particles:** `effects.foregroundParticles` (alias `particles`) drifts a light layer
+  of particles over the wallpaper and hero art, under the menu: `SNOW` (flakes falling and
+  swaying), `BOKEH` (large faint discs in the accent rising slowly, nearer ones bigger and
+  fainter) or `DUST_MOTES` (specks drifting and twinkling, brightest in a shaft of light from the
+  top left); `NONE` by default. At most 48 particles. They ease to a stop after 10 s without
+  input and draw nothing until the next key or touch, stop in the background, and are hidden
+  under a playing video snap, full-screen photos and video, and the Monochrome E-Ink profile.
+* **Background filter:** `effects.backgroundFilter` draws a full-screen filter over the background
+  shader, inside its GL pipeline (the shader is a separate surface under the menu, so this is the
+  one place a filter reaches it): `SCANLINES` (dark lines about 1.5 dp apart), `CRT` (scanlines,
+  an RGB aperture grille and the tube's vignette) or `LCD_GRID` (a handheld's pixel grid, cells
+  about 3 dp across); `NONE` by default. Lines and stripes are sized in dp and snapped to whole
+  pixels of the shader's render target (density × render scale), so they don't shimmer or beat
+  into moiré. It only darkens the background; the menu stays crisp. Skipped over the `CRT`
+  preset, which draws its own (and now sizes them the same way).
+* **UI filter (experimental, Android 13+):** `effects.uiFilter` (alias `postProcess`) runs an AGSL
+  shader over the whole menu as a `RenderEffect`: `SCANLINES_UI`, `BLOOM` (bright text and glows
+  bleed a soft halo), or `CUSTOM` with the pack's `postprocess.agsl` (or `effects.uiFilterPath`,
+  alias `postProcessPath`; a path alone means `CUSTOM`). A custom file must declare
+  `uniform shader content;` (the menu) and may declare `uniform float2 uResolution;`,
+  `uniform float uTime;` (seconds) and `uniform float uPxPerDp;`; Xross sets only those it
+  declares. The built-in filters are static, so a resting menu draws no frames; a custom one that
+  reads `uTime` animates at up to 30 fps while the menu is in use and rests with it (3 s without
+  input, in the background, under E-Ink). A compile error turns the filter off with a toast.
+  Android 12 and below ignore it. Every pass costs a full-screen offscreen render, so prefer the
+  background filter on slow GPUs.
 * **Variants:** `"variants": [{ "id": "bios-matrix", "name": "BIOS Matrix", "palette": {…},
   "effects": { "surfaceStyle": "OLED_TRUE_BLACK" } }]` adds colorways that share the pack's fonts,
   icons and sounds. **Settings ▸ Theme ▸ Theme variant** (shown only for packs that have them)
@@ -289,15 +351,71 @@ drawn, layer by layer:
 * **Overrides:** `"categoryOverrides": { "MUSIC": {…} }` (`GAMES`, `MUSIC`, `PHOTO`, `VIDEO`,
   `APPS`, `SETTINGS`) applies while that category is open; `"systemOverrides": { "dreamcast": {…} }`
   (a platform id or a folder alias such as `dc`) while one of that system's games is focused, after
-  the cursor rests for a quarter second. Each may set `palette` roles, `effects.surfaceStyle` and
-  `cardAspectRatio` (a system's aspect shapes that system's game tiles). Precedence, lowest to
+  the cursor rests for a quarter second. Each may set `palette` roles, `effects.surfaceStyle`,
+  `effects.shaderPreset`, `effects.wallpaperPath`, `effects.focusFrameStyle`, `iconMask`,
+  `iconFilter`, `foregroundParticles`, `backgroundFilter`, `uiFilter` and `cardAspectRatio` (a system's aspect shapes that system's game tiles). Precedence, lowest to
   highest: Default pack → pack → variant → category → system → your own Settings (a fixed theme
-  color or a chosen surface style wins over all of them). Overrides patch a pack palette; they
+  color, a chosen surface style or any effect picked in Settings ▸ Theme wins over all of them). Overrides patch a pack palette; they
   don't add one to a pack without colors. The wave crossfades between palettes.
+* **Context rules:** `"rules": [{ "match": {…}, "apply": {…} }]` inline, or in a `rules.json`
+  listed in `imports` (imported rules come first, then the manifest's; they add up). `match` takes
+  any of `category` (`MUSIC`), `system` (a platform id or folder alias), `battery` (`<= 20`, `< 15`,
+  `>= 80`, `charging`, `discharging`, `full`) and `time` (`21:00..06:00`, wrapping past midnight;
+  start included, end excluded); every selector given must hold. `apply` takes `palette` roles,
+  any `effects` key above, `cardAspectRatio` and any `layout` key. Rules sit above the variant and
+  the overrides, in file order, so the last matching rule wins. A rule whose selector can't be read
+  is reported and dropped, never applied everywhere. Battery and time are re-checked when they
+  change and once a minute, never per frame.
+* **Color layers:** `palette.circadianCurve` (an hourly curve: cool cyan 06–11, azure 11–18, amber
+  and rose gold 18–21, indigo 21–06, blended across each boundary), `palette.batteryTint` (accent and
+  glow shift to amber, then red, below 20%; a soft green pulse while charging) and
+  `effects.adaptiveGamePalette` (the focused game's hero or wheel art drives the wave, focus halos,
+  avatar glow and battery outline, 250 ms after the cursor rests). A pack sets the defaults (off,
+  off, on); **Settings ▸ Theme ▸ Adaptive colors / Circadian curve / Battery alert tint** override
+  them (`display.adaptiveGamePalette`, `display.circadianCurve`, `display.batteryTint`; `null`
+  follows the pack). Rules can switch them too.
+* **Quick profiles:** **Settings ▸ Theme ▸ Quick profile** (`display.quickProfile`): *OLED True
+  Black* (pure black canvas, no surface fills, glowing outlines; game art still drives the accent),
+  *Y2K Cyber-Pastel* (lavender, lilac and strawberry, glossy bezels) and *Monochrome E-Ink* (black
+  and white, no translucency, instant motion, every pulse and glow frozen, the wave a single still
+  frame, color layers off). Precedence, lowest to highest: Default pack → pack → variant →
+  overrides → rules → your theme color → quick profile → circadian curve and battery tint → game art.
+* **`effects` reference:** every key a pack's `effects` block (in the base, a variant, an override
+  or a rule's `apply`) recognizes. Any other key is listed with the pack's problems (Settings ▸
+  Theme ▸ Theme pack) instead of being ignored silently, so a typo shows up.
+
+  | Key (aliases) | Values | Since |
+  | --- | --- | --- |
+  | `surfaceStyle` | a preset or a surface the pack defines | 2b.2 |
+  | `adaptiveGamePalette` | `true` / `false` | 2b.3 |
+  | `shaderPreset` (`shader`) | `WAVE`, `ASCII_MATRIX`, `BOKEH`, `STARFIELD`, `CRT`, `CUSTOM` | 2b.4a |
+  | `shaderPath` | a `.frag` in the pack (implies `CUSTOM`) | 2b.4a |
+  | `wallpaperPath` (`wallpaper`) | a PNG, JPEG or WebP in the pack, or `none` | 2b.4c |
+  | `focusFrameStyle` (`focusFrame`) | `BREATHING_HALO`, `STATIC_NEON`, `HARD_SHADOW`, `GOLD_BEZEL` | 2b.4d |
+  | `iconMask` | `NONE`, `SQUIRCLE`, `CIRCLE`, `Y2K_CHROME_FRAME` | 2b.4d |
+  | `iconFilter` | `NONE`, `DUOTONE`, `MONOCHROME` | 2b.4d |
+  | `foregroundParticles` (`particles`) | `NONE`, `SNOW`, `BOKEH`, `DUST_MOTES` | 2b.4e |
+  | `backgroundFilter` | `NONE`, `SCANLINES`, `CRT`, `LCD_GRID` | 2b.4f |
+  | `uiFilter` (`postProcess`) | `NONE`, `SCANLINES_UI`, `BLOOM`, `CUSTOM` (Android 13+) | 2b.4f |
+  | `uiFilterPath` (`postProcessPath`) | an `.agsl` in the pack (implies `CUSTOM`) | 2b.4f |
+
+* **Your own picks over the pack:** **Settings ▸ Theme** has a row for each of *Background
+  shader* (Wave, Matrix, Bokeh, Starfield, CRT), *Background filter* (Off, Scanlines, CRT grille,
+  LCD grid), *UI filter (experimental)* (Off, Scanlines, Bloom), *Focus frame style* (Breathing
+  halo, Static neon, Hard shadow, Gold bezel), *Ambient particles* (Off, Snow, Bokeh, Dust motes)
+  and *App icon mask* (System, Squircle, Circle, Chrome). Confirm steps through "Theme pack (…)"
+  and then each choice; Options lists them all. They are saved under `display.effects` in
+  `settings.json` (`shaderPreset`, `backgroundFilter`, `uiFilter`, `focusFrameStyle`,
+  `foregroundParticles`, `iconMask`; empty follows the pack) and win in every category and rule.
+  *Xross wallpaper* picks any picture through the system picker (Pick custom…; the read access is
+  kept across restarts) or goes back to the theme's (Reset to theme). *Reset to theme defaults*
+  clears every pick that overrides the pack's look (those six, the surface style, the three color
+  layers and the Xross wallpaper) and keeps the pack, its variant, the theme color, the quick
+  profile and the wave settings.
 * **`.xtheme` files:** a pack zipped into one file (the folder itself or its contents) installs with
   **Settings ▸ Theme ▸ Import theme (.xtheme)…**. The archive is checked before anything is
-  written: no `..` or absolute paths, only `.json` / `.md` / `.txt` at the top and fonts, sounds
-  (or `audio/`), icons and shaders in their folders with their own file types, no programs, at most
+  written: no `..` or absolute paths, only `.json` / `.md` / `.txt`, `wallpaper.png`,
+  `shader.frag` and `postprocess.agsl` at the top and fonts, sounds (or `audio/`), icons, shaders and `wallpapers/` in their folders with their own file types, no programs, at most
   50 MB unpacked, and a valid `schemaVersion: 2` `theme.json`. It unpacks into
   `Xross/themes/<id>/` (the id is made from the pack's name) and is switched to; if that id is
   installed, Xross asks whether to replace it or keep both.
@@ -355,5 +473,5 @@ assets/docs/         PS3 and PSP instruction manuals (local reference only, git-
 assets/examples/     XMB reference screenshots and design mock-ups
 tools/icons/         SVG → VectorDrawable converter and icon role map
 tools/emulator-stub/ test-only emulator stand-ins (Gradle module :emulator-stub)
-tools/device-tests/  adb-driven smoke test
+tools/device-tests/  adb-driven device tests: quick smoke, five suites, run-all.sh, frame timing
 ```

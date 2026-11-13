@@ -183,12 +183,18 @@ internal fun NameEntryOverlay(
 @Composable
 private fun QueryField(search: SearchState, m: XmbMetrics, placeholder: String = "Search games") {
     val density = LocalDensity.current
-    val caret by rememberInfiniteTransition(label = "caret").animateFloat(
-        initialValue = 1f,
-        targetValue = 0f,
-        animationSpec = infiniteRepeatable(tween(520), RepeatMode.Reverse),
-        label = "blink",
-    )
+    // A steady caret under still-motion profiles (E-Ink); otherwise it blinks.
+    // (Read in the layer block, so the blink redraws the caret without recomposing.)
+    val blink = if (LocalStillMotion.current) {
+        null
+    } else {
+        rememberInfiniteTransition(label = "caret").animateFloat(
+            initialValue = 1f,
+            targetValue = 0f,
+            animationSpec = infiniteRepeatable(tween(520), RepeatMode.Reverse),
+            label = "blink",
+        )
+    }
     Column {
         Row(verticalAlignment = Alignment.Bottom) {
             Text(
@@ -204,7 +210,7 @@ private fun QueryField(search: SearchState, m: XmbMetrics, placeholder: String =
                         .padding(start = 4.dp, bottom = 4.dp)
                         .width(2.dp)
                         .height(with(density) { (m.titleSize * 1.2f).toDp() })
-                        .graphicsLayer { alpha = caret }
+                        .graphicsLayer { alpha = blink?.value ?: 1f }
                         .background(Color.White),
                 )
             }

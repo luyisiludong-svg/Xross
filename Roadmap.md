@@ -19,6 +19,8 @@ material and link back here rather than keeping their own to-do lists.
 | [`project_scope.md`](project_scope.md) | The original product scope. Where this roadmap disagrees, §5 records the decision |
 | [`README.md`](README.md) | Building, running and using Xross; the `Xross/` folder; theme pack format |
 | [`docs/STATUS.md`](docs/STATUS.md) | Evidence: test suites, device runs, measurements, bugs found and fixed |
+| [`docs/PHASE_2B3_PENDING_TESTS.md`](docs/PHASE_2B3_PENDING_TESTS.md) | What Phase 2b.3 still needs verified (frame pacing, hardware, by-eye checks, smoke flakes) and how |
+| [`docs/PHASE_2B4_PROMPTS.md`](docs/PHASE_2B4_PROMPTS.md) | Phase 2b.4 (shaders, effects, materials) split into slices 2b.4a–2b.4f, each with its scope and checks |
 | [`docs/HARDWARE_TESTING.md`](docs/HARDWARE_TESTING.md) | Checklist for testing on a real handheld, and what to send back |
 | [`docs/XMB_FIDELITY.md`](docs/XMB_FIDELITY.md) | How close Xross is to the real XMB, checked against the PS3 and PSP manuals |
 | [`docs/FEASIBILITY.md`](docs/FEASIBILITY.md) | The 2026-11-09 feasibility review that led to the scope changes in §5 |
@@ -43,7 +45,7 @@ Merged into this file on 2026-11-11 (the originals are in git history):
 | **Phase 1 — Alpha** | XMB navigation, gamepad layer, ROM library, emulator launching, wave background | ✅ Complete |
 | **Phase 1b — Alpha hardening** | Hot-swap, USB-OTG, playtime, Options menu, per-game emulator, more emulators | ◐ Features done, including per-controller mappings, the axial deadzone and a 0% ("hardware only") deadzone. Real-handheld testing and a Baseline Profile remain |
 | **Phase 2 — Beta** | Metadata, media hub, theme packs, on-screen controller and keyboard, portable `Xross/` folder, library organization | ◐ Fingerprinting, DAT verification, three scrapers (all live-verified), Details screen, video snaps, media hub, gamepad search, the portable `Xross/` folder, library organization, theme packs, wave settings and the focused-game background are done. Left: on-screen controller, keyboard modes, per-track disc hashing, a language priority list, volume sliders, an original Default pack |
-| **Phase 2b — Customization engine (Theme 2.0)** | Profile HUD, XMB game tiles, RetroAchievements dashboard, then Theme 2.0: layout, palettes, shaders, audio, haptics | ◐ **2b.1 done** (2026-11-11, unit-tested, not yet on a device, §2.9). **2b.2 done** on `feat/theme-2b2` (2026-11-12, unit tests, emulator smoke test and display matrix; STATUS §3.16–§3.18). 2b.3–2b.9 not started (§4.3) |
+| **Phase 2b — Customization engine (Theme 2.0)** | Profile HUD, XMB game tiles, RetroAchievements dashboard, then Theme 2.0: layout, palettes, shaders, audio, haptics | ◐ **2b.1 done** (2026-11-11, unit-tested, not yet on a device, §2.9). **2b.2 done** on `feat/theme-2b2` (2026-11-12, unit tests, emulator smoke test and display matrix; STATUS §3.16–§3.18). **2b.3 done** on `feat/theme-2b3` (2026-11-12, unit tests and emulator smoke test; frame pacing still to measure; STATUS §3.19). **2b.4a done** on `feat/theme-2b4` (2026-11-12, shader host and watchdog: unit tests, emulator and Galaxy A55; STATUS §3.22). **2b.4b done** on `feat/theme-2b4` (2026-11-12, audio-reactive uniforms: unit tests and emulator; STATUS §3.23). **2b.4c done** on `feat/theme-2b4` (2026-11-12, wallpapers and frosted surfaces: unit tests and emulator; STATUS §3.24). **2b.4d done** on `feat/theme-2b4` (2026-11-12, focus frames and icon masks: unit tests and emulator; STATUS §3.25). **2b.4e done** on `feat/theme-2b4` (2026-11-13, foreground particles: unit tests, emulator and profiling-build frame timing; STATUS §3.26). **2b.4f done**, so **2b.4 is complete** on `feat/theme-2b4` (2026-11-13, post-processing filters and the Settings ▸ Theme effect rows: unit tests, every device suite and `palette-perf.sh` on the emulator; STATUS §3.27; not yet on the Galaxy A55). 2b.5–2b.9 not started (§4.3) |
 | **Phase 3 — Release candidate** | Dual screen, docking, RetroAchievements, Xross Portal, FTPS | ◐ RetroAchievements is done apart from encrypting the key and seeing an unlock toast after a real session. Hot-swap and live resolution change (two prerequisites) are done. Dual screen, docking, Portal and FTPS are not started |
 | **Phase 4 — v1.0** | Onboarding, tuning, theme/plugin format, release | ◐ Performance work started; app triage moved to Phase 2 as app folders |
 | **XMB fidelity** | Look and feel exactly like the XMB, plus Xross's extras | ◐ Layout, motion, navigation, status bar, game art and backgrounds, the monthly color, the busy icon and the sound roles match. The typeface, Resume/Quit Game, the folder drill-down and the playback control panel don't yet (§4.6) |
@@ -53,9 +55,10 @@ Merged into this file on 2026-11-11 (the originals are in git history):
 22 platforms, 11 emulator launch recipes, 8 color themes (one follows the month), three metadata
 services (Hasheous, SteamGridDB, ScreenScraper) plus RetroAchievements, settings in three JSON files
 in `Xross/config/` (kotlinx.serialization), art in `Xross/media` in ES-DE's layout, theme packs in
-`Xross/themes/`. **464 unit tests** (460 run by default, 4 opt-in live-service tests), an
-on-device smoke test (75 of 86 on the Galaxy A55, §3; 139 of 139 on the API 37 emulator with the
-2b.2 checks), and test-only stand-ins for all 11 emulators.
+`Xross/themes/`. **495 unit tests** (491 run by default, 4 opt-in live-service tests), an
+on-device tests in three tiers (a 12-check quick `smoke.sh`, five standalone suites and
+`run-all.sh`: 171 checks, 171 of 171 on the API 37 emulator; the older single script passed 75 of
+86 on the Galaxy A55, §3), and test-only stand-ins for all 11 emulators.
 
 **Testing so far:** one real device, a Samsung Galaxy A55 (Android 16, 120 Hz), has run every
 milestone up to the theme packs and the live RetroAchievements and scraping pass
@@ -129,7 +132,7 @@ All 11 recipes are verified only against the test stand-ins, not real emulator i
 | Feature | State | Notes |
 | --- | --- | --- |
 | Photo, Music and Video from MediaStore | ✅ | Folders, tags, EXIF, thumbnails, album art |
-| Photo viewer | ✅ | Zoom up to 5×, pan, slideshow (3–20 s), set as wallpaper |
+| Photo viewer | ✅ | Zoom up to 5×, pan, slideshow (3–20 s); Options: Set as Xross wallpaper (2b.4c) or the Android wallpaper |
 | Music player as a background service | ✅ | Media3 + MediaSession: notification, headset and lock-screen controls; albums, artists, shuffle, repeat |
 | Albums split by copy | ✅ 🧪 | The same album in two folders (FLAC and MP3, say) shows once per copy, labelled by format or folder |
 | Background music pauses for games and videos | ✅ | Resumes when Xross is back in front |
@@ -148,6 +151,13 @@ All 11 recipes are verified only against the test stand-ins, not real emulator i
 | Theme packs | ✅ 📱 | `Xross/themes/<id>/` (theme.json v2, fonts per role, SVG/PNG icons, sounds, imported JSON files), case-insensitive and contained lookups; partial packs inherit from the built-in Default pack; the active pack reloads live when its files change; variants, category and system overrides, and single-file `.xtheme` import with safety checks (2b.2). Format in README "Theme packs" |
 | Audio roles | ✅ | Nine roles in `SoundRole`: `cursor` (every D-pad step), `confirm`, `back`, `option`, `ok`, `system_ng` (errors and refused actions), `trophy`, and the streamed `opening` (startup) and `gameboot` cues |
 | Day/night brightness shift | ✅ | |
+| Color intelligence (2b.3) | ✅ 🧪 | Game-art palette (Jetpack Palette, 250 ms debounce, 100-game cache) morphing the wave, halos, avatar glow and battery outline; `rules` context engine (category, system, battery, time); hourly circadian curve; battery tint; quick profiles OLED True Black, Y2K Cyber-Pastel and Monochrome E-Ink (no motion, wave a single frame). STATUS §3.19 |
+| Background shaders (2b.4a) | ✅ 📱 | `effects.shaderPreset` (`WAVE`, `ASCII_MATRIX`, `BOKEH`, `STARFIELD`, `CRT`, `CUSTOM`) and `effects.shaderPath` in a pack's base, variants, overrides and rules; every program compiled ahead of time on pack load, the program on screen kept until the next links; compile errors, a frame-budget watchdog (p90 over 60% of the frame) and a crash-loop canary all fall back to the wave with a toast; a pack's `shader.frag` hot-reloads. STATUS §3.22 |
+| Wallpaper and frosted surfaces (2b.4c) | ✅ 🧪 | `wallpaper.png` or `effects.wallpaperPath` (through variants, overrides and rules), Set as Xross wallpaper from Photos (`display.customWallpaper`); an opaque wallpaper stops the shader's loop; `backdropBlurDp` draws a pre-blurred 192 px slice of the hero art or wallpaper behind a surface on every Android version. STATUS §3.24 |
+| Focus frames and icon masks (2b.4d) | ✅ 🧪 | `effects.focusFrameStyle` (`BREATHING_HALO`, `STATIC_NEON`, `HARD_SHADOW`, `GOLD_BEZEL` in `palette.focusGold`) on game tiles, icons and RetroAchievements badges, only the halo animating; `effects.iconMask` (`SQUIRCLE`, `CIRCLE`, `Y2K_CHROME_FRAME`) and `effects.iconFilter` (`DUOTONE`, `MONOCHROME`) on installed apps, drawn once per style and cached. STATUS §3.25 |
+| Post-processing (2b.4f) | ✅ 🧪 | `effects.backgroundFilter` (`SCANLINES`, `CRT`, `LCD_GRID`): a multiplied GL pass over any background program, pitches in dp snapped to whole render pixels (density × render scale), the `CRT` preset sized the same way. `effects.uiFilter` (`SCANLINES_UI`, `BLOOM`, `CUSTOM` from `postprocess.agsl`): an AGSL `RenderEffect` on the menu's root, Android 13+ only, static filters built once, a custom one reading `uTime` animating only while the menu is in use; AGSL errors turn it off with a toast. Unknown `effects` keys are reported. STATUS §3.27 |
+| Settings ▸ Theme effect rows (2b.4f) | ✅ 🧪 | Background shader, Background filter, UI filter (experimental), Focus frame style, Ambient particles, App icon mask: "Theme pack (…)" then each choice, saved as `display.effects` and winning over the cascade; Xross wallpaper ▸ Pick custom (system picker, persisted grant) or Reset to theme; Reset to theme defaults. STATUS §3.27 |
+| Foreground particles (2b.4e) | ✅ 🧪 | `effects.foregroundParticles` (`SNOW`, `BOKEH`, `DUST_MOTES`) through the cascade, at most 48, drawn in one `graphicsLayer` from flat arrays with no recomposition; ease to a stop after 10 s without input (then no frames), stop in the background, hidden under a playing snap, full-screen media and E-Ink. STATUS §3.26 |
 | Color themes | ✅ 📱 | Lavender, Crimson, Sapphire, Emerald, Amber, Rose, Midnight, and Original (a color per month, blended over the days around each month boundary) |
 | Icons from the design SVGs | ✅ | 29 SVGs in the Default theme pack, generated by `tools/icons/svg_icons.py` and drawn by the pack loader |
 | Focus glow, halos, drop shadows | ✅ | Blurred on Android 12+, offset copies on older versions |
@@ -175,7 +185,7 @@ All 11 recipes are verified only against the test stand-ins, not real emulator i
 | Fewer recompositions per cursor move | ✅ | Only rows whose focus changes are rebuilt (~75% less work per press) |
 | Cold boot to interactive | ✅ 📱 | 377–1,050 ms to first frame on the Galaxy A55 (profiling build); the fade-in adds 1.75 s by design |
 | Memory with another app in front | ✅ 📱 | 83–122 MB PSS on the Galaxy A55 (target ≤ 150 MB); decoded art is released when the UI is hidden |
-| Test tooling | ✅ | Unit tests, opt-in live service tests, adb smoke test, emulator stand-ins, `profiling` build type |
+| Test tooling | ✅ | Unit tests, opt-in live service tests, adb device tests (quick smoke, five suites, `run-all.sh`), emulator stand-ins, `profiling` build type |
 
 ### 2.8 Metadata and art
 
@@ -220,7 +230,7 @@ Bugs or gaps in features that are already built, separate from the new work in �
 | --- | --- | --- |
 | No real-hardware validation of controllers, sticks, emulators or audio | Biggest risk to Beta | Phase 1b hardware pass (§4.1) |
 | Phase 2b.1 animations not checked by eye | On the Galaxy A55 (2026-11-12) the HUD, tiles, Details paging and dashboard all work and were screenshotted; `smoke.sh` passes 112/112 on the emulator. The HUD morph and the Details crossfade haven't been watched for jitter, and L1/R1 hasn't been pressed on a physical controller | Watch them on the A55, then on a handheld with a controller |
-| `smoke.sh` 75/86 on the Galaxy A55 | The 11 failures are Photo/Music checks that expect the seeded media to be the only media. Not re-run since 2b.1 added Settings ▸ Theme ▸ Profile customization and Games ▸ RetroAchievements, which may shift key counts | Re-run on a throwaway emulator; fix counts |
+| Device tests 75/86 on the Galaxy A55 | The 11 failures are Photo/Music checks that expect the seeded media to be the only media. Not re-run since 2b.1; the checks have since been split into suites (`run-all.sh`, 171/171 on the emulator) | Run `run-all.sh library theme input integration` on the A55; `test-media.sh` only on a device without its own media |
 | Idle CPU in front 12–19%, above the 10% target | Was 114–124% resting on the Galaxy A55 (focus pulse redrawing every frame, wave at 120 Hz). After 3 s without input (`InactivityTracker`; music or a video snap keeps it awake) the pulses settle and stop and the wave drops to 20 fps (p95 51.9 ms against 50 ms); in use it runs at 60 fps. A 12 fps standby reached 7.9–11.6% but looked sluggish, so 20 fps stays. About 3.5% of the rest is not the wave (main thread, binder) | Profile the main thread at rest; or stop the wave after a longer rest, if that is acceptable (docs/STATUS.md §3.15) |
 | Library organization and the portable folder only tested on a phone | Passed on the Galaxy A55's internal storage. Moving the folder to an SD card or USB drive, atomic replace on FAT/exFAT, and Android 9/10 are unit-tested only | Check on a device with an SD card, and on an Android 9 or 10 device |
 | Folder names are typed in capitals | The gamepad keyboard has no lower case; "MY TOOLS" is saved as "My Tools" | Keyboard modes (§4.6) |
@@ -288,8 +298,8 @@ and a browser Theme Studio as 2b.9.
 | --- | --- | --- | --- |
 | **2b.1** | Far-right avatar and mini-HUD, 16:9 game tiles, Details paging, playtime subtitle, game RA telemetry, avatar style settings, Games ▸ RetroAchievements dashboard | RetroAchievements ✅, Details ✅ | ✅ 📱 (A55 screenshots; animations not yet watched) |
 | **2b.2** | **Foundation.** Theme 2.0 manifest (`theme.json` v2, `schemaVersion`; no v1 reader, §5); `imports` so a pack can split into `surfaces.json` and `rules.json`; variants and category/system overrides in the model; `.xtheme` archive import; font roles (`display`, `body`, `mono`); layout block (crosshair anchors and clamping, tile aspect per category, spacing, focused scale, unfocused alpha, UI scale 50–150%, motion profiles with optional spring parameters); text overflow mode; `Modifier.xrossSurface(SurfaceSpec)` with open surface definitions (shape incl. chamfer, solid/linear/sweep fill, sheen, stacked inner/outer/per-side borders, shadow and glow) and the four styles shipped as built-in presets (tint only, no blur yet); `FULL_BLEED_LINE` focus divider; drill-down styles (`CHEVRON_COLLAPSE`, `XMB_FOLDER_COLUMN`, today's `BREADCRUMB`); hot reload of the active pack when its files change | Theme pack loader ✅ | ✅ 🧪 Done on `feat/theme-2b2` (2026-11-12) in three slices (STATUS §3.16–§3.18): v2 manifest (v2 only), `imports`, palette and font roles, `SurfaceSpec` with the four presets, hot reload; layout block, motion profiles, text overflow, focus divider, the three drill-down styles; `variants` with Settings ▸ Theme ▸ Theme variant (`display.themeVariant`), `categoryOverrides` and `systemOverrides` (palette, surface, tile aspect; platform ids or folder aliases) in one precedence cascade, and `.xtheme` import through the SAF picker with zip-slip, folder, file-type, program and 50 MB checks. 464 unit tests, `smoke.sh` 139/139 and the 12-configuration display matrix (Default and a stress pack) on the API 37 emulator. Moved out: Settings rows for the user's own layout overrides (crosshair preset, UI scale, spacing) go to 2b.8, which owns the user layer. Not yet on a phone or handheld |
-| **2b.3** | Contextual palette from game art (Jetpack Palette) driving the wave, status-bar rings and focus glow; quick profiles (OLED True Black, Y2K / Cyber-Pastel, Monochrome E-Ink); optional hourly circadian curve; optional battery-level tint; `rules.json` context rules (category, system, battery level, time of day) that generalize the 2b.2 overrides, with the circadian curve and battery tint expressed as built-in rules | Art in `Xross/media` ✅, 2b.2 palette roles, surfaces and overrides | ⬜ |
-| **2b.4** | Shader presets (`WAVE`, `ASCII_MATRIX`, `BOKEH`, `STARFIELD`, `CRT`) and custom `shader.frag` with standard uniforms (plus `uBatteryLevel`, and `uAudioBass` / `uAudioBeat` from Xross's own music player) and a frame-budget watchdog; an optional full-screen post-process filter (scanlines, LCD grid, bloom) as AGSL on Android 13+ only; foreground ambient particles (layer 4); blur radius and opacity on surfaces; focus frame styles (`BREATHING_HALO`, `STATIC_NEON`, `HARD_SHADOW`, `GOLD_BEZEL`); icon masks and duotone tinting for app icons; static wallpaper (`wallpaper.png` in a pack, or Set as Xross wallpaper from Photos) | Wave uniforms ✅, 2b.2 | ⬜ |
+| **2b.3** | Contextual palette from game art (Jetpack Palette) driving the wave, status-bar rings and focus glow; quick profiles (OLED True Black, Y2K / Cyber-Pastel, Monochrome E-Ink); optional hourly circadian curve; optional battery-level tint; `rules.json` context rules (category, system, battery level, time of day) that generalize the 2b.2 overrides, with the circadian curve and battery tint expressed as built-in rules | Art in `Xross/media` ✅, 2b.2 palette roles, surfaces and overrides | ✅ 🧪 Done on `feat/theme-2b3` (2026-11-12, STATUS §3.19): `GamePaletteExtractor` (off the main thread, 250 ms debounce, 100-entry LRU) with Settings ▸ Theme ▸ Adaptive colors; `rules` with `category` / `system` / `battery` / `time` selectors in one cascade above variants and overrides; `Circadian` and `BatteryTint` as the built-in layers (Settings ▸ Theme ▸ Circadian curve, Battery alert tint; `BatteryMonitor` in `XmbViewModel`); Settings ▸ Theme ▸ Quick profile with OLED True Black, Y2K Cyber-Pastel and Monochrome E-Ink (`LocalStillMotion`, `WaveLoop.SINGLE_FRAME`). 495 unit tests; the device tests 171/171 on the API 37 emulator (164/171 on the first pass; the 7 were timing in older checks, fixed in the script). **Open:** the 0–1.5% janky gate for game navigation on the profiling build (the emulator's system process hung mid-measurement), and a phone or handheld pass. See docs/PHASE_2B3_PENDING_TESTS.md |
+| **2b.4** | Shader presets (`WAVE`, `ASCII_MATRIX`, `BOKEH`, `STARFIELD`, `CRT`) and custom `shader.frag` with standard uniforms (plus `uBatteryLevel`, and `uAudioBass` / `uAudioBeat` from Xross's own music player) and a frame-budget watchdog; an optional full-screen post-process filter (scanlines, LCD grid, bloom) as AGSL on Android 13+ only; foreground ambient particles (layer 4); blur radius and opacity on surfaces; focus frame styles (`BREATHING_HALO`, `STATIC_NEON`, `HARD_SHADOW`, `GOLD_BEZEL`); icon masks and duotone tinting for app icons; static wallpaper (`wallpaper.png` in a pack, or Set as Xross wallpaper from Photos). Six slices, 2b.4a–2b.4f (docs/PHASE_2B4_PROMPTS.md) | Wave uniforms ✅, 2b.2 | ◐ **2b.4a done** on `feat/theme-2b4` (2026-11-12, STATUS §3.22): multi-program GL host in `WaveRenderer` with `assets/shaders/` (a `prelude.glsl` of public uniforms, five presets), ahead-of-time compile through `queueEvent` (`KHR_parallel_shader_compile` polled where present), `ShaderStatus` / `ShaderHealth` toasts with the driver's error line, `FrameBudgetWatchdog` (timer queries, else sampled `glFinish`), `ShaderCanary` (`Xross/cache/shader_canary.tmp`, blocked keys in `shader_blocked.txt`), `validateShaders` Gradle task (glslangValidator). 535 unit tests; `smoke.sh` 12/12 on the emulator and the Galaxy A55, theme suite 88/88 on the emulator. **2b.4b done** (2026-11-12, STATUS §3.23): `uAudioBass` / `uAudioBeat` from the music player's own PCM (`BassTapProcessor` in its `DefaultAudioSink`, 150 Hz 4th-order low-pass, energy-ratio beats), dated by the sink's playout clock through `EnergyAudioSink` and a ring buffer, so pulses land when they are heard (the emulator's lead was ~490 ms); 558 unit tests, media suite 24/24 and `smoke.sh` 12/12 on the emulator. **2b.4c done** (2026-11-12, STATUS §3.24): wallpapers (`wallpaper.png`, `effects.wallpaperPath` in the cascade, Set as Xross wallpaper from the Photo list and viewer, `display.customWallpaper`, Settings ▸ Theme ▸ Xross wallpaper back to the theme's), `backdropCovers` stopping the shader under an opaque one, and frosted surfaces from `PreBlur` (a 192 px copy, three box passes, premultiplied) drawn as an aligned slice by `Modifier.frostedSlice`; `FLAT_GLASS` blurs 14 dp; 578 unit tests, theme and media suites on the emulator. **2b.4d done** (2026-11-12, STATUS §3.25): `effects.focusFrameStyle` (`BREATHING_HALO`, `STATIC_NEON`, `HARD_SHADOW`, `GOLD_BEZEL`) through the cascade, a constant pulse for every frame but the halo, `effects.iconMask` / `iconFilter` rendered by `IconStyler` (adaptive layers, padded legacy icons, chrome bezel, a luma `ColorMatrix`) and cached by package, style and size; 603 unit tests, theme suite 98/98, library 41/41, Apps list 0.5% janky. **2b.4e done** (2026-11-13, STATUS §3.26): `effects.foregroundParticles` (`SNOW`, `BOKEH`, `DUST_MOTES`) as layer 4 in `ui/AmbientParticles.kt`, a `ParticleField` of flat `FloatArray`s stepped by `withFrameNanos` and drawn in one `graphicsLayer` (no recomposition), ≤48 particles, a second `InactivityTracker` (10 s) easing them to a stop, hidden under a snap, full-screen media and E-Ink; 622 unit tests, theme suite 102/102 on the emulator, UI thread 0.3 ms p50 per frame with or without particles on the profiling build. ✅ **2b.4f done; 2b.4 complete** (2026-11-13, STATUS §3.27): `effects.backgroundFilter` (`SCANLINES`, `CRT`, `LCD_GRID`) as a second, multiplied full-screen pass in the GL pipeline (`screen_filter.frag`, compiled with the wave), its pitches in dp snapped to whole render pixels through `uPxPerDp` (density × render scale; the `CRT` preset now sizes its lines the same way instead of a fixed 270); `effects.uiFilter` (`SCANLINES_UI`, `BLOOM`, `CUSTOM` from `postprocess.agsl` / `uiFilterPath`) as an AGSL `RuntimeShader` `RenderEffect` on the menu's root on Android 13+ (off below), static presets built once per size, a custom file that reads `uTime` animating at ≤30 fps only while the menu is in use; only uniforms a file declares are set (setting an undeclared one aborts the process on API 37); Settings ▸ Theme rows for the shader, both filters, focus frame, particles and icon mask (`display.effects`, above the whole cascade), Xross wallpaper ▸ Pick custom / Reset to theme, Reset to theme defaults; `ThemeManifest.Effects.KEYS` with unknown `effects` keys reported. 645 unit tests; 226/226 device checks (theme suite 134) and `palette-perf.sh` on the emulator. **Open:** the Galaxy A55 and handhelds (Adreno, Mali, 120 Hz), the audio sync and the blur's look on hardware |
 | **2b.5** | Ambient BGM loop from theme packs with ducking; independent volume sliders (UI effects, boot and game cues, music/BGM, video snaps); three new sound roles (`category_switch`, `drill_in`, `drill_out`) with per-sound gains; stereo panning by crosshair X; optional cursor pitch jitter; custom boot sequence (`boot.mp4` or shader intro) and a game-launch curtain | Media hub ✅, `SnapPlayer` ✅ | ⬜ |
 | **2b.6** | Haptic profiles (Off, Subtle Click, Crisp Snap, Deep Thud) on category switch, list moves, errors and unlock toasts, with controller rumble where supported | Gamepad layer ✅ | ⬜ |
 | **2b.7** | Modular components: status-bar cluster slots (`left` / `right` arrays of `LOGO`, `WIFI`, `CLOCK` with a format, `BATTERY`, `AVATAR`) and battery display modes; mini-player modes (card, status ticker, off); glyph style override; metadata badge pills beside the focused title; telemetry tiers (`OFF`, `COMPACT_PILL` = today's 2b.1 widget, `RICH_CARD`); top-left `SOCIAL_STACK`; RetroAchievements hub upgrade (3-row badge grid modal with a detail banner, `FOLLOWING` sidebar, L1/R1 platform filter) | 2b.2, 2b.4 (surfaces) | ⬜ |
@@ -312,7 +322,7 @@ then 2b.8 alongside the original Default pack (§4.2). 2b.9 can start once the 2
 | Contrast profiles (2b.3) | Yes | E-Ink must turn off the wave, the glow pulse and all motion; OLED True Black draws no surface fills. Both are presets over existing settings, not new renderers |
 | Circadian curve (2b.3) | Yes | Extends the Original theme's blending and the existing day/night brightness shift; one source of truth for time-of-day color |
 | Custom shaders (2b.4) | Yes, guarded | The wave is a `GLSurfaceView`. User shaders are compiled on the GL thread; a compile or link failure, or a frame-time budget overrun (watchdog), falls back to the built-in wave with a toast. Only the fragment shader is replaceable, the standard uniforms are always bound, and the existing pause rules (not in front, art or video covering it) still apply |
-| Frosted surfaces (2b.4) | Partly | Compose can't blur what is behind a view, and the GL wave is a separate surface, so `Frosted.kt` uses a layered tint. A real backdrop blur needs `RenderEffect` (Android 12+) on a layer that also holds the background, or a blur pass inside the shader. Decision: opacity and glint border on every version; blur radius only on Android 12+ over art backgrounds; Android 9–11 keep the tint |
+| Frosted surfaces (2b.4) | Partly | Compose can't blur what is behind a view, and the GL wave is a separate surface, so a live backdrop blur would need `RenderEffect` (Android 12+) on a layer that also holds the background, or a blur pass inside the shader. But hero art and wallpapers are still images: each is blurred once, small (192 px) and off the main thread, and a surface draws its aligned, clipped slice of that copy. Decision (revised in 2b.4c): blur over hero art and wallpapers on every version, Android 9 included, at no per-frame cost; over the live shader and video snaps the tint alone |
 | Halo profiles (2b.4) | Yes | Glow blur already runs on Android 12+ with offset copies below; profiles change parameters, not technique |
 | BGM (2b.5) | Yes | BGM must never fight the user's music: it plays only while no song is loaded, pauses when music starts, ducks to 20% under a video snap and stops before an emulator launch. Use a second, lightweight ExoPlayer with audio focus `GAIN_TRANSIENT_MAY_DUCK` handling, not the music session (no notification for BGM) |
 | Pitch jitter (2b.5) | Yes | `SoundPool.play` already takes a rate; ±2% is a random rate in 0.98–1.02 |
@@ -330,11 +340,11 @@ then 2b.8 alongside the original Default pack (§4.2). 2b.9 can start once the 2
 | Sound roles and panning (2b.5) | Yes | `SoundRole` already has nine roles (§2.5); v2.1 adds `category_switch`, `drill_in` and `drill_out`, which fall back to `cursor`, `confirm` and `back` when a pack leaves them out. The spec's names for existing roles are accepted as aliases (Appendix A.9). Panning is `SoundPool.play`'s left/right volume |
 | Rich telemetry and social stack (2b.7) | Yes, data-limited | Needs followed users: the Web API's following list plus each friend's recent games. That is one call per friend, so it is fetched on refresh (rate-limited and cached like the rest of the RA data), never on hover. Check whether the Web API exposes anything an unread badge could count; if it doesn't, the badge counts new friend activity since the stack was last opened. Collapses when unlinked or offline |
 | Live Theme Mixer (2b.8) | Yes | Serializes the user's visual and audio overrides into `theme.json` v2 and copies the files the active look uses. Never touches `CredentialStore`, writes only a new folder, and warns that copied assets keep their original licences |
-| Open surface definitions (2b.2) | Yes | `SurfaceSpec` replaces the closed `SurfaceStyle` enum: shapes are Compose `Shape`s (rounded, chamfered via `GenericShape`, rectangle), fills and borders are `Brush`es, per-side borders are drawn lines. All draw-phase, cached per spec, so a surface costs no recomposition. Limits keep it cheap on 640×480 handhelds: at most 3 borders and 2 shadows per surface, glow radius ≤ 24 dp, and glows on list tiles only for the focused tile. `backdropBlurDp` is read but applied only under the 2b.4 frosted-surface rule |
+| Open surface definitions (2b.2) | Yes | `SurfaceSpec` replaces the closed `SurfaceStyle` enum: shapes are Compose `Shape`s (rounded, chamfered via `GenericShape`, rectangle), fills and borders are `Brush`es, per-side borders are drawn lines. All draw-phase, cached per spec, so a surface costs no recomposition. Limits keep it cheap on 640×480 handhelds: at most 3 borders and 2 shadows per surface, glow radius ≤ 24 dp, and glows on list tiles only for the focused tile. `backdropBlurDp` is drawn under the frosted-surface rule above (2b.4c) |
 | Hot reload (2b.2) | Yes, with a fallback | `FileObserver` on the active pack folder (`CLOSE_WRITE`, `MOVED_TO`, `DELETE`, so editors that save through a temp file and rename are caught), debounced ~150 ms, then re-parse off the main thread and swap the manifest in one state update; a parse error keeps the last good theme and shows a toast with the file and line. FUSE doesn't deliver every change on every device, so re-check modification times on resume and keep Options ▸ Look for new packs. The proposal's "< 30 ms" holds for JSON; a changed shader or font takes longer (recompile, font load) |
 | Split files and imports (2b.2) | Yes | `theme.json` lists `imports` (`surfaces.json`, `rules.json`); they are merged before decoding, paths stay inside the pack (same containment checks as icons and sounds). One file still works |
 | Context rules (2b.3) | Yes, typed | `rules.json` selectors: `category`, `system`, `battery.level` (comparison), `time` (range), each applied in file order above the pack and below the user's `settings.json` (Appendix A.4). Patches target documented keys only (palette roles, surface names, shader preset and speed, tile aspect), not arbitrary JSON paths with array indexes, so packs keep working when the format grows and errors can be reported by key. Battery and time are re-evaluated on change and once a minute, never per frame |
-| Post-process filter (2b.4) | Partly | The proposal's layer-7 GLSL pass with `uContentTexture` would need the whole Compose UI copied into a GL texture every frame: costly, and it defeats the idle rest. Android 13+ can apply an AGSL `RuntimeShader` as a `RenderEffect` to the root layer instead. Decision: AGSL filters on Android 13+, off below; built-in filters plus a custom `postprocess.agsl`; the filter animates only with the wave and rests with it |
+| Post-process filter (2b.4, done in 2b.4f) | Partly | The proposal's layer-7 GLSL pass with `uContentTexture` would need the whole Compose UI copied into a GL texture every frame: costly, and it defeats the idle rest. Android 13+ can apply an AGSL `RuntimeShader` as a `RenderEffect` to the root layer instead. Decision: AGSL filters on Android 13+, off below; built-in filters plus a custom `postprocess.agsl`; the filter animates only with the wave and rests with it |
 | Audio-reactive uniforms (2b.4) | Yes, own audio only | Android's `Visualizer` needs `RECORD_AUDIO`; Xross won't ask for it. Instead a `TeeAudioProcessor` in Xross's ExoPlayer computes bass energy and beats from its own music. Other apps' audio doesn't drive the shader. While music plays the screen doesn't rest anyway (idle rule) |
 | Status-bar slots (2b.7) | Yes | `WIFI` reads `ConnectivityManager` network capabilities (signal level without location permission; no SSID). `LOGO` is a pack icon. `CLOCK` formats with a pattern clamped to time fields. Slot order must keep the 2b.1 avatar morph working (the avatar stays the rightmost slot) |
 | Web Theme Studio (2b.9) | Yes, approximate | WebGL 2 runs the same GLSL ES 3.0 fragment shaders, so shader previews are exact. The menu preview is an HTML re-implementation, so it will drift from the Compose app; label it a preview and keep the app's own hot reload as the reference. Needs a published JSON schema and somewhere to host it (no project domain yet, §5). Must not ship Sony assets (same rule as the Default pack) |
@@ -375,7 +385,7 @@ read as an XMB; what remains, ordered by how much each item adds to the feel:
 | A distinct cursor sound in the Default pack | Original Default pack (§4.2) | The role exists (`cursor.wav`); today's file is the options tick at a lower gain |
 | XMB-style drill-down (folder icon beside its contents, no text breadcrumb) | — | The `XMB_FOLDER_COLUMN` drill-down style in 2b.2 |
 | Control panel on △ in the video and music players | — | Alongside the existing direct controls and the media controls shortcut |
-| Photo or theme background behind the menu | Theme packs ✅ | "Set as wallpaper" currently sets the Android wallpaper; Set as Xross wallpaper and `wallpaper.png` are in 2b.4 |
+| Photo or theme background behind the menu | ✅ 2b.4c | `wallpaper.png` in a pack, or Photo ▸ Options ▸ Set as Xross wallpaper (`display.customWallpaper`); Set as Android wallpaper still opens the system cropper |
 | Connected drives as items in their categories | Hot-swap ✅ | |
 | Keyboard input modes and an optional multi-tap keypad | — | Lower case, accented letters, symbols |
 | Delete, sort and Display All in the options menu; Restore default settings | — | |
@@ -516,7 +526,9 @@ Before any public release: original Default pack + open-licensed typeface (§4.2
    (the emulator's GPU timing was noisy on 2026-11-12).
 5. An original Default pack (icons, sounds), then the Game backgrounds setting.
 6. Baseline Profile.
-7. 2b.3 and 2b.4, then 2b.7, then 2b.5 and 2b.6, then 2b.8; any of them can interleave with
+7. Finish 2b.3's open items (frame pacing of game navigation on the profiling build, a phone
+   pass; docs/PHASE_2B3_PENDING_TESTS.md), then a hardware pass over 2b.4 (complete on the
+   emulator; the Galaxy A55 for 2b.4b–2b.4f), then 2b.7, then 2b.5 and 2b.6, then 2b.8; any of them can interleave with
    Phase 3 (Keystore for the RA key, Portal, FTPS).
 
 ---
@@ -649,28 +661,49 @@ thickness, gradient stops), `ASCII_MATRIX` (character grid driven by luminance a
 the palette), `BOKEH` (drifting orbs with depth of field), `STARFIELD` (warp dust that reacts
 slightly to category switches), `CRT` (scanlines, aperture grille, phosphor bloom), `CUSTOM`.
 
-Custom fragment shaders: `Xross/themes/<id>/shader.frag` (or `effects.shaderPath`), GLSL ES 3.0.
-Xross always binds:
+Custom fragment shaders: `Xross/themes/<id>/shader.frag` (or `effects.shaderPath`, inside the
+pack), GLSL ES 3.0, at most 64 KB. Unless the file starts with its own `#version`, Xross puts
+`assets/shaders/prelude.glsl` in front of it (version, precision, `out vec4 fragColor`), which
+declares the uniforms Xross always binds:
 
 ```glsl
-uniform float uTime;
-uniform vec2  uResolution;
+uniform float uTime;          // animation seconds (scaled by the wave speed)
+uniform vec2  uResolution;    // render target in pixels
 uniform vec4  uColorTop;
 uniform vec4  uColorBottom;
-uniform vec4  uAccent;
+uniform vec4  uAccent;        // the wave / ribbon color
+uniform vec4  uGlow;          // the glow color (pack accent)
+uniform float uBatteryLevel;  // 0..1
+uniform float uAudioBass;     // 0..1, own music player, as heard (2b.4b)
+uniform float uAudioBeat;     // 1 for ~100 ms from a beat, else 0 (2b.4b)
+uniform float uTransition;    // 1 on a category switch, easing to 0 in ~1 s
 ```
 
-On a compile error or a blown frame budget Xross falls back to `WAVE` with a toast.
+On a compile or link error, a blown frame budget (p90 over 60% of the frame for its first ~2 s on
+screen) or a crash in the last session, Xross falls back to `WAVE` with a toast; error lines are
+numbered from the top of the user's file. Since 2b.4a.
 
-**Foreground particles** (`effects.foregroundParticles`, layer 4): `NONE`, `BOKEH`, `SNOW`,
-`DUST_MOTES`, drawn over hero art and wallpapers.
+**Foreground particles** (`effects.foregroundParticles`, alias `particles`, layer 4): `NONE`,
+`BOKEH`, `SNOW`, `DUST_MOTES`, drawn over hero art and wallpapers and under surfaces; at most 48.
+They ease to a stop after 10 s without input, stop in the background, and hide under a playing
+video snap, full-screen media and still-motion profiles (E-Ink). Since 2b.4e.
+
+**Post-process filters** (2b.4f): `effects.backgroundFilter` (`NONE`, `SCANLINES`, `CRT`,
+`LCD_GRID`) is a multiplied full-screen pass inside the background's GL pipeline, so it darkens
+the shader only; line pitch 1.5 dp, grille stripes 0.5 dp and LCD cells 3 dp, each snapped to
+whole render pixels (`uPxPerDp` = density × render scale), skipped over the `CRT` preset.
+`effects.uiFilter` (`NONE`, `SCANLINES_UI`, `BLOOM`, `CUSTOM` with `postprocess.agsl` or
+`effects.uiFilterPath`) is an AGSL `RenderEffect` over the menu on Android 13+ only. A custom file
+declares `uniform shader content;` and may declare `float2 uResolution`, `float uTime`,
+`float uPxPerDp`; it animates only when it reads `uTime`, at ≤30 fps, and rests with the menu.
+The user's Settings ▸ Theme picks (`display.effects`) sit above the whole cascade.
 
 **Wallpaper** (layer 3): `wallpaper.png` in a pack, or Set as Xross wallpaper in the Photo viewer.
 
 | Parameter | Range |
 | --- | --- |
 | Surface opacity | 0% (clear) to 85% (milky) |
-| Background blur radius | 0–48 dp (Android 12+, over art backgrounds; §5) |
+| Background blur radius | 0–48 dp (`backdropBlurDp`; over hero art and wallpapers, every Android version; §5) |
 | Glint border | 1 px inner hairline, solid or gradient |
 | Halo pulse speed / blur / peak opacity | 0.5–2.0× / 2–24 dp / 0.1–1.0 |
 
@@ -914,8 +947,10 @@ Each milestone adds unit or Robolectric tests and keeps the full suite green:
   inside the pack; a hot reload with a broken file keeps the last good theme; role fallbacks; precedence order (A.4)
   across variant, category, system and user layers; `.xtheme` import rejects zip-slip paths,
   oversize archives and unknown folders; layout clamping on the 12 display configurations.
-- 2b.3: palette extraction off the main thread, debounce, cache; E-Ink stops every infinite
-  animation.
+- 2b.3 (done, `ContextRulesTest`, `ColorIntelligenceTest`, `GamePaletteExtractorTest`,
+  `StillMotionTest`, 31 tests): palette extraction off the main thread, debounce, cache; rule
+  selectors and order; precedence through game art; E-Ink stops every infinite animation and the
+  wave loop.
 - 2b.4: shader compile failure and budget overrun fall back to the wave; uniforms bound; a
   preset switch from a category override doesn't drop frames; particles stop when idle.
 - 2b.5: BGM never plays over music, ducks under snaps, stops on launch; new sound roles fall back
@@ -982,8 +1017,8 @@ does), then the wave, with one hero decoded at a time and the wave paused while 
 Follow-up: the Game backgrounds setting and the ramp down on leaving (§4.2).
 
 **Local test media.** Fixtures live in the git-ignored `localTestMedia/` (`Roms/ARCADE`,
-`Roms/3DS`, `Music/`, `Video/`); live tests read from it. `smoke.sh` generates its own files and
-doesn't use it. Never commit anything from that folder.
+`Roms/3DS`, `Music/`, `Video/`); live tests read from it. The device tests in `tools/device-tests/`
+generate their own files and don't use it. Never commit anything from that folder.
 
 ---
 

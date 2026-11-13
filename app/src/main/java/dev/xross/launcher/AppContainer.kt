@@ -53,6 +53,15 @@ class AppContainer(context: Context) {
     val themePacks: dev.xross.launcher.theme.pack.ThemePackLoader by lazy {
         dev.xross.launcher.theme.pack.ThemePackLoader(appContext.assets) { environment.current.themes }
     }
+    /**
+     * Background shader status, toasts and the crash-loop canary (`Xross/cache/`). Its creation
+     * runs the canary's recovery, so it is built in [XrossApplication.onCreate], before any frame.
+     */
+    val shaderHealth: dev.xross.launcher.theme.shader.ShaderHealth by lazy {
+        dev.xross.launcher.theme.shader.ShaderHealth(
+            dev.xross.launcher.theme.shader.ShaderCanary { java.io.File(environment.current.root, CACHE_DIR) },
+        )
+    }
     val themes: dev.xross.launcher.theme.pack.ThemeRuntime by lazy { dev.xross.launcher.theme.pack.ThemeRuntime(themePacks) }
     val sounds: UiSounds by lazy { UiSounds(appContext).also { it.useTheme(themes.active.value) } }
     val sessions: PlaySessionTracker by lazy { PlaySessionTracker(PrefsSessionStore(appContext)) }
@@ -98,6 +107,41 @@ class AppContainer(context: Context) {
         AssetCache(root = { environment.current.media }, legacyRoot = java.io.File(appContext.noBackupFilesDir, "assets"))
     }
     val art: ArtLoader by lazy { ArtLoader(assets) }
+
+    /** The wallpaper behind the menu (2b.4c): Set as Xross wallpaper, or the theme pack's. */
+    val wallpapers: dev.xross.launcher.ui.WallpaperLoader by lazy {
+        dev.xross.launcher.ui.WallpaperLoader(appContext.contentResolver) { environment.current.root }
+    }
+
+    /**
+     * Colors of the focused game's hero or wheel art (Theme 2.0 contextual palette), debounced and
+     * cached per game; extraction runs on [kotlinx.coroutines.Dispatchers.Default].
+     */
+    val gamePalette: dev.xross.launcher.theme.GamePaletteExtractor<android.graphics.Bitmap> by lazy {
+        dev.xross.launcher.theme.GamePaletteExtractor(
+            scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate),
+            load = { key ->
+                val uuid = dev.xross.launcher.theme.ArtSwatches.uuidOf(key)
+                dev.xross.launcher.theme.ArtSwatches.KINDS.firstNotNullOfOrNull { assets.file(uuid, it) }
+                    ?.let(dev.xross.launcher.theme.ArtSwatches::decode)
+            },
+            analyze = { bitmap ->
+                val start = android.os.SystemClock.elapsedRealtimeNanos()
+                dev.xross.launcher.theme.ArtSwatches.analyze(bitmap).also {
+                    // Debug and profiling builds: what was extracted, how long it took, and where.
+                    if (BuildConfig.PERF_LOG) {
+                        android.util.Log.i(
+                            "XrossPalette",
+                            "extract ${bitmap.width}x${bitmap.height} in %.1f ms on %s".format(
+                                (android.os.SystemClock.elapsedRealtimeNanos() - start) / 1e6, Thread.currentThread().name,
+                            ),
+                        )
+                    }
+                    bitmap.recycle()
+                }
+            },
+        )
+    }
     val snaps: SnapPlayer by lazy { SnapPlayer(appContext, music) }
     private val http: HttpClient by lazy { UrlConnectionHttp("Xross/${BuildConfig.VERSION_NAME} (Android)") }
 
@@ -156,5 +200,10 @@ class AppContainer(context: Context) {
             // New fingerprints may now match an imported DAT.
             onFinished = { dats.matchAll() },
         )
+    }
+
+    private companion object {
+        /** Under the Xross root: the shader canary and the list of shaders blocked after a crash. */
+        const val CACHE_DIR = "cache"
     }
 }

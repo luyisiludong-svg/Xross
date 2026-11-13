@@ -40,6 +40,7 @@ class ConfigCodecTest {
         theme = "ORIGINAL",
         surfaceStyle = "Y2K_GLOSSY_BEZEL",
         themeVariant = "bios-matrix",
+        customWallpaper = "content://media/external/images/media/42",
         showButtonHints = false,
         soundEffects = false,
         soundVolume = 0.25f,

@@ -110,8 +110,11 @@ private fun BatteryGauge(state: BatteryState, modifier: Modifier) {
         val shadow = Offset(0f, stroke)
         // Shadow, outline and terminal nub.
         drawRoundRect(Color(0x66000000), shadow, body, CornerRadius(stroke * 1.5f), style = Stroke(stroke))
-        drawRoundRect(Color.White, Offset.Zero, body, CornerRadius(stroke * 1.5f), style = Stroke(stroke))
-        drawRect(Color.White, Offset(body.width, size.height * 0.3f), Size(nub, size.height * 0.4f))
+        // The outline follows the accent halo (white unless game art or the battery tint color it);
+        // read while drawing, so a morph redraws this canvas only.
+        val rim = ThemeAccent.halo.value
+        drawRoundRect(rim, Offset.Zero, body, CornerRadius(stroke * 1.5f), style = Stroke(stroke))
+        drawRect(rim, Offset(body.width, size.height * 0.3f), Size(nub, size.height * 0.4f))
         // Three bars like the reference: 1-33% → 1 bar, 34-66% → 2, 67%+ → 3.
         val bars = when {
             state.percent > 66 -> 3
