@@ -139,7 +139,7 @@ class PostProcessSettingsTest {
                "rules": [{"match": {"category": "GAMES"}, "apply": {"effects": {"uiFliter": "BLOOM"}}}]""",
         )
         val p = loader.load("typo").problems
-        assertTrue(p.toString(), p.contains("theme.effects.shaderPrest isn't an effects property (see README, Theme packs)"))
+        assertTrue(p.toString(), p.contains("theme.effects.shaderPrest isn't an effects property (see docs/THEME_SPECIFICATION.md, effects reference)"))
         assertTrue(p.toString(), p.any { it.startsWith("variants.v.effects.glow") })
         assertTrue(p.toString(), p.any { it.startsWith("systemOverrides.snes.effects.scanlines") })
         assertTrue(p.toString(), p.any { it.startsWith("rules[0].effects.uiFliter") })
