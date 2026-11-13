@@ -248,7 +248,7 @@ We need to finalize full-screen post-processing effects, expose new controls in 
 4. **Documentation & Theme Schema:**
    - Update `ThemeManifest.kt` to officially recognize all `effects` properties.
    - Update `Roadmap.md` marking 2b.4 as completed.
-   - Document new properties in `README.md`.
+   - Document new properties in `README.md` (since moved to `docs/THEME_SPECIFICATION.md`).
 
 5. **Full Regression Verification:**
    - Run `./gradlew check` and all unit tests.

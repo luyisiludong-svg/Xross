@@ -241,7 +241,7 @@ data class ThemeManifest(
                 val out = ArrayList<String>()
                 fun check(where: String, effects: kotlinx.serialization.json.JsonElement?) {
                     val obj = effects as? JsonObject ?: return
-                    for (key in obj.keys) if (key !in KEYS) out += "$where.effects.$key isn't an effects property (see README, Theme packs)"
+                    for (key in obj.keys) if (key !in KEYS) out += "$where.effects.$key isn't an effects property (see docs/THEME_SPECIFICATION.md, effects reference)"
                 }
                 fun obj(e: kotlinx.serialization.json.JsonElement?) = e as? JsonObject
                 fun arr(e: kotlinx.serialization.json.JsonElement?) = e as? kotlinx.serialization.json.JsonArray
