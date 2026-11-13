@@ -131,7 +131,8 @@ fun Modifier.uiFilter(
 ): Modifier {
     val sdk = Build.VERSION.SDK_INT
     val active = UiFilterSupport.active(ref, sdk)
-    val animates = UiFilterSupport.animates(active.filter, customSource)
+    // Scans the AGSL source (regex): once per filter, not on every recomposition of the menu.
+    val animates = remember(active.filter, customSource) { UiFilterSupport.animates(active.filter, customSource) }
     val running = UiFilterSupport.running(animates, started, idle, stillMotion)
     val built: UiFilterBuild? = if (active.filter == UiFilter.NONE) {
         null

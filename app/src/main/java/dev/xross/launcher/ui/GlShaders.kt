@@ -148,7 +148,11 @@ internal class ScreenFilterPass {
         }
         val fs = GLES30.glCreateShader(GLES30.GL_FRAGMENT_SHADER)
         val program = GLES30.glCreateProgram()
-        if (fs == 0 || program == 0) return
+        if (fs == 0 || program == 0) {
+            if (fs != 0) GLES30.glDeleteShader(fs)
+            if (program != 0) GLES30.glDeleteProgram(program)
+            return
+        }
         GLES30.glShaderSource(fs, source)
         GLES30.glCompileShader(fs)
         GLES30.glAttachShader(program, vertex)

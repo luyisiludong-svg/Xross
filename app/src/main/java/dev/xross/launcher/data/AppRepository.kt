@@ -105,6 +105,9 @@ class AppRepository(
     /** The icon for [key] if it has been drawn (no loading); safe on the main thread. */
     fun cachedIcon(key: IconKey): ImageBitmap? = iconCache.get(key)
 
+    /** Drops every rendered icon (the process is in the background); they are redrawn on demand. */
+    fun trimIcons() = iconCache.evictAll()
+
     fun launchIntent(app: AppEntry): Intent =
         Intent(Intent.ACTION_MAIN)
             .addCategory(Intent.CATEGORY_LAUNCHER)

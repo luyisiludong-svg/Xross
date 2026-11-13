@@ -412,6 +412,8 @@ class MainActivity : ComponentActivity() {
         super.onDestroy()
     }
 
+    // ComponentActivity re-declares dispatchKeyEvent under @RestrictTo; overriding the public Activity method is fine.
+    @android.annotation.SuppressLint("RestrictedApi")
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         noteInput()
         val handled = gamepad.onKeyEvent(event)

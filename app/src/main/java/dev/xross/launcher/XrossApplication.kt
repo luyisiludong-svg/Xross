@@ -19,11 +19,18 @@ class XrossApplication : Application() {
 
     /**
      * Once the launcher's UI is hidden (an emulator is in front) keep the background footprint
-     * small: decoded art is the largest thing that can be rebuilt later from disk.
+     * small: decoded art, pre-blurred copies and cached wallpapers are rebuilt later from disk
+     * (what is on screen stays referenced by its composable). Once the process is on the LRU
+     * list the styled app icons go too; they are redrawn when the Apps list next shows them.
      */
     @Suppress("DEPRECATION") // the level constants are the documented way to read the callback
     override fun onTrimMemory(level: Int) {
         super.onTrimMemory(level)
-        if (level >= ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN) container.art.trim()
+        if (level >= ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN) {
+            container.art.trim()
+            dev.xross.launcher.ui.FrostedBackdrop.trim()
+            container.wallpapers.trim()
+        }
+        if (level >= ComponentCallbacks2.TRIM_MEMORY_BACKGROUND) container.apps.trimIcons()
     }
 }

@@ -32,7 +32,13 @@ pid=$(adb shell pidof "$PKG" | tr -d '\r')
 adb shell dumpsys activity activities | grep -m1 topResumedActivity | grep -q "$PKG/.MainActivity" \
   && ok "MainActivity is in front" || bad "MainActivity isn't the resumed activity"
 if adb shell run-as "$PKG" true 2>/dev/null; then
-  adb shell run-as "$PKG" ls databases/xross.db >/dev/null 2>&1 && ok "the library database is created" || bad "no databases/xross.db"
+  # The first launch after an install can open Room a few seconds late: poll up to ~6 s.
+  db=0
+  for _ in 1 2 3 4 5 6; do
+    adb shell run-as "$PKG" ls databases/xross.db >/dev/null 2>&1 && { db=1; break; }
+    pause 1
+  done
+  [ "$db" = 1 ] && ok "the library database is created" || bad "no databases/xross.db"
 else
   skip 1 "the database check needs a debuggable build"
 fi
