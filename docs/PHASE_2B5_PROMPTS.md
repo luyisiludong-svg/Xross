@@ -252,6 +252,41 @@ Differences from the prompt below:
 
 ## Slice 2b.5b: Volume mixer
 
+**Status (2026-11-13, `feat/theme-2b5`):** done in code, unit-tested (707 tests, lint 0 errors),
+device-checked on the emulator (`emulator-5554`, debug build) by the new "Music under video snaps"
+section of `test-media.sh` (10/10): Chrono Trigger gets a generated 6 s snap with a 660 Hz tone
+and is marked scraped in the database.
+- Video snaps 75% → 30% with seven Confirms: `"snapVolume": 0.3` saved, `effectsVolume` still
+  0.75, the snap logs `XrossSnap audible target=0.30`.
+- `PAUSE`: the playing song fades out (213 ms) and pauses when the snap's first frame is up, and
+  fades back in (211 ms) when the cursor moves to EarthBound. A song paused with
+  `cmd media_session dispatch pause` stays paused through a snap.
+- `DUCK` (Music during video snaps ▸ Lower) with Music at 50%: `XrossMix music=0.10` under the
+  snap, `0.50` after it.
+- **Not checked on the A55** (not connected): the same section runs there, but needs a debuggable
+  build for the database edit (the profiling build skips it). The suite's other 5 failures on the
+  emulator (Settings ▸ Theme wallpaper row ×3, XrossAudio ×2) fail the same on `b3c3b2e`: the
+  wallpaper row moved into Theme ▸ Background in the prep slice and the suite still uses the old
+  offsets.
+
+Differences from the prompt below:
+- A snap touches the music only once it is **heard**: its first frame is up (`SnapState.AUDIBLE`,
+  where its fade-in starts) and Video snaps is above 0%. That applies to `DUCK` too (it used to
+  duck while the snap was still loading), so a snap scrolled past or muted never dips the music.
+- Effects volume moved from 25% to 10% steps like the others (75% → 80% on the next press), and
+  0% reads "Muted". Only Effects volume previews its level when changed.
+- `musicUnderSnaps` also reads `LOWER` (the row's label) as `DUCK`; any other value is `PAUSE`.
+  NaN in `settings.json` isn't JSON, so the file is reported as broken like any syntax error.
+- The song's "paused by a snap" mark lives in `MusicPlayer` (beside "paused for a game"), behind a
+  `MusicOutput` interface so `AudioDirectorTest` drives the director without ExoPlayer. Anything
+  the user does to playback clears it; a game launch while a snap holds the song hands it to the
+  game's pause (`resumeMusicAfterGames`).
+- `SnapPlayer` reads its level from `AudioDirector` when its fade-in starts and follows changes
+  live (`snapVolumeListener`), so the `snapVolume` parameter through `MainActivity` /
+  `XmbScreen` / `SnapDriver` is gone.
+- Theme music shows "No theme music in this pack" for every pack until 2b.5c fills
+  `ThemeSetup.packMusic`.
+
 ```markdown
 ### Task: Implement Phase 2b.5b — independent volumes
 

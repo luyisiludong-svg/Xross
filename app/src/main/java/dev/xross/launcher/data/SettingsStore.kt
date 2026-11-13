@@ -83,7 +83,18 @@ data class XrossSettings(
     /** The pill of button hints in the bottom corner of the home menu. */
     val showButtonHints: Boolean = true,
     val soundEffects: Boolean = true,
+    /** UI effects (Settings ▸ Sound ▸ Effects volume), 0–1. */
     val soundVolume: Float = 0.75f,
+    /** The `opening` and `gameboot` cues, 0–1 (2b.5b). */
+    val cueVolume: Float = 0.75f,
+    /** The theme pack's ambient music (2b.5c), 0–1. */
+    val bgmVolume: Float = 0.6f,
+    /** Xross's music player, on top of the system media volume, 0–1. */
+    val musicVolume: Float = 1f,
+    /** Video snaps, 0–1. */
+    val snapVolume: Float = 0.75f,
+    /** What a playing song does while a video snap's sound plays. */
+    val musicUnderSnaps: dev.xross.launcher.audio.MusicUnderSnaps = dev.xross.launcher.audio.MusicUnderSnaps.PAUSE,
     val bootSound: Boolean = true,
     val gameBootSound: Boolean = true,
     /** Fully hash disc images over the size limit (slow on SD cards). */
@@ -341,6 +352,9 @@ class SettingsStore(
             showButtonHints = prefs.getBoolean(KEY_BUTTON_HINTS, true),
             soundEffects = prefs.getBoolean(KEY_SFX, true),
             soundVolume = prefs.getFloat(KEY_SFX_VOLUME, 0.75f),
+            // One volume drove effects, cues and snaps back then.
+            cueVolume = prefs.getFloat(KEY_SFX_VOLUME, 0.75f),
+            snapVolume = prefs.getFloat(KEY_SFX_VOLUME, 0.75f),
             bootSound = prefs.getBoolean(KEY_BOOT_SOUND, true),
             gameBootSound = prefs.getBoolean(KEY_GAMEBOOT_SOUND, true),
             hashLargeImages = prefs.getBoolean(KEY_HASH_LARGE, false),

@@ -42,7 +42,6 @@ internal fun SnapDriver(
     uuid: String?,
     snap: SnapPlayer,
     videoFile: suspend (String) -> File?,
-    volume: Float,
     delayMs: Long = BackdropTiming.VIDEO_DELAY_MS,
 ) {
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -53,7 +52,7 @@ internal fun SnapDriver(
         if (uuid == null || !active) return@LaunchedEffect
         delay(delayMs)
         val file = videoFile(uuid) ?: return@LaunchedEffect
-        snap.play(file, volume)
+        snap.play(file)
     }
     DisposableEffect(Unit) { onDispose { snap.stop() } }
 }

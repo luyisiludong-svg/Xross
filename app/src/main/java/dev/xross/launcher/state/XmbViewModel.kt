@@ -1,5 +1,7 @@
 package dev.xross.launcher.state
 
+import dev.xross.launcher.audio.MusicUnderSnaps
+import dev.xross.launcher.audio.VolumeChannel
 import androidx.core.net.toUri
 import android.content.Context
 import android.content.Intent
@@ -2145,6 +2147,15 @@ class XmbViewModel(
         }
     }
 
+    /** Settings ▸ Sound: saves [channel]'s level; a playing song or snap follows through the settings flow. */
+    private fun setVolume(channel: VolumeChannel, value: Float) {
+        settingsStore.update { channel.set(it, value) }
+        if (channel == VolumeChannel.EFFECTS) {
+            audio.onSettingsChanged(settingsStore.current)
+            sounds.play(UiSound.OK) // preview the new level
+        }
+    }
+
     private fun launchGame(gameId: Long) = viewModelScope.launch {
         val game = container.games.get(gameId) ?: return@launch
         when (val plan = container.launcher.plan(game, settingsStore.current.emulatorChoice[game.platformId])) {
@@ -2360,11 +2371,12 @@ class XmbViewModel(
                 it.copy(surfaceStyle = ids[(i + 1) % ids.size])
             }
             Command.ToggleSoundEffects -> settingsStore.update { it.copy(soundEffects = !it.soundEffects) }
-            Command.CycleSoundVolume -> {
-                settingsStore.update { it.copy(soundVolume = VOLUMES.nextAfter(it.soundVolume)) }
-                audio.onSettingsChanged(settingsStore.current)
-                sounds.play(UiSound.OK) // preview the new level
+            is Command.CycleVolume -> setVolume(command.channel, VolumeChannel.next(command.channel.of(settingsStore.current)))
+            is Command.SetVolume -> setVolume(command.channel, command.value)
+            Command.CycleMusicUnderSnaps -> settingsStore.update {
+                it.copy(musicUnderSnaps = MusicUnderSnaps.entries[(it.musicUnderSnaps.ordinal + 1) % MusicUnderSnaps.entries.size])
             }
+            is Command.SetMusicUnderSnaps -> settingsStore.update { it.copy(musicUnderSnaps = command.mode) }
             Command.ToggleBootSound -> settingsStore.update { it.copy(bootSound = !it.bootSound) }
             Command.ToggleGameBootSound -> settingsStore.update { it.copy(gameBootSound = !it.gameBootSound) }
             Command.ToggleLargeImageHashing -> {
@@ -2651,7 +2663,6 @@ class XmbViewModel(
         internal val DEADZONES = listOf(0f, 0.15f, 0.25f, 0.35f, 0.45f, 0.55f)
         private val AXIAL_DEADZONES = listOf(0f, 0.1f, 0.2f, 0.3f)
         private const val INFO_PAGE = 5
-        private val VOLUMES = listOf(0.25f, 0.5f, 0.75f, 1f)
         private val SLIDESHOW_SECONDS = listOf(3, 5, 10, 20)
         private const val GAMEBOOT_HANDOFF_MS = 1100L
         internal const val UNLOCK_TOAST_MS = 4_500L

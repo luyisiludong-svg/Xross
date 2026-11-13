@@ -343,7 +343,6 @@ class MainActivity : ComponentActivity() {
                             container.assets.file(uuid, dev.xross.launcher.scrape.ArtKind.VIDEO)
                         }
                     },
-                    snapVolume = container.audio.snapVolume,
                     onPlayDetails = { viewModel.onAction(NavAction.CONFIRM) },
                     onCloseDetails = viewModel::closeDetails,
                     onAvatarTap = viewModel::onAvatarTapped,

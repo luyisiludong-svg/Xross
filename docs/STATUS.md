@@ -136,7 +136,7 @@ parked until an API is documented.
 | Coldboot: fade-in + startup sound | ✅ | Once per process start, `01. opening.wav` (was the coldboot cue); can be turned off |
 | Custom boot animations | ❌ | |
 | UI sound effects + volume, game-start cue | ✅ | SoundPool for short effects, MediaPlayer for long cues |
-| BGM and video-snap volume sliders | ◐ | Music uses system media volume; separate sliders planned in Phase 2b.5 |
+| Volume mixer: effects, cues, theme music, music, video snaps | ✅ 🧪 | Settings ▸ Sound (2b.5b), each 0–100% in `settings.json`; music pauses under a video snap with sound (or lowers to 20%), resuming only what Xross paused. Theme music itself is 2b.5c |
 | Loadable sound packs / theme packs | ✅ | `Xross/themes/<id>/` (theme.json, fonts, icons, sounds); the bundled icons and sounds are the built-in Default pack in `assets/themes/default`. Variants, category and system overrides, and single-file `.xtheme` import (§3.18) |
 | Icons from the design SVGs | ✅ | `tools/icons/svg_icons.py` → 29 SVGs in the Default pack, read by `SvgIcon` at runtime |
 | Custom fonts | ✅ | One .ttf/.otf per theme pack, applied to all launcher text |

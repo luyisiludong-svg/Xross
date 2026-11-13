@@ -1,5 +1,8 @@
 package dev.xross.launcher.state
 
+import dev.xross.launcher.audio.AudioMixer
+import dev.xross.launcher.audio.MusicUnderSnaps
+import dev.xross.launcher.audio.VolumeChannel
 import dev.xross.launcher.data.AppEntry
 import dev.xross.launcher.data.GameEntity
 import dev.xross.launcher.data.XrossSettings
@@ -85,6 +88,8 @@ data class ThemeSetup(
     val packFlags: dev.xross.launcher.theme.pack.ColorFlags = dev.xross.launcher.theme.pack.ColorFlags.NONE,
     /** The active pack brings a wallpaper (`wallpaper.png` or `effects.wallpaperPath`). */
     val packWallpaper: Boolean = false,
+    /** The active pack brings ambient music (`bgm.ogg` / `bgm.mp3`); filled in by Phase 2b.5c, which plays it. */
+    val packMusic: Boolean = false,
     /**
      * The pack's own look per variant id ("" = its base), no category open, before the user's
      * picks (2b.4f): what the effect rows call "Theme pack (…)".
@@ -1164,10 +1169,47 @@ class MenuTree(private val s: MenuSnapshot) {
 
     private fun soundSettings() = listOf(
         setting("snd:fx", "Sound effects", onOff(s.settings.soundEffects), GlyphKey.SOUND, Command.ToggleSoundEffects),
-        setting("snd:vol", "Effects volume", "${(s.settings.soundVolume * 100).toInt()}%", GlyphKey.SOUND, Command.CycleSoundVolume),
+        volumeRow("snd:vol", VolumeChannel.EFFECTS),
+        volumeRow("snd:cues", VolumeChannel.CUES),
+        volumeRow("snd:bgm", VolumeChannel.BGM, note = if (s.themes.packMusic) null else "No theme music in this pack"),
+        volumeRow("snd:music", VolumeChannel.MUSIC, glyph = GlyphKey.MUSIC),
+        volumeRow("snd:snaps", VolumeChannel.SNAPS, glyph = GlyphKey.VIDEO),
+        musicUnderSnapsRow(),
         setting("snd:boot", "Startup sound", onOff(s.settings.bootSound), GlyphKey.SOUND, Command.ToggleBootSound),
         setting("snd:gameboot", "Game start sound", onOff(s.settings.gameBootSound), GlyphKey.SOUND, Command.ToggleGameBootSound),
     )
+
+    /** A volume (2b.5b): Confirm steps it 10% (wrapping to 0); Options offer Mute, 50% and 100%. */
+    private fun volumeRow(id: String, channel: VolumeChannel, note: String? = null, glyph: GlyphKey = GlyphKey.SOUND): XmbNode {
+        val v = channel.of(s.settings)
+        val value = if (v <= 0f) "Muted" else VolumeChannel.percent(v)
+        return XmbNode(
+            id = id,
+            title = channel.title,
+            subtitle = if (note == null) value else "$value · $note",
+            icon = NodeIcon.Glyph(glyph),
+            action = NodeAction.Run(Command.CycleVolume(channel)),
+            menu = listOf("Mute" to 0f, "50%" to 0.5f, "100%" to 1f).map { (label, level) ->
+                MenuOption(label, command = Command.SetVolume(channel, level), selected = kotlin.math.abs(v - level) < 0.001f)
+            },
+        )
+    }
+
+    private fun musicUnderSnapsRow(): XmbNode {
+        val mode = s.settings.musicUnderSnaps
+        val note = when (mode) {
+            MusicUnderSnaps.PAUSE -> "Pause, then resume when the snap ends"
+            MusicUnderSnaps.DUCK -> "Lower to ${(AudioMixer.SNAP_DUCK * 100).toInt()}% while the snap plays"
+        }
+        return XmbNode(
+            id = "snd:undersnaps",
+            title = "Music during video snaps",
+            subtitle = "${mode.label} · $note",
+            icon = NodeIcon.Glyph(GlyphKey.MUSIC),
+            action = NodeAction.Run(Command.CycleMusicUnderSnaps),
+            menu = MusicUnderSnaps.entries.map { m -> MenuOption(m.label, command = Command.SetMusicUnderSnaps(m), selected = m == mode) },
+        )
+    }
 
     private fun systemSettings() = buildList {
         add(XmbNode("sys:version", "Xross", "Version ${s.versionName}", NodeIcon.Glyph(GlyphKey.INFO)))

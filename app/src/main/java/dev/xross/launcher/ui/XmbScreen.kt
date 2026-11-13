@@ -188,7 +188,6 @@ fun XmbScreen(
     onCloseInfo: () -> Unit = {},
     snap: SnapPlayer? = null,
     videoFile: suspend (String) -> java.io.File? = { null },
-    snapVolume: Float = 0.75f,
     onPlayDetails: () -> Unit = {},
     onCloseDetails: () -> Unit = {},
     onAvatarTap: () -> Unit = {},
@@ -300,7 +299,6 @@ fun XmbScreen(
                 uuid = state.details?.uuid ?: focusedArt?.uuid.takeIf { quiet },
                 snap = snap,
                 videoFile = videoFile,
-                volume = snapVolume,
             )
             val playing by snap.player.collectAsState()
             playing?.let { SnapVideo(it, Modifier.fillMaxSize(), scrim = 0.55f, onCovering = { c -> videoCovers = c }) }

@@ -189,7 +189,14 @@ badges in `Xross/media/avatars/` and `Xross/media/ra/badges/`.
   [Theme 2.0 specification](THEME_SPECIFICATION.md#wallpaper)); it can also be set as the Android
   wallpaper.
 * **Music:** background music player with media-session controls. Select (or a held Guide button)
-  opens the media controls. Music pauses for games and videos.
+  opens the media controls. Music pauses for games and videos, and for a game's video snap once
+  the snap's sound starts (it fades back in when the cursor moves on; a song you paused stays
+  paused). **Settings ▸ Sound ▸ Music during video snaps ▸ Lower** keeps it playing at 20% instead.
+* **Settings ▸ Sound** has separate volumes for effects, startup and game cues, theme music
+  (Phase 2b.5c), Xross's music player (on top of the phone's media volume) and video snaps:
+  Confirm steps each 10%, Options offer Mute, 50% and 100%. They are `sound.effectsVolume`,
+  `cueVolume`, `bgmVolume`, `musicVolume` and `snapVolume` (0–1) in `settings.json`, with
+  `sound.musicUnderSnaps` (`PAUSE` or `DUCK`). Reset to theme defaults leaves them alone.
 * **Video:** video player.
 * **Albums:** an album found in more than one folder (the same rip as FLAC and MP3, say) shows
   once per folder, labelled by format ("… · FLAC") or, when the formats match, by folder name.
