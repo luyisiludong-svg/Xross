@@ -250,11 +250,8 @@ synchronously from the source flows, so a burst of D-pad presses never acts on a
 
 ## 7. Other findings
 
-* **Lint debt:** `lintDebug` fails on 10 errors that predate 2b.4f (RestrictedApi on
-  `dispatchKeyEvent`, Media3 opt-ins in `MediaScreens.kt` and `SnapLayer.kt`,
-  `LifecycleCurrentStateInComposition`, `UnusedBoxWithConstraintsScope`, a byte-order mark in
-  `DatParser.kt`; [`STATUS.md`](STATUS.md) §3.27). While it fails, lint can't be a CI gate, so
-  new findings go unnoticed.
+* **Lint debt:** resolved in `5281d15`. `lintDebug` reports 0 errors (61 warnings, mostly
+  dependency versions and `UseKtx`), and AGP's `check` already runs it, so lint is a gate.
 * **Fully qualified names inline.** `AppContainer`, `XmbViewModel` and `MainActivity` refer to
   many types as `dev.xross.launcher.theme.pack.ThemeRuntime` and similar inside code rather than
   importing them. It hides the real dependency list (and made this review's import count harder).

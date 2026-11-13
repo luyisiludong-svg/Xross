@@ -9,7 +9,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dev.xross.launcher.AppContainer
 import dev.xross.launcher.BuildConfig
-import dev.xross.launcher.audio.UiCue
 import dev.xross.launcher.audio.UiSound
 import dev.xross.launcher.input.ConfirmLayout
 import dev.xross.launcher.input.ConnectedController
@@ -183,6 +182,7 @@ class XmbViewModel(
 ) : ViewModel(), InputSink {
 
     private val sounds = container.sounds
+    private val audio = container.audio
 
     /** Hot reload: the active folder pack's files changed; a broken edit keeps the last good theme. */
     private val themeWatcher = dev.xross.launcher.theme.pack.ThemeWatcher(viewModelScope) {
@@ -1631,7 +1631,7 @@ class XmbViewModel(
     fun onForeground() {
         foreground = true
         refreshEnvironment()
-        music.resumeAfterGame()
+        audio.onReturnFromGame()
         recordFinishedSession()
         viewModelScope.launch { container.media.refresh() }
         if (volumesChangedInBackground) {
@@ -2151,13 +2151,8 @@ class XmbViewModel(
                 container.games.markPlayed(game.id)
                 // Start transition: bloom + start cue, then hand off to the emulator.
                 transient.update { it.copy(booting = game.title) }
-                // Background music: pause for the game (and resume on return) or stop.
-                if (settingsStore.current.resumeMusicAfterGames) music.pauseForGame() else music.player.pause()
-                if (settingsStore.current.gameBootSound) {
-                    sounds.playCue(UiCue.GAMEBOOT, settingsStore.current.soundVolume)
-                } else {
-                    sounds.play(UiSound.OK)
-                }
+                // Music pauses (to resume on return, or not) and the start cue plays.
+                audio.onGameLaunch()
                 delay(GAMEBOOT_HANDOFF_MS)
                 container.sessions.arm(game.id)
                 emit(UiEffect.Launch(plan))
@@ -2366,7 +2361,7 @@ class XmbViewModel(
             Command.ToggleSoundEffects -> settingsStore.update { it.copy(soundEffects = !it.soundEffects) }
             Command.CycleSoundVolume -> {
                 settingsStore.update { it.copy(soundVolume = VOLUMES.nextAfter(it.soundVolume)) }
-                sounds.volume = settingsStore.current.soundVolume
+                audio.onSettingsChanged(settingsStore.current)
                 sounds.play(UiSound.OK) // preview the new level
             }
             Command.ToggleBootSound -> settingsStore.update { it.copy(bootSound = !it.bootSound) }
@@ -2570,10 +2565,7 @@ class XmbViewModel(
             container.backups.status.collect { status -> env.update { it.copy(portable = it.portable.copy(backup = status)) } }
         }
         viewModelScope.launch {
-            settingsStore.settings.collect {
-                sounds.enabled = it.soundEffects
-                sounds.volume = it.soundVolume
-            }
+            settingsStore.settings.collect(audio::onSettingsChanged)
         }
         // Keep open search results in step with the library (favorites, playtime, rescans).
         viewModelScope.launch {
@@ -2587,7 +2579,7 @@ class XmbViewModel(
             val wanted = settingsStore.current.themePack
             if (wanted != container.themes.active.value.id) container.themes.select(wanted)
             // Startup sound once the pack's sounds are in place (01. opening.wav by default).
-            if (coldBoot && settingsStore.current.bootSound) sounds.playCue(UiCue.OPENING, settingsStore.current.soundVolume)
+            if (coldBoot) audio.onColdBoot()
         }
         viewModelScope.launch {
             combine(container.themes.packs, container.themes.active, container.themes.rejected) { packs, active, rejected ->

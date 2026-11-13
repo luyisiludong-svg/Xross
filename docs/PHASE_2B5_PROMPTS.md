@@ -56,6 +56,21 @@ launch; new sound roles fall back as in A.9; camelCase aliases resolve.
 
 ## Slice 2b.5-prep: Groundwork
 
+**Status (2026-11-13, `refactor/2b5-prep`):** done in code, unit-tested (654 tests, lint 0
+errors); device checks not run yet. Differences from the prompt below:
+- Lint: the 10 errors were already fixed in `5281d15`, and AGP's `check` already runs
+  `lintDebug`, so requirement 1 needed no change.
+- `ThemeLookResolver` is a pure `resolve(LookInputs): ResolvedLook` that `MainActivity` calls
+  inside one `remember`, not a `StateFlow`; the settled system, battery and minute inputs still
+  come from Compose. The palette layers stay in `ColorPipeline` (already pure), driven by
+  `AdaptiveWave`.
+- Quick profiles keep exactly what they applied before: the table (`QuickProfile.fields`) is
+  derived from each profile and made visible ("Set by …" rows, the profile row lists what it
+  sets). Extending a profile to wave background, wave settings or the shader is a product choice
+  left open (see Decisions).
+- Theme colours got an Options menu and five new colours (Teal, Violet, Coral, Slate, Copper); the
+  options have no colour preview yet.
+
 ```markdown
 ### Task: Prepare for Phase 2b.5 — lint gate, ThemeLookResolver, AudioDirector
 
