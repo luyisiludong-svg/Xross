@@ -90,7 +90,13 @@ sealed interface Command {
     /** Install the staged `.xtheme` next to the installed pack, under a new id. */
     data object KeepBothImportedThemes : Command
     data object ToggleSoundEffects : Command
-    data object CycleSoundVolume : Command
+    /** Settings ▸ Sound: the next 10% step of [channel] (wrapping to 0). */
+    data class CycleVolume(val channel: dev.xross.launcher.audio.VolumeChannel) : Command
+    /** Settings ▸ Sound ▸ a volume ▸ Options: Mute, 50% or 100%. */
+    data class SetVolume(val channel: dev.xross.launcher.audio.VolumeChannel, val value: Float) : Command
+    /** Settings ▸ Sound ▸ Music during video snaps: Pause ↔ Lower. */
+    data object CycleMusicUnderSnaps : Command
+    data class SetMusicUnderSnaps(val mode: dev.xross.launcher.audio.MusicUnderSnaps) : Command
     data object ToggleBootSound : Command
     data object ToggleGameBootSound : Command
     data object ToggleLargeImageHashing : Command

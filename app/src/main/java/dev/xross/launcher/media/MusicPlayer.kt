@@ -37,7 +37,7 @@ data class NowPlaying(
  * `uAudioBass` / `uAudioBeat` (2b.4b): Xross's own music only, no `RECORD_AUDIO`.
  */
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
-class MusicPlayer(private val context: Context) {
+class MusicPlayer(private val context: Context) : dev.xross.launcher.audio.MusicOutput {
     val energy = MusicEnergy()
 
     val player: ExoPlayer = ExoPlayer.Builder(context, EnergyRenderersFactory(context, energy))
@@ -56,6 +56,10 @@ class MusicPlayer(private val context: Context) {
 
     /** True when music was paused by a game launch, so it can resume afterwards (BGM mode). */
     private var pausedForGame = false
+
+    /** True while a video snap holds the song (2b.5b): cleared by anything the user does to playback. */
+    override var pausedForSnap = false
+        private set
 
     init {
         player.repeatMode = Player.REPEAT_MODE_ALL
@@ -76,12 +80,14 @@ class MusicPlayer(private val context: Context) {
         player.prepare()
         player.play()
         pausedForGame = false
+        pausedForSnap = false
     }
 
     fun togglePlayPause() {
         if (player.mediaItemCount == 0) return
         if (player.isPlaying) player.pause() else player.play()
         pausedForGame = false
+        pausedForSnap = false
     }
 
     fun next() { if (player.hasNextMediaItem()) player.seekToNextMediaItem() }
@@ -105,27 +111,57 @@ class MusicPlayer(private val context: Context) {
         player.clearMediaItems()
         queue = emptyList()
         pausedForGame = false
+        pausedForSnap = false
     }
 
     /** Xross's own level for music, on top of the system media volume; set by [dev.xross.launcher.audio.AudioDirector]. */
-    fun setVolume(volume: Float) {
-        player.volume = volume.coerceIn(0f, 1f)
-    }
+    override var volume: Float
+        get() = player.volume
+        set(value) {
+            player.volume = value.coerceIn(0f, 1f)
+        }
+
+    /** A song is playing, or buffering to play (a user-paused or empty player is not). */
+    override val playing: Boolean get() = player.playWhenReady && player.mediaItemCount > 0
 
     /** Game starting: pause and remember to resume. */
-    fun pauseForGame() {
+    override fun pauseForGame() {
         if (player.isPlaying) {
             player.pause()
             pausedForGame = true
         }
     }
 
+    override fun pause() = player.pause()
+
     /** Back in the launcher after a game. */
-    fun resumeAfterGame() {
+    override fun resumeAfterGame() {
         if (pausedForGame) {
             pausedForGame = false
             player.play()
         }
+    }
+
+    override fun pauseForSnap() {
+        if (playing) {
+            player.pause()
+            pausedForSnap = true
+        }
+    }
+
+    override fun resumeAfterSnap(): Boolean {
+        if (!pausedForSnap) return false
+        pausedForSnap = false
+        // Something else (the notification's play button) may have started it meanwhile.
+        if (player.playWhenReady || player.mediaItemCount == 0) return false
+        player.play()
+        return true
+    }
+
+    override fun handSnapPauseToGame(resume: Boolean) {
+        if (!pausedForSnap) return
+        pausedForSnap = false
+        pausedForGame = resume
     }
 
     private fun publish() {

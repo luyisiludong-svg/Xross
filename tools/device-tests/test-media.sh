@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
-# Media suite (31 checks): photo folders and the viewer (paging, R1 zoom, Set as Xross wallpaper and
+# Media suite (41 checks): photo folders and the viewer (paging, R1 zoom, Set as Xross wallpaper and
 # back to the theme's), music from tags (albums,
 # track order, playback through the media session), the music driving the shader's audio uniforms
-# (and 0 when paused), Now Playing, the Select shortcut and the mini-player line, and background
-# music pausing for a video and for a game.
+# (and 0 when paused), Now Playing, the Select shortcut and the mini-player line, background
+# music pausing for a video and for a game, and the volume mixer (2b.5b): the Video snaps volume,
+# music pausing under a game's video snap (and staying paused when the user paused it), and
+# lowered instead with "Music during video snaps: Lower".
 #
 #   ./gradlew :emulator-stub:installRetroarchDebug   # optional: the two music-during-a-game checks
 #   tools/device-tests/test-media.sh
@@ -15,11 +17,11 @@
 # folders under Pictures, Music and Movies (all removed at exit; see lib/harness.sh).
 set -u
 . "$(dirname "$0")/lib/harness.sh"
-suite_begin media 31
+suite_begin media 41
 
 setup_base_env
 if ! setup_media_fixtures; then
-  skip 31 "the media suite needs ffmpeg on the host"
+  skip 41 "the media suite needs ffmpeg on the host"
   suite_end
   exit
 fi
@@ -140,6 +142,106 @@ if has_stub; then
   [ "$(music_state)" = "PLAYING" ] && ok "music resumes after the game" || bad "music after game (state $(music_state))"
 else
   skip 2 "install the RetroArch stub (./gradlew :emulator-stub:installRetroarchDebug)"
+fi
+
+section "Music under video snaps (2b.5b)"
+# Chrono Trigger gets a 6 s video snap with a 660 Hz tone and is marked scraped in the database
+# (pulled, edited with the host's sqlite3, pushed back while Xross is stopped), so resting on it
+# plays the snap after 1.2 s. Debug builds log the snap's level (XrossSnap) and the music
+# player's (XrossMix).
+snap_audible() { for _ in $(seq 12); do adb logcat -d -s XrossSnap:I | grep -q "audible" && return 0; pause 0.5; done; return 1; }
+sound_row() { # sound_row <row>: Settings ▸ Sound, cursor on that row (0 = Sound effects)
+  category 0
+  press DPAD_DOWN 4 KEYCODE_DPAD_CENTER
+  top_list
+  [ "$1" -gt 0 ] && press DPAD_DOWN "$1"
+}
+chrono() { # the SNES list, cursor on Chrono Trigger (its snap starts 1.2 s later)
+  home
+  all_games "$(collections_above)"
+  key KEYCODE_DPAD_CENTER
+}
+play_song() {
+  category 2
+  key KEYCODE_DPAD_DOWN KEYCODE_DPAD_DOWN KEYCODE_DPAD_CENTER
+  for _ in $(seq 8); do screen | grep -q "Smoke Artist · 2 songs" && break; key KEYCODE_DPAD_DOWN; done
+  key KEYCODE_DPAD_CENTER KEYCODE_DPAD_CENTER
+  for _ in $(seq 12); do [ "$(music_state)" = "PLAYING" ] && break; pause 0.5; done
+}
+if command -v sqlite3 >/dev/null && adb shell run-as "$PKG" true 2>/dev/null; then
+  snapdir=$(tmpdir snap)
+  ffmpeg -loglevel error -y -f lavfi -i testsrc2=size=640x360:rate=30:duration=6 -f lavfi -i "sine=frequency=660:sample_rate=44100:duration=6" \
+    -c:v libx264 -pix_fmt yuv420p -c:a aac -shortest "$snapdir/Chrono Trigger (USA).mp4"
+  adb shell mkdir -p /sdcard/Xross/media/snaps/snes
+  adb push "$snapdir/Chrono Trigger (USA).mp4" /sdcard/Xross/media/snaps/snes/ >/dev/null
+  db=$(tmpdir db)
+  adb shell am force-stop "$PKG"
+  for f in xross.db xross.db-wal xross.db-shm; do adb exec-out run-as "$PKG" cat "databases/$f" > "$db/$f" 2>/dev/null; done
+  [ -s "$db/xross.db-wal" ] || rm -f "$db/xross.db-wal" "$db/xross.db-shm"
+  sqlite3 "$db/xross.db" "INSERT OR REPLACE INTO game_metadata (gameId, locked, scrapeStatus, scrapedAt)
+    SELECT id, 0, 'OK', 1700000000000 FROM games WHERE platformId = 'snes' AND fileName LIKE 'Chrono Trigger%';
+    PRAGMA journal_mode = DELETE;" >/dev/null
+  adb push "$db/xross.db" /data/local/tmp/xross-smoke.db >/dev/null
+  adb shell chmod 644 /data/local/tmp/xross-smoke.db
+  adb shell run-as "$PKG" sh -c "'cp /data/local/tmp/xross-smoke.db databases/xross.db && rm -f databases/xross.db-wal databases/xross.db-shm'"
+  adb shell rm -f /data/local/tmp/xross-smoke.db
+  start_app 4
+  # Video snaps 75% → 30%: Confirm steps 80, 90, 100, 0 (Muted), 10, 20, 30.
+  sound_row 5
+  press DPAD_CENTER 7
+  expect "Video snaps" "Settings ▸ Sound lists Video snaps"
+  for _ in $(seq 10); do settings_has '"snapVolume": 0.3' && break; pause 0.5; done
+  settings_has '"snapVolume": 0.3' && settings_has '"effectsVolume": 0.75' \
+    && ok "Video snaps saves 30% as sound.snapVolume, Effects volume unchanged" || bad "snapVolume not 0.3 in settings.json"
+  play_song
+  adb logcat -c
+  chrono
+  if snap_audible; then
+    adb logcat -d -s XrossSnap:I | grep -q "audible target=0.30" && ok "the snap plays at the Video snaps volume (0.30)" \
+      || bad "snap level ($(adb logcat -d -s XrossSnap:I | tail -1))"
+    pause 1
+    [ "$(music_state)" = "PAUSED" ] && ok "music pauses when the snap's sound starts" || bad "music under the snap (state $(music_state))"
+  else
+    bad "no snap played for Chrono Trigger"; bad "music under the snap (no snap)"
+  fi
+  key KEYCODE_DPAD_DOWN
+  pause 1.2
+  [ "$(music_state)" = "PLAYING" ] && ok "music resumes when the cursor leaves the game" || bad "music after the snap (state $(music_state))"
+  # A song the user paused stays paused through a snap.
+  adb shell cmd media_session dispatch pause
+  pause 0.5
+  adb logcat -c
+  key KEYCODE_DPAD_UP
+  snap_audible || true
+  pause 1
+  key KEYCODE_DPAD_DOWN
+  pause 1.2
+  [ "$(music_state)" = "PAUSED" ] && ok "a song the user paused stays paused after a snap" || bad "user-paused song after a snap (state $(music_state))"
+  # Lower: Music during video snaps (row 6) → Lower, Music (row 4) 100% → 50% (Muted, 10 … 50).
+  sound_row 6
+  key KEYCODE_DPAD_CENTER
+  expect "Lower" "Music during video snaps switches to Lower"
+  for _ in $(seq 10); do settings_has '"musicUnderSnaps": "DUCK"' && break; pause 0.5; done
+  settings_has '"musicUnderSnaps": "DUCK"' && ok "saved as sound.musicUnderSnaps DUCK" || bad "musicUnderSnaps not DUCK in settings.json"
+  press DPAD_UP 2
+  press DPAD_CENTER 6
+  for _ in $(seq 10); do settings_has '"musicVolume": 0.5' && break; pause 0.5; done
+  adb shell cmd media_session dispatch play
+  for _ in $(seq 12); do [ "$(music_state)" = "PLAYING" ] && break; pause 0.5; done
+  adb logcat -c
+  chrono
+  snap_audible || true
+  pause 1
+  mix=$(adb logcat -d -s XrossMix:I | tail -1)
+  [[ "$mix" == *"music=0.10"* ]] && [ "$(music_state)" = "PLAYING" ] && ok "Lower: Music 50% plays at 0.10 under the snap" || bad "ducked music ($mix, state $(music_state))"
+  key KEYCODE_DPAD_DOWN
+  pause 1.2
+  mix=$(adb logcat -d -s XrossMix:I | tail -1)
+  [[ "$mix" == *"music=0.50"* ]] && ok "back to 0.50 after the snap" || bad "music after the ducked snap ($mix)"
+  adb shell cmd media_session dispatch pause
+  adb shell rm -f "'/sdcard/Xross/media/snaps/snes/Chrono Trigger (USA).mp4'"
+else
+  skip 10 "the snap checks need sqlite3 on the host and a debuggable build (run-as)"
 fi
 
 suite_end

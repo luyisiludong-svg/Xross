@@ -147,7 +147,9 @@ class AppContainer(context: Context) {
         dev.xross.launcher.audio.AudioDirector(music, sounds) { settings.current }
     }
     val snaps: SnapPlayer by lazy {
-        SnapPlayer(appContext) { active -> if (active) audio.onSnapStarted() else audio.onSnapStopped() }
+        SnapPlayer(appContext, volume = { audio.snapVolume }, onState = audio::onSnapState).also { player ->
+            audio.snapVolumeListener = player::setVolume
+        }
     }
     private val http: HttpClient by lazy { UrlConnectionHttp("Xross/${BuildConfig.VERSION_NAME} (Android)") }
 
