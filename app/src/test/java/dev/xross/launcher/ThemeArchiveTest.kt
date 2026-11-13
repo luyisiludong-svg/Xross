@@ -96,7 +96,7 @@ class ThemeArchiveTest {
     @Test fun onlyKnownFoldersAndTypesAreAccepted() {
         for ((path, why) in listOf(
             "scripts/setup.json" to "unexpected folder scripts/",
-            "cover.png" to "only .json, wallpaper.png, shader.frag and postprocess.agsl at the top level",
+            "cover.png" to "only .json, wallpaper.png, bgm.ogg, shader.frag and postprocess.agsl at the top level",
             "wallpapers/night.gif" to "wallpapers/ holds jpeg, jpg, png, webp",
             "fonts/readme.pdf" to "fonts/ holds otf, ttf",
             "icons/a/b/c/deep.svg" to "nested too deep",
@@ -168,6 +168,24 @@ class ThemeArchiveTest {
         // Just under the cap is fine.
         val ok = zip("ok.xtheme", "theme.json" to text(manifest), "sounds/big.wav" to ByteArray((49 * ThemeArchive.MB).toInt()))
         staged(archive().stage(ok, "ok.xtheme"))
+    }
+
+    @Test fun themeMusicIsAcceptedAtTheRootUpTo20Mb() {
+        val ok = staged(
+            archive().stage(
+                zip("music.xtheme", "theme.json" to text(manifest), "bgm.ogg" to ByteArray(1000), "BGM.mp3" to ByteArray(1000), "audio/games.ogg" to text("ogg")),
+                "music.xtheme",
+            ),
+        )
+        assertTrue(File(ok.dir, "bgm.ogg").isFile && File(ok.dir, "BGM.mp3").isFile && File(ok.dir, "audio/games.ogg").isFile)
+        archive().discard(ok)
+        // Over 20 MB is rejected, though the archive is far under its own 50 MB cap.
+        val big = zip("loud.xtheme", "theme.json" to text(manifest), "bgm.ogg" to ByteArray((21 * ThemeArchive.MB).toInt()))
+        val reason = rejected(archive().stage(big, "loud.xtheme"))
+        assertTrue(reason, "bgm.ogg is larger than 20 MB" in reason)
+        assertOnly()
+        // Other names stay unexpected at the root.
+        assertTrue("only .json" in rejected(archive().stage(zip("odd.xtheme", "theme.json" to text(manifest), "bgm.wav" to text("x")), "odd.xtheme")))
     }
 
     @Test fun manyFilesAddUpToTheCap() {

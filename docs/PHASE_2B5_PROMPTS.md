@@ -332,6 +332,46 @@ Differences from the prompt below:
 
 ## Slice 2b.5c: Theme BGM
 
+**Status (2026-11-13, `feat/theme-2b5`):** done in code, unit-tested (737 tests, lint 0 errors),
+device-checked on the emulator (`emulator-5554`, debug build) by the new "Theme music (2b.5c)"
+section of `test-media.sh` (15/15), with a generated 10 s `bgm.ogg` (ffmpeg's built-in Vorbis
+encoder, so no libvorbis is needed):
+- Starts with the pack: `XrossBgm state=PLAYING file=bgm.ogg vol=0.60 reason=ALLOWED`; `dumpsys
+  audio` shows a started `USAGE_GAME` / `CONTENT_TYPE_MUSIC` AudioTrack and no Xross entry in the
+  focus stack.
+- A song stops it (`reason=MUSIC`); Now Playing ▸ ↓ (new, see below) empties the queue and it
+  starts again.
+- The stub's new tone service (`USAGE_MEDIA`, in the background) pauses it (`reason=OTHER_APP`);
+  stopping the tone brings it back.
+- Launching Chrono Trigger in the stub stops it (`reason=GAME`); back in Xross it starts over.
+- Under Chrono Trigger's snap: `vol=0.12 reason=SNAP_DUCK` with Lower, `state=PAUSED reason=SNAP`
+  with Pause, back to 0.60 when the cursor moves on.
+- The suite's other 5 failures are the ones 2b.5b recorded (wallpaper row offsets ×3, XrossAudio ×2).
+- **Not checked on the A55** (not connected): the gap at the loop point by ear, and the same suite
+  there (it needs a debuggable build for the snap fixture).
+
+Differences from the prompt below:
+- **Now Playing ▸ ↓ stops the music and empties the queue.** Nothing in the UI cleared the queue
+  before, so with "a paused song blocks BGM" theme music could never come back after the first
+  song until the process died.
+- What stops (next start from 0) and what pauses: no loop, Theme music 0%, a game and a loaded
+  song stop it; the launcher leaving the screen, the video player, the boot video, another app and
+  a snap under Pause pause it. Fades: 600 ms in from a stop, 300 ms out to a stop, 200 ms for
+  pauses, snaps and level changes, none on `onStop`.
+- "Another app" counts active `USAGE_MEDIA` players and `USAGE_GAME` players with music or movie
+  content (so Xross's own SoundPool clicks and cues, `USAGE_GAME` + sonification, don't count),
+  minus Xross's music player, snap, video player and BGM players. Silence applies at once; playback
+  must hold 500 ms, since the platform reports Xross's own players a moment late. The callback is
+  registered only between `onStart` and `onStop`, with a snapshot read at `onStart`.
+- `BgmPolicy` is a pure object next to `AudioMixer`; `AudioDirector` applies it through a
+  `BgmOutput` interface (`media/ThemeBgm.kt`), so `BgmPolicyTest` drives the director without
+  ExoPlayer. The crossfade runs on a second, short-lived player.
+- `audio.bgmFile` takes `.ogg`, `.mp3`, `.m4a`, `.aac`, `.opus`, `.flac` or `.wav`; the root
+  default names are only `bgm.ogg` / `bgm.mp3`. Built-in packs can't bring one (folder packs only,
+  like the wallpaper). Variants, overrides and rules accept `bgmFile` beside `soundGains`.
+- The boot-video rule is wired (`AudioDirector.onBootVideo`) for 2b.5d to call.
+- On a cold boot the loop fades in under the `opening` cue; nothing holds it back until the cue ends.
+
 ```markdown
 ### Task: Implement Phase 2b.5c — ambient theme music
 

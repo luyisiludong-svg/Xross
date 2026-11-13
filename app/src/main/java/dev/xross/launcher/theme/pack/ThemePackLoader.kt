@@ -106,6 +106,10 @@ data class LoadedTheme(
     val wallpaper: WallpaperRef = WallpaperRef.NONE,
     /** Each wallpaper file the pack names, by its pack-relative path (missing ones absent). */
     val wallpapers: Map<String, File> = emptyMap(),
+    /** The pack's own music loop (2b.5c): `audio.bgmFile`, else its `bgm.ogg` / `bgm.mp3`, else none. */
+    val bgm: BgmRef = BgmRef.NONE,
+    /** Each loop file the pack names, by its pack-relative path (missing and oversized ones absent). */
+    val bgmFiles: Map<String, File> = emptyMap(),
     /** The pack's own focus frame, icon mask and icon filter (2b.4d), over the Default pack's. */
     val cosmetics: Cosmetics = Cosmetics.NONE,
     /** Text of each CUSTOM UI filter (`postprocess.agsl`, 2b.4f) the pack names, by pack-relative path. */
@@ -156,6 +160,12 @@ data class LoadedTheme(
     /** The file of [ref] (the look's wallpaper); null for none or a file that wasn't found. */
     fun wallpaperFile(ref: WallpaperRef): File? = ref.path?.let(wallpapers::get)
 
+    /** True when the base, a variant, an override or a rule can play theme music (2b.5c). */
+    val hasBgm: Boolean get() = bgmFiles.isNotEmpty()
+
+    /** The loop [ref] names (the look's music); null for none or a file that wasn't found. */
+    fun bgmTrack(ref: BgmRef): BgmTrack? = ref.path?.let(bgmFiles::get)?.let(::BgmTrack)
+
     /** Some rule depends on the battery. */
     val usesBattery: Boolean get() = rules.any { it.battery != null }
 
@@ -184,7 +194,7 @@ data class LoadedTheme(
         // Category-wide tile shapes and focused-system layout patches depend on those two as well.
         val layoutContext = if (layoutHeld.isEmpty()) "" else "${category.orEmpty()}/${system.orEmpty()}"
         return looks.getOrPut(LookKey(v?.id.orEmpty(), cat, sys, held.map { it.index }, layoutHeld, layoutContext)) {
-            cascade(roles, surfaceId, wave, v, categoryPatches[cat], systemPatches[sys], held, flags, shader, wallpaper, cosmetics, gains, soundLinks)
+            cascade(roles, surfaceId, wave, v, categoryPatches[cat], systemPatches[sys], held, flags, shader, wallpaper, cosmetics, gains, soundLinks, bgm)
                 .copy(layout = if (layoutHeld.isEmpty()) null else applyRuleLayout(layout, rules, ctx))
         }
     }
@@ -228,6 +238,7 @@ sealed interface PackLoad {
  *                trophy.wav, 01. opening.wav, gameboot.wav
  *   shader.frag  GLSL ES 3.0 fragment shader for "effects": { "shaderPreset": "CUSTOM" } (or effects.shaderPath)
  *   wallpaper.png  static wallpaper behind the menu (or .jpg / .webp, or effects.wallpaperPath)
+ *   bgm.ogg      ambient music loop (or bgm.mp3, or audio.bgmFile), at most 20 MB
  * ```
  *
  * File lookups ignore case (FAT-formatted SD cards and hand-made packs disagree on it) and never
@@ -369,6 +380,12 @@ class ThemePackLoader(
         val wallpaperRefs = listOf(wallpaper) + variants.mapNotNull { it.wallpaper } +
             (categoryPatches.values + systemPatches.values).mapNotNull { it.wallpaper } + rules.mapNotNull { it.patch?.wallpaper }
         val wallpapers = wallpaperFiles(folder, wallpaperRefs, problems)
+        val bgm = BgmRef.of("theme", m.audio?.bgmFile, problems)
+            ?: folder?.let(BgmRef::defaultIn)?.let(::BgmRef)
+            ?: BgmRef.NONE
+        val bgmRefs = listOf(bgm) + variants.mapNotNull { it.bgm } +
+            (categoryPatches.values + systemPatches.values).mapNotNull { it.bgm } + rules.mapNotNull { it.patch?.bgm }
+        val bgmFiles = bgmFiles(folder, bgmRefs, problems)
         val cosmetics = (base?.cosmetics ?: Cosmetics.NONE).over(Cosmetics.of("theme", m.effects, problems))
         // 2b.4f: the AGSL of each CUSTOM UI filter the base, a variant, an override or a rule names.
         val uiFilterPaths = (listOf(cosmetics) + variants.mapNotNull { it.cosmetics } +
@@ -401,6 +418,8 @@ class ThemePackLoader(
             customShaders = customShaders,
             wallpaper = wallpaper,
             wallpapers = wallpapers,
+            bgm = bgm,
+            bgmFiles = bgmFiles,
             cosmetics = cosmetics,
             customUiFilters = customUiFilters,
             problems = problems,

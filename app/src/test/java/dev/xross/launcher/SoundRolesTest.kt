@@ -249,8 +249,8 @@ class SoundRolesTest {
             """{"name": "Strict", "variants": [{"id": "v", "audio": {"sounds": {"cursor": "x.wav"}, "panAmount": 0, "soundGains": {"nope": 1}}}]}""",
         )
         val problems = theme.problems.joinToString("\n")
-        assertTrue(problems, problems.contains("variants.v.audio.sounds: only soundGains can change here"))
-        assertTrue(problems, problems.contains("variants.v.audio.panAmount: only soundGains can change here"))
+        assertTrue(problems, problems.contains("variants.v.audio.sounds: only soundGains and bgmFile can change here"))
+        assertTrue(problems, problems.contains("variants.v.audio.panAmount: only soundGains and bgmFile can change here"))
         assertTrue(problems, problems.contains("variants.v.audio.soundGains.nope isn't a sound role"))
         // The variant still exists; its look keeps the pack's gains.
         assertEquals(theme.gains, theme.look("v").gains)

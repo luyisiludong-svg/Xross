@@ -87,13 +87,14 @@ internal fun resolvePackSounds(
 
 /**
  * The `soundGains` of a variant's, override's or rule's `audio` block at [where], checked; null
- * when it sets none. Only gains change there: files, panning and jitter are the pack's.
+ * when it sets none. Only gains and the music loop ([BgmRef.of]) change there: sound files,
+ * panning and jitter are the pack's.
  */
 internal fun resolveGainPatch(where: String, audio: ThemeManifest.Audio?, problems: MutableList<String>): Map<SoundRole, Float>? {
     if (audio == null) return null
-    if (audio.sounds.isNotEmpty()) problems += "$where.audio.sounds: only soundGains can change here (sound files are the pack's)"
-    if (audio.panAmount != null) problems += "$where.audio.panAmount: only soundGains can change here"
-    if (audio.cursorJitter != null) problems += "$where.audio.cursorJitter: only soundGains can change here"
+    if (audio.sounds.isNotEmpty()) problems += "$where.audio.sounds: only soundGains and bgmFile can change here (sound files are the pack's)"
+    if (audio.panAmount != null) problems += "$where.audio.panAmount: only soundGains and bgmFile can change here"
+    if (audio.cursorJitter != null) problems += "$where.audio.cursorJitter: only soundGains and bgmFile can change here"
     return gainsOf("$where.audio", audio, problems).takeIf { it.isNotEmpty() }
 }
 

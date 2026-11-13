@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
-# Media suite (41 checks): photo folders and the viewer (paging, R1 zoom, Set as Xross wallpaper and
+# Media suite (56 checks): photo folders and the viewer (paging, R1 zoom, Set as Xross wallpaper and
 # back to the theme's), music from tags (albums,
 # track order, playback through the media session), the music driving the shader's audio uniforms
 # (and 0 when paused), Now Playing, the Select shortcut and the mini-player line, background
 # music pausing for a video and for a game, and the volume mixer (2b.5b): the Video snaps volume,
 # music pausing under a game's video snap (and staying paused when the user paused it), and
-# lowered instead with "Music during video snaps: Lower".
+# lowered instead with "Music during video snaps: Lower"; theme music (2b.5c): a pack's generated
+# bgm.ogg loop starting with the pack without audio focus, stopping for a song and for a game,
+# silent while another app plays (the stub's tone service), paused or lowered under a video snap.
 #
-#   ./gradlew :emulator-stub:installRetroarchDebug   # optional: the two music-during-a-game checks
+#   ./gradlew :emulator-stub:installRetroarchDebug   # optional: the game and other-app checks
 #   tools/device-tests/test-media.sh
 #
 # Needs ffmpeg on the host (every check is skipped without it). Expects the seeded XrossSmoke media
@@ -17,11 +19,11 @@
 # folders under Pictures, Music and Movies (all removed at exit; see lib/harness.sh).
 set -u
 . "$(dirname "$0")/lib/harness.sh"
-suite_begin media 41
+suite_begin media 56
 
 setup_base_env
 if ! setup_media_fixtures; then
-  skip 41 "the media suite needs ffmpeg on the host"
+  skip 56 "the media suite needs ffmpeg on the host"
   suite_end
   exit
 fi
@@ -240,8 +242,82 @@ if command -v sqlite3 >/dev/null && adb shell run-as "$PKG" true 2>/dev/null; th
   [[ "$mix" == *"music=0.50"* ]] && ok "back to 0.50 after the snap" || bad "music after the ducked snap ($mix)"
   adb shell cmd media_session dispatch pause
   adb shell rm -f "'/sdcard/Xross/media/snaps/snes/Chrono Trigger (USA).mp4'"
+  snaps_ready=1
 else
   skip 10 "the snap checks need sqlite3 on the host and a debuggable build (run-as)"
+fi
+
+section "Theme music (2b.5c)"
+# A pack with a generated 10 s loop (bgm.ogg), made active by editing settings.json while Xross
+# is stopped (which also empties the music queue). Debug builds log every move (XrossBgm).
+bgm_line() { adb logcat -d -s XrossBgm:I | grep "state=" | tail -1; }
+bgm_wait() { # bgm_wait <text>: the latest XrossBgm state line contains it, within 6 s
+  for _ in $(seq 12); do [[ "$(bgm_line)" == *"$1"* ]] && return 0; pause 0.5; done; return 1; }
+bgm_ok() { # bgm_ok <text> <description>
+  if bgm_wait "$1"; then ok "$2"; else bad "$2 ($(bgm_line))"; fi; }
+bgmdir=$(tmpdir bgm)/smoke_bgm
+mkdir -p "$bgmdir"
+ffmpeg -loglevel error -y -f lavfi -i "sine=frequency=520:sample_rate=44100:duration=10" -ac 2 -c:a vorbis -strict -2 "$bgmdir/bgm.ogg" # the built-in encoder: no libvorbis needed
+echo '{"schemaVersion": 2, "name": "Smoke Music"}' > "$bgmdir/theme.json"
+adb shell rm -rf /sdcard/Xross/themes/smoke_bgm
+adb push "$bgmdir" /sdcard/Xross/themes/ >/dev/null
+adb shell am force-stop "$PKG"
+adb shell "sed -i 's/\"themePack\": \"[^\"]*\"/\"themePack\": \"smoke_bgm\"/' /sdcard/Xross/config/settings.json"
+adb logcat -c
+start_app 5
+bgm_ok "state=PLAYING file=bgm.ogg vol=0.60 reason=ALLOWED" "theme music starts with the pack (Theme music 60%)"
+# Read whole, then matched: grep -q on the live pipe would cut dumpsys off (SIGPIPE under pipefail).
+# Only Xross plays game music here (the stub's tone is USAGE_MEDIA), so no uid filter is needed.
+bgm_player() { adb shell dumpsys audio | grep "AudioPlaybackConfiguration" | grep "usage=USAGE_GAME content=CONTENT_TYPE_MUSIC" | grep -o 'state:[a-z]*' | tr '\n' ' '; }
+for _ in $(seq 10); do [[ "$(bgm_player)" == *"state:started"* ]] && break; pause 0.5; done
+p=$(bgm_player)
+[[ "$p" == *"state:started"* ]] && ok "the loop plays as USAGE_GAME / CONTENT_TYPE_MUSIC" || bad "no started USAGE_GAME music player (${p:-none}; $(adb shell dumpsys audio | grep -c AudioPlaybackConfiguration) configurations)"
+focus=$(adb shell dumpsys audio | sed -n '/Audio Focus stack entries/,/^ *$/p')
+[[ "$focus" == *"Audio Focus stack entries"* && "$focus" != *"$PKG"* ]] \
+  && ok "theme music takes no audio focus" || bad "audio focus while only theme music plays: $(grep -c "$PKG" <<<"$focus") Xross entries"
+play_song
+bgm_ok "state=STOPPED file=bgm.ogg vol=0.00 reason=MUSIC" "starting a song stops theme music"
+key KEYCODE_BUTTON_SELECT
+expect "Track 1 of 2" "Now Playing opens over the menu"
+key KEYCODE_DPAD_DOWN
+pause 1
+bgm_ok "state=PLAYING file=bgm.ogg vol=0.60 reason=ALLOWED" "Now Playing ▸ ↓ stops the song and theme music starts again"
+if has_stub; then
+  adb shell am start-foreground-service -n "$STUB/dev.xross.stub.ToneService" >/dev/null
+  bgm_ok "state=PAUSED file=bgm.ogg vol=0.00 reason=OTHER_APP" "another app playing media keeps theme music silent"
+  adb shell am stopservice -n "$STUB/dev.xross.stub.ToneService" >/dev/null 2>&1
+  bgm_ok "state=PLAYING file=bgm.ogg vol=0.60 reason=ALLOWED" "theme music continues when the other app stops"
+  chrono
+  key KEYCODE_DPAD_CENTER # launch Chrono Trigger in the stub
+  bgm_ok "state=STOPPED file=bgm.ogg vol=0.00 reason=GAME" "launching a game stops theme music"
+  pause 2
+  start_app 1
+  home
+  bgm_ok "state=PLAYING file=bgm.ogg vol=0.60 reason=ALLOWED" "back from the game, theme music starts over"
+else
+  skip 4 "install the RetroArch stub (./gradlew :emulator-stub:installRetroarchDebug)"
+fi
+if [ -n "${snaps_ready:-}" ]; then
+  # Still "Music during video snaps: Lower" from the section above.
+  adb push "$snapdir/Chrono Trigger (USA).mp4" /sdcard/Xross/media/snaps/snes/ >/dev/null
+  adb logcat -c
+  chrono
+  snap_audible || true
+  bgm_ok "state=PLAYING file=bgm.ogg vol=0.12 reason=SNAP_DUCK" "Lower: theme music at 0.6 × 0.2 under the snap"
+  key KEYCODE_DPAD_DOWN
+  bgm_ok "state=PLAYING file=bgm.ogg vol=0.60 reason=ALLOWED" "back to 0.60 after the snap"
+  sound_row 6
+  key KEYCODE_DPAD_CENTER
+  expect "Pause" "Music during video snaps back to Pause"
+  adb logcat -c
+  chrono
+  snap_audible || true
+  bgm_ok "state=PAUSED file=bgm.ogg vol=0.00 reason=SNAP" "Pause: theme music pauses under the snap"
+  key KEYCODE_DPAD_DOWN
+  bgm_ok "state=PLAYING file=bgm.ogg vol=0.60 reason=ALLOWED" "and continues when the cursor leaves the game"
+  adb shell rm -f "'/sdcard/Xross/media/snaps/snes/Chrono Trigger (USA).mp4'"
+else
+  skip 5 "the theme music snap checks need the snap fixture above"
 fi
 
 suite_end

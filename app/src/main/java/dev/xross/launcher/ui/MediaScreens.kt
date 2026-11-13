@@ -443,7 +443,7 @@ private fun NowPlayingScreen(
             }
         }
         Box(Modifier.align(Alignment.BottomEnd).padding(with(density) { (s * 0.04f).toDp() })) {
-            hints(listOf("@confirm" to "Play/Pause", "←→" to "Track", "L1/R1" to "Seek", "@options" to "Shuffle", "↑" to "Repeat"))
+            hints(listOf("@confirm" to "Play/Pause", "←→" to "Track", "L1/R1" to "Seek", "@options" to "Shuffle", "↑" to "Repeat", "↓" to "Stop"))
         }
     }
 }

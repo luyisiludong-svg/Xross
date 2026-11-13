@@ -40,7 +40,7 @@ class AudioDirectorTest {
         override var playing = false
         override var pausedForSnap = false
         var pausedForGame = false
-        var loaded = false
+        override var loaded = false
 
         fun userPlays() { loaded = true; playing = true; pausedForSnap = false; pausedForGame = false }
         fun userPauses() { playing = false; pausedForSnap = false; pausedForGame = false }

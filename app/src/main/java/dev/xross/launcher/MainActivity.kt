@@ -245,6 +245,8 @@ class MainActivity : ComponentActivity() {
             val layout = resolved.layout
             // Sound levels follow the look too (variant, category, system, rules: 2b.5a).
             androidx.compose.runtime.LaunchedEffect(pack, look.gains) { container.sounds.useLook(pack, look) }
+            // So does the theme music loop (a category override can give Games its own, 2b.5c).
+            androidx.compose.runtime.LaunchedEffect(pack, look.bgm) { container.audio.onBgmTrack(pack.bgmTrack(look.bgm)) }
             // Read in the draw phase only, so a category or system switch redraws without recomposing.
             androidx.compose.runtime.LaunchedEffect(resolved.surface) {
                 dev.xross.launcher.ui.ThemeSurfaces.active = resolved.surface
@@ -412,6 +414,11 @@ class MainActivity : ComponentActivity() {
         super.onPause()
     }
 
+    override fun onStart() {
+        super.onStart()
+        viewModel.onStarted()
+    }
+
     override fun onStop() {
         viewModel.onStopped()
         super.onStop()
@@ -420,6 +427,7 @@ class MainActivity : ComponentActivity() {
     override fun onDestroy() {
         unregisterReceiver(packageReceiver)
         volumeMonitor.unregister(this)
+        if (!isChangingConfigurations) container.audio.release()
         super.onDestroy()
     }
 

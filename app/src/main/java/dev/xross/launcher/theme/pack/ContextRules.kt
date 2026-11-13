@@ -57,7 +57,7 @@ data class RuleApplication(
     val cardAspectRatio: String? = null,
     /** Any `layout` key ([LayoutSpec]) over the pack's layout. */
     val layout: LayoutSpec? = null,
-    /** Only `soundGains` (2b.5a): sound levels while the rule holds. */
+    /** Only `soundGains` (2b.5a) and `bgmFile` (2b.5c): sound levels and music while the rule holds. */
     val audio: ThemeManifest.Audio? = null,
 )
 
