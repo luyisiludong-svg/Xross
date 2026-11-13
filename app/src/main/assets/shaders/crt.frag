@@ -1,5 +1,10 @@
 // CRT: the theme on a curved tube: a gradient and glowing ribbons with phosphor bloom, seen
 // through scanlines and an RGB aperture grille.
+//
+// Line pitch and stripe width are whole render pixels, sized from uPxPerDp (display density x the
+// surface's render scale, bound by Xross): a fixed line count would land between pixels on most
+// screens and beat into moire once the surface is scaled up to the display.
+uniform float uPxPerDp; // render pixels per dp; 0 where unbound (then 1.0 is assumed)
 
 const float PI = 3.14159265;
 
@@ -39,14 +44,18 @@ void main() {
     vec3 col = picture(tube, aspect);
     float luma = dot(col, vec3(0.299, 0.587, 0.114));
 
-    // Scanlines: ~270 lines whatever the render size; bright lines bloom over the gaps.
-    float lines = 270.0;
-    float s = sin(tube.y * lines * PI);
+    // Scanlines about 1.5 dp apart, a whole number of render pixels (at least 2); bright lines
+    // bloom over the gaps. Sampled at pixel centers, so a 2 px pitch is one lit row, one dark.
+    float pxPerDp = uPxPerDp > 0.0 ? uPxPerDp : 1.0;
+    float pitch = max(2.0, floor(1.5 * pxPerDp + 0.5));
+    float lines = res.y / pitch;
+    float s = sin((tube.y * lines - 0.5 / pitch) * PI);
     float scan = mix(0.55, 1.0, s * s);
     col *= mix(scan, 1.0, clamp(luma * 0.6, 0.0, 0.5));
 
-    // Aperture grille: vertical R, G, B phosphor stripes, one pixel each.
-    float stripe = mod(floor(gl_FragCoord.x), 3.0);
+    // Aperture grille: vertical R, G, B phosphor stripes, each about 0.5 dp (whole pixels).
+    float sw = max(1.0, floor(0.5 * pxPerDp + 0.5));
+    float stripe = mod(floor(gl_FragCoord.x / sw), 3.0);
     vec3 mask = vec3(0.78);
     if (stripe < 0.5) mask.r = 1.12; else if (stripe < 1.5) mask.g = 1.12; else mask.b = 1.12;
     col *= mask;

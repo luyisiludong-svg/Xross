@@ -94,6 +94,8 @@ data class LoadedTheme(
     val wallpapers: Map<String, File> = emptyMap(),
     /** The pack's own focus frame, icon mask and icon filter (2b.4d), over the Default pack's. */
     val cosmetics: Cosmetics = Cosmetics.NONE,
+    /** Text of each CUSTOM UI filter (`postprocess.agsl`, 2b.4f) the pack names, by pack-relative path. */
+    val customUiFilters: Map<String, String> = emptyMap(),
     /** What the pack declared but couldn't be used (bad font, unreadable icon), for Settings. */
     val problems: List<String> = emptyList(),
     /** Bumped on every load, so a hot reload of the same files still counts as a change. */
@@ -122,6 +124,14 @@ data class LoadedTheme(
 
     /** [shadersUsed] as programs, compiled ahead of time when this pack becomes active. */
     val shaderLibrary: ShaderLibrary by lazy { ShaderLibrary.of(shadersUsed, customShaders) }
+
+    /**
+     * [shaderLibrary] plus [extra] (the user's Settings ▸ Theme ▸ Background shader, 2b.4f), so
+     * a preset the pack never names is compiled ahead of time too. The same object without one.
+     */
+    fun shaderLibrary(extra: ShaderPreset?): ShaderLibrary =
+        if (extra == null || extra == ShaderPreset.CUSTOM || shadersUsed.any { it.preset == extra }) shaderLibrary
+        else ShaderLibrary.of(shadersUsed + ShaderRef(extra), customShaders)
 
     /** True when the base, a variant, an override or a rule can show a wallpaper. */
     val hasWallpaper: Boolean get() = wallpapers.isNotEmpty()
@@ -291,7 +301,7 @@ class ThemePackLoader(
 
     private fun resolve(pack: ThemePackInfo, base: LoadedTheme?): LoadedTheme {
         val m = pack.manifest
-        val problems = ArrayList<String>()
+        val problems = ArrayList<String>(m.schemaProblems)
 
         val sounds = LinkedHashMap<SoundRole, SoundSource>()
         val gains = LinkedHashMap<SoundRole, Float>()
@@ -359,6 +369,12 @@ class ThemePackLoader(
             (categoryPatches.values + systemPatches.values).mapNotNull { it.wallpaper } + rules.mapNotNull { it.patch?.wallpaper }
         val wallpapers = wallpaperFiles(folder, wallpaperRefs, problems)
         val cosmetics = (base?.cosmetics ?: Cosmetics.NONE).over(Cosmetics.of("theme", m.effects, problems))
+        // 2b.4f: the AGSL of each CUSTOM UI filter the base, a variant, an override or a rule names.
+        val uiFilterPaths = (listOf(cosmetics) + variants.mapNotNull { it.cosmetics } +
+            (categoryPatches.values + systemPatches.values).mapNotNull { it.cosmetics } + rules.mapNotNull { it.patch?.cosmetics })
+            .mapNotNull { it.uiFilter }.filter { it.filter == UiFilter.CUSTOM }.map { it.path }.distinct()
+        val customUiFilters = LinkedHashMap<String, String>()
+        for (path in uiFilterPaths) packText(pack, "UI filter", path, problems)?.let { customUiFilters[path] = it }
 
         return LoadedTheme(
             info = pack,
@@ -382,6 +398,7 @@ class ThemePackLoader(
             wallpaper = wallpaper,
             wallpapers = wallpapers,
             cosmetics = cosmetics,
+            customUiFilters = customUiFilters,
             problems = problems,
             revision = revisions.incrementAndGet(),
         )
@@ -394,22 +411,26 @@ class ThemePackLoader(
      * folder packs carry one; a missing, oversized or binary file is reported and left out (the
      * renderer then shows the wave and says why).
      */
-    private fun shaderText(pack: ThemePackInfo, path: String, problems: MutableList<String>): String? {
+    private fun shaderText(pack: ThemePackInfo, path: String, problems: MutableList<String>): String? =
+        packText(pack, "Shader", path, problems)
+
+    /** A pack's source file (a CUSTOM shader, or a CUSTOM UI filter's AGSL, 2b.4f) as text; see [shaderText]. */
+    private fun packText(pack: ThemePackInfo, what: String, path: String, problems: MutableList<String>): String? {
         val dir = (pack.source as? PackSource.Folder)?.dir ?: run {
-            problems += "Shader $path: only folder packs can bring a CUSTOM shader"
+            problems += if (what == "Shader") "Shader $path: only folder packs can bring a CUSTOM shader" else "$what $path: only folder packs can bring their own code"
             return null
         }
         val file = inside(dir, path)?.takeIf { it.isFile } ?: run {
-            problems += "Shader $path not found in the pack"
+            problems += "$what $path not found in the pack"
             return null
         }
         if (file.length() > MAX_SHADER_BYTES) {
-            problems += "Shader $path is larger than ${MAX_SHADER_BYTES / 1024} KB"
+            problems += "$what $path is larger than ${MAX_SHADER_BYTES / 1024} KB"
             return null
         }
         val text = runCatching { file.readText() }.getOrNull()
         if (text == null || text.any { it == '\u0000' }) {
-            problems += "Shader $path can't be read as text"
+            problems += "$what $path can't be read as text"
             return null
         }
         return text
@@ -561,7 +582,7 @@ class ThemePackLoader(
         }
         return try {
             val m = ThemeManifest.JSON.decodeFromJsonElement(ThemeManifest.serializer(), merged)
-            if (m.name.isBlank()) Read.Bad("theme.json needs a \"name\"") else Read.Ok(m)
+            if (m.name.isBlank()) Read.Bad("theme.json needs a \"name\"") else Read.Ok(m.copy(schemaProblems = ThemeManifest.Effects.unknownKeys(merged)))
         } catch (e: SerializationException) {
             Read.Bad("$manifestName: ${e.message?.lineSequence()?.firstOrNull() ?: "invalid"}")
         } catch (e: IllegalArgumentException) {

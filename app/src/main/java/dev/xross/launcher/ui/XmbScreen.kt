@@ -216,6 +216,8 @@ fun XmbScreen(
     onCloseRaHub: () -> Unit = {},
     /** No input for [ParticleRest.IDLE_AFTER_MS]: the foreground particles rest. */
     particlesIdle: Boolean = false,
+    /** A UI filter (2b.4f) couldn't be built: (key, toast text), announced once per key. */
+    onUiFilterError: (String, String) -> Unit = { _, _ -> },
 ) {
     val palette = rememberActivePalette(state.theme, (LocalThemeLook.current ?: LocalThemePack.current?.look())?.palette)
     // The pack's layout with the context rules that hold and the quick profile's motion (MainActivity).
@@ -233,9 +235,17 @@ fun XmbScreen(
     val reveal = remember { Animatable(if (state.coldBoot) 0f else 1f) }
     LaunchedEffect(Unit) { reveal.animateTo(1f, tween(1400, delayMillis = 350, easing = LinearEasing)) }
 
+    // The experimental UI filter (2b.4f, Android 13+): an AGSL RenderEffect on the whole menu.
+    // Static filters never animate; a custom one that reads uTime rests with the screen.
+    val filterRef = LocalThemeLook.current?.cosmetics?.screenFilter ?: dev.xross.launcher.theme.pack.UiFilterRef.OFF
+    val filterSource = filterRef.takeIf { it.filter == dev.xross.launcher.theme.pack.UiFilter.CUSTOM }
+        ?.let { LocalThemePack.current?.customUiFilters?.get(it.path) }
+    val filterStill = LocalStillMotion.current
+
     BoxWithConstraints(
         Modifier
             .fillMaxSize()
+            .uiFilter(filterRef, filterSource, started, idle, filterStill, onUiFilterError)
             .graphicsLayer { alpha = reveal.value }
             .frostHost()
             .swipeNavigation(onAction),

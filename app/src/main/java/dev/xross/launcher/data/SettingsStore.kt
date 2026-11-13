@@ -65,6 +65,11 @@ data class XrossSettings(
      * wallpaper, if it has one. Separate from the Android system wallpaper.
      */
     val customWallpaper: String = "",
+    /**
+     * Settings ▸ Theme picks over the pack's effects (2b.4f): background shader and filter, UI
+     * filter, focus frame, particles, app icon mask. Empty values follow the pack.
+     */
+    val effectOverrides: dev.xross.launcher.theme.pack.EffectOverrides = dev.xross.launcher.theme.pack.EffectOverrides.NONE,
     /** [dev.xross.launcher.theme.QuickProfile] name (Settings ▸ Theme ▸ Quick profile); NONE = the theme's own look. */
     val quickProfile: String = dev.xross.launcher.theme.QuickProfile.NONE.name,
     /** Colors from the focused game's art; null follows the pack's `effects.adaptiveGamePalette` (on by default). */

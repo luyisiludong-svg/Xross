@@ -109,6 +109,18 @@ sealed interface Command {
     data class SetXrossWallpaper(val photoId: Long) : Command
     /** Back to the theme pack's wallpaper (or none). */
     data object ResetXrossWallpaper : Command
+    /** Settings ▸ Theme ▸ Xross wallpaper ▸ Pick a picture: any image, through the system picker. */
+    data object PickXrossWallpaper : Command
+    /** Settings ▸ Theme (2b.4f): the next choice of [slot] over the pack (the pack's own first). */
+    data class CycleEffect(val slot: dev.xross.launcher.theme.pack.EffectSlot) : Command
+    /** Sets [slot] to [value] (an enum name; empty hands it back to the theme pack). */
+    data class SetEffect(val slot: dev.xross.launcher.theme.pack.EffectSlot, val value: String) : Command
+    /**
+     * Settings ▸ Theme ▸ Reset to theme defaults: drops every pick that overrides the pack's look
+     * (effects, surface style, color layers, the Xross wallpaper), keeping the pack, variant,
+     * theme color, quick profile and wave settings.
+     */
+    data object ResetThemeDefaults : Command
     data object CycleSlideshowInterval : Command
     data object ToggleResumeMusicAfterGames : Command
     data object ToggleVideoLoop : Command

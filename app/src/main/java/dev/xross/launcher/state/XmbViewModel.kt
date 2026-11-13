@@ -1,5 +1,6 @@
 package dev.xross.launcher.state
 
+import androidx.core.net.toUri
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -64,6 +65,8 @@ sealed interface UiEffect {
     data class PromptRetroAchievements(val user: String, val linked: Boolean) : UiEffect
     data object RequestStorageAccess : UiEffect
     data class SetWallpaper(val uri: Uri) : UiEffect
+    /** Pick an image for the Xross wallpaper; answers [XmbViewModel.onWallpaperPicked]. */
+    data object PickWallpaperImage : UiEffect
 
     /** Start a game; the activity hands the plan to [dev.xross.launcher.launch.GameLauncher.start]. */
     data class Launch(val plan: LaunchPlan.Ready) : UiEffect
@@ -726,6 +729,43 @@ class XmbViewModel(
     private var pendingImport: dev.xross.launcher.theme.pack.StagedTheme? = null
 
     /** The picked `.xtheme`: copied to the cache, checked, unpacked, and installed or held for a prompt. */
+    /**
+     * Settings ▸ Theme ▸ Xross wallpaper ▸ Pick a picture: keeps read access to [uri] across
+     * restarts (a document the picker granted), saves it as the Xross wallpaper and lets go of the
+     * last picked one.
+     */
+    fun onWallpaperPicked(uri: Uri?) {
+        uri ?: return
+        val resolver = context.contentResolver
+        val kept = runCatching { resolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }.isSuccess
+        val old = settingsStore.current.customWallpaper
+        settingsStore.update { it.copy(customWallpaper = uri.toString()) }
+        if (old != uri.toString()) releaseWallpaperGrant(old)
+        toast(if (kept) "Xross wallpaper set" else "Xross wallpaper set (until Xross restarts: the picker gave no lasting access)")
+    }
+
+    /** Lets go of a picked wallpaper's lasting read grant once nothing uses it (Photo's MediaStore URIs hold none). */
+    private fun releaseWallpaperGrant(location: String) {
+        if (!location.startsWith("content://")) return
+        val resolver = context.contentResolver
+        val uri = location.toUri()
+        if (resolver.persistedUriPermissions.none { it.uri == uri }) return
+        runCatching { resolver.releasePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+    }
+
+    /** Settings ▸ Theme (2b.4f): [slot] set to [value] over the pack, with a note where it can't show. */
+    private fun setEffect(slot: dev.xross.launcher.theme.pack.EffectSlot, value: String) {
+        settingsStore.update { it.copy(effectOverrides = it.effectOverrides.with(slot, value)) }
+        val v = settingsStore.current.effectOverrides[slot]
+        val note = when {
+            slot == dev.xross.launcher.theme.pack.EffectSlot.UI_FILTER && v.isNotEmpty() && v != "NONE" &&
+                !dev.xross.launcher.ui.UiFilterSupport.supported() -> "UI filters need Android 13 or later"
+            slot == dev.xross.launcher.theme.pack.EffectSlot.SHADER && !settingsStore.current.waveEnabled -> "Turn Wave background on to see it"
+            else -> null
+        }
+        note?.let { toast(it) }
+    }
+
     fun onThemeArchivePicked(uri: Uri?) {
         uri ?: return
         viewModelScope.launch {
@@ -2361,8 +2401,24 @@ class XmbViewModel(
                 toast("Xross wallpaper set")
             }
             Command.ResetXrossWallpaper -> {
+                val old = settingsStore.current.customWallpaper
                 settingsStore.update { it.copy(customWallpaper = "") }
+                releaseWallpaperGrant(old)
                 toast(if (container.themes.active.value.hasWallpaper) "Using the theme's wallpaper" else "Xross wallpaper removed")
+            }
+            Command.PickXrossWallpaper -> emit(UiEffect.PickWallpaperImage)
+            is Command.CycleEffect -> setEffect(command.slot, command.slot.next(settingsStore.current.effectOverrides[command.slot]))
+            is Command.SetEffect -> setEffect(command.slot, command.value)
+            Command.ResetThemeDefaults -> {
+                val before = settingsStore.current
+                val after = dev.xross.launcher.theme.pack.ThemeDefaults.reset(before)
+                if (after == before) {
+                    toast("Already the theme's own look")
+                } else {
+                    settingsStore.update { dev.xross.launcher.theme.pack.ThemeDefaults.reset(it) }
+                    releaseWallpaperGrant(before.customWallpaper)
+                    toast("Back to ${container.themes.active.value.info.name}'s own look")
+                }
             }
             Command.CycleSlideshowInterval -> settingsStore.update {
                 it.copy(slideshowSeconds = SLIDESHOW_SECONDS[(SLIDESHOW_SECONDS.indexOf(it.slideshowSeconds) + 1) % SLIDESHOW_SECONDS.size])
@@ -2550,6 +2606,7 @@ class XmbViewModel(
                             rejected = rejected.map { r -> "${r.id}: ${r.reason}" },
                             packFlags = active.flags,
                             packWallpaper = active.hasWallpaper,
+                            looks = (listOf("") + active.variants.map { v -> v.id }).associateWith { v -> active.look(v) },
                         ),
                     )
                 }

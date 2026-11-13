@@ -4,6 +4,8 @@
 #
 #   ./gradlew :app:assembleDebug :app:assembleProfiling
 #   tools/device-tests/palette-perf.sh [pairs]     # default 3 pairs of passes
+#   PERF_EFFECTS='{"backgroundFilter": "CRT", "uiFilter": "BLOOM"}' tools/device-tests/palette-perf.sh
+#                                                  # the same with Settings ▸ Theme effects on
 #
 # Installs the debug build to seed 12 scraped SNES games with distinct hero art (it must be
 # debuggable to edit the database), then the profiling build over it (same signing, data kept).
@@ -16,7 +18,7 @@
 # `-gpu host` first: the default may pick software rendering and report ~100% jank.
 #
 # WARNING: replaces /sdcard/ROMs with the 12 test games and resets display settings (theme,
-# pack, quick profile, color layers) in /sdcard/Xross/config/settings.json.
+# pack, quick profile, color layers, effects) in /sdcard/Xross/config/settings.json.
 set -u
 PKG=dev.xross.launcher
 PAIRS=${1:-3}
@@ -39,8 +41,10 @@ settings() { # settings <adaptive>: the shipped look, with adaptive colors on or
   adb shell am force-stop "$PKG"
   adb shell cat /sdcard/Xross/config/settings.json > "$OUT/settings.json"
   python3 -I - "$OUT/settings.json" "$1" <<'PY'
-import json, sys
+import json, os, sys
 p = sys.argv[1]; s = json.load(open(p)); d = s["display"]
+# The pack's own effects unless PERF_EFFECTS names some (2b.4f, display.effects).
+d["effects"] = json.loads(os.environ.get("PERF_EFFECTS") or "{}")
 d.update(theme="LAVENDER", themePack="default", themeVariant="", surfaceStyle="", quickProfile="NONE",
          adaptiveGamePalette=sys.argv[2] == "true")
 for k in ("circadianCurve", "batteryTint"): d.pop(k, None)

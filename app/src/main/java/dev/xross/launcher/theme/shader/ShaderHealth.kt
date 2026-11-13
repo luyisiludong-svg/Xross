@@ -40,6 +40,11 @@ class ShaderHealth(val canary: ShaderCanary) {
         if (status is ShaderStatus.Failed && markAnnounced(status.key)) _notices.trySend(status.message)
     }
 
+    /** A notice about something other than the background program (a UI filter's AGSL, 2b.4f), once per [key]. */
+    fun notice(key: String, text: String) {
+        if (markAnnounced(key)) _notices.trySend(text)
+    }
+
     @Synchronized
     private fun markAnnounced(key: String): Boolean = announced.add(key)
 }

@@ -1,0 +1,15 @@
+// Xross UI filter SCANLINES_UI (2b.4f, Android 13+): applied as a RenderEffect to the menu's root
+// layer. Darkens every uPitch-th row of the interface; transparent pixels stay transparent, so the
+// GL background below shows through unchanged (it has its own effects.backgroundFilter).
+uniform shader content;
+uniform float uPitch;    // pixels from one line to the next (whole pixels, >= 2)
+uniform float uStrength; // 0..1
+
+half4 main(float2 p) {
+    half4 c = content.eval(p);
+    // Sampled at pixel centers from the line's start: a 2 px pitch is one lit row, one dark.
+    float f = fract((p.y - 0.5) / uPitch);
+    float s = sin(f * 3.14159265);
+    float k = mix(1.0 - 0.38 * uStrength, 1.0, s * s);
+    return half4(c.rgb * half(k), c.a);
+}

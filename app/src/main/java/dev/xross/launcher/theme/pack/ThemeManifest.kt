@@ -24,7 +24,11 @@ import kotlinx.serialization.json.JsonObject
  *   "typography": { "display": "fonts/Display.ttf", "body": "fonts/Rounded.ttf" },
  *   "audio": { "sounds": { "cursor": "tick.wav" }, "soundGains": { "cursor": 0.6 } },
  *   "icons": { "album": "disc.svg" },
- *   "effects": { "surfaceStyle": "petal", "shaderPreset": "BOKEH", "wallpaperPath": "art/sakura.webp" },
+ *   "effects": {
+ *     "surfaceStyle": "petal", "shaderPreset": "BOKEH", "wallpaperPath": "art/sakura.webp",
+ *     "focusFrameStyle": "GOLD_BEZEL", "iconMask": "SQUIRCLE", "iconFilter": "DUOTONE",
+ *     "foregroundParticles": "SNOW", "backgroundFilter": "SCANLINES", "uiFilter": "BLOOM"
+ *   },
  *   "surfaces": { "petal": { "shape": { "type": "CHAMFERED", "cutDp": [10, 0, 10, 0] } } }
  * }
  * ```
@@ -67,6 +71,8 @@ data class ThemeManifest(
      * first, then these.
      */
     val rules: List<ContextRule> = emptyList(),
+    /** Keys the reader found but doesn't know (unknown `effects` properties), reported with the pack's problems. */
+    @kotlinx.serialization.Transient val schemaProblems: List<String> = emptyList(),
 ) {
     val supported: Boolean get() = schemaVersion == SCHEMA_VERSION
 
@@ -199,7 +205,59 @@ data class ThemeManifest(
          * (default), `SNOW`, `BOKEH` or `DUST_MOTES`.
          */
         @kotlinx.serialization.json.JsonNames("particles") val foregroundParticles: String? = null,
-    )
+        /**
+         * Full-screen filter over the background shader, drawn on the GL side ([BackgroundFilter],
+         * 2b.4f): `NONE` (default), `SCANLINES`, `CRT` (scanlines, aperture grille, vignette) or
+         * `LCD_GRID`. It darkens the background only; the menu above stays crisp.
+         */
+        val backgroundFilter: String? = null,
+        /**
+         * Experimental AGSL filter over the whole menu ([UiFilter], 2b.4f, Android 13+ only):
+         * `NONE` (default), `SCANLINES_UI`, `BLOOM`, or `CUSTOM` for the pack's own AGSL.
+         */
+        @kotlinx.serialization.json.JsonNames("postProcess") val uiFilter: String? = null,
+        /** CUSTOM's AGSL file, from the pack root (default `postprocess.agsl`); alone it implies CUSTOM. */
+        @kotlinx.serialization.json.JsonNames("postProcessPath") val uiFilterPath: String? = null,
+    ) {
+        companion object {
+            /**
+             * Every property `effects` recognizes, with its aliases: the schema of the block. Any
+             * other key is reported as a problem ([unknownKeys]) instead of being dropped silently.
+             */
+            val KEYS: Set<String> = setOf(
+                "surfaceStyle", "adaptiveGamePalette",
+                "shaderPreset", "shader", "shaderPath",
+                "wallpaperPath", "wallpaper",
+                "focusFrameStyle", "focusFrame", "iconMask", "iconFilter",
+                "foregroundParticles", "particles",
+                "backgroundFilter", "uiFilter", "postProcess", "uiFilterPath", "postProcessPath",
+            )
+
+            /**
+             * Problems for the keys of every `effects` block in a pack's merged JSON [root] (the base,
+             * each variant, category and system override, and each rule) that aren't in [KEYS].
+             */
+            fun unknownKeys(root: JsonObject): List<String> {
+                val out = ArrayList<String>()
+                fun check(where: String, effects: kotlinx.serialization.json.JsonElement?) {
+                    val obj = effects as? JsonObject ?: return
+                    for (key in obj.keys) if (key !in KEYS) out += "$where.effects.$key isn't an effects property (see README, Theme packs)"
+                }
+                fun obj(e: kotlinx.serialization.json.JsonElement?) = e as? JsonObject
+                fun arr(e: kotlinx.serialization.json.JsonElement?) = e as? kotlinx.serialization.json.JsonArray
+                check("theme", root["effects"])
+                arr(root["variants"])?.forEachIndexed { i, v ->
+                    val id = (obj(v)?.get("id") as? kotlinx.serialization.json.JsonPrimitive)?.content ?: "$i"
+                    check("variants.$id", obj(v)?.get("effects"))
+                }
+                for (block in listOf("categoryOverrides", "systemOverrides")) {
+                    obj(root[block])?.forEach { (k, v) -> check("$block.$k", obj(v)?.get("effects")) }
+                }
+                arr(root["rules"])?.forEachIndexed { i, r -> check("rules[$i]", obj(obj(r)?.get("apply"))?.get("effects")) }
+                return out
+            }
+        }
+    }
 
     companion object {
         const val SCHEMA_VERSION = 2

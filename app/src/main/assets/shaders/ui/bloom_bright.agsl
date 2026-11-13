@@ -1,0 +1,15 @@
+// Xross UI filter BLOOM (2b.4f, Android 13+), bright pass: keeps what is brighter than uThreshold
+// (white text, glows, the focused tile's halo), scaled by uGain. Xross blurs the result and adds it
+// back over the interface (RenderEffect chain: this, a blur, a PLUS blend over the content).
+uniform shader content;
+uniform float uThreshold; // 0..1 luma where the bloom starts
+uniform float uGain;      // 0..1
+
+half4 main(float2 p) {
+    half4 c = content.eval(p);
+    if (c.a <= 0.0) return half4(0.0);
+    float3 rgb = float3(c.rgb) / float(c.a); // content is premultiplied
+    float l = dot(rgb, float3(0.2126, 0.7152, 0.0722));
+    float k = smoothstep(uThreshold, 1.0, l) * uGain;
+    return half4(c * half(k));
+}
