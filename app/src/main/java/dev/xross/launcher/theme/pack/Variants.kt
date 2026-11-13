@@ -19,7 +19,7 @@ data class ResolvedVariant(
     val shader: ShaderRef? = null,
     /** `effects.wallpaperPath`, checked ([WallpaperRef.NONE] turns the pack's off). */
     val wallpaper: WallpaperRef? = null,
-    /** `effects.focusFrameStyle`, `iconMask` and `iconFilter`, checked (2b.4d). */
+    /** `effects.focusFrameStyle`, `iconMask`, `iconFilter` (2b.4d) and `foregroundParticles` (2b.4e), checked. */
     val cosmetics: Cosmetics? = null,
 )
 

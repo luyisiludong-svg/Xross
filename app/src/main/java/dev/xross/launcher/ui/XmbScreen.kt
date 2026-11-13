@@ -89,6 +89,7 @@ import androidx.compose.ui.unit.dp
 import dev.xross.launcher.input.ConfirmLayout
 import dev.xross.launcher.media.MusicPlayer
 import dev.xross.launcher.media.ThumbKind
+import dev.xross.launcher.state.MediaOverlay
 import dev.xross.launcher.state.MediaOverlayController
 import dev.xross.launcher.input.NavAction
 import dev.xross.launcher.state.GlyphKey
@@ -213,6 +214,8 @@ fun XmbScreen(
     onAvatarSlider: (Int, Float) -> Unit = { _, _ -> },
     onCloseAvatarStyle: () -> Unit = {},
     onCloseRaHub: () -> Unit = {},
+    /** No input for [ParticleRest.IDLE_AFTER_MS]: the foreground particles rest. */
+    particlesIdle: Boolean = false,
 ) {
     val palette = rememberActivePalette(state.theme, (LocalThemeLook.current ?: LocalThemePack.current?.look())?.palette)
     // The pack's layout with the context rules that hold and the quick profile's motion (MainActivity).
@@ -293,6 +296,22 @@ fun XmbScreen(
         val snapOn = snap?.player?.collectAsState()?.value != null
         val frostOff = snapOn || state.overlay != null
         androidx.compose.runtime.SideEffect { FrostedBackdrop.suppressed = frostOff }
+        // Layer 4: ambient particles over the art (2b.4e), hidden under a snap, full-screen media,
+        // the wave editor and E-Ink, resting when stopped or after 10 s without input.
+        val particlePreset = (LocalThemeLook.current?.cosmetics ?: dev.xross.launcher.theme.pack.Cosmetics.NONE).particleField
+        if (particlePreset != dev.xross.launcher.theme.pack.ParticlePreset.NONE) {
+            val stillMotion = LocalStillMotion.current
+            val particleState = ParticleRest.of(
+                preset = particlePreset,
+                stillMotion = stillMotion,
+                snapPlaying = snapOn,
+                covered = state.waveEditor != null ||
+                    state.overlay is MediaOverlay.Photos || state.overlay is MediaOverlay.VideoPlayback,
+                started = started,
+                idle = particlesIdle,
+            )
+            AmbientParticles(particlePreset, particleState, Color(palette.glow), stillMotion)
+        }
         val covers = heroCovers || videoCovers || wallpaperCovers
         val reportCover by rememberUpdatedState(onBackdropCoverChanged)
         LaunchedEffect(covers) { reportCover(covers) }
