@@ -11,6 +11,7 @@ import dev.xross.launcher.storage.EmulatorOption
 import dev.xross.launcher.storage.Platform
 import dev.xross.launcher.storage.PlatformRegistry
 import dev.xross.launcher.storage.StorageVolumes
+import dev.xross.launcher.theme.ProfileField
 import dev.xross.launcher.theme.XrossTheme
 import java.util.Locale
 
@@ -169,6 +170,10 @@ class MenuTree(private val s: MenuSnapshot) {
         key == CONTROLS -> controlSettings()
         key == EMULATORS -> emulatorSettings()
         key == DISPLAY -> displaySettings()
+        key == DISPLAY_COLORS -> colorSettings()
+        key == DISPLAY_BACKGROUND -> backgroundSettings()
+        key == DISPLAY_EFFECTS -> effectSettings()
+        key == DISPLAY_MENU -> menuLookSettings()
         key == SOUND -> soundSettings()
         key == MEDIA_SETTINGS -> mediaSettings()
         key == SYSTEM -> systemSettings()
@@ -887,9 +892,49 @@ class MenuTree(private val s: MenuSnapshot) {
             },
         ),
     ) + themeVariantRow() + listOf(
-        setting("disp:theme", "Theme color", themeColorLabel(), GlyphKey.DISPLAY, Command.CycleTheme),
+        quickProfileRow(),
+        folder(DISPLAY_COLORS, "Colors", GlyphKey.DISPLAY, profiled(ProfileField.THEME_COLOR, themeColorLabel())),
+        folder(DISPLAY_BACKGROUND, "Background", GlyphKey.DISPLAY, backgroundSummary()),
+        folder(DISPLAY_EFFECTS, "Effects", GlyphKey.DISPLAY, profiled(ProfileField.SURFACE, surfaceSummary())),
+        folder(DISPLAY_MENU, "Menu and profile", GlyphKey.USERS, "Profile customization, button hints, platform folders"),
+        resetThemeRow(),
+        setting(
+            "disp:import", "Import theme (.xtheme)…",
+            "Pick a theme file; it is checked, then unpacked into Xross/themes",
+            GlyphKey.DOWNLOAD, Command.ImportThemeArchive,
+        ),
+    )
+
+    /** Settings ▸ Theme ▸ Colors: the base color and the optional color layers over it. */
+    private fun colorSettings() = listOf(
+        themeColorRow(),
+        colorSwitchRow("disp:adaptive", "Adaptive colors", ColorSwitch.ADAPTIVE, "Colors follow the focused game's art"),
+        colorSwitchRow("disp:circadian", "Circadian curve", ColorSwitch.CIRCADIAN, "Colors shift with the time of day"),
+        colorSwitchRow("disp:battery", "Battery alert tint", ColorSwitch.BATTERY, "Amber to red below 20%, green while charging"),
+    )
+
+    /** Settings ▸ Theme ▸ Background: what is drawn behind the menu. */
+    private fun backgroundSettings() = listOf(
         setting("disp:wave", "Wave background", onOff(s.settings.waveEnabled), GlyphKey.DISPLAY, Command.ToggleWave),
-        setting("disp:wavesettings", "Wave settings", waveSummary(), GlyphKey.DISPLAY, Command.OpenWaveSettings),
+        setting(
+            "disp:wavesettings", "Wave settings",
+            if (activeProfile.stillMotion) "Still in ${activeProfile.label} · ${waveSummary()}" else waveSummary(),
+            GlyphKey.DISPLAY, Command.OpenWaveSettings,
+        ),
+        wallpaperRow(),
+        effectRow(dev.xross.launcher.theme.pack.EffectSlot.SHADER),
+        effectRow(dev.xross.launcher.theme.pack.EffectSlot.BACKGROUND_FILTER),
+    )
+
+    /** Settings ▸ Theme ▸ Effects: surfaces and what is drawn over the menu. */
+    private fun effectSettings() = listOf(
+        setting("disp:surface", "Surface style", profiled(ProfileField.SURFACE, surfaceSummary()), GlyphKey.DISPLAY, Command.CycleSurfaceStyle),
+    ) + dev.xross.launcher.theme.pack.EffectSlot.entries
+        .filter { it != dev.xross.launcher.theme.pack.EffectSlot.SHADER && it != dev.xross.launcher.theme.pack.EffectSlot.BACKGROUND_FILTER }
+        .map(::effectRow)
+
+    /** Settings ▸ Theme ▸ Menu and profile: how the menu is laid out, not how it is colored. */
+    private fun menuLookSettings() = listOf(
         setting("disp:avatar", "Profile customization", avatarSummary(), GlyphKey.USERS, Command.OpenAvatarStyle),
         setting(
             "disp:hints",
@@ -905,20 +950,49 @@ class MenuTree(private val s: MenuSnapshot) {
             GlyphKey.GAMES,
             Command.ToggleAllGamesFolder,
         ),
-        setting("disp:surface", "Surface style", surfaceSummary(), GlyphKey.DISPLAY, Command.CycleSurfaceStyle),
-        quickProfileRow(),
-        colorSwitchRow("disp:adaptive", "Adaptive colors", ColorSwitch.ADAPTIVE, "Colors follow the focused game's art"),
-        colorSwitchRow("disp:circadian", "Circadian curve", ColorSwitch.CIRCADIAN, "Colors shift with the time of day"),
-        colorSwitchRow("disp:battery", "Battery alert tint", ColorSwitch.BATTERY, "Amber to red below 20%, green while charging"),
-    ) + dev.xross.launcher.theme.pack.EffectSlot.entries.map(::effectRow) + listOf(
-        wallpaperRow(),
-        resetThemeRow(),
-        setting(
-            "disp:import", "Import theme (.xtheme)…",
-            "Pick a theme file; it is checked, then unpacked into Xross/themes",
-            GlyphKey.DOWNLOAD, Command.ImportThemeArchive,
-        ),
     )
+
+    private val activeProfile by lazy { dev.xross.launcher.theme.QuickProfile.byName(s.settings.quickProfile) }
+
+    /**
+     * [own] (the user's value), or, when the quick profile takes [field] over, that it does and
+     * what the user's value is underneath ([forced]: the value the profile gives, when it has one).
+     */
+    private fun profiled(field: ProfileField, own: String, forced: String? = null): String {
+        if (!activeProfile.sets(field)) return own
+        val by = if (forced != null) "$forced (set by ${activeProfile.label})" else "Set by ${activeProfile.label}"
+        return "$by · yours: $own"
+    }
+
+    /** "Wave on · Theme pack (Wave)", "Wave off · a picture you chose". */
+    private fun backgroundSummary(): String = buildString {
+        append(if (s.settings.waveEnabled) "Wave on · " + effectShown(dev.xross.launcher.theme.pack.EffectSlot.SHADER) else "Wave off")
+        when {
+            s.settings.customWallpaper.isNotBlank() -> append(" · a picture you chose")
+            s.themes.packWallpaper -> append(" · theme wallpaper")
+        }
+    }
+
+    /** Theme color: Confirm cycles; Options list every color (and the pack's own, when it has one). */
+    private fun themeColorRow(): XmbNode {
+        val current = s.settings.theme
+        val options = buildList {
+            if (s.themes.packPalette) {
+                add(MenuOption("Theme pack", detail = s.themes.activeName, command = Command.SetTheme(dev.xross.launcher.theme.PACK_THEME), selected = current == dev.xross.launcher.theme.PACK_THEME))
+            }
+            for (t in XrossTheme.entries) {
+                add(MenuOption(t.label, detail = if (t.dynamic) "Changes every month" else null, command = Command.SetTheme(t.name), selected = current == t.name))
+            }
+        }
+        return XmbNode(
+            id = "disp:theme",
+            title = "Theme color",
+            subtitle = profiled(ProfileField.THEME_COLOR, themeColorLabel()),
+            icon = NodeIcon.Glyph(GlyphKey.DISPLAY),
+            action = NodeAction.Run(Command.CycleTheme),
+            menu = options,
+        )
+    }
 
     /**
      * One of the effect rows (2b.4f): Background shader, Background filter, UI filter, Focus frame
@@ -928,7 +1002,7 @@ class MenuTree(private val s: MenuSnapshot) {
     private fun effectRow(slot: dev.xross.launcher.theme.pack.EffectSlot): XmbNode {
         val own = s.settings.effectOverrides[slot]
         val look = s.themes.packLook(s.settings.themeVariant)
-        val shown = if (own.isEmpty()) slot.packLabel(look) else slot.label(own)
+        val shown = effectShown(slot)
         val note = when (slot) {
             dev.xross.launcher.theme.pack.EffectSlot.SHADER -> if (s.settings.waveEnabled) "Behind the menu" else "Wave background is off"
             dev.xross.launcher.theme.pack.EffectSlot.BACKGROUND_FILTER -> "Over the background only"
@@ -951,6 +1025,12 @@ class MenuTree(private val s: MenuSnapshot) {
                 MenuOption(label, command = Command.SetEffect(slot, name), selected = own == name)
             },
         )
+    }
+
+    /** "Theme pack (Wave)" when [slot] follows the pack, else the user's choice. */
+    private fun effectShown(slot: dev.xross.launcher.theme.pack.EffectSlot): String {
+        val own = s.settings.effectOverrides[slot]
+        return if (own.isEmpty()) slot.packLabel(s.themes.packLook(s.settings.themeVariant)) else slot.label(own)
     }
 
     /** Reset to theme defaults: what it would clear, or that nothing is overridden. */
@@ -1021,10 +1101,12 @@ class MenuTree(private val s: MenuSnapshot) {
             dev.xross.launcher.theme.QuickProfile.Y2K_CYBER_PASTEL -> "Lavender, lilac and strawberry, glossy bezels"
             dev.xross.launcher.theme.QuickProfile.MONOCHROME_EINK -> "Black and white, no motion"
         }
+        // Say what the profile takes over, so the rows it overrides aren't a surprise.
+        val takes = active.fields.joinToString(", ") { it.label }
         return XmbNode(
             id = "disp:profile",
             title = "Quick profile",
-            subtitle = if (active == dev.xross.launcher.theme.QuickProfile.NONE) "None · $note" else "${active.label} · $note",
+            subtitle = if (active == dev.xross.launcher.theme.QuickProfile.NONE) "None · $note" else "${active.label} · $note · sets $takes",
             icon = NodeIcon.Glyph(GlyphKey.DISPLAY),
             action = NodeAction.Run(Command.CycleQuickProfile),
             menu = dev.xross.launcher.theme.QuickProfile.entries.map { p ->
@@ -1040,16 +1122,14 @@ class MenuTree(private val s: MenuSnapshot) {
     private fun colorSwitchRow(id: String, title: String, which: ColorSwitch, note: String): XmbNode {
         val (own, pack) = colorSwitch(which)
         val on = own ?: pack
-        val profile = dev.xross.launcher.theme.QuickProfile.byName(s.settings.quickProfile)
-        val blocked = when (which) {
-            ColorSwitch.ADAPTIVE -> !profile.allowsArt
-            else -> !profile.allowsAmbient
+        val field = when (which) {
+            ColorSwitch.ADAPTIVE -> ProfileField.ADAPTIVE_COLORS
+            ColorSwitch.CIRCADIAN -> ProfileField.CIRCADIAN
+            ColorSwitch.BATTERY -> ProfileField.BATTERY_TINT
         }
-        val subtitle = when {
-            blocked -> "Off in ${profile.label}"
-            own == null -> "${onOff(on)} (theme pack) · $note"
-            else -> "${onOff(on)} · $note"
-        }
+        val ownText = if (own == null) "${onOff(on)} (theme pack) · $note" else "${onOff(on)} · $note"
+        // Every profile that takes a color layer over turns it off.
+        val subtitle = profiled(field, ownText, forced = "Off")
         return XmbNode(
             id = id,
             title = title,
@@ -1253,6 +1333,13 @@ class MenuTree(private val s: MenuSnapshot) {
         const val CONTROLS = "settings:controls"
         const val EMULATORS = "settings:emulators"
         const val DISPLAY = "settings:display"
+        const val DISPLAY_COLORS = "settings:display:colors"
+        const val DISPLAY_BACKGROUND = "settings:display:background"
+        const val DISPLAY_EFFECTS = "settings:display:effects"
+        const val DISPLAY_MENU = "settings:display:menu"
+
+        /** Settings ▸ Theme and its folders, top level first. */
+        val THEME_LISTS = listOf(DISPLAY, DISPLAY_COLORS, DISPLAY_BACKGROUND, DISPLAY_EFFECTS, DISPLAY_MENU)
         const val SOUND = "settings:sound"
         const val MEDIA_SETTINGS = "settings:media"
         const val APPS_SETTINGS = "settings:apps"

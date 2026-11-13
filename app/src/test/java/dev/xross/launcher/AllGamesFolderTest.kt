@@ -70,7 +70,7 @@ class AllGamesFolderTest {
     }
 
     @Test fun themeSettingsOfferTheLayoutToggle() {
-        fun row(settings: XrossSettings) = MenuTree(MenuSnapshot(settings = settings)).list(MenuTree.DISPLAY)
+        fun row(settings: XrossSettings) = MenuTree(MenuSnapshot(settings = settings)).themeRows()
             .single { it.id == "disp:allgames" }
         assertEquals("Inside All Games", row(XrossSettings()).subtitle)
         assertEquals("At the top of Games (classic)", row(XrossSettings(allGamesFolder = false)).subtitle)

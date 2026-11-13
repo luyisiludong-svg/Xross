@@ -335,13 +335,17 @@ class ColorIntelligenceTest {
 
     @Test fun themeSettingsListTheQuickProfileAndColorRows() {
         fun rows(settings: XrossSettings, flags: ColorFlags = ColorFlags.NONE) =
-            MenuTree(MenuSnapshot(settings = settings, themes = ThemeSetup(packFlags = flags))).list(MenuTree.DISPLAY)
+            MenuTree(MenuSnapshot(settings = settings, themes = ThemeSetup(packFlags = flags))).themeRows()
 
         val list = rows(XrossSettings())
-        val ids = list.map { it.id }
-        val at = ids.indexOf("disp:profile")
-        assertEquals(listOf("disp:profile", "disp:adaptive", "disp:circadian", "disp:battery"), ids.subList(at, at + 4))
-        assertEquals("disp:import", ids.last())
+        val top = MenuTree(MenuSnapshot()).list(MenuTree.DISPLAY).map { it.id }
+        val at = top.indexOf("disp:profile")
+        assertEquals(listOf("disp:profile", MenuTree.DISPLAY_COLORS), top.subList(at, at + 2))
+        assertEquals("disp:import", top.last())
+        assertEquals(
+            listOf("disp:theme", "disp:adaptive", "disp:circadian", "disp:battery"),
+            MenuTree(MenuSnapshot()).list(MenuTree.DISPLAY_COLORS).map { it.id },
+        )
 
         val profile = list.first { it.id == "disp:profile" }
         assertEquals("Quick profile", profile.title)
@@ -371,7 +375,10 @@ class ColorIntelligenceTest {
         // Under E-Ink the color rows say they're held off.
         val eink = rows(XrossSettings(quickProfile = QuickProfile.MONOCHROME_EINK.name))
         assertTrue(eink.first { it.id == "disp:profile" }.subtitle!!.startsWith("Monochrome E-Ink"))
-        assertEquals("Off in Monochrome E-Ink", eink.first { it.id == "disp:adaptive" }.subtitle)
+        assertEquals(
+            "Off (set by Monochrome E-Ink) · yours: On (theme pack) · Colors follow the focused game's art",
+            eink.first { it.id == "disp:adaptive" }.subtitle,
+        )
     }
 
     // endregion

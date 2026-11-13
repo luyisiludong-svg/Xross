@@ -322,11 +322,21 @@ class PostProcessSettingsTest {
         val look = ThemeLook(null, "FLAT_GLASS", shader = ShaderRef(ShaderPreset.BOKEH), cosmetics = Cosmetics(particles = ParticlePreset.SNOW))
         val setup = ThemeSetup(activeName = "Sakura", looks = mapOf("" to look))
         val s = XrossSettings(effectOverrides = EffectOverrides(iconMask = "CIRCLE"), customWallpaper = "content://x/1")
-        val rows = MenuTree(MenuSnapshot(settings = s, themes = setup)).list(MenuTree.DISPLAY)
+        val tree = MenuTree(MenuSnapshot(settings = s, themes = setup))
+        val rows = tree.themeRows()
         val ids = rows.map { it.id }
         val fx = EffectSlot.entries.map { "disp:fx:" + it.name.lowercase() }
         assertEquals(fx, ids.filter { it.startsWith("disp:fx:") })
-        assertEquals(listOf("disp:battery") + fx + listOf("disp:wallpaper", "disp:reset", "disp:import"), ids.subList(ids.indexOf("disp:battery"), ids.size))
+        // Background holds what is drawn behind the menu; Effects what is drawn over it.
+        assertEquals(
+            listOf("disp:wave", "disp:wavesettings", "disp:wallpaper", "disp:fx:shader", "disp:fx:background_filter"),
+            tree.list(MenuTree.DISPLAY_BACKGROUND).map { it.id },
+        )
+        assertEquals(
+            listOf("disp:surface", "disp:fx:ui_filter", "disp:fx:focus_frame", "disp:fx:particles", "disp:fx:icon_mask"),
+            tree.list(MenuTree.DISPLAY_EFFECTS).map { it.id },
+        )
+        assertEquals(listOf("disp:reset", "disp:import"), tree.list(MenuTree.DISPLAY).map { it.id }.takeLast(2))
         val byId = rows.associateBy { it.id }
         assertTrue(byId["disp:fx:shader"]!!.subtitle!!.startsWith("Theme pack (Bokeh)"))
         assertTrue(byId["disp:fx:particles"]!!.subtitle!!.startsWith("Theme pack (Snow)"))
@@ -339,7 +349,7 @@ class PostProcessSettingsTest {
         val wall = byId["disp:wallpaper"]!!
         assertEquals(NodeAction.Run(Command.ResetXrossWallpaper), wall.action)
         assertEquals(listOf("Pick custom…", "Reset to theme (none)"), wall.menu.map { it.label })
-        val clean = MenuTree(MenuSnapshot(themes = setup)).list(MenuTree.DISPLAY).associateBy { it.id }
+        val clean = MenuTree(MenuSnapshot(themes = setup)).themeRows().associateBy { it.id }
         assertEquals("Nothing overrides Sakura", clean["disp:reset"]!!.subtitle)
         assertEquals(NodeAction.Run(Command.PickXrossWallpaper), clean["disp:wallpaper"]!!.action)
     }

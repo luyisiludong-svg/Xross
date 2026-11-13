@@ -209,12 +209,27 @@ class MainActivity : ComponentActivity() {
             val ruleMinute by dev.xross.launcher.theme.rememberMinuteOfDay(active = pack.usesClock, key = pack) { m ->
                 pack.rules.filter { r -> r.time?.contains(m) == true }.map { it.index }
             }
-            // The user's Settings ▸ Theme picks (2b.4f: shader, filters, focus frame, particles, icon
-            // mask) sit on top of the pack's look in every context.
-            val userEffects = state.settings.effectOverrides
-            val look = androidx.compose.runtime.remember(pack, state.settings.themeVariant, categoryId, system, ruleBattery, ruleMinute, userEffects) {
-                userEffects.applyTo(pack.look(state.settings.themeVariant, categoryId, system, ruleBattery, ruleMinute))
-            }
+            // The whole cascade (pack, variant, overrides, rules, the user's picks, the quick
+            // profile) in one pure step: see ThemeLookResolver.
+            val st = state.settings
+            val userEffects = st.effectOverrides
+            val profile = dev.xross.launcher.theme.QuickProfile.byName(st.quickProfile)
+            val lookInputs = dev.xross.launcher.theme.LookInputs(
+                pack = pack,
+                variant = st.themeVariant,
+                category = categoryId,
+                system = system,
+                battery = ruleBattery,
+                minuteOfDay = ruleMinute,
+                effects = userEffects,
+                surfaceStyle = st.surfaceStyle,
+                profile = profile,
+                circadian = st.circadianCurve,
+                batteryTint = st.batteryTint,
+                adaptive = st.adaptiveGamePalette,
+            )
+            val resolved = androidx.compose.runtime.remember(lookInputs) { dev.xross.launcher.theme.ThemeLookResolver.resolve(lookInputs) }
+            val look = resolved.look
             // The pack's programs plus the user's background shader, all compiled ahead of time.
             val shaderLibrary = androidx.compose.runtime.remember(pack, userEffects.shader) { pack.shaderLibrary(userEffects.shader) }
             if (BuildConfig.PERF_LOG) {
@@ -227,14 +242,10 @@ class MainActivity : ComponentActivity() {
                     )
                 }
             }
-            val profile = dev.xross.launcher.theme.QuickProfile.byName(state.settings.quickProfile)
-            val layout = androidx.compose.runtime.remember(pack, look, profile) { profile.layout(look.layout ?: pack.layout) }
-            // The quick profile's surface, else the user's choice (Settings ▸ Theme ▸ Surface style),
-            // else the look's. Read in the draw phase only, so a category or system switch redraws
-            // without recomposing.
-            androidx.compose.runtime.LaunchedEffect(pack, look, state.settings.surfaceStyle, profile) {
-                dev.xross.launcher.ui.ThemeSurfaces.active =
-                    profile.surface?.let { pack.surfaces[it.name] } ?: pack.surfaceFor(look, state.settings.surfaceStyle)
+            val layout = resolved.layout
+            // Read in the draw phase only, so a category or system switch redraws without recomposing.
+            androidx.compose.runtime.LaunchedEffect(resolved.surface) {
+                dev.xross.launcher.ui.ThemeSurfaces.active = resolved.surface
             }
             var backdropCovers by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
             // Resting: no input for a few seconds and nothing playing. Music and video snaps keep
@@ -250,7 +261,7 @@ class MainActivity : ComponentActivity() {
                 dev.xross.launcher.ui.LocalThemeLook provides look,
                 dev.xross.launcher.ui.LocalUiIdle provides uiIdle,
                 dev.xross.launcher.ui.LocalThemeLayout provides layout,
-                dev.xross.launcher.ui.LocalStillMotion provides profile.stillMotion,
+                dev.xross.launcher.ui.LocalStillMotion provides resolved.stillMotion,
             ) {
             Box(Modifier.fillMaxSize()) {
                 // The wave is hidden (and its GL loop stopped) under full-screen photos and video,
@@ -261,9 +272,7 @@ class MainActivity : ComponentActivity() {
                 val wavePalette = androidx.compose.runtime.remember(base, s.waveTint, s.waveColors) {
                     dev.xross.launcher.theme.wavePalette(base, dev.xross.launcher.theme.WaveTint.byName(s.waveTint), s.waveColors)
                 }
-                val switches = androidx.compose.runtime.remember(look.flags, s.circadianCurve, s.batteryTint, s.adaptiveGamePalette, profile) {
-                    dev.xross.launcher.theme.ColorSwitches.resolve(look.flags, s.circadianCurve, s.batteryTint, s.adaptiveGamePalette, profile)
-                }
+                val switches = resolved.switches
                 // Game-art palette: the focused game's (or the Details screen's) art, debounced 250 ms.
                 val artKey = dev.xross.launcher.ui.adaptiveArtKey(state)
                 androidx.compose.runtime.LaunchedEffect(artKey, switches.adaptive) {

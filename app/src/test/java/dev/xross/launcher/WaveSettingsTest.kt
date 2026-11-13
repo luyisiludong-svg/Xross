@@ -151,18 +151,22 @@ class WaveSettingsTest {
             ),
         )
         val rows = tree.list(MenuTree.DISPLAY)
-        assertEquals(listOf("disp:pack", "disp:theme", "disp:wave", "disp:wavesettings", "disp:avatar", "disp:hints", "disp:allgames", "disp:surface", "disp:profile", "disp:adaptive", "disp:circadian", "disp:battery",
-            "disp:fx:shader", "disp:fx:background_filter", "disp:fx:ui_filter", "disp:fx:focus_frame", "disp:fx:particles", "disp:fx:icon_mask",
-            "disp:wallpaper", "disp:reset", "disp:import"), rows.map { it.id })
+        assertEquals(listOf("disp:pack", "disp:profile", MenuTree.DISPLAY_COLORS, MenuTree.DISPLAY_BACKGROUND, MenuTree.DISPLAY_EFFECTS, MenuTree.DISPLAY_MENU,
+            "disp:reset", "disp:import"), rows.map { it.id })
+        assertEquals(listOf("Colors", "Background", "Effects", "Menu and profile"), rows.subList(2, 6).map { it.title })
+        assertEquals("Theme pack · Sakura", rows[2].subtitle)
+        assertEquals(listOf("disp:avatar", "disp:hints", "disp:allgames"), tree.list(MenuTree.DISPLAY_MENU).map { it.id })
         val pack = rows[0]
         assertEquals("Sakura by me · 2 packs", pack.subtitle)
         assertEquals(NodeAction.Run(Command.CycleThemePack), pack.action)
         assertEquals(listOf(Command.SetThemePack("default"), Command.SetThemePack("sakura"), Command.ReloadThemePacks), pack.menu.map { it.command })
         assertTrue(pack.menu[1].selected)
-        assertEquals("Theme pack · Sakura", rows[1].subtitle)
-        assertEquals("1.5× · 7 lines · Theme colors", rows[3].subtitle)
-        assertEquals(NodeAction.Run(Command.OpenWaveSettings), rows[3].action)
-        assertFalse(MenuTree(MenuSnapshot()).list(MenuTree.DISPLAY).any { it.id == "disp:speed" })
+        val color = tree.list(MenuTree.DISPLAY_COLORS).single { it.id == "disp:theme" }
+        assertEquals("Theme pack · Sakura", color.subtitle)
+        val wave = tree.list(MenuTree.DISPLAY_BACKGROUND).single { it.id == "disp:wavesettings" }
+        assertEquals("1.5× · 7 lines · Theme colors", wave.subtitle)
+        assertEquals(NodeAction.Run(Command.OpenWaveSettings), wave.action)
+        assertFalse(MenuTree(MenuSnapshot()).themeRows().any { it.id == "disp:speed" })
     }
 
     @Test fun focusedGameBackgroundTiming() {

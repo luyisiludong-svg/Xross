@@ -79,7 +79,7 @@ class SeasonalPaletteTest {
         assertNotEquals(XrossTheme.ORIGINAL.palette(june), XrossTheme.ORIGINAL.palette(december))
         assertEquals(XrossTheme.CRIMSON.palette(june), XrossTheme.CRIMSON.palette(december))
         assertEquals(XrossTheme.ORIGINAL, XrossTheme.byName("ORIGINAL"))
-        assertEquals(8, XrossTheme.entries.size)
+        assertEquals(13, XrossTheme.entries.size)
     }
 
     @Test fun hsvConversionMatchesKnownColors() {
