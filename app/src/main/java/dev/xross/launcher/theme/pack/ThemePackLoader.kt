@@ -43,6 +43,13 @@ data class ThemePackInfo(val id: String, val manifest: ThemeManifest, val source
 sealed interface SoundSource {
     data class Asset(val path: String) : SoundSource
     data class Disk(val file: File) : SoundSource
+
+    /** The file's name without its folders, for logs. */
+    val fileName: String
+        get() = when (this) {
+            is Asset -> path.substringAfterLast('/')
+            is Disk -> file.name
+        }
 }
 
 /** A pack icon: vector (SVG) or bitmap (PNG/WebP). */
@@ -65,7 +72,14 @@ data class LoadedTheme(
     val icons: Map<GlyphKey, ThemeIcon>,
     val fonts: ThemeFonts,
     val sounds: Map<SoundRole, SoundSource>,
+    /** Each role's gain in the pack's base look; variants, overrides and rules change it ([ThemeLook.gains]). */
     val gains: Map<SoundRole, Float>,
+    /** Roles playing a fallback role's file from this pack, whose gain follows the fallback's ([PackSounds.links]). */
+    val soundLinks: Map<SoundRole, SoundRole> = emptyMap(),
+    /** `audio.panAmount` (2b.5a): how far effects pan with the crosshair, 0–1. */
+    val panAmount: Float = PackSounds.DEFAULT_PAN_AMOUNT,
+    /** `audio.cursorJitter` (2b.5a). */
+    val cursorJitter: Boolean = false,
     /** Every surface available: the Default pack's presets, then this pack's own. */
     val surfaces: Map<String, Surface> = emptyMap(),
     /** The pack's `effects.surfaceStyle` (or the inherited one). */
@@ -102,6 +116,9 @@ data class LoadedTheme(
     val revision: Long = 0,
 ) {
     val id: String get() = info.id
+
+    /** The sound part of this pack, as [resolvePackSounds] gives it. */
+    val packSounds: PackSounds get() = PackSounds(sounds, gains, soundLinks, panAmount, cursorJitter)
 
     /** [id] if it names a surface, else the pack's own, else [Surface.FALLBACK]. */
     fun surface(id: String = ""): Surface = surfaces[id] ?: surfaces[surfaceId] ?: Surface.FALLBACK
@@ -167,7 +184,7 @@ data class LoadedTheme(
         // Category-wide tile shapes and focused-system layout patches depend on those two as well.
         val layoutContext = if (layoutHeld.isEmpty()) "" else "${category.orEmpty()}/${system.orEmpty()}"
         return looks.getOrPut(LookKey(v?.id.orEmpty(), cat, sys, held.map { it.index }, layoutHeld, layoutContext)) {
-            cascade(roles, surfaceId, wave, v, categoryPatches[cat], systemPatches[sys], held, flags, shader, wallpaper, cosmetics)
+            cascade(roles, surfaceId, wave, v, categoryPatches[cat], systemPatches[sys], held, flags, shader, wallpaper, cosmetics, gains, soundLinks)
                 .copy(layout = if (layoutHeld.isEmpty()) null else applyRuleLayout(layout, rules, ctx))
         }
     }
@@ -303,23 +320,7 @@ class ThemePackLoader(
         val m = pack.manifest
         val problems = ArrayList<String>(m.schemaProblems)
 
-        val sounds = LinkedHashMap<SoundRole, SoundSource>()
-        val gains = LinkedHashMap<SoundRole, Float>()
-        val declaredSounds = m.audio?.sounds.orEmpty()
-        val declaredGains = m.audio?.soundGains.orEmpty()
-        for (key in declaredSounds.keys + declaredGains.keys) if (SoundRole.byKey(key) == null) problems += "Unknown sound role $key"
-        for (role in SoundRole.entries) {
-            val fileName = declaredSounds.entries.firstOrNull { SoundRole.byKey(it.key) == role }?.value ?: role.file
-            val own = soundFile(pack, fileName)
-            val source = own ?: base?.sounds?.get(role)
-            if (source != null) sounds[role] = source
-            val gain = declaredGains.entries.firstOrNull { SoundRole.byKey(it.key) == role }?.value
-            gains[role] = when {
-                gain != null && gain.isFinite() -> gain.coerceIn(0f, 1f)
-                own == null -> base?.gains?.get(role) ?: 1f
-                else -> 1f
-            }
-        }
+        val audio = resolvePackSounds(m.audio, base?.packSounds, problems) { name -> soundFile(pack, name) }
 
         val icons = LinkedHashMap<GlyphKey, ThemeIcon>()
         for (key in GlyphKey.entries) {
@@ -382,8 +383,11 @@ class ThemePackLoader(
             wave = m.wave,
             icons = icons,
             fonts = fonts,
-            sounds = sounds,
-            gains = gains,
+            sounds = audio.sounds,
+            gains = audio.gains,
+            soundLinks = audio.links,
+            panAmount = audio.panAmount,
+            cursorJitter = audio.cursorJitter,
             surfaces = surfaces,
             surfaceId = surfaceId,
             layout = layout,
@@ -582,7 +586,7 @@ class ThemePackLoader(
         }
         return try {
             val m = ThemeManifest.JSON.decodeFromJsonElement(ThemeManifest.serializer(), merged)
-            if (m.name.isBlank()) Read.Bad("theme.json needs a \"name\"") else Read.Ok(m.copy(schemaProblems = ThemeManifest.Effects.unknownKeys(merged)))
+            if (m.name.isBlank()) Read.Bad("theme.json needs a \"name\"") else Read.Ok(m.copy(schemaProblems = ThemeManifest.schemaProblems(merged)))
         } catch (e: SerializationException) {
             Read.Bad("$manifestName: ${e.message?.lineSequence()?.firstOrNull() ?: "invalid"}")
         } catch (e: IllegalArgumentException) {
