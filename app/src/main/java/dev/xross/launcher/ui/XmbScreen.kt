@@ -98,7 +98,7 @@ import dev.xross.launcher.media.ThumbKind
 import dev.xross.launcher.state.MediaOverlay
 import dev.xross.launcher.state.MediaOverlayController
 import dev.xross.launcher.input.NavAction
-import dev.xross.launcher.state.GlyphKey
+import dev.xross.launcher.model.GlyphKey
 import dev.xross.launcher.state.NodeAction
 import dev.xross.launcher.state.NodeIcon
 import dev.xross.launcher.state.RemapSession
@@ -179,6 +179,8 @@ fun XmbScreen(
     loadArt: suspend (String, List<ArtKind>, Int) -> ImageBitmap?,
     media: MediaOverlayController,
     music: MusicPlayer,
+    /** The status bar's own slice; only the bar collects it. */
+    statusBar: kotlinx.coroutines.flow.StateFlow<dev.xross.launcher.state.StatusBarState>,
     onAction: (NavAction) -> Unit,
     onCategoryTap: (Int) -> Unit,
     onItemTap: (Int) -> Unit,
@@ -374,6 +376,7 @@ fun XmbScreen(
         val statusTop = (m.s * 0.04f).dp()
         val statusEnd = (m.width * 0.025f).dp()
         StatusBar(
+            source = statusBar,
             textSize = m.statusSize.sp(),
             modifier = Modifier.align(Alignment.TopEnd).padding(top = statusTop, end = statusEnd),
             contentAlpha = { 1f - hudExpansion.value },
@@ -395,9 +398,9 @@ fun XmbScreen(
             style = state.settings.avatarStyle,
             animateGlow = avatarGlowRuns,
             m = m,
-            confirmGlyph = if (state.confirm == ConfirmLayout.EAST) state.family.east else state.family.south,
-            backGlyph = if (state.confirm == ConfirmLayout.EAST) state.family.south else state.family.east,
-            optionsGlyph = state.family.north,
+            confirmGlyph = if (state.confirm == ConfirmLayout.EAST) state.glyphs.east else state.glyphs.south,
+            backGlyph = if (state.confirm == ConfirmLayout.EAST) state.glyphs.south else state.glyphs.east,
+            optionsGlyph = state.glyphs.north,
             onAvatarTap = onAvatarTap,
             loadBadge = loadBadge,
             modifier = Modifier.align(Alignment.TopEnd).padding(top = statusTop, end = statusEnd),
@@ -462,7 +465,7 @@ fun XmbScreen(
                 entry = entry,
                 m = m,
                 pulse = { pulse },
-                family = state.family,
+                glyphs = state.glyphs,
                 confirm = state.confirm,
                 onKeyTap = onNameKeyTap,
             )
@@ -473,7 +476,7 @@ fun XmbScreen(
                 search = search,
                 m = m,
                 pulse = { pulse },
-                family = state.family,
+                glyphs = state.glyphs,
                 confirm = state.confirm,
                 onKeyTap = onSearchKeyTap,
                 onResultTap = onSearchResultTap,
@@ -484,8 +487,8 @@ fun XmbScreen(
             menu = state.optionsMenu,
             m = m,
             pulse = { pulse },
-            confirmGlyph = if (state.confirm == ConfirmLayout.EAST) state.family.east else state.family.south,
-            backGlyph = if (state.confirm == ConfirmLayout.EAST) state.family.south else state.family.east,
+            confirmGlyph = if (state.confirm == ConfirmLayout.EAST) state.glyphs.east else state.glyphs.south,
+            backGlyph = if (state.confirm == ConfirmLayout.EAST) state.glyphs.south else state.glyphs.east,
             onTap = onOptionTap,
             onDismiss = onCloseOptions,
         )
@@ -494,9 +497,9 @@ fun XmbScreen(
             details = state.details,
             m = m,
             snapPlaying = snap?.player?.collectAsState()?.value != null,
-            confirmGlyph = if (state.confirm == ConfirmLayout.EAST) state.family.east else state.family.south,
-            backGlyph = if (state.confirm == ConfirmLayout.EAST) state.family.south else state.family.east,
-            optionsGlyph = state.family.north,
+            confirmGlyph = if (state.confirm == ConfirmLayout.EAST) state.glyphs.east else state.glyphs.south,
+            backGlyph = if (state.confirm == ConfirmLayout.EAST) state.glyphs.south else state.glyphs.east,
+            optionsGlyph = state.glyphs.north,
             loadArt = loadArt,
             loadBadge = loadBadge,
             onPlay = onPlayDetails,
@@ -507,7 +510,7 @@ fun XmbScreen(
         InfoPanel(
             info = state.info,
             m = m,
-            backGlyph = if (state.confirm == ConfirmLayout.EAST) state.family.south else state.family.east,
+            backGlyph = if (state.confirm == ConfirmLayout.EAST) state.glyphs.south else state.glyphs.east,
             onRowTap = onInfoRowTap,
             onDismiss = onCloseInfo,
         )
@@ -517,8 +520,8 @@ fun XmbScreen(
             profile = state.profile,
             m = m,
             pulse = { pulse },
-            confirmGlyph = if (state.confirm == ConfirmLayout.EAST) state.family.east else state.family.south,
-            backGlyph = if (state.confirm == ConfirmLayout.EAST) state.family.south else state.family.east,
+            confirmGlyph = if (state.confirm == ConfirmLayout.EAST) state.glyphs.east else state.glyphs.south,
+            backGlyph = if (state.confirm == ConfirmLayout.EAST) state.glyphs.south else state.glyphs.east,
             onButtonTap = onProfileCardButtonTap,
             onDismiss = onCloseProfileCard,
             loadBadge = loadBadge,
@@ -530,8 +533,8 @@ fun XmbScreen(
             profile = state.profile,
             style = state.settings.avatarStyle,
             m = m,
-            confirmGlyph = if (state.confirm == ConfirmLayout.EAST) state.family.east else state.family.south,
-            backGlyph = if (state.confirm == ConfirmLayout.EAST) state.family.south else state.family.east,
+            confirmGlyph = if (state.confirm == ConfirmLayout.EAST) state.glyphs.east else state.glyphs.south,
+            backGlyph = if (state.confirm == ConfirmLayout.EAST) state.glyphs.south else state.glyphs.east,
             loadArt = loadArt,
             loadBadge = loadBadge,
             onDismiss = onCloseRaHub,
@@ -541,8 +544,8 @@ fun XmbScreen(
             view = state.achievements,
             m = m,
             pulse = { pulse },
-            backGlyph = if (state.confirm == ConfirmLayout.EAST) state.family.south else state.family.east,
-            optionsGlyph = state.family.north,
+            backGlyph = if (state.confirm == ConfirmLayout.EAST) state.glyphs.south else state.glyphs.east,
+            optionsGlyph = state.glyphs.north,
             loadArt = loadArt,
             loadBadge = loadBadge,
             onBadgeTap = onAchievementTap,
@@ -555,8 +558,8 @@ fun XmbScreen(
             basePalette = palette,
             m = m,
             pulse = { pulse },
-            confirmGlyph = if (state.confirm == ConfirmLayout.EAST) state.family.east else state.family.south,
-            backGlyph = if (state.confirm == ConfirmLayout.EAST) state.family.south else state.family.east,
+            confirmGlyph = if (state.confirm == ConfirmLayout.EAST) state.glyphs.east else state.glyphs.south,
+            backGlyph = if (state.confirm == ConfirmLayout.EAST) state.glyphs.south else state.glyphs.east,
             onRowTap = onWaveRowTap,
             onSlider = onWaveSlider,
             onDismiss = onCloseWaveSettings,
@@ -568,8 +571,8 @@ fun XmbScreen(
             profile = state.profile,
             m = m,
             pulse = { pulse },
-            confirmGlyph = if (state.confirm == ConfirmLayout.EAST) state.family.east else state.family.south,
-            backGlyph = if (state.confirm == ConfirmLayout.EAST) state.family.south else state.family.east,
+            confirmGlyph = if (state.confirm == ConfirmLayout.EAST) state.glyphs.east else state.glyphs.south,
+            backGlyph = if (state.confirm == ConfirmLayout.EAST) state.glyphs.south else state.glyphs.east,
             onRowTap = onAvatarRowTap,
             onSlider = onAvatarSlider,
             onDismiss = onCloseAvatarStyle,
@@ -1261,7 +1264,7 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.fittedFrame(frame: 
 /** Button hints for media screens; @confirm/@back/@options become the controller's symbols. */
 @Composable
 private fun OverlayHints(pairs: List<Pair<String, String>>, state: XmbUiState, size: TextUnit) {
-    val confirm = if (state.confirm == ConfirmLayout.EAST) state.family.east else state.family.south
+    val confirm = if (state.confirm == ConfirmLayout.EAST) state.glyphs.east else state.glyphs.south
     Row(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         modifier = Modifier
@@ -1272,7 +1275,7 @@ private fun OverlayHints(pairs: List<Pair<String, String>>, state: XmbUiState, s
         for ((glyph, label) in pairs) {
             val g = when (glyph) {
                 "@confirm" -> confirm
-                "@options" -> state.family.north
+                "@options" -> state.glyphs.north
                 else -> glyph
             }
             Hint(g, label, size)
@@ -1448,8 +1451,8 @@ private fun Modifier.edgeFade(active: () -> Boolean): Modifier = this
 
 @Composable
 private fun ButtonHints(state: XmbUiState, size: TextUnit, modifier: Modifier) {
-    val confirmGlyph = if (state.confirm == ConfirmLayout.EAST) state.family.east else state.family.south
-    val backGlyph = if (state.confirm == ConfirmLayout.EAST) state.family.south else state.family.east
+    val confirmGlyph = if (state.confirm == ConfirmLayout.EAST) state.glyphs.east else state.glyphs.south
+    val backGlyph = if (state.confirm == ConfirmLayout.EAST) state.glyphs.south else state.glyphs.east
     val focused = state.focused
     if (focused == null || (focused.action == NodeAction.None && state.depth == 0 && focused.menu.isEmpty())) return
     // Backed so it stays legible where long titles run underneath on narrow (4:3, 1:1) screens.
@@ -1463,7 +1466,7 @@ private fun ButtonHints(state: XmbUiState, size: TextUnit, modifier: Modifier) {
     ) {
         if (focused.action != NodeAction.None) Hint(confirmGlyph, "Select", size)
         if (state.depth > 0) Hint(backGlyph, "Back", size)
-        if (focused.menu.isNotEmpty()) Hint(state.family.north, "Options", size)
+        if (focused.menu.isNotEmpty()) Hint(state.glyphs.north, "Options", size)
     }
 }
 

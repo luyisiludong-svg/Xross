@@ -1,6 +1,6 @@
 package dev.xross.launcher.theme.pack
 
-import dev.xross.launcher.state.GlyphKey
+import dev.xross.launcher.model.GlyphKey
 import dev.xross.launcher.theme.ThemePalette
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json

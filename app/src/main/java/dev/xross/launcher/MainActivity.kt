@@ -333,6 +333,7 @@ class MainActivity : ComponentActivity() {
                     loadArt = { uuid, kinds, px -> container.art.load(uuid, kinds, px) },
                     media = viewModel.media,
                     music = container.music,
+                    statusBar = viewModel.statusBar,
                     onAction = viewModel::onAction,
                     onCategoryTap = viewModel::onCategoryTapped,
                     onItemTap = viewModel::onItemTapped,

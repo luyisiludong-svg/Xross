@@ -1,5 +1,6 @@
 package dev.xross.launcher.state
 
+import dev.xross.launcher.model.GlyphKey
 import androidx.compose.runtime.Immutable
 import dev.xross.launcher.media.ThumbKind
 
@@ -36,14 +37,6 @@ sealed interface NodeIcon {
 }
 
 enum class MediaKind { PHOTO, SONG, VIDEO }
-
-/** Icon roles; each maps to an `xmb_*` vector drawable generated from assets/icons. */
-enum class GlyphKey {
-    SETTINGS, GAMES, APPS, PHOTO, MUSIC, VIDEO, ALBUM, ARTIST, SHUFFLE, SEARCH,
-    PLATFORM, GAME_CART, GAME_DISC, FAVORITES, RECENT, HANDHELD, FOLDER, STORAGE,
-    CONTROLS, EMULATORS, DISPLAY, SOUND, SYSTEM,
-    ADD, REFRESH, HOME, INFO, DOWNLOAD, NETWORK, USERS, TROPHY,
-}
 
 /** The optional color layers of Settings ▸ Theme (Theme 2.0, 2b.3). */
 enum class ColorSwitch { ADAPTIVE, CIRCADIAN, BATTERY }

@@ -12,7 +12,7 @@ import androidx.compose.ui.graphics.painter.ColorPainter
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.text.font.FontFamily
-import dev.xross.launcher.state.GlyphKey
+import dev.xross.launcher.model.GlyphKey
 import dev.xross.launcher.theme.pack.LoadedTheme
 import dev.xross.launcher.theme.pack.ThemeIcon
 

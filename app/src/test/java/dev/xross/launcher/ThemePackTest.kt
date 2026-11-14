@@ -8,7 +8,7 @@ import androidx.test.core.app.ApplicationProvider
 import dev.xross.launcher.audio.UiCue
 import dev.xross.launcher.audio.UiSound
 import dev.xross.launcher.audio.UiSounds
-import dev.xross.launcher.state.GlyphKey
+import dev.xross.launcher.model.GlyphKey
 import dev.xross.launcher.storage.XrossEnvironment
 import dev.xross.launcher.storage.XrossLayout
 import dev.xross.launcher.theme.pack.BorderKind
