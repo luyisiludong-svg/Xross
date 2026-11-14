@@ -52,6 +52,65 @@ mid-phase only creates merge conflicts.
 Unit-test gates from Appendix A (2b.5): BGM never plays over music, ducks under snaps, stops on
 launch; new sound roles fall back as in A.9; camelCase aliases resolve.
 
+### A55 device pass (2026-11-14, working tree after 2b.5d)
+
+Profiling build over the user's own data and settings (app data and `settings.json` backed up and
+restored byte for byte afterwards), a temporary folder pack with a 6 s 60 fps `boot.mp4`, a 10 s
+`bgm.ogg` and `launchCurtain: IRIS`, and the RetroArch stub installed for the launches (removed
+afterwards). Snaps: the phone's two scraped PSP games (OutRun 2006, Tekken 6) with their real
+snap videos, so no database edit was needed.
+
+| Check | Result |
+|---|---|
+| `settings.json` migration (a real v1 file without the new keys) | Pass: `cueVolume` = `snapVolume` = `effectsVolume` (1.0), `musicVolume` 1.0, `bgmVolume` 0.6, `musicUnderSnaps` PAUSE |
+| Roles and pan (2b.5a) | Pass: `cursor` pan −0.20, `category_switch` −0.05 / −0.35, `drill_in` (Default `confirm` → `cursor.wav`, 0.70), `drill_out` (`back.wav`, 0.60) |
+| Levels against real snaps | OutRun / Tekken snaps: peak −5.5 dBFS, −17.6 / −18.4 LUFS. Cursor click as played ≈ −9 dBFS peak (−3 × 0.5), option ≈ −6 dBFS. By-ear comparison still open |
+| Video snaps volume (2b.5b) | Pass: 30% → `XrossSnap audible target=0.30`; 100% → 1.00 |
+| Theme music (2b.5c) | Pass: starts with the pack (`vol=0.60 ALLOWED`), `USAGE_GAME` / `CONTENT_TYPE_MUSIC`, audio focus stack empty; Pause → `PAUSED reason=SNAP` under the OutRun snap, Lower → `vol=0.12 SNAP_DUCK`, both back to 0.60 when the cursor leaves; the stub's tone service → `PAUSED OTHER_APP` and back; game launch → `STOPPED GAME`, back in Xross → `PLAYING` |
+| Boot intro (2b.5d) | Pass: the video plays and ends by itself (`at=6.3–6.6 s`); a real touch skipped it (`skipped=true at=3099 ms`); Shader → `uTransition=1.00 at=2511 ms`, wave rising from black; E-Ink → `FADE` |
+| Launch curtains | Pass: IRIS (screenshot: black with the glowing title), FLASH, FADE_BLACK, BLOOM, and BLACK under E-Ink |
+| Cold start (`am start -W`, 3 runs each, warm caches) | Default pack 433–633 ms to the first frame, intro decided 0.17–0.21 s after process start. Folder pack without a boot video 573–644 ms, decided 0.88–1.12 s; with the boot video 400–411 ms, decided 0.86–0.93 s (first runs after pushing the pack: 818–1067 ms, 1.2–1.6 s) |
+| **Boot video at 120 Hz** | **Judder, fixed the same day** (below). Through the `TextureView` the 60 fps file showed 56–58 distinct frames/s but held unevenly, about a third each for 1, 2 and 3 vsyncs (8 / 17 / 25 ms), although the decoder dropped none (`rendered=359 dropped=0`). Now 350 of 361 gaps are an even 16.7 ms |
+
+Findings:
+- **Boot video judder: fixed.** `BootVideo` drew through `SURFACE_TYPE_TEXTURE_VIEW`, so each video frame
+  waited for one of Xross's UI frames. It now has its own `SurfaceView` above the window
+  (`setZOrderOnTop`): nothing draws over the intro, an empty surface shows the black underneath
+  until the first frame (no flash of the wave), and the 300 ms crossfade fades the surface through
+  `View.alpha` (applied to the surface from API 29; on API 28 it cuts at the end). SurfaceFlinger
+  timestats show the video layer presenting ≈ 355 frames at 16.7 ms with one or two late; a skip
+  crossfades the video into the menu, and after the end only the wave's surface is left. Debug and
+  profiling builds now log the decoder's counts when the video goes
+  (`XrossBoot video rendered=360 dropped=0 maxRun=0 skipped=0`).
+  How it was measured: `screenrecord --size 1170x540` plus ffmpeg `mpdecimate`, with Samsung Video
+  playing the same file as the control (59.6 fps, even 16.6 ms). At full size the recorder itself
+  caps near 30 fps here, because Xross's window keeps redrawing at 120 Hz under the video
+  (≈ 366 window frames in 8 s); the first pass's "~29 fps" came from that.
+- **Video snaps juddered the same way: fixed on API 34+.** The OutRun 2006 snap (30 fps) held
+  only about half its frames for the even 4 vsyncs at 120 Hz, the rest for 3 or 5 (25 / 42 ms);
+  the same file in Samsung Video held 232 of 238 for 4. `SnapVideo` now draws on a `SurfaceView`
+  behind the window, above the wave's (`setZOrderMediaOverlay`), with the scrim and the menu over
+  it: 231–233 of 237 frames for 4 vsyncs. Its alpha fades the surface and the hole it clears
+  together, so the snap still crossfades in over the hero art (recorded frame by frame: no wave
+  between them) and nothing shows before its first frame. That partial hole needs API 34, so
+  older versions keep the `TextureView`. Checked on the A55: moving from OutRun's snap to Tekken's
+  (hero art, then the snap fading in), Back out of the list (only the wave's surface left),
+  Options (the snap stops as before) and Details over a playing snap.
+  Measured with the same `screenrecord --size 1170x540` recording, cropped to a part of the
+  snap with no menu, counting frames whose mean difference from the previous one is above 1.5
+  (encoder noise stays under 1).
+- **Xross's window redraws at 120 Hz during the boot video** although nothing on it changes (the
+  menu and black are covered). Not 2b.5-specific; it belongs with the idle-CPU item in
+  `PHASE_2B3_PENDING_TESTS.md`.
+- **Folder packs show ≈ 0.3–0.7 s of black on a cold start.** Since 2b.5d the screen stays black
+  until the intro is decided, and for a folder pack that waits for the pack to load (0.9–1.1 s
+  after process start, against ≈ 0.2 s for the built-in Default pack). It happens with or without
+  a boot video. The emulator showed ≈ 250 ms.
+
+Not checked: Xross's music player under snaps and the game pause (the app has no
+`READ_MEDIA_AUDIO` on this phone, so the Music category has no songs, and it wasn't granted for the
+test); by ear: the BGM loop point, option click against a snap, `system_ng` recovery.
+
 ---
 
 ## Slice 2b.5-prep: Groundwork
@@ -469,8 +528,8 @@ Differences from the prompt below:
   switch; the black over the shader lifts over the first 1.5 s and the menu fades in from 1.2 s.
 - The boot video plays without audio focus (`USAGE_GAME` / `CONTENT_TYPE_MOVIE`), counted as
   Xross's own player in the playback census, fitted on black rather than cropped, and the wave
-  pauses under it. It draws on a `SurfaceView` above the window, not a `TextureView`, so its frames
-  don't wait for Xross's UI frames.
+  pauses under it. It draws on a `SurfaceView` above the window, not a `TextureView` (the A55 pass
+  below found the `TextureView` judders at 120 Hz).
 - Curtains close in 900 ms (inside the 1100 ms hand-off); `IRIS` closes on the crosshair, where the
   focused tile is, with the title glowing in once it is three-quarters shut. Each launch logs
   `XrossBoot curtain=IRIS title=…` (`BLACK` under E-Ink). Aliases: `FADE`/`BLACK` → `FADE_BLACK`,
