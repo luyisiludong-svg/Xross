@@ -142,7 +142,7 @@ parked until an API is documented.
 | Icons from the design SVGs | ✅ | `tools/icons/svg_icons.py` → 29 SVGs in the Default pack, read by `SvgIcon` at runtime |
 | Custom fonts | ✅ | One .ttf/.otf per theme pack, applied to all launcher text |
 | UI scale slider (50–150%) | ❌ | Layout already scales automatically (§4) |
-| Aspect-ratio overrides, status-bar mode options | ❌ | Currently immersive (system bars hidden); status-bar modes planned in Phase 2b.7 |
+| Aspect-ratio overrides | ❌ | Xross stays immersive (Android's system bars hidden); showing Android's status bar was dropped (2026-11-14). Xross's own status-bar slots come in Phase 2b.7 |
 | Game tiles and avatar style | ✅ 🧪 | 16:9 XMB tiles in Games; `profile.avatarStyle` with Settings ▸ Theme ▸ Profile customization (Phase 2b.1, §3.15) |
 
 ### 3.5 Device integration & form factors

@@ -282,7 +282,8 @@ Bugs or gaps in features that are already built, separate from the new work in �
 | Advanced: live database on internal shared storage | Database backup ✅ | Opt-in, `JournalMode.TRUNCATE`, never on a removable drive (Appendix B.6) |
 
 Moved to the customization engine: separate volume sliders and custom boot animations (2b.5),
-status-bar modes (2b.7), the UI scale slider (2b.2) and battery-level color blending (2b.3).
+Xross's own status-bar modes (2b.7), the UI scale slider (2b.2) and battery-level color blending
+(2b.3). Android's system bars stay hidden (§5).
 
 ### 4.3 Phase 2b — Customization engine (Theme 2.0)
 
@@ -470,7 +471,8 @@ first group comes from [`docs/FEASIBILITY.md`](docs/FEASIBILITY.md).
 | v2.1 "11-role" sound map | Twelve roles: today's nine plus `category_switch`, `drill_in`, `drill_out` | The code already has `ok`, which the spec doesn't list |
 | Y2K "art under the shader" (v2.1 layer 3) | Art always above the shader, drawn tinted and partly transparent | Matches the layer order and keeps the GL surface free of art textures |
 | `layout.statusBarMode` (v2.0 example) | Replaced by the v2.1 `components` block | One place for status-bar, telemetry and mini-player modes |
-| Top-left social stack unread badge `9+` | Counts new friend activity unless the Web API offers a real unread count | RetroAchievements' API has no push or inbox known to the project; to verify in 2b.7 |
+| Top-left social stack unread badge `9+` | Counts friends with new activity since the stack was last opened, tracked locally (confirmed 2026-11-14) | RetroAchievements' API has no push or inbox known to the project; 2b.7c confirms the `API_GetUsersIFollow` payload and rate limits first |
+| Android status-bar modes (Phase 2 "status-bar mode options") | Dropped (2026-11-14); Xross stays immersive | Only Xross's own status bar is configurable (2b.7 `components`); Android's bars over a full-screen launcher add nothing a handheld needs |
 | Ricing proposal: `Xross/config/overrides.json` for API keys and credentials (git-ignored) | Rejected; credentials stay in `CredentialStore` | Anything in `Xross/` is readable by any app with All files access, and a `.gitignore` is one mistake from publishing keys (Appendix A.1, invariant 1) |
 | Ricing proposal: `.git/` in `Xross/` and git sharing | Supported as a user workflow, not built into Xross | Xross only needs to tolerate a `.git` folder (skip it when scanning packs, keep `.nomedia`). Installing from git is `git clone` in Termux or the 2b.2 `.xtheme` import |
 | Ricing proposal: `surfaces.json` paths like `surfaces.glassCard.fill.stops[0][2]` in rules | Rules patch documented keys only | Index paths break silently when a pack changes; typed keys can be validated and reported |

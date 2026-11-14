@@ -39,7 +39,8 @@ it doesn't block 2b.7.
 | RetroAchievements hub | `ui/RaHubScreen.kt`, `state/RaHub.kt` | Identity card, library completion gauge, mastery showcase, recent activity; L1/R1 (`PREV_CATEGORY` / `NEXT_CATEGORY`) scroll by 4 |
 | RetroAchievements data | `profile/` | `ProfileRepository` (profile and recent unlocks, stale after 6 h), `AchievementsRepository` (per-game progress fresh for 10 min, console lists 7 days, files in `Xross/data/ra/`), `RetroAchievementsClient` (`API_GetUserProfile`, `GetUserSummary`, `GetUserRecentAchievements`, `GetGameInfoAndUserProgress`, `GetGameList`). `RaLibrarySummary` is library-wide, **not per system**. No friend data |
 | Settings | `config/ConfigFiles.kt` `Display` | `display.effects` (`EffectOverrides`) is the 2b.4f/2b.5d user layer for pack effects; no `components` |
-| Permissions | `AndroidManifest.xml` | `INTERNET`, `ACCESS_NETWORK_STATE`; no `ACCESS_WIFI_STATE` |
+| Permissions | `AndroidManifest.xml` | `INTERNET`, `ACCESS_NETWORK_STATE`; no `ACCESS_WIFI_STATE` (2b.7a adds it) |
+| System bars | `MainActivity` | Immersive: Android's status and navigation bars hidden, re-applied on focus. Stays that way (Decisions) |
 | Tests | `app/src/test` | 757 unit tests at the end of 2b.5d |
 
 ---
@@ -117,9 +118,9 @@ in every cluster order.
    `telemetryMode`, `miniPlayerMode`, `glyphOverride`, `badgePills`, `logo`, `volumeAlways`. Unknown keys and bad
    values are reported like `effects` (`Components.KEYS`, `schemaProblems`); a bad value falls back
    on its own. Only this slice's keys are drawn; the rest are read and stored for 2b.7b–d.
-2. **Cascade:** pack base → variant → user. Category and system overrides and `rules.json` don't
-   patch `components` in 2b.7 (reported if they try; see Decisions). Resolved in
-   `ThemeLookResolver` into `ResolvedComponents`.
+2. **Cascade:** Default pack → theme pack base → variant → user `settings.json`, nothing else.
+   Category and system overrides and `rules.json` don't patch `components` (a `components` key in
+   one is ignored and reported). Resolved in `ThemeLookResolver` into `ResolvedComponents`.
 3. **User layer:** `display.components` in `settings.json` (`ComponentOverrides`, every field
    nullable = the pack's), cleared by Reset to theme defaults. Quick profiles don't touch it.
 4. **Slots:** `statusBarLeft` draws at the top-left, `statusBarRight` at the top-right, in array
@@ -127,15 +128,17 @@ in every cluster order.
    - `LOGO`: the pack's `components.logo` (an SVG or PNG in the pack, through the same path checks
      as icons), sized to the status text's cap height; absent → slot skipped.
    - `WIFI`: Wi-Fi, cellular, ethernet or offline glyph from `ConnectivityManager` network
-     callbacks; Wi-Fi strength in 4 levels from `NetworkCapabilities.signalStrength` on API 29+;
-     on API 28 connected/disconnected only (Decisions). Never the SSID; no location permission.
-   - `VOLUME`: the system media volume (`STREAM_MUSIC`) in 4 levels and muted, observed through a
-     `ContentObserver` on `Settings.System`; shown only when it changes for 3 s, or always (setting
-     `components.volumeAlways`; default off).
+     callbacks. Wi-Fi strength in 4 levels: `NetworkCapabilities.signalStrength` on API 29+;
+     on API 28 `WifiManager.getConnectionInfo().rssi` through `WifiManager.calculateSignalLevel`,
+     re-read on `RSSI_CHANGED_ACTION`. Adds `ACCESS_WIFI_STATE` to the manifest (a normal,
+     install-time permission). Never the SSID; no location permission.
+   - `VOLUME`: the **system media volume** (`AudioManager.STREAM_MUSIC`), not the 2b.5b mixer, in
+     4 levels, with a muted glyph at 0; observed through a `ContentObserver` on `Settings.System`.
+     Shown for 3 s after it changes, or always (`components.volumeAlways`; default off).
    - `BATTERY`: `CAPSULE_ICON` (today's gauge), `PERCENTAGE` (today's `NN%`), `BOTH` (today's
-     default), `TIME_REMAINING` (`BatteryManager.computeChargeTimeRemaining()` while charging, e.g.
-     "1 h 20 m to full"; while discharging, an estimate from `BatteryMonitor`'s drain over the last
-     30 min once it has ≥ 3% of history, else the percentage).
+     default), `TIME_REMAINING`: while charging, `BatteryManager.computeChargeTimeRemaining()`
+     (API 28+) as "1 h 20 m to full"; while discharging, or when it returns −1 (unknown), the
+     percentage, exactly as `PERCENTAGE` draws it. No drain estimate.
    - `CLOCK`: date and time as today; `clockFormat` is a `DateFormat` skeleton limited to the
      fields `y M d E H h m a` (anything else is dropped and reported); empty = today's.
    - `AVATAR`: the 2b.1 HUD. **Always the rightmost slot of `statusBarRight`:** listed elsewhere
@@ -155,18 +158,23 @@ in every cluster order.
 
 #### Tests
 - `ComponentsTest`: decode with aliases and bad values; unknown keys reported; cascade order
-  (base, variant, user); `AVATAR` moved to the end; duplicate slots dropped.
-- `StatusSlotsTest`: clock skeleton filtering; battery text per mode, charging and discharging;
-  the drain estimate with short and long histories; Wi-Fi level mapping on API 28 and 29+.
+  (Default pack, theme pack, variant, user); `components` in a category override, a system
+  override or a rule ignored and reported; `AVATAR` moved to the end; duplicate slots dropped.
+- `StatusSlotsTest`: clock skeleton filtering; battery text per mode; `TIME_REMAINING` charging,
+  charging with −1, and discharging (equals `PERCENTAGE`); Wi-Fi level mapping from RSSI (API 28)
+  and from `signalStrength` (API 29+); volume levels and mute at 0.
 - MenuTree: the Components folder, slot reordering, Reset to theme defaults.
 
 #### Device checks (theme suite, new "Components (2b.7a)" section)
 - Each battery mode and three slot orders: screenshots, and the HUD expands and collapses with the
   clock and battery fading and returning (A.13).
-- Airplane mode on and off: `WIFI` changes within 2 s.
+- Airplane mode on and off: `WIFI` changes within 2 s. `TIME_REMAINING` on and off the charger
+  (the emulator's `adb emu power ac on|off`).
 - `display-matrix.sh` 12/12 with no clipped texts; `palette-perf.sh` unchanged within noise; a
   minute tick at rest draws one frame.
-- On the A55 at 120 Hz: the same, plus volume keys update `VOLUME`.
+- On the A55 at 120 Hz: the same, plus volume keys update `VOLUME` (and mute at 0), and Wi-Fi
+  bars follow walking away from the router. An Android 9 device or emulator image for the
+  `WifiManager` path, if one is available.
 ```
 
 ---
@@ -211,12 +219,13 @@ in every cluster order.
 
 ## Slice 2b.7c: Friend data and the social stack
 
-**Verify first.** Before writing UI, confirm against the live Web API with the user's key (and
-record the answers in a new `docs/RETROACHIEVEMENTS_API.md`): the endpoint for users the account follows (expected
-`API_GetUsersIFollow.php`, paginated), what each entry carries (avatar, points, whether it follows
-back), what gives a friend's latest game and when (`API_GetUserSummary` / `API_GetUserProfile`:
-last game id, rich presence, last activity), and any documented rate limit. Also check whether any
-endpoint offers an unread or notification count (A.10's badge; §5 expects none).
+**Verify first (decided 2026-11-14).** Before writing UI, confirm against the live Web API with
+the user's key, and record the answers in a new `docs/RETROACHIEVEMENTS_API.md`: the
+`API_GetUsersIFollow.php` payload (paging, and what each entry carries: avatar, points, whether
+it follows back), what gives a friend's latest game and when (`API_GetUserSummary` /
+`API_GetUserProfile`: last game id, rich presence, last activity), and any documented or observed
+rate limit. Adjust requirement 2's caps to what the limits allow. The unread badge is tracked
+locally either way (requirement 3).
 
 ```markdown
 ### Task: Implement Phase 2b.7c — followed users, friend activity, social stack
@@ -235,8 +244,8 @@ endpoint offers an unread or notification count (A.10's badge; §5 expects none)
 3. **State (`RaController`):** `FriendsState` = `Unlinked`, `Offline` (no network or the last fetch
    failed, with the cached list if any), `Loading`, `Ready(friends, newActivity)`. `newActivity`
    counts friends whose latest game or last activity changed since the stack was last opened
-   (stored as a map in `friends.json`); opening the stack clears it. Use a real unread count
-   instead if the verify step finds one.
+   (stored as a map in `friends.json`, with the time the stack was last opened); opening the stack
+   clears it.
 4. **`topLeftCluster: SOCIAL_STACK`:** up to 4 overlapping round avatars (most recent activity
    first) after the left status slots, with a badge `1`–`9`, then `9+`; tap it, or focus it the
    same way the avatar is focused, to open a small panel listing friends
@@ -313,14 +322,14 @@ endpoint offers an unread or notification count (A.10's badge; §5 expects none)
    owns it. Collapses (the dashboard takes the width) when `FriendsState` isn't `Ready` and has no
    cache.
 3. **L1/R1 platform filter:** pills under the header for All and each system with tracked games;
-   L1/R1 move between them and the completion gauge, mastery showcase and activity show that
-   system only. This takes L1/R1 from scrolling by 4 (Up/Down still scroll). Needs a per-system
+   L1/R1 move between them, clamped at the ends, and the completion gauge, mastery showcase and
+   activity show that system only. L1/R1 no longer scroll by 4; Up/Down still scroll. Needs a per-system
    `RaLibrarySummary` (`librarySummary` grouped by console), computed from cached progress only.
 4. Settings: none new; both follow the pack's surface.
 
 #### Tests
 - `AchievementsView`: grid columns per width, three rows, focus and scroll at the edges.
-- `RaHub`: L1/R1 cycle the filter (wrapping or clamped, see Decisions), Right/Left move between the
+- `RaHub`: L1/R1 move the filter, clamped at All and the last system, and never scroll; Right/Left move between the
   dashboard and the sidebar; Confirm on a friend.
 - Per-system summary from fixture progress; All equals today's summary.
 - Sidebar collapse when unlinked or offline without cache (A.13).
@@ -333,20 +342,25 @@ endpoint offers an unread or notification count (A.10's badge; §5 expects none)
 
 ---
 
-## Decisions to confirm
+## Decisions (confirmed 2026-11-14)
 
-| Question | Recommendation |
+| Question | Decision |
 |---|---|
-| `TIME_REMAINING` while discharging (2b.7a) | **Estimate from the last 30 min of drain**, shown once there is ≥ 3% of history, else the percentage. Android only reports time to full (`computeChargeTimeRemaining`, API 28+) |
-| Wi-Fi strength on Android 9 (2b.7a) | **Connected/disconnected only on API 28** rather than adding `ACCESS_WIFI_STATE` for one handheld generation. API 29+ gets 4 levels from `NetworkCapabilities` |
-| What `VOLUME` shows (2b.7a) | **System media volume**, the one the hardware keys change. Xross's own mixer (2b.5b) is in Settings ▸ Sound |
-| Do overrides and rules patch `components`? (2b.7a) | **No, in 2b.7: pack, variant and user only.** A status bar that rearranges itself per category or per battery level reads as a bug; revisit in 2b.8 if packs ask for it |
-| `statusBarLeft` and `SOCIAL_STACK` both top-left (2b.7a, c) | **Left slots first, then the stack**, in one row; both clip before the category bar |
-| Avatar left out of `statusBarRight` (2b.7a) | **Allowed**: no avatar in the bar; the HUD stays reachable from Settings ▸ Accounts |
-| Unread badge (2b.7c) | **Friends with new activity since the stack was last opened**, unless the verify step finds a real count (Roadmap §5) |
-| How many friends get activity calls (2b.7c) | **20 per refresh**, most recently active first, ≥ 250 ms apart. One call per friend is the API's shape (Roadmap §4.3) |
-| L1/R1 in Games ▸ RetroAchievements (2b.7e) | **Platform filter, clamped at the ends** (like Details paging in 2b.1); scrolling stays on Up/Down |
-| Android system bars ("status-bar mode options" in STATUS) | **Not 2b.7.** A.10 only covers Xross's own bar; showing Android's status bar over the launcher is a separate display setting. Move the STATUS row to §4.2 or drop it |
+| `TIME_REMAINING` battery mode (2b.7a) | **Time to full while charging only**, from `computeChargeTimeRemaining()` (API 28+); while discharging, or when it reports −1, the plain percentage. No drain estimate: Android has no discharge-time API |
+| Wi-Fi strength on Android 9 (2b.7a) | **Add `ACCESS_WIFI_STATE`** (normal, install-time) and read `WifiManager` RSSI through `calculateSignalLevel` on API 28; `NetworkCapabilities.signalStrength` on API 29+. Both give 4 levels |
+| What `VOLUME` shows (2b.7a) | **System media volume** (`AudioManager.STREAM_MUSIC`), with a muted glyph at 0; not the 2b.5b mixer, which stays in Settings ▸ Sound |
+| L1/R1 in Games ▸ RetroAchievements (2b.7e) | **Platform filter pills, clamped at the ends** (like Details paging in 2b.1); scrolling stays on Up/Down |
+| `components` cascade (2b.7a) | **Default pack, theme pack, variants and the user's `settings.json` only.** Category and system overrides and `rules.json` don't patch it; a `components` key there is ignored and reported. A status bar that rearranges itself per category or battery level reads as a bug |
+| RetroAchievements friend data (2b.7c) | **Confirm `API_GetUsersIFollow`'s payload and the rate limits first**, then build. The unread badge is local: friends with new activity since the stack was last opened |
+| Android system bars | **Dropped from 2b.7; Xross stays immersive.** A.10 covers Xross's own status bar only. STATUS and the Roadmap no longer list Android status-bar modes |
+
+Defaults chosen in this doc (change before the slice starts if needed):
+
+| Question | Default |
+|---|---|
+| `statusBarLeft` and `SOCIAL_STACK` both top-left (2b.7a, c) | Left slots first, then the stack, in one row; both clip before the category bar |
+| Avatar left out of `statusBarRight` (2b.7a) | Allowed: no avatar in the bar; the HUD stays reachable from Settings ▸ Accounts |
+| How many friends get activity calls (2b.7c) | 20 per refresh, most recently active first, ≥ 250 ms apart, adjusted to the rate limits found in the verify step |
 
 ---
 
