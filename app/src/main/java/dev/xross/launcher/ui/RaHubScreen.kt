@@ -61,7 +61,7 @@ import dev.xross.launcher.profile.RaBadge
 import dev.xross.launcher.profile.RaLibrarySummary
 import dev.xross.launcher.profile.RaMasteredGame
 import dev.xross.launcher.scrape.ArtKind
-import dev.xross.launcher.state.GlyphKey
+import dev.xross.launcher.model.GlyphKey
 import dev.xross.launcher.state.RaHubState
 import dev.xross.launcher.theme.AvatarStyleConfig
 import java.text.NumberFormat

@@ -5,7 +5,7 @@ import dev.xross.launcher.data.XrossSettings
 import dev.xross.launcher.input.ControllerProfile
 import dev.xross.launcher.input.NavAction
 import dev.xross.launcher.state.Command
-import dev.xross.launcher.state.GlyphKey
+import dev.xross.launcher.model.GlyphKey
 import dev.xross.launcher.state.MenuSnapshot
 import dev.xross.launcher.state.MenuTree
 import dev.xross.launcher.state.NodeAction

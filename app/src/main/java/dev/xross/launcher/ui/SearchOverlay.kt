@@ -39,7 +39,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.xross.launcher.input.ConfirmLayout
-import dev.xross.launcher.input.ControllerFamily
+import dev.xross.launcher.model.GlyphSet
 import dev.xross.launcher.state.Key
 import dev.xross.launcher.state.KeyKind
 import dev.xross.launcher.state.NameEntry
@@ -56,7 +56,7 @@ internal fun SearchOverlay(
     search: SearchState,
     m: XmbMetrics,
     pulse: () -> Float,
-    family: ControllerFamily,
+    glyphs: GlyphSet,
     confirm: ConfirmLayout,
     onKeyTap: (Int, Int) -> Unit,
     onResultTap: (Int) -> Unit,
@@ -103,8 +103,8 @@ internal fun SearchOverlay(
             }
         }
 
-        val confirmGlyph = if (confirm == ConfirmLayout.EAST) family.east else family.south
-        val backGlyph = if (confirm == ConfirmLayout.EAST) family.south else family.east
+        val confirmGlyph = if (confirm == ConfirmLayout.EAST) glyphs.east else glyphs.south
+        val backGlyph = if (confirm == ConfirmLayout.EAST) glyphs.south else glyphs.east
         Row(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier
@@ -115,13 +115,13 @@ internal fun SearchOverlay(
         ) {
             if (search.focus == SearchFocus.KEYS) {
                 Hint(confirmGlyph, "Type", m.subtitleSize.sp())
-                Hint(family.north, "Space", m.subtitleSize.sp())
+                Hint(glyphs.north, "Space", m.subtitleSize.sp())
                 Hint("L1", "Delete", m.subtitleSize.sp())
                 if (search.results.isNotEmpty()) Hint("R1", "Results", m.subtitleSize.sp())
                 Hint(backGlyph, "Close", m.subtitleSize.sp())
             } else {
                 Hint(confirmGlyph, "Play", m.subtitleSize.sp())
-                Hint(family.north, "Options", m.subtitleSize.sp())
+                Hint(glyphs.north, "Options", m.subtitleSize.sp())
                 Hint(backGlyph, "Keyboard", m.subtitleSize.sp())
             }
         }
@@ -137,7 +137,7 @@ internal fun NameEntryOverlay(
     entry: NameEntry,
     m: XmbMetrics,
     pulse: () -> Float,
-    family: ControllerFamily,
+    glyphs: GlyphSet,
     confirm: ConfirmLayout,
     onKeyTap: (Int, Int) -> Unit,
 ) {
@@ -161,8 +161,8 @@ internal fun NameEntryOverlay(
             Spacer(Modifier.height((m.s * 0.03f).dp()))
             KeyGrid(entry.keys, m, width, pulse, onKeyTap, doneLabel = "Done")
         }
-        val confirmGlyph = if (confirm == ConfirmLayout.EAST) family.east else family.south
-        val backGlyph = if (confirm == ConfirmLayout.EAST) family.south else family.east
+        val confirmGlyph = if (confirm == ConfirmLayout.EAST) glyphs.east else glyphs.south
+        val backGlyph = if (confirm == ConfirmLayout.EAST) glyphs.south else glyphs.east
         Row(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier
@@ -172,7 +172,7 @@ internal fun NameEntryOverlay(
                 .padding(horizontal = 10.dp, vertical = 4.dp),
         ) {
             Hint(confirmGlyph, "Type", m.subtitleSize.sp())
-            Hint(family.north, "Space", m.subtitleSize.sp())
+            Hint(glyphs.north, "Space", m.subtitleSize.sp())
             Hint("L1", "Delete", m.subtitleSize.sp())
             Hint("R1", "Done", m.subtitleSize.sp())
             Hint(backGlyph, "Cancel", m.subtitleSize.sp())

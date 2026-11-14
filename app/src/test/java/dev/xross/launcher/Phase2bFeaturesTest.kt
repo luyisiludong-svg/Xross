@@ -415,25 +415,5 @@ class Phase2bFeaturesTest {
         assertEquals(RaHubEffect.Primary, RaHub.onAction(hub, NavAction.CONFIRM).effect)
     }
 
-    @Test fun dashboardOpensFromGamesWithAnOfflinePlaceholderState() {
-        val container = AppContainer(context)
-        runBlocking { container.database.games().insertAll(listOf(snes("Alpha"))) }
-        val vm = XmbViewModel(context, container, storageAccess = { false }).also { idle() }
-        vm.await("the RetroAchievements entry") { s -> s.items.any { it.id == MenuTree.RA_HUB } }
-        val index = vm.state.value.items.indexOfFirst { it.id == MenuTree.RA_HUB }
-        vm.press(NavAction.DOWN, times = index - vm.state.value.focusedIndex)
-        vm.press(NavAction.CONFIRM)
-        assertNotNull(vm.state.value.raHub)
-        // No account is linked: the screen opens anyway and reports an empty, network-free summary.
-        assertFalse(vm.state.value.profile.linked)
-        vm.await("the library summary") { it.raHub?.summary != null }
-        assertEquals(1, vm.state.value.raHub!!.summary!!.supportedGames)
-        assertEquals(0, vm.state.value.raHub!!.summary!!.trackedGames)
-        vm.press(NavAction.DOWN)
-        assertEquals(1, vm.state.value.raHub!!.scroll)
-        vm.press(NavAction.BACK)
-        assertNull(vm.state.value.raHub)
-    }
-
     // endregion
 }

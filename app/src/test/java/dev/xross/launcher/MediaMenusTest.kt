@@ -47,7 +47,7 @@ class MediaMenusTest {
         val root = menus.photoRoot()
         assertEquals(listOf("All photos", "Screenshots", "Trips"), root.map { it.title })
         assertEquals("3 photos", root[0].subtitle)
-        assertEquals(NodeIcon.Thumb(ThumbKind.PHOTO, 2, dev.xross.launcher.state.GlyphKey.FOLDER), root[1].icon)
+        assertEquals(NodeIcon.Thumb(ThumbKind.PHOTO, 2, dev.xross.launcher.model.GlyphKey.FOLDER), root[1].icon)
         val trips = menus.list(MediaMenus.PHOTO_FOLDER + "Trips")
         assertEquals(2, trips.size)
         assertEquals(NodeAction.OpenMedia(MediaKind.PHOTO, MediaMenus.PHOTO_FOLDER + "Trips", 1), trips[1].action)

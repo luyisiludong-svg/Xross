@@ -5,7 +5,7 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import dev.xross.launcher.scrape.ArtKind
 import dev.xross.launcher.state.GameDetailsState
-import dev.xross.launcher.state.GlyphKey
+import dev.xross.launcher.model.GlyphKey
 import dev.xross.launcher.state.NodeIcon
 import dev.xross.launcher.state.XmbNode
 import dev.xross.launcher.state.XmbUiState
