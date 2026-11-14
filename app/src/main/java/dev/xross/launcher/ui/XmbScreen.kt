@@ -365,9 +365,9 @@ fun XmbScreen(
 
         // (The "now playing" line that used to sit top-left is the floating MiniPlayerCard below.)
 
-        // Status bar: clock and battery, then the avatar at the far right. The avatar is drawn by
-        // AvatarHud over the room the bar keeps for it, and grows in place into the mini-HUD,
-        // which takes the clock's and battery's place while it is open.
+        // Status bar (2b.7a): the pack's left and right slot clusters, the avatar always the
+        // rightmost slot. The avatar is drawn by AvatarHud over the room the bar keeps for it, and
+        // grows in place into the mini-HUD, which takes the right cluster's place while it is open.
         val hudExpansion = animateFloatAsState(
             if (state.avatarFocused) 1f else 0f,
             if (motion.instant) snap() else tween(260, easing = FastOutSlowInEasing),
@@ -375,15 +375,19 @@ fun XmbScreen(
         )
         val statusTop = (m.s * 0.04f).dp()
         val statusEnd = (m.width * 0.025f).dp()
+        val components = LocalComponents.current
         StatusBar(
             source = statusBar,
+            components = components,
             textSize = m.statusSize.sp(),
-            modifier = Modifier.align(Alignment.TopEnd).padding(top = statusTop, end = statusEnd),
+            modifier = Modifier.align(Alignment.TopStart).fillMaxWidth().padding(top = statusTop, start = statusEnd, end = statusEnd),
             contentAlpha = { 1f - hudExpansion.value },
             trailingWidth = StatusAvatarBox + 10.dp,
             trailingHeight = StatusAvatarBox,
+            // The left cluster clips before it reaches the category bar's focused icon.
+            leftMaxHeight = (m.barY - m.categoryIcon * m.categoryFocusScale / 2 - m.s * 0.04f).coerceAtLeast(0f).dp(),
         )
-        if (state.avatarFocused) {
+        if (state.avatarFocused && components.avatar) {
             // A tap anywhere outside the expanded HUD collapses it.
             Box(
                 Modifier
@@ -391,7 +395,7 @@ fun XmbScreen(
                     .clickable(remember { MutableInteractionSource() }, indication = null, onClick = onCloseAvatarHud),
             )
         }
-        AvatarHud(
+        if (components.avatar) AvatarHud(
             expansion = { hudExpansion.value },
             expanded = state.avatarFocused,
             profile = state.profile,

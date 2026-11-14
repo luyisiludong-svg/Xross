@@ -122,6 +122,16 @@ sealed interface Command {
      * theme color, quick profile and wave settings.
      */
     data object ResetThemeDefaults : Command
+    /** Settings ▸ Theme ▸ Components (2b.7a): sets status bar [side]'s slots; null hands it back to the pack. */
+    data class SetStatusSlots(val side: dev.xross.launcher.theme.pack.StatusSide, val slots: List<dev.xross.launcher.theme.pack.StatusSlot>?) : Command
+    /** One move, removal or addition of [slot] in status bar [side]; the slot list reopens on it. */
+    data class EditStatusSlot(val side: dev.xross.launcher.theme.pack.StatusSide, val slot: dev.xross.launcher.theme.pack.StatusSlot, val edit: SlotEdit) : Command
+    /** The next choice of a Components [row] over the pack (the pack's own first). */
+    data class CycleComponent(val row: dev.xross.launcher.theme.pack.ComponentRow) : Command
+    /** Sets [row] to [value] (null hands it back to the theme pack). */
+    data class SetComponent(val row: dev.xross.launcher.theme.pack.ComponentRow, val value: String?) : Command
+    /** Opens the focused row's Options list (rows whose choices live there). */
+    data object ShowOptions : Command
     data object CycleSlideshowInterval : Command
     data object ToggleResumeMusicAfterGames : Command
     data object ToggleVideoLoop : Command

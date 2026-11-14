@@ -26,6 +26,12 @@ val LocalThemePack = staticCompositionLocalOf<LoadedTheme?> { null }
 val LocalThemeLook = androidx.compose.runtime.compositionLocalOf<dev.xross.launcher.theme.pack.ThemeLook?> { null }
 
 /**
+ * The widgets drawn (2b.7a, [dev.xross.launcher.theme.pack.ResolvedComponents]): status-bar slots,
+ * battery and clock modes. Changes only with the pack, its variant or Settings ▸ Theme ▸ Components.
+ */
+val LocalComponents = androidx.compose.runtime.compositionLocalOf { dev.xross.launcher.theme.pack.ResolvedComponents.DEFAULT }
+
+/**
  * The layout drawn now: the pack's, with the tile shapes and `layout` patches of the context rules
  * that hold, and the quick profile's motion (E-Ink moves instantly). Null: the pack's own.
  */

@@ -227,6 +227,7 @@ class MainActivity : ComponentActivity() {
                 circadian = st.circadianCurve,
                 batteryTint = st.batteryTint,
                 adaptive = st.adaptiveGamePalette,
+                components = st.componentOverrides,
             )
             val resolved = androidx.compose.runtime.remember(lookInputs) { dev.xross.launcher.theme.ThemeLookResolver.resolve(lookInputs) }
             val look = resolved.look
@@ -269,6 +270,7 @@ class MainActivity : ComponentActivity() {
                 dev.xross.launcher.ui.LocalUiIdle provides uiIdle,
                 dev.xross.launcher.ui.LocalThemeLayout provides layout,
                 dev.xross.launcher.ui.LocalStillMotion provides resolved.stillMotion,
+                dev.xross.launcher.ui.LocalComponents provides resolved.components,
             ) {
             Box(Modifier.fillMaxSize()) {
                 // The wave is hidden (and its GL loop stopped) under full-screen photos and video,

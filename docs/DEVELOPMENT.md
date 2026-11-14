@@ -33,7 +33,7 @@ several times slower there, so it shows stutter that the optimized build doesn't
 ./gradlew :app:installDebug :emulator-stub:installRetroarchDebug
 tools/device-tests/smoke.sh                       # quick on-device smoke test, ~30 s (see warning below)
 tools/device-tests/test-theme.sh                  # one suite: test-{library,theme,media,input,integration}.sh
-tools/device-tests/run-all.sh                     # full device regression, all 226 checks (= smoke.sh --all)
+tools/device-tests/run-all.sh                     # full device regression, all 314 checks (= smoke.sh --all)
 ./gradlew :app:assembleProfiling                  # R8-optimized build for frame timing
 ```
 
@@ -60,7 +60,7 @@ The device tests come in three tiers that share `tools/device-tests/lib/harness.
 1. `smoke.sh` (12 checks: boot, database, library scan, category bar, no crash) for everyday work;
 2. five suites that each start from a reset and run on their own (`test-library.sh` 41,
    `test-theme.sh` 134, `test-media.sh` 31, `test-input.sh` 11, `test-integration.sh` 9);
-3. `run-all.sh`, which runs them all (226 checks) with one passed / failed / skipped summary and
+3. `run-all.sh`, which runs them all (314 checks) with one passed / failed / skipped summary and
    exits non-zero on any failure.
 
 Details, timings and optional host tools: [`HARDWARE_TESTING.md`](HARDWARE_TESTING.md) §2a. Frame

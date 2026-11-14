@@ -29,6 +29,18 @@
     "shuffle": "refresh.svg"
   },
   "effects": { "surfaceStyle": "FLAT_GLASS" },
+  "components": {
+    "topLeftCluster": "EMPTY",
+    "statusBarLeft": [],
+    "statusBarRight": ["CLOCK", "BATTERY", "AVATAR"],
+    "batteryMode": "BOTH",
+    "clockFormat": "",
+    "telemetryMode": "COMPACT_PILL",
+    "miniPlayerMode": "FLOATING_CARD",
+    "glyphOverride": "AUTO",
+    "badgePills": [],
+    "volumeAlways": false
+  },
   "layout": {
     "crosshairX": 0.22,
     "crosshairY": 0.25,

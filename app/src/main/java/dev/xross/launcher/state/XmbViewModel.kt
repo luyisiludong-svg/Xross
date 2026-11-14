@@ -199,8 +199,23 @@ class XmbViewModel(
     private val batteryMonitor = BatteryMonitor(context).also { it.start() }
     val battery: StateFlow<dev.xross.launcher.theme.BatteryLevel?> get() = batteryMonitor.level
 
-    /** The status bar's clock and battery, collected by the bar alone (Assessment #9). */
-    val statusBar: StateFlow<StatusBarState> = StatusBarSource(context, viewModelScope, batteryMonitor.level).state
+    /**
+     * The widgets drawn (2b.7a): the active pack's `components`, its variant's, then the user's
+     * `display.components`. The same cascade as [dev.xross.launcher.theme.ThemeLookResolver]'s,
+     * here for the status bar's sources and the avatar's place in navigation.
+     */
+    val components: StateFlow<dev.xross.launcher.theme.pack.ResolvedComponents> =
+        combine(container.themes.active, container.settings.settings) { pack, st -> pack.components(st.themeVariant, st.componentOverrides) }
+            .stateIn(
+                viewModelScope, SharingStarted.Eagerly,
+                container.settings.current.let { st -> container.themes.active.value.components(st.themeVariant, st.componentOverrides) },
+            )
+
+    /** The status bar's clock, battery, network and volume, collected by the bar alone (Assessment #9). */
+    val statusBar: StateFlow<StatusBarState> = StatusBarSource(
+        context, viewModelScope, batteryMonitor.level,
+        needs = components.map { it.needs }.stateIn(viewModelScope, SharingStarted.Eagerly, components.value.needs),
+    ).state
 
     /** For tests: a battery reading, as the system would broadcast it. */
     internal fun reportBattery(level: dev.xross.launcher.theme.BatteryLevel?) = batteryMonitor.report(level)
@@ -476,7 +491,8 @@ class XmbViewModel(
         val ui = current()
         when (action) {
             // Up from the top of a category root climbs into the status bar: the avatar opens its mini-HUD.
-            NavAction.UP -> if (ui.depth == 0 && ui.focusedIndex == 0) ra.focusAvatar() else moveCursor(-1)
+            // Without an AVATAR slot (2b.7a) there is nothing to climb into; the User Card stays in Settings ▸ Accounts.
+            NavAction.UP -> if (ui.depth == 0 && ui.focusedIndex == 0 && components.value.avatar) ra.focusAvatar() else moveCursor(-1)
             NavAction.DOWN -> moveCursor(+1)
             NavAction.LEFT -> if (ui.depth > 0) back() else moveCategory(-1)
             NavAction.RIGHT -> when {
@@ -635,6 +651,43 @@ class XmbViewModel(
     }
 
     /** Settings ▸ Theme (2b.4f): [slot] set to [value] over the pack, with a note where it can't show. */
+    /**
+     * Settings ▸ Theme ▸ Components (2b.7a): one move of a status-bar slot. The sides it changes
+     * are written as the user's (the other keeps following the pack), and the slot list reopens
+     * on the slot so it can be moved again.
+     */
+    private fun editStatusSlot(command: Command.EditStatusSlot) {
+        val pack = container.themes.active.value
+        val before = settingsStore.current
+        val shown = pack.components(before.themeVariant, before.componentOverrides)
+        val (left, right) = ComponentMenus.edit(shown, command.side, command.slot, command.edit) ?: return refuse()
+        settingsStore.update { st ->
+            var o = st.componentOverrides
+            if (left != shown.left) o = o.withSlots(dev.xross.launcher.theme.pack.StatusSide.LEFT, left)
+            if (right != shown.right) o = o.withSlots(dev.xross.launcher.theme.pack.StatusSide.RIGHT, right)
+            st.copy(componentOverrides = o)
+        }
+        val after = settingsStore.current
+        val now = pack.components(after.themeVariant, after.componentOverrides)
+        val userSet = (if (command.side == dev.xross.launcher.theme.pack.StatusSide.LEFT) after.componentOverrides.statusBarLeft else after.componentOverrides.statusBarRight) != null
+        val options = ComponentMenus.options(command.side, now, pack.components(after.themeVariant), userSet, now.logo in pack.logos)
+        val title = if (command.side == dev.xross.launcher.theme.pack.StatusSide.LEFT) "Status bar left" else "Status bar right"
+        transient.update { it.copy(optionsMenu = ComponentMenus.reopen(title, options, command.slot, command.edit)) }
+        if (command.edit == SlotEdit.REMOVE && command.slot == dev.xross.launcher.theme.pack.StatusSlot.AVATAR) {
+            toast("Avatar removed from the status bar · the User Card stays in Settings ▸ Accounts")
+        }
+    }
+
+    private fun setComponent(row: dev.xross.launcher.theme.pack.ComponentRow, value: String?) {
+        settingsStore.update { it.copy(componentOverrides = it.componentOverrides.with(row, value)) }
+        val c = components.value
+        val note = when (row) {
+            dev.xross.launcher.theme.pack.ComponentRow.BATTERY -> "Battery isn't in the status bar".takeIf { !c.shows(dev.xross.launcher.theme.pack.StatusSlot.BATTERY) }
+            dev.xross.launcher.theme.pack.ComponentRow.CLOCK -> "Clock isn't in the status bar".takeIf { !c.shows(dev.xross.launcher.theme.pack.StatusSlot.CLOCK) }
+        }
+        note?.let { toast(it) }
+    }
+
     private fun setEffect(slot: dev.xross.launcher.theme.pack.EffectSlot, value: String) {
         settingsStore.update { it.copy(effectOverrides = it.effectOverrides.with(slot, value)) }
         val v = settingsStore.current.effectOverrides[slot]
@@ -2265,6 +2318,11 @@ class XmbViewModel(
                 toast(if (container.themes.active.value.hasWallpaper) "Using the theme's wallpaper" else "Xross wallpaper removed")
             }
             Command.PickXrossWallpaper -> emit(UiEffect.PickWallpaperImage)
+            is Command.SetStatusSlots -> settingsStore.update { it.copy(componentOverrides = it.componentOverrides.withSlots(command.side, command.slots)) }
+            is Command.EditStatusSlot -> editStatusSlot(command)
+            is Command.CycleComponent -> setComponent(command.row, command.row.next(settingsStore.current.componentOverrides[command.row]))
+            is Command.SetComponent -> setComponent(command.row, command.value)
+            Command.ShowOptions -> current().focused?.let(::openOptions) ?: refuse()
             is Command.CycleEffect -> setEffect(command.slot, command.slot.next(settingsStore.current.effectOverrides[command.slot]))
             is Command.SetEffect -> setEffect(command.slot, command.value)
             Command.ResetThemeDefaults -> {
@@ -2473,6 +2531,9 @@ class XmbViewModel(
                             packMusic = active.hasBgm,
                             packBootVideo = active.bootVideo != null,
                             looks = (listOf("") + active.variants.map { v -> v.id }).associateWith { v -> active.look(v) },
+                            components = (listOf("") + active.variants.map { v -> v.id })
+                                .associateWith { v -> active.components.over(active.variant(v)?.components) },
+                            logos = active.logos.keys,
                         ),
                     )
                 }

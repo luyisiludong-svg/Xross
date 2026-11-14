@@ -9,7 +9,9 @@
 #   tools/device-tests/display-matrix.sh [out-dir] [stress]
 #
 # With "stress", a pack is installed and activated first that pushes the layout clamps the hardest:
-# the PSP centre crosshair at 150% UI scale, 3:4 game tiles and 20 dp spacing. Restores the
+# the PSP centre crosshair at 150% UI scale, 3:4 game tiles and 20 dp spacing, and both status-bar
+# clusters full (2b.7a: a wide logo, network, volume always shown; a long clock, battery, avatar).
+# The "status" column counts left-cluster glyphs that run into the right cluster (should be 0). Restores the
 # display size and density, and the previous theme pack, at the end. Doesn't clear app data.
 set -u
 PKG=dev.xross.launcher
@@ -45,8 +47,14 @@ if [ "$MODE" = stress ]; then
   cat > "$tmp/matrix_stress/theme.json" <<'JSON'
 {"schemaVersion": 2, "name": "Matrix Stress",
  "layout": {"preset": "PSP_CENTER", "uiScale": 1.5, "itemSpacingDp": 20, "focusedScale": 1.35, "focusDivider": "FULL_BLEED_LINE"},
- "categoryOverrides": {"GAMES": {"cardAspectRatio": "3:4"}}}
+ "categoryOverrides": {"GAMES": {"cardAspectRatio": "3:4"}},
+ "components": {"statusBarLeft": ["LOGO", "WIFI", "VOLUME"], "statusBarRight": ["CLOCK", "BATTERY", "AVATAR"],
+                "logo": "logo.svg", "volumeAlways": true, "clockFormat": "yEMMMdHm", "batteryMode": "BOTH"}}
 JSON
+  # A wide logo, so the left cluster is as long as it gets.
+  cat > "$tmp/matrix_stress/logo.svg" <<'SVG'
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 24"><rect x="0" y="0" width="120" height="24" rx="6" fill="#FFFFFF"/><rect x="6" y="6" width="108" height="12" rx="3" fill="#000000"/></svg>
+SVG
   adb shell rm -rf /sdcard/Xross/themes/matrix_stress
   adb push "$tmp/matrix_stress" /sdcard/Xross/themes/ >/dev/null
   rm -rf "$tmp"
@@ -54,7 +62,7 @@ JSON
   adb shell "sed -i 's/\"themePack\": \"[^\"]*\"/\"themePack\": \"matrix_stress\"/' $settings"
 fi
 
-printf '%-15s %-11s %-11s %-9s %-7s %-7s %s\n' config asked app-gets janky p90 p99 clipped-texts
+printf '%-15s %-11s %-11s %-9s %-7s %-7s %-14s %s\n' config asked app-gets janky p90 p99 clipped-texts status
 for line in $(echo "$CONFIGS" | tr ' ' ','); do
   [ -z "$line" ] && continue
   IFS=, read -r name size dpi <<<"$line"
@@ -87,12 +95,18 @@ for line in $(echo "$CONFIGS" | tr ' ' ','); do
   clipped=$(adb shell cat /sdcard/xross-matrix.xml | grep -o 'text="[^"][^"]*"[^>]*bounds="\[[-0-9]*,[-0-9]*\]\[[-0-9]*,[-0-9]*\]"' \
     | sed 's/.*bounds="\[\([-0-9]*\),[-0-9]*\]\[\([-0-9]*\),[-0-9]*\]"/\1 \2/' \
     | awk -v W="$aw" '$1 < 0 || $2 > W { n++ } END { print n + 0 }')
+  # Left-cluster glyphs (logo, network, volume) whose right edge passes the right cluster's left edge.
+  ui=$(adb shell cat /sdcard/xross-matrix.xml)
+  rleft=$(grep -oE '(text="[0-9]{1,2}/[0-9]{1,2}  [^"]*"|text="[A-Z][a-z]{2}, [^"]*"|text="[0-9]{1,3}%"|content-desc="Battery gauge[^"]*")[^>]*bounds="\[[0-9]+' <<<"$ui" \
+    | grep -oE '[0-9]+$' | sort -n | head -1)
+  status=$(grep -oE 'content-desc="(Theme logo|Wi-Fi[^"]*|Mobile data|Ethernet|Offline|Volume[^"]*)"[^>]*bounds="\[[0-9]+,[0-9]+\]\[[0-9]+' <<<"$ui" \
+    | grep -oE '[0-9]+$' | awk -v R="${rleft:-999999}" '$1 > R { n++ } END { print n + 0 }')
   # Settings ▸ Theme: the deepest common list, with the drill-down beside it.
   key $(times 4 KEYCODE_BUTTON_L1)
   key $(times 25 KEYCODE_DPAD_UP) KEYCODE_DPAD_DOWN $(times 3 KEYCODE_DPAD_DOWN) KEYCODE_DPAD_CENTER
   pause 1
   adb exec-out screencap -p > "$OUT/$MODE-$name-settings.png"
-  printf '%-15s %-11s %-11s %-9s %-7s %-7s %s\n' "$name" "$size@$dpi" "$app" "${janky:-?}" "${p90:-?}" "${p99:-?}" "$clipped"
+  printf '%-15s %-11s %-11s %-9s %-7s %-7s %-14s %s\n' "$name" "$size@$dpi" "$app" "${janky:-?}" "${p90:-?}" "${p99:-?}" "$clipped" "$status"
 done
 
 adb shell wm size reset

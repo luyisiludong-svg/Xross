@@ -1,9 +1,9 @@
 # Theme 2.0 specification
 
-The reference for Xross's look and sound as implemented today (through Phase 2b.4): the theme pack
+The reference for Xross's look and sound as implemented today (through Phase 2b.7a): the theme pack
 format, surfaces, sounds, the background shader and Wave settings, wallpapers, focus frames, icon
-masks, particles, filters, variants, overrides, context rules, color layers, quick profiles and the
-single-file `.xtheme` archive.
+masks, particles, filters, variants, overrides, context rules, color layers, quick profiles, the
+single-file `.xtheme` archive and the `components` block (status-bar slots, §15).
 
 Related documents: the [user and storage guide](USER_GUIDE.md) (where `Xross/themes/` lives and
 the rest of the `Xross/` folder), [`Roadmap.md`](../Roadmap.md) §4.3 and Appendix A (the design
@@ -28,6 +28,7 @@ studio proposal).
 12. [`.xtheme` archives](#12-xtheme-archives)
 13. [Focused game background](#13-focused-game-background)
 14. [The Default pack and icon tooling](#14-the-default-pack-and-icon-tooling)
+15. [Components](#15-components)
 
 ## 1. Where a look comes from
 
@@ -44,6 +45,8 @@ Layers stack in this order, lowest to highest:
   chosen surface style or any effect picked in Settings ▸ Theme wins over all of them, §11).
 * **Colors:** Default pack → pack → variant → overrides → rules → your theme color → quick profile
   → circadian curve and battery tint → game art (§10).
+* **Components** (the status bar and the other widgets): Default pack → pack → variant → your
+  Settings ▸ Theme ▸ Components, nothing else (§15).
 
 ## 2. Pack layout
 
@@ -248,6 +251,7 @@ from Settings ▸ Theme; editing the file by hand works too and is picked up on 
 | `themeVariant` | a variant id; empty = the pack's base look | Theme variant (§9) |
 | `surfaceStyle` | a built-in or pack surface id; empty = the pack's | Surface style (§4) |
 | `customWallpaper` | a `content://` URI or a file path; empty = the pack's wallpaper | Xross wallpaper (§8) |
+| `components` | `statusBarLeft`, `statusBarRight`, `batteryMode`, `clockFormat`, …; `null` = the pack's | Settings ▸ Theme ▸ Components (§15) |
 | `effects` | `shaderPreset`, `backgroundFilter`, `uiFilter`, `focusFrameStyle`, `foregroundParticles`, `iconMask`, `bootIntro`, `launchCurtain`; empty = the pack's | Effect rows (§11) |
 | `quickProfile` | `NONE`, `OLED_TRUE_BLACK`, `Y2K_CYBER_PASTEL`, `MONOCHROME_EINK` | Quick profile (§10) |
 | `adaptiveGamePalette`, `circadianCurve`, `batteryTint` | `true` / `false`; `null` follows the pack | Adaptive colors / Circadian curve / Battery alert tint (§10) |
@@ -493,7 +497,7 @@ category and rule.
 kept across restarts) or goes back to the theme's (Reset to theme).
 
 *Reset to theme defaults* clears every pick that overrides the pack's look (those eight, the surface
-style, the three color layers and the Xross wallpaper) and keeps the pack, its variant, the theme
+style, the three color layers, the Xross wallpaper and the Components picks, §15) and keeps the pack, its variant, the theme
 color, the quick profile and the wave settings.
 
 ## 12. `.xtheme` archives
@@ -535,3 +539,87 @@ edit the map and run:
 python3 tools/icons/svg_icons.py list assets/icons /tmp/icons   # previews every icon id
 python3 tools/icons/svg_icons.py build assets/icons tools/icons/icon_map.txt app/src/main/assets/themes/default/icons
 ```
+
+## 15. Components
+
+The `components` block (Phase 2b.7) says which widgets the menu draws and how. It is read from
+the pack's base and its variants only: a category or system override or a rule can't change it
+(a `components` key there is reported and ignored), so the status bar never rearranges itself per
+category or battery level.
+
+```json
+"components": {
+  "statusBarLeft": ["LOGO", "WIFI"],
+  "statusBarRight": ["CLOCK", "BATTERY", "AVATAR"],
+  "batteryMode": "TIME_REMAINING",
+  "clockFormat": "EMMMdm",
+  "logo": "art/logo.svg",
+  "volumeAlways": false
+}
+```
+
+### Status bar
+
+* `statusBarLeft` draws at the top-left, `statusBarRight` at the top-right, each in array order.
+  Slots: `LOGO`, `WIFI`, `VOLUME`, `BATTERY`, `CLOCK`, `AVATAR`. A slot listed twice, or in both
+  clusters, is drawn once (on the left); these are reported.
+* `AVATAR` (the profile avatar and its mini-HUD) is always the rightmost slot of `statusBarRight`:
+  listed anywhere else, it is moved there and reported. Left out, there is no avatar in the bar and
+  Up at the top of a list stays in the list; the User Card is still in Settings ▸ Accounts.
+* While the HUD is open it fades every slot of the right cluster; the left cluster never fades.
+* The left cluster gets the width the right one leaves and is clipped before the category bar.
+* `LOGO`: the pack's `logo`, an SVG, PNG or WebP from the pack root (the same checks as icons),
+  drawn at the status text's cap height and its own aspect. An SVG is read like an icon (white,
+  black fills dropped); a PNG or WebP keeps its colors. No logo: the slot is skipped.
+* `WIFI`: Wi-Fi with its strength in 4 levels, mobile data, ethernet or offline. Xross reads the
+  signal strength only (the `ACCESS_WIFI_STATE` permission), never the network's name.
+* `VOLUME`: the system media volume in 4 levels, a muted glyph at 0, shown for 3 s after it
+  changes; `"volumeAlways": true` keeps it shown.
+* `BATTERY`: `batteryMode` is `CAPSULE_ICON` (the gauge), `PERCENTAGE`, `BOTH` (the default) or
+  `TIME_REMAINING`: "1 h 20 m to full" while charging when Android has an estimate, else exactly
+  like `PERCENTAGE`. There is no time-to-empty: Android doesn't estimate it.
+* `CLOCK`: `clockFormat` is a date-format skeleton of the letters `y M d E H h m a`; other letters
+  are dropped and reported. The date letters are written in the locale's order, then two spaces
+  and the time: `H` for 24 h, `h` for 12 h, `m` alone for the phone's own 12/24 h setting. Empty is
+  the default clock (`Md` and the phone's time). Examples: `MdHm` → "11/14  21:41", `EMMMdm` →
+  "Sat, Nov 14  9:41 PM", `m` → "9:41 PM".
+
+The Default pack: left `[]`, right `[CLOCK, BATTERY, AVATAR]`, `BOTH`, empty clock format.
+
+### The other keys
+
+Read and stored now, drawn by later 2b.7 slices: `topLeftCluster` (`EMPTY`, `SOCIAL_STACK`),
+`telemetryMode` (`OFF`, `COMPACT_PILL`, `RICH_CARD`), `miniPlayerMode` (`FLOATING_CARD`,
+`STATUS_TICKER`, `OFF`), `glyphOverride` (`AUTO`, `PLAYSTATION`, `XBOX`, `NINTENDO`,
+`MONOCHROME_MINIMAL`) and `badgePills` (`SYSTEM`, `YEAR`, `DEVELOPER`, `PLAYTIME`, `RA_PROGRESS`).
+
+### `components` reference
+
+Names ignore case, `-` and spaces; a bad value is reported and falls back to the layer below,
+leaving the rest of the block.
+
+| Key (aliases) | Values (aliases) |
+| --- | --- |
+| `topLeftCluster` (`topLeft`) | `EMPTY` (`NONE`), `SOCIAL_STACK` (`SOCIAL`, `FRIENDS`) |
+| `statusBarLeft`, `statusBarRight` | arrays of `LOGO`, `WIFI` (`WI-FI`, `NETWORK`), `VOLUME`, `BATTERY`, `CLOCK` (`TIME`), `AVATAR` (`PROFILE`) |
+| `batteryMode` (`battery`, `batteryDisplay`) | `CAPSULE_ICON` (`ICON`, `CAPSULE`, `GAUGE`), `PERCENTAGE` (`PERCENT`), `BOTH`, `TIME_REMAINING` (`TIME`, `TIME_TO_FULL`) |
+| `clockFormat` (`clock`) | a skeleton of `y M d E H h m a`; empty = the default clock |
+| `telemetryMode` (`telemetry`) | `OFF` (`NONE`), `COMPACT_PILL` (`PILL`, `COMPACT`), `RICH_CARD` (`CARD`, `RICH`) |
+| `miniPlayerMode` (`miniPlayer`) | `FLOATING_CARD` (`CARD`), `STATUS_TICKER` (`TICKER`), `OFF` (`NONE`) |
+| `glyphOverride` (`glyphs`, `glyphStyle`) | `AUTO`, `PLAYSTATION` (`PS`), `XBOX`, `NINTENDO` (`SWITCH`), `MONOCHROME_MINIMAL` (`MONOCHROME`, `MINIMAL`) |
+| `badgePills` | array of `SYSTEM` (`PLATFORM`), `YEAR` (`RELEASE_YEAR`), `DEVELOPER`, `PLAYTIME`, `RA_PROGRESS` (`RA`, `ACHIEVEMENTS`) |
+| `logo` | an SVG, PNG or WebP in the pack, or `none` |
+| `volumeAlways` | `true` / `false` |
+
+### Settings ▸ Theme ▸ Components
+
+* *Status bar left* and *Status bar right*: Confirm (or Options) opens the slot list: Theme pack
+  (the pack's slots), each slot with Move left, Move right, Move to the other side and Remove, and
+  Add. After a move the list reopens on that slot, so it can be moved again at once. The avatar
+  can only be removed or added back, always last.
+* *Battery display*: Theme pack, Icon, Percentage, Icon and percentage, Time to full.
+* *Clock format*: Theme pack, 24 h (`MdHm`), 12 h (`Mdhma`), Date and time (`EMMMdm`), Time only
+  (`m`).
+
+Saved as `display.components` in `settings.json` (`null` follows the pack); Reset to theme
+defaults clears it, quick profiles never touch it.

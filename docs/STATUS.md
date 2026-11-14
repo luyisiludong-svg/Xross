@@ -26,6 +26,7 @@ Legend: ✅ done and verified · ◐ partial · ❌ not started · 🧪 verified
 | Phase 2b.4d (focus frames and icon masks): `effects.focusFrameStyle` (`BREATHING_HALO`, `STATIC_NEON`, `HARD_SHADOW`, `GOLD_BEZEL` in `palette.focusGold`), `effects.iconMask` (`SQUIRCLE`, `CIRCLE`, `Y2K_CHROME_FRAME`) and `effects.iconFilter` (`DUOTONE`, `MONOCHROME`) through the cascade, icons cached by package, style and size | ✅ 🧪 on `feat/theme-2b4` (2026-11-12): 603 unit tests; theme suite 98/98 and library suite 41/41 on the API 37 emulator; Apps list 0.5% janky on the profiling build with the cache cold or warm. **Galaxy A55** (2026-11-13): real apps' icons 3–11 ms each (chrome), 2–4 ms (squircle), off the main thread (§3.25, §3.28) |
 | Phase 2b.4e (foreground particles): `effects.foregroundParticles` (`SNOW`, `BOKEH`, `DUST_MOTES`) as layer 4, ≤48 particles in flat arrays drawn in one `graphicsLayer`; resting after 10 s without input, in the background, and hidden under a snap, full-screen media and E-Ink | ✅ 🧪 on `feat/theme-2b4` (2026-11-13): 622 unit tests; theme suite 102/102 on the API 37 emulator; profiling build: UI thread 0.3 ms p50 per frame with or without particles, 0.2–0.4% janky in most windows (as without). **Galaxy A55** (2026-11-13): 120 Hz, 0 frames at rest, hidden under a playing snap; during game navigation 7 of 16 passes doubled the render time (deadline jank unchanged, §3.28) |
 | Phase 2b.4f (post-processing and Settings rows): `effects.backgroundFilter` (`SCANLINES`, `CRT`, `LCD_GRID`) as a GL pass snapped to render pixels, `effects.uiFilter` (`SCANLINES_UI`, `BLOOM`, custom `postprocess.agsl`) as an AGSL `RenderEffect` on Android 13+, Settings ▸ Theme rows for every 2b.4 effect (`display.effects`), Pick custom wallpaper, Reset to theme defaults, the `effects` schema | ✅ 🧪 on `feat/theme-2b4` (2026-11-13): 645 unit tests; 226/226 device checks on the API 37 emulator (theme 134/134); `palette-perf.sh` 0.30–0.45% janky, the same as the build before it, and 0.30–0.44% with CRT and Bloom on. **Galaxy A55** (2026-11-13): 645 unit tests, `lintDebug` 0 errors, **215/226** device checks (theme 134/134; the 11 are seeded-media checks), every slice checked by hand, `palette-perf.sh` 0.12–0.19% janky (0.06–0.19% with CRT and Bloom) (§3.28). **2b.4 is complete on the emulator and the A55** |
+| Phase 2b.7a (components block and status-bar clusters): `components` in the manifest (Default pack → pack → variant → `display.components`; never overrides or rules), `statusBarLeft` / `statusBarRight` slots (`LOGO`, `WIFI`, `VOLUME`, `BATTERY`, `CLOCK`, `AVATAR` always last), battery modes with time to full, clock skeletons, Settings ▸ Theme ▸ Components | ✅ 🧪 on `feat/theme-2b7` (2026-11-14): 793 unit tests, `lintDebug` 0 errors; theme suite **197/197** on the API 37 emulator, display matrix 12/12 default and stress, `palette-perf.sh` 0.15–0.75% janky (§3.29). Not yet on the A55 |
 | Phase 3 (dual screen, hot-swap, RetroAchievements, Web Portal, FTPS) | ◐ RetroAchievements account linking, status bar avatar and User Card (§3.12), per-game achievement lists and unlock toasts (§3.13), live on the emulator and the Galaxy A55 (§3.14); hot-swap and live resolution change done; dual screen, docking, Portal and FTPS not started |
 | Phase 4 (onboarding, triage, profiling, plugin API) | ◐ app triage and performance work started |
 
@@ -142,7 +143,8 @@ parked until an API is documented.
 | Icons from the design SVGs | ✅ | `tools/icons/svg_icons.py` → 29 SVGs in the Default pack, read by `SvgIcon` at runtime |
 | Custom fonts | ✅ | One .ttf/.otf per theme pack, applied to all launcher text |
 | UI scale slider (50–150%) | ❌ | Layout already scales automatically (§4) |
-| Aspect-ratio overrides | ❌ | Xross stays immersive (Android's system bars hidden); showing Android's status bar was dropped (2026-11-14). Xross's own status-bar slots come in Phase 2b.7 |
+| Aspect-ratio overrides | ❌ | Xross stays immersive (Android's system bars hidden); showing Android's status bar was dropped (2026-11-14). Xross's own status-bar slots are below |
+| Status bar components | ✅ 🧪 | `components.statusBarLeft` / `statusBarRight` slots (logo, network, system volume, battery, clock, avatar), battery modes including time to full, clock skeletons; Settings ▸ Theme ▸ Components (2b.7a, §3.29) |
 | Game tiles and avatar style | ✅ 🧪 | 16:9 XMB tiles in Games; `profile.avatarStyle` with Settings ▸ Theme ▸ Profile customization (Phase 2b.1, §3.15) |
 
 ### 3.5 Device integration & form factors
@@ -1344,6 +1346,43 @@ a Perfetto GPU-queue trace would confirm.
 **Not covered:** sync of the audio uniforms judged by eye, Bluetooth output latency, E-Ink with a
 pack shader, `HARD_SHADOW` and the RA badge frames by eye, handhelds (Adreno, Mali).
 
+### 3.29 Phase 2b.7a: components block and status-bar clusters (2026-11-14)
+
+On `feat/theme-2b7`, API 37 emulator (`-gpu host`, 2400×1080).
+
+**Host:** 793 unit tests pass (4 skipped): `ComponentsTest` (decoding with aliases and bad values,
+unknown keys, the cascade, `components` in overrides and rules ignored and reported, `AVATAR` moved
+last, duplicates, the logo, `display.components`, Reset, the Components rows, slot edits through
+the view model and the avatar gating Up) and `StatusSlotsTest` (clock skeletons, battery text per
+mode, time to full with −1 and discharging, Wi-Fi levels from RSSI, volume levels and mute, which
+monitors run for which slots). `lintDebug` 0 errors, 61 warnings (as before; `ACCESS_WIFI_STATE`
+comes with `uses-feature android.hardware.wifi required=false`, so Ethernet-only TVs still qualify).
+
+**Theme suite: 197/197** (the 149 before plus a new 48-check "Components (2b.7a)" section): each
+battery mode, on and off the charger; the four clock presets; three slot orders, the HUD fading the
+right cluster and giving it back with the clock's and battery's bounds unchanged; airplane mode
+on (network slot offline in **0.17–0.26 s**) and off; the volume keys showing `VOLUME` for 3 s and
+the muted glyph at 0; the avatar removed (Up at the top stays in the list) and Reset; **a minute
+tick at rest draws 1 frame**, and 3-second windows away from the minute draw 0.
+
+**Display matrix:** 12/12 with the Default pack and with a stress pack that fills both clusters (a
+5:1 logo, network, volume always shown, a "Sat, Nov 14, 2026  13:11" clock, battery, avatar): no
+clipped texts, no left-cluster glyph past the right cluster; at 640×480 the left cluster clips its
+last slot. **`palette-perf.sh`** (profiling, 3 interleaved pairs): 0.15–0.75% janky (deadline);
+the build before read 0.30–0.45%; the 0.75% is the first, cold pass.
+
+**Found and fixed on the device:** `VOLUME` counted level changes, not volume changes, so a step
+inside one level (14 → 12 of 15) didn't show it; it now counts every change and also listens to
+the volume-changed broadcast, since Android writes the volume to `Settings.System` up to a second
+after the key (now 5 ms). SVG logos were squashed to 48 × 48 dp; `SvgIcon` now keeps the
+`viewBox` aspect (square icons unchanged). The 2b.4f "at rest under Bloom" check failed once when
+its 3-second window crossed a minute boundary (the clock's frame, already there before 2b.7); the
+suite's rest windows now avoid the boundary.
+
+**Not covered:** the Galaxy A55 (volume keys, Wi-Fi strength walking away from the router, 120 Hz),
+an Android 9 image for the `WifiManager` RSSI path, a real charge-time estimate (the emulator's
+`dumpsys battery` charger gives −1, so only the percentage fallback was seen on a device).
+
 ## 4. Display matrix & performance
 
 All numbers are from the Android emulator on an Apple M5 with the host GPU, using an
@@ -1459,7 +1498,7 @@ implemented, by phase, including the Phase 2b customization engine).
 ./gradlew :app:testDebugUnitTest                         # unit tests
 ./gradlew :app:installDebug :emulator-stub:installRetroarchDebug
 tools/device-tests/smoke.sh                              # quick device smoke test, 12 checks (clears app data)
-tools/device-tests/run-all.sh                            # full device regression: the five suites, 226 checks
+tools/device-tests/run-all.sh                            # full device regression: the five suites, 314 checks
 ./gradlew :app:assembleProfiling                         # optimized build for frame timing
 adb shell dumpsys gfxinfo dev.xross.launcher              # UI frame stats
 adb logcat -s WaveFrames XrossScan                        # GL pacing + scan timing (debug/profiling)

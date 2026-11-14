@@ -202,12 +202,13 @@ enum class EffectSlot(val title: String, val choices: List<Pair<String, String>>
 
 /**
  * Settings ▸ Theme ▸ Reset to theme defaults (2b.4f): everything the user set over the active
- * pack's look goes back to the pack. Kept: which pack and variant, the theme color, the quick
+ * pack's look goes back to the pack, the Components picks (2b.7a) included. Kept: which pack and variant, the theme color, the quick
  * profile (a look of its own, with its own row) and the wave's speed and shape.
  */
 object ThemeDefaults {
     fun reset(s: dev.xross.launcher.data.XrossSettings): dev.xross.launcher.data.XrossSettings = s.copy(
         effectOverrides = EffectOverrides.NONE,
+        componentOverrides = ComponentOverrides.NONE,
         surfaceStyle = "",
         customWallpaper = "",
         adaptiveGamePalette = null,

@@ -71,6 +71,11 @@ data class ThemeManifest(
      * first, then these.
      */
     val rules: List<ContextRule> = emptyList(),
+    /**
+     * Which widgets the menu draws ([Components], 2b.7): status-bar slots, battery and clock modes,
+     * and the modes of the mini player, telemetry and glyphs. Read from the base and variants only.
+     */
+    val components: Components? = null,
     /** Keys the reader found but doesn't know (unknown `effects` properties), reported with the pack's problems. */
     @kotlinx.serialization.Transient val schemaProblems: List<String> = emptyList(),
 ) {
@@ -307,8 +312,11 @@ data class ThemeManifest(
 
         fun colorText(argb: Int): String = "#%06X".format(argb and 0xFFFFFF)
 
-        /** Every problem a pack's merged JSON has: unknown `effects` and `audio` properties. */
-        fun schemaProblems(root: JsonObject): List<String> = Effects.unknownKeys(root) + Audio.unknownKeys(root)
+        /**
+         * Every problem a pack's merged JSON has: unknown `effects`, `audio` and `components`
+         * properties, and `components` where it is ignored.
+         */
+        fun schemaProblems(root: JsonObject): List<String> = Effects.unknownKeys(root) + Audio.unknownKeys(root) + Components.schemaProblems(root)
 
         /**
          * [check] on each key of every [block] object in a pack's merged JSON [root]: the base, each
@@ -360,6 +368,8 @@ data class ThemeVariant(
     val effects: ThemeManifest.Effects? = null,
     /** Only `soundGains` (2b.5a) and `bgmFile` (2b.5c): this colorway's sound levels and music. */
     val audio: ThemeManifest.Audio? = null,
+    /** This colorway's `components` (2b.7a), over the pack's. */
+    val components: Components? = null,
 )
 
 /**

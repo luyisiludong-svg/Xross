@@ -98,7 +98,18 @@ data class ThemeSetup(
      * picks (2b.4f): what the effect rows call "Theme pack (…)".
      */
     val looks: Map<String, dev.xross.launcher.theme.pack.ThemeLook> = emptyMap(),
+    /** The pack's `components` per variant id ("" = its base), before the user's (2b.7a). */
+    val components: Map<String, dev.xross.launcher.theme.pack.ComponentsPatch> = emptyMap(),
+    /** Logo paths the pack could read (`components.logo`). */
+    val logos: Set<String> = emptySet(),
 ) {
+    /** The components of [variant] (else the base), with the user's [user] layer on top. */
+    fun components(
+        variant: String,
+        user: dev.xross.launcher.theme.pack.ComponentOverrides = dev.xross.launcher.theme.pack.ComponentOverrides.NONE,
+    ): dev.xross.launcher.theme.pack.ResolvedComponents =
+        (components[variant] ?: components[""] ?: dev.xross.launcher.theme.pack.ComponentsPatch.NONE).over(user.patch.takeUnless { user.empty }).resolve()
+
     /** The look of [variant], else the base look, else a plain default. */
     fun packLook(variant: String): dev.xross.launcher.theme.pack.ThemeLook =
         looks[variant] ?: looks[""] ?: dev.xross.launcher.theme.pack.ThemeLook(palette = null, surfaceId = packSurface)
@@ -182,6 +193,7 @@ class MenuTree(private val s: MenuSnapshot) {
         key == DISPLAY_BACKGROUND -> backgroundSettings()
         key == DISPLAY_EFFECTS -> effectSettings()
         key == DISPLAY_INTRO -> introSettings()
+        key == DISPLAY_COMPONENTS -> componentSettings()
         key == DISPLAY_MENU -> menuLookSettings()
         key == SOUND -> soundSettings()
         key == MEDIA_SETTINGS -> mediaSettings()
@@ -906,6 +918,7 @@ class MenuTree(private val s: MenuSnapshot) {
         folder(DISPLAY_BACKGROUND, "Background", GlyphKey.DISPLAY, backgroundSummary()),
         folder(DISPLAY_EFFECTS, "Effects", GlyphKey.DISPLAY, profiled(ProfileField.SURFACE, surfaceSummary())),
         folder(DISPLAY_INTRO, "Intro and transitions", GlyphKey.DISPLAY, introSummary()),
+        folder(DISPLAY_COMPONENTS, "Components", GlyphKey.DISPLAY, componentsSummary()),
         folder(DISPLAY_MENU, "Menu and profile", GlyphKey.USERS, "Profile customization, button hints, platform folders"),
         resetThemeRow(),
         setting(
@@ -952,6 +965,66 @@ class MenuTree(private val s: MenuSnapshot) {
             val own = s.settings.effectOverrides[slot]
             if (own.isEmpty()) slot.packLabel(s.themes.packLook(s.settings.themeVariant), s.themes.packBootVideo) else slot.label(own)
         }
+
+    // region Settings ▸ Theme ▸ Components (2b.7a)
+
+    private val packComponents by lazy { s.themes.components(s.settings.themeVariant) }
+    private val shownComponents by lazy { s.themes.components(s.settings.themeVariant, s.settings.componentOverrides) }
+
+    /** Settings ▸ Theme ▸ Components: the status bar's clusters, battery display and clock. 2b.7b–e add rows here. */
+    private fun componentSettings() = listOf(
+        statusSlotsRow(dev.xross.launcher.theme.pack.StatusSide.LEFT),
+        statusSlotsRow(dev.xross.launcher.theme.pack.StatusSide.RIGHT),
+        componentRow(dev.xross.launcher.theme.pack.ComponentRow.BATTERY),
+        componentRow(dev.xross.launcher.theme.pack.ComponentRow.CLOCK),
+    )
+
+    /** "Right: Clock · Battery · Avatar · Icon and percentage". */
+    private fun componentsSummary(): String {
+        val c = shownComponents
+        val left = if (c.left.isEmpty()) "" else "Left: ${ComponentMenus.summary(c.left)} · "
+        return left + "Right: ${ComponentMenus.summary(c.right)} · " + dev.xross.launcher.theme.pack.ComponentRow.BATTERY.label(c.battery.name)
+    }
+
+    /** Status bar left / right: Confirm and Options both open the slot list (add, remove, reorder). */
+    private fun statusSlotsRow(side: dev.xross.launcher.theme.pack.StatusSide): XmbNode {
+        val user = s.settings.componentOverrides
+        val userSet = (if (side == dev.xross.launcher.theme.pack.StatusSide.LEFT) user.statusBarLeft else user.statusBarRight) != null
+        val slots = ComponentMenus.slots(shownComponents, side)
+        val where = if (side == dev.xross.launcher.theme.pack.StatusSide.LEFT) "Top-left" else "Top-right; the avatar stays last"
+        val shown = ComponentMenus.summary(slots) + if (userSet) "" else " (theme pack)"
+        return XmbNode(
+            id = "disp:comp:" + side.name.lowercase(Locale.ROOT),
+            title = if (side == dev.xross.launcher.theme.pack.StatusSide.LEFT) "Status bar left" else "Status bar right",
+            subtitle = "$shown · $where",
+            icon = NodeIcon.Glyph(GlyphKey.DISPLAY),
+            action = NodeAction.Run(Command.ShowOptions),
+            menu = ComponentMenus.options(side, shownComponents, packComponents, userSet, shownComponents.logo in s.themes.logos),
+        )
+    }
+
+    /** Battery display and Clock format: Confirm cycles "Theme pack (…)" then each choice; Options lists them all. */
+    private fun componentRow(row: dev.xross.launcher.theme.pack.ComponentRow): XmbNode {
+        val own = s.settings.componentOverrides[row]
+        val shown = if (own == null) row.packLabel(packComponents) else row.label(own)
+        val note = when (row) {
+            dev.xross.launcher.theme.pack.ComponentRow.BATTERY ->
+                if (!shownComponents.shows(dev.xross.launcher.theme.pack.StatusSlot.BATTERY)) "Battery isn't in the status bar" else "Time to full shows the percentage unless charging"
+            dev.xross.launcher.theme.pack.ComponentRow.CLOCK ->
+                if (!shownComponents.shows(dev.xross.launcher.theme.pack.StatusSlot.CLOCK)) "Clock isn't in the status bar" else "Date and time in the status bar"
+        }
+        return XmbNode(
+            id = "disp:comp:" + row.name.lowercase(Locale.ROOT),
+            title = row.title,
+            subtitle = "$shown · $note",
+            icon = NodeIcon.Glyph(GlyphKey.DISPLAY),
+            action = NodeAction.Run(Command.CycleComponent(row)),
+            menu = listOf(MenuOption(row.packLabel(packComponents), command = Command.SetComponent(row, null), selected = own == null)) +
+                row.choices.map { (value, label) -> MenuOption(label, command = Command.SetComponent(row, value), selected = own == value) },
+        )
+    }
+
+    // endregion
 
     /** Settings ▸ Theme ▸ Menu and profile: how the menu is laid out, not how it is colored. */
     private fun menuLookSettings() = listOf(
@@ -1067,6 +1140,8 @@ class MenuTree(private val s: MenuSnapshot) {
         val changed = buildList {
             val fx = dev.xross.launcher.theme.pack.EffectSlot.entries.count { st.effectOverrides[it].isNotEmpty() }
             if (fx > 0) add(countOf(fx, "effect"))
+            val comps = st.componentOverrides.count
+            if (comps > 0) add(countOf(comps, "component"))
             if (st.surfaceStyle.isNotEmpty()) add("surface")
             val layers = listOf(st.adaptiveGamePalette, st.circadianCurve, st.batteryTint).count { it != null }
             if (layers > 0) add(countOf(layers, "color layer"))
@@ -1403,6 +1478,7 @@ class MenuTree(private val s: MenuSnapshot) {
         const val DISPLAY_EFFECTS = "settings:display:effects"
         const val DISPLAY_MENU = "settings:display:menu"
         const val DISPLAY_INTRO = "settings:display:intro"
+        const val DISPLAY_COMPONENTS = "settings:display:components"
 
         /** The effect rows in Settings ▸ Theme ▸ Background; the rest of the 2b.4f rows are in Effects. */
         private val BACKGROUND_SLOTS = setOf(dev.xross.launcher.theme.pack.EffectSlot.SHADER, dev.xross.launcher.theme.pack.EffectSlot.BACKGROUND_FILTER)
@@ -1411,7 +1487,7 @@ class MenuTree(private val s: MenuSnapshot) {
         private val INTRO_SLOTS = listOf(dev.xross.launcher.theme.pack.EffectSlot.BOOT_INTRO, dev.xross.launcher.theme.pack.EffectSlot.LAUNCH_CURTAIN)
 
         /** Settings ▸ Theme and its folders, top level first. */
-        val THEME_LISTS = listOf(DISPLAY, DISPLAY_COLORS, DISPLAY_BACKGROUND, DISPLAY_EFFECTS, DISPLAY_INTRO, DISPLAY_MENU)
+        val THEME_LISTS = listOf(DISPLAY, DISPLAY_COLORS, DISPLAY_BACKGROUND, DISPLAY_EFFECTS, DISPLAY_INTRO, DISPLAY_COMPONENTS, DISPLAY_MENU)
         const val SOUND = "settings:sound"
         const val MEDIA_SETTINGS = "settings:media"
         const val APPS_SETTINGS = "settings:apps"

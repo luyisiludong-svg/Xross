@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Theme suite (149 checks): Settings ▸ Theme and its folders (theme color, wave and avatar panels,
+# Theme suite (197 checks): Settings ▸ Theme and its folders (theme color, wave and avatar panels,
 # platform folders, surface style, the 2b.4f effect rows, Pick custom wallpaper, Reset to theme
 # defaults), quick profiles (OLED, Y2K, E-Ink), color layers (adaptive colors,
 # circadian curve, battery tint and charging pulse through `dumpsys battery`), the Sound section,
@@ -9,7 +9,9 @@
 # filter and custom postprocess.agsl, resting and failing safely), .xtheme import (zip-slip, variants, overrides, Keep both), and the
 # game-art palette (hero PNGs, scraped flags patched into the database, extraction cache, debounce),
 # and the cold-start intro and launch curtains (2b.5d: a generated boot.mp4, the shader ramp, E-Ink,
-# each curtain on a stub launch).
+# each curtain on a stub launch), and Settings ▸ Theme ▸ Components (2b.7a: battery modes on and off
+# the charger, clock formats, three slot orders with the avatar HUD, network in airplane mode,
+# the system volume, the avatar left out, a minute tick at rest).
 #
 #   tools/device-tests/test-theme.sh
 #
@@ -19,7 +21,7 @@
 # The battery override is always reset at exit, even after Ctrl-C.
 set -u
 . "$(dirname "$0")/lib/harness.sh"
-suite_begin theme 149
+suite_begin theme 197
 
 setup_base_env
 setup_theme_fixtures
@@ -28,7 +30,7 @@ start_app
 category 0
 
 # Settings ▸ Theme (the fourth Settings folder) with the Default pack: Theme pack, Quick profile,
-# then the folders Colors, Background, Effects, Intro and transitions, Menu and profile, then
+# then the folders Colors, Background, Effects, Intro and transitions, Components, Menu and profile, then
 # Reset to theme defaults and Import theme (.xtheme)…. A pack with variants adds Theme variant
 # below Theme pack. Back out of a folder lands on that folder's row.
 section "Settings"
@@ -56,10 +58,10 @@ expect "6" "Ribbon lines slider moves"
 key KEYCODE_BACK
 expect "1.1× · 6 lines" "Wave settings row summarizes the new values"
 settings_has '"waveSpeed": 1.1' && ok "wave uniforms are saved to settings.json" || bad "waveSpeed not in settings.json"
-# Menu and profile (three folders below Background): Profile customization, Button hints,
+# Menu and profile (four folders below Background): Profile customization, Button hints,
 # Platform folders.
 key KEYCODE_BACK
-press DPAD_DOWN 3 KEYCODE_DPAD_CENTER
+press DPAD_DOWN 4 KEYCODE_DPAD_CENTER
 expect "glow on" "Profile customization row summarizes the avatar style"
 # Panel rows: Border color, Custom color…, Border width, Glow, Glow speed, Glow intensity, Reset.
 key KEYCODE_DPAD_CENTER
@@ -78,10 +80,10 @@ key KEYCODE_DPAD_CENTER
 expect "At the top of Games (classic)" "Platform folders toggles to the classic layout"
 key KEYCODE_DPAD_CENTER
 expect "Inside All Games" "Platform folders toggles back"
-# Effects (two folders above Menu and profile): Surface style, UI filter (experimental), Focus
+# Effects (three folders above Menu and profile): Surface style, UI filter (experimental), Focus
 # frame style, Ambient particles, App icon mask.
 key KEYCODE_BACK
-press DPAD_UP 2 KEYCODE_DPAD_CENTER
+press DPAD_UP 3 KEYCODE_DPAD_CENTER
 expect "Theme pack (Flat glass)" "Surface style follows the theme pack (Flat glass)"
 key KEYCODE_DPAD_CENTER KEYCODE_DPAD_CENTER
 expect "Y2K glossy bezel" "Surface style cycles through the presets"
@@ -268,7 +270,15 @@ adb logcat -d -s XrossParticles:I | grep -q "rest preset=SNOW n=40 settleFrames=
   && ok "10 s without input: the particles ease to a stop" \
   || bad "the particles didn't rest ($(adb logcat -d -s XrossParticles:I | tail -1))"
 frames() { adb shell dumpsys gfxinfo "$PKG" | grep -m1 "Total frames rendered" | grep -o "[0-9]*"; }
-f0=$(frames); pause 3; f1=$(frames)
+# rest_frames: f0 and f1 around 3 s at rest that don't cross a minute boundary, where the status
+# bar's clock draws its one frame.
+rest_frames() {
+  local s
+  s=$(adb shell date +%S | tr -d '\r'); s=${s#0}
+  [ "$s" -ge 52 ] && adb shell sleep $((62 - s))
+  f0=$(frames); pause 3; f1=$(frames)
+}
+rest_frames
 [ "$f0" = "$f1" ] && ok "resting particles draw no frames" || bad "$((f1 - f0)) frames drawn while resting"
 adb logcat -c
 key KEYCODE_DPAD_DOWN
@@ -309,7 +319,7 @@ if [ "$sdk" -ge 33 ]; then
   pause 4
   adb logcat -d -s XrossUiFilter:I | tail -1 | grep -q "filter=CUSTOM state=RESTING" \
     && ok "3 s without input: the UI filter rests" || bad "the UI filter didn't rest ($(adb logcat -d -s XrossUiFilter:I | tail -1))"
-  f0=$(frames); pause 3; f1=$(frames)
+  rest_frames
   [ "$f0" = "$f1" ] && ok "a resting UI filter draws no frames" || bad "$((f1 - f0)) frames drawn under a resting UI filter"
   adb logcat -c
   adb shell "echo 'uniform shader content; half4 main(float2 p) { return content.eval(p) * nope; }' > /sdcard/Xross/themes/smoke_pack/postprocess.agsl"
@@ -461,7 +471,7 @@ else
     && ok "Bloom stays off below Android 13" || bad "Bloom state ($(adb logcat -d -s XrossUiFilter:I | tail -1))"
 fi
 pause 4
-f0=$(frames); pause 3; f1=$(frames)
+rest_frames
 [ "$f0" = "$f1" ] && ok "with Bloom on, a resting menu draws no frames" || bad "$((f1 - f0)) frames drawn at rest under Bloom"
 key KEYCODE_DPAD_DOWN
 press DPAD_CENTER 2
@@ -506,7 +516,7 @@ adb logcat -d -s XrossWallpaper:I | grep -q "wallpaper=custom .*opaque=true" \
 category 0
 press DPAD_DOWN 3 KEYCODE_DPAD_CENTER
 top_list
-press DPAD_DOWN 7
+press DPAD_DOWN 8
 expect "Clears 6 effects" "Reset to theme defaults says what it would clear"
 adb logcat -c
 key KEYCODE_DPAD_CENTER
@@ -681,5 +691,241 @@ set_json bootIntro ""
 set_json themePack default
 adb shell rm -rf /sdcard/Xross/themes/smoke_boot
 start_app
+
+
+section "Components (2b.7a)"
+# Settings ▸ Theme ▸ Components (the folder after Intro and transitions): Status bar left and
+# right (Confirm opens the slot list: Theme pack, each slot with its moves, then Add), Battery
+# display and Clock format, saved as display.components. The bar's glyphs are described
+# ("Battery gauge, 2 of 3 bars", "Wi-Fi, 3 of 3 bars", "Volume 2 of 3", "Offline"), and debug
+# builds log one XrossStatus line per change. XROSS_SHOTS=<dir> keeps a screenshot of each state.
+shot() { if [ -n "${XROSS_SHOTS:-}" ]; then mkdir -p "$XROSS_SHOTS"; adb exec-out screencap -p > "$XROSS_SHOTS/components-$1.png"; fi; }
+flat_settings() { adb shell cat /sdcard/Xross/config/settings.json | tr -d ' \n\r'; }
+await_flat() { # await_flat <text in settings.json without spaces>
+  for _ in $(seq 10); do flat_settings | grep -qF -- "$1" && return 0; pause 0.5; done
+  return 1
+}
+xml() { dump; adb shell cat /sdcard/xross-ui.xml; }
+has_desc() { xml | grep -qF "content-desc=\"$1"; }
+descs() { xml | grep -o 'content-desc="[^"]\{1,\}"' | sort; }
+# The clock's and the gauge's bounds: the HUD's expansion must never move them.
+bar_bounds() {
+  xml | grep -oE '(text="[0-9]{1,2}/[0-9]{1,2}  [^"]*"|text="[0-9]{1,3}%"|content-desc="Battery gauge[^"]*")[^>]*bounds="[^"]*"' \
+    | grep -o 'bounds="[^"]*"' | tr '\n' ' '
+}
+# Left edge of the first text matching <ERE>.
+x_of() { xml | grep -oE "text=\"$1\"[^>]*bounds=\"\[[0-9]+" | grep -oE '\[[0-9]+$' | tr -d '[' | head -1; }
+clock_is() { screen | grep -qE "$1"; }
+open_components() {
+  category 0
+  press DPAD_DOWN 3 KEYCODE_DPAD_CENTER
+  top_list
+  press DPAD_DOWN 6 KEYCODE_DPAD_CENTER
+}
+# While the HUD is open the right cluster is fully faded, and Compose leaves transparent nodes out
+# of the accessibility tree: an empty reading then is the fade, not a missing bar.
+hud_cycle() { # hud_cycle <order>: the HUD fades the right cluster and hands it back in place
+  category 0
+  pause 1
+  local before during after
+  before=$(bar_bounds)
+  key KEYCODE_DPAD_UP
+  pause 0.8
+  during=$(bar_bounds)
+  shot "hud-$2"
+  key KEYCODE_DPAD_DOWN
+  pause 0.8
+  after=$(bar_bounds)
+  shot "bar-$2"
+  if [ -n "$before" ] && [ -z "$during" ] && [ "$before" = "$after" ]; then
+    ok "$1: the HUD fades the clock and battery and gives them back without moving them"
+  else
+    bad "$1: before | under the HUD | after: $before | $during | $after"
+  fi
+}
+adb shell dumpsys battery unplug
+adb shell dumpsys battery set level 64
+adb shell dumpsys battery set status 3
+open_components
+expect "Status bar left" "Settings ▸ Theme ▸ Components lists the status-bar rows"
+expect "Empty (theme pack) · Top-left" "the left cluster follows the Default pack (empty)"
+# Only the focused row shows its subtitle.
+key KEYCODE_DPAD_DOWN
+expect "Clock · Battery · Avatar (theme pack)" "the right cluster follows the Default pack"
+key KEYCODE_DPAD_DOWN
+expect "Theme pack (Icon and percentage)" "Battery display follows the pack (BOTH)"
+expect "64%" "the bar draws the battery percentage"
+expect_desc "Battery gauge, 2 of 3 bars" "the bar draws the battery gauge beside it"
+shot both
+hud_cycle "Default order" default
+
+# Battery display (third row): Theme pack → Icon → Percentage → Icon and percentage → Time to full.
+open_components
+press DPAD_DOWN 2 KEYCODE_DPAD_CENTER
+expect "Icon · Time to full" "Battery display cycles to Icon"
+await_flat '"batteryMode":"CAPSULE_ICON"' && ok "it is saved as display.components.batteryMode" || bad "batteryMode not in settings.json"
+expect_not "64%" "Icon draws no percentage"
+expect_desc "Battery gauge, 2 of 3 bars" "Icon draws the gauge"
+shot icon
+key KEYCODE_DPAD_CENTER
+expect "64%" "Percentage draws the percentage"
+has_desc "Battery gauge" && bad "Percentage still draws the gauge" || ok "Percentage draws no gauge"
+shot percentage
+key KEYCODE_DPAD_CENTER KEYCODE_DPAD_CENTER
+expect "Time to full · " "Battery display cycles to Time to full"
+expect "64%" "Time to full off the charger draws the percentage"
+adb logcat -c
+adb shell dumpsys battery set ac 1
+adb shell dumpsys battery set status 2
+pause 2
+s=$(screen)
+full=$(grep -m1 -E '^[0-9]+ [hm]( [0-9]+ m)? to full$' <<<"$s")
+if [ -n "$full" ]; then
+  ok "on the charger, Time to full draws '$full'"
+elif grep -qxF "64%" <<<"$s" && adb logcat -d -s XrossStatus:I | grep -q "battery=64+ toFull=-"; then
+  ok "on the charger with no estimate from Android (−1), Time to full draws the percentage"
+else
+  bad "Time to full on the charger ($(adb logcat -d -s XrossStatus:I | tail -1))"; show "$s"
+fi
+shot time-remaining
+adb shell dumpsys battery set ac 0
+adb shell dumpsys battery set status 3
+key KEYCODE_DPAD_CENTER
+await_flat '"batteryMode":null' && ok "Theme pack hands the battery back (null)" || bad "batteryMode not reset to null"
+
+# Clock format (fourth row): Theme pack → 24 h → 12 h → Date and time → Time only.
+key KEYCODE_DPAD_DOWN KEYCODE_DPAD_CENTER
+expect "24 h · " "Clock format cycles to 24 h"
+clock_is '^[0-9]{1,2}/[0-9]{1,2}  ([01][0-9]|2[0-3]):[0-5][0-9]$' && ok "24 h: date and a 24-hour time" || { bad "24 h clock"; show "$(screen)"; }
+key KEYCODE_DPAD_CENTER
+clock_is '^[0-9]{1,2}/[0-9]{1,2}  [0-9]{1,2}:[0-5][0-9][^0-9]*[AP]M$' && ok "12 h: date and a 12-hour time" || { bad "12 h clock"; show "$(screen)"; }
+key KEYCODE_DPAD_CENTER
+clock_is '^[A-Z][a-z]{2}, [A-Z][a-z]{2} [0-9]{1,2}  [0-9]{1,2}:[0-5][0-9]' && ok "Date and time: weekday, month and day, then the time" || { bad "Date and time clock"; show "$(screen)"; }
+key KEYCODE_DPAD_CENTER
+await_flat '"clockFormat":"m"' && ok "Time only is saved as the skeleton m" || bad "clockFormat m not in settings.json"
+clock_is '^[0-9]{1,2}:[0-5][0-9]([^0-9]*[AP]M)?$' && ! clock_is '^[0-9]{1,2}/[0-9]{1,2}  ' \
+  && ok "Time only: the time without a date" || { bad "Time only clock"; show "$(screen)"; }
+key KEYCODE_DPAD_CENTER
+clock_is '^[0-9]{1,2}/[0-9]{1,2}  [0-9]{1,2}:[0-5][0-9]' && ok "Theme pack: back to the default clock" || { bad "default clock"; show "$(screen)"; }
+
+# Second order: Status bar right ▸ Clock ▸ Move right gives Battery, Clock, Avatar.
+top_list
+press DPAD_DOWN 1 KEYCODE_DPAD_CENTER
+expect "Add" "Status bar right opens its slot list (Theme pack, the slots, Add)"
+press DPAD_DOWN 1 KEYCODE_DPAD_CENTER
+key KEYCODE_DPAD_CENTER
+await_flat '"statusBarRight":["BATTERY","CLOCK","AVATAR"]' && ok "Clock ▸ Move right saves Battery, Clock, Avatar" || bad "statusBarRight not saved ($(flat_settings | grep -o '"statusBarRight":[^]]*]'))"
+expect "Move left" "the list reopens on the clock's moves"
+key KEYCODE_BACK KEYCODE_BACK
+bx=$(x_of '[0-9]{1,3}%'); cx=$(x_of '[0-9]{1,2}/[0-9]{1,2}  [^"]*')
+[ -n "$bx" ] && [ -n "$cx" ] && [ "$bx" -lt "$cx" ] && ok "the battery now draws left of the clock" || bad "slot order on screen (battery x=$bx, clock x=$cx)"
+hud_cycle "Battery first" battery-first
+
+# Third order: Status bar left ▸ Add ▸ Network, then Add ▸ Volume.
+open_components
+key KEYCODE_DPAD_CENTER
+press DPAD_DOWN 1 KEYCODE_DPAD_CENTER
+press DPAD_DOWN 1 KEYCODE_DPAD_CENTER
+press DPAD_DOWN 1 KEYCODE_DPAD_CENTER
+press DPAD_DOWN 1 KEYCODE_DPAD_CENTER
+key KEYCODE_BACK
+await_flat '"statusBarLeft":["WIFI","VOLUME"]' && ok "Add ▸ Network and Add ▸ Volume save the left cluster" || bad "statusBarLeft not saved ($(flat_settings | grep -o '"statusBarLeft":[^]]*]'))"
+expect "Network · Volume · Top-left" "Status bar left shows its slots"
+if has_desc "Wi-Fi," || has_desc "Mobile data" || has_desc "Ethernet"; then
+  ok "Network shows the default network ($(descs | grep -oE 'Wi-Fi[^"]*|Mobile data|Ethernet' | head -1))"
+else
+  bad "no network glyph ($(descs | tr '\n' ' '))"
+fi
+has_desc "Volume" && bad "Volume shows before the volume changed" || ok "Volume stays hidden until the volume changes"
+# The volume keys, as a user would (`cmd media_session volume --set` doesn't move the emulator's
+# speaker volume). A press while Android's volume panel is hidden only raises the panel, so the
+# first press shows it and the next one steps. One step down usually keeps the same level: it
+# still counts as a change.
+music_volume() { adb shell cmd media_session volume --stream 3 --get 2>/dev/null | grep -o 'volume is [0-9]*' | grep -o '[0-9]*$'; }
+# While Android's panel has the focus, uiautomator doesn't list the slot that just appeared, so
+# its state is read from XrossStatus ("volume=<level>#<changes>"); the screenshots show the glyph.
+vol=$(music_volume)
+adb logcat -c
+key KEYCODE_VOLUME_DOWN
+key KEYCODE_VOLUME_DOWN
+pause 0.3
+step=$(adb logcat -d -s XrossStatus:I | grep -oE 'volume=[0-9]#[1-9][0-9]*' | tail -1)
+[ -n "$step" ] && ok "a volume step shows Volume ($step)" || bad "Volume didn't show after a change ($(adb logcat -d -s XrossStatus:I | tail -1))"
+shot volume
+pause 4
+has_desc "Volume" && bad "Volume still shown 4 s after the change" || ok "Volume hides again after 3 s"
+key KEYCODE_VOLUME_DOWN
+for _ in $(seq 16); do [ "$(music_volume)" = 0 ] && break; key KEYCODE_VOLUME_DOWN; done
+pause 0.3
+shot volume-muted
+adb logcat -d -s XrossStatus:I | grep -qE 'volume=0#[1-9]' && ok "volume 0 shows the muted glyph" || bad "no muted volume ($(adb logcat -d -s XrossStatus:I | tail -1))"
+key KEYCODE_VOLUME_UP
+for _ in $(seq 16); do [ "$(music_volume)" -ge "${vol:-8}" ] && break; key KEYCODE_VOLUME_UP; done
+pause 4
+hud_cycle "With a left cluster" left-cluster
+
+# Airplane mode: the network slot follows within 2 s, and comes back after.
+category 0
+pause 1
+adb logcat -c
+t0=$(adb shell date +%s.%N | tr -d '\r')
+adb shell cmd connectivity airplane-mode enable
+pause 3
+t1=$(adb logcat -d -v epoch -s XrossStatus:I | grep -m1 "network=OFFLINE" | awk '{print $1}')
+if [ -n "$t1" ] && python3 -c "import sys; sys.exit(0 if float('$t1') - float('$t0') <= 2.0 else 1)"; then
+  ok "airplane mode on: the network slot goes offline in $(python3 -c "print(round(float('$t1') - float('$t0'), 2))") s"
+else
+  bad "airplane mode on: no offline within 2 s ($(adb logcat -d -s XrossStatus:I | tail -1))"
+fi
+expect_desc "Offline" "the offline glyph is drawn"
+shot offline
+adb logcat -c
+adb shell cmd connectivity airplane-mode disable
+back=
+for _ in $(seq 20); do
+  if adb logcat -d -s XrossStatus:I | grep -qE "network=(WIFI|CELLULAR|ETHERNET)"; then back=1; break; fi
+  pause 1
+done
+[ -n "$back" ] && ok "airplane mode off: the network slot comes back ($(adb logcat -d -s XrossStatus:I | grep -oE 'network=[A-Z]+/[0-9]' | tail -1))" \
+  || bad "airplane mode off: the network slot stayed offline"
+
+# The avatar left out: no avatar, and Up at the top of a list stays in the list.
+open_components
+with=$(descs)
+press DPAD_DOWN 1 KEYCODE_DPAD_CENTER
+press DPAD_DOWN 3 KEYCODE_DPAD_CENTER
+key KEYCODE_DPAD_CENTER
+expect "Avatar removed from the status bar" "Avatar ▸ Remove says where the User Card is"
+key KEYCODE_BACK
+await_flat '"statusBarRight":["BATTERY","CLOCK"]' && ok "the right cluster is saved without the avatar" || bad "statusBarRight still has the avatar"
+without=$(descs)
+[ -n "$(comm -23 <(echo "$with") <(echo "$without"))" ] && ok "the avatar is gone from the bar" || bad "the avatar is still drawn"
+shot no-avatar
+# category's own top() climbs onto the avatar, so go to the top by hand here.
+key KEYCODE_BACK KEYCODE_BACK KEYCODE_BACK
+press BUTTON_L1 6
+press DPAD_UP 25
+key KEYCODE_DPAD_UP
+pause 0.8
+expect "Theme" "Up at the top of Settings stays in the list without an avatar"
+
+# Reset to theme defaults hands the components back to the pack.
+press DPAD_DOWN 3 KEYCODE_DPAD_CENTER
+top_list
+press DPAD_DOWN 8
+expect "2 components" "Reset to theme defaults counts the components"
+key KEYCODE_DPAD_CENTER
+await_flat '"statusBarLeft":null,"statusBarRight":null' && ok "Reset clears display.components" || bad "components left in settings.json"
+[ "$(descs)" != "$without" ] && ok "the avatar is back after Reset" || bad "no avatar after Reset"
+
+# At rest the bar's minute tick draws a frame or two, nothing more.
+category 0
+pause 12
+adb shell dumpsys gfxinfo "$PKG" reset >/dev/null
+s=$(adb shell date +%S | tr -d '\r'); s=${s#0}
+adb shell sleep $((60 - s + 3))
+frames=$(adb shell dumpsys gfxinfo "$PKG" | grep -m1 'Total frames rendered' | grep -o '[0-9]*$')
+[ -n "$frames" ] && [ "$frames" -le 3 ] && ok "a minute tick at rest draws $frames frame(s)" || bad "a minute at rest drew ${frames:-?} frames"
+adb shell dumpsys battery reset
 
 suite_end

@@ -8,7 +8,8 @@ shippable. Branches: `refactor/2b7-prep` from `main` once 2b.5 is merged, merged
 
 **Order note.** The Roadmap recommended 2b.7 before 2b.5; 2b.5 went first (see
 [`PHASE_2B5_PROMPTS.md`](PHASE_2B5_PROMPTS.md)). Nothing here touches audio. The one neighbour is
-the status-bar `VOLUME` slot (2b.7a), which reads the 2b.5b mixer but never writes it. Merge 2b.5
+the status-bar `VOLUME` slot (2b.7a), which shows the system media volume (not the 2b.5b mixer,
+see Decisions) and never writes it. Merge 2b.5
 into `main` before cutting either 2b.7 branch: the prep slice moves code out of `XmbViewModel` and
 `XmbScreen`, which 2b.5 also changed.
 
@@ -23,7 +24,23 @@ it doesn't block 2b.7.
 
 ---
 
+## Progress
+
+| Slice | State |
+|---|---|
+| 2b.7-prep | ✅ merged into `main` (`f67f532`): `RaController`, `StatusBarState` / `StatusBarSource`, `model/GlyphKey` and `GlyphSet` |
+| 2b.7a | ✅ on `feat/theme-2b7` (2026-11-14): 793 unit tests, `lintDebug` 0 errors, theme suite **197/197** on the API 37 emulator (new 48-check "Components (2b.7a)" section), `display-matrix.sh` 12/12 default and stress, `palette-perf.sh` 0.15–0.75% janky ([STATUS §3.29](STATUS.md)). **Open:** the A55 pass (volume keys, Wi-Fi bars, 120 Hz), an Android 9 image, a real charge-time estimate. As built: [2b.7a notes](#as-built-2b7a-2026-11-14) |
+| 2b.7b | ⬜ next; see [Notes for 2b.7b–e](#notes-for-2b7be-from-2b7a) |
+| 2b.7c | ⬜ |
+| 2b.7d | ⬜ |
+| 2b.7e | ⬜ |
+
+---
+
 ## What exists today (2026-11-13)
+
+The table below is the starting point before the prep slice; what 2b.7a changed is in its
+[as-built notes](#as-built-2b7a-2026-11-14).
 
 | Piece | Where | State |
 |---|---|---|
@@ -176,6 +193,79 @@ in every cluster order.
   bars follow walking away from the router. An Android 9 device or emulator image for the
   `WifiManager` path, if one is available.
 ```
+
+### As built (2b.7a, 2026-11-14)
+
+Where things live:
+
+| Piece | Where |
+|---|---|
+| Enums, the `components` block, its schema, `ComponentsPatch` (one layer), `ResolvedComponents` (settled, with `needs`), `ComponentOverrides` (`display.components`), `ComponentRow` (one-value Settings rows), `ClockFormat` | `theme/pack/Components.kt` |
+| Pack layers | `LoadedTheme.components` (Default pack over the pack's base), `ResolvedVariant.components`, `LoadedTheme.components(variant, user)`; logos in `LoadedTheme.logos` |
+| Resolution | `ThemeLookResolver` → `ResolvedLook.components`, provided as `LocalComponents` (MainActivity); the same cascade as `XmbViewModel.components` for the bar's sources and the avatar's place in navigation |
+| Bar state | `state/StatusBarState.kt` (`StatusBarState`, `StatusBarSource` with `StatusNeeds`, `StatusLevels`), `state/StatusMonitors.kt` (`NetworkMonitor`, `MediaVolumeMonitor`) |
+| Drawing | `ui/StatusBar.kt`: one `Layout` with the left and right clusters, a composable per slot |
+| Settings | `state/ComponentMenus.kt` (the slot list and its edits), `MenuTree` folder `DISPLAY_COMPONENTS`, commands `SetStatusSlots`, `EditStatusSlot`, `CycleComponent`, `SetComponent`, `ShowOptions` |
+
+Decisions made while building (the spec above is unchanged otherwise):
+
+- **Clock skeletons:** the date letters (`y M d E`) go through the locale's best pattern, then two
+  spaces (the gap the bar always had), then the time: `H` 24 h, `h` 12 h, and `m` without either
+  follows the phone's 12/24 h setting. Skeletons are formatted with ICU
+  (`android.text.format.DateFormat` prints `y` as two digits). Presets: 24 h `MdHm`, 12 h `Mdhma`,
+  Date and time `EMMMdm`, Time only `m`.
+- **`VOLUME`** counts every change of the volume index, not only a change of its 4 levels (14 → 12
+  of 15 is level 3 both times), and listens to `android.media.VOLUME_CHANGED_ACTION` as well as the
+  `Settings.System` observer: Android persists the volume up to a second after the key, the
+  broadcast arrives within milliseconds.
+- **`WIFI`:** `RSSI_CHANGED_ACTION` is read on every API (its `EXTRA_NEW_RSSI` beats an older
+  reading); on 29+ `signalStrength`, then the connection's RSSI, mapped with the AOSP
+  `calculateSignalLevel` formula. `ACCESS_WIFI_STATE` comes with `uses-feature
+  android.hardware.wifi required=false`, so Ethernet-only TVs aren't filtered out.
+- **Aliases** (case, `-` and spaces ignored): see the `components` reference in
+  [THEME_SPECIFICATION.md §15](THEME_SPECIFICATION.md#15-components).
+- **Logos:** SVG logos are read like icons (white, black fills dropped) and now keep their
+  `viewBox` aspect (`SvgIcon` used to make every vector 48 × 48 dp; the Default icons are all
+  square, so they are unchanged). PNG and WebP logos keep their colors.
+- **Slot editor:** Confirm on Status bar left / right opens the Options list (Theme pack, each
+  slot with Move left / Move right / Move to the other side / Remove, Add). After an edit the list
+  reopens on that slot, with its moves open after a left or right move. Edits write only the
+  side(s) they change; the other keeps following the pack.
+- **Avatar left out:** Up at the top of a list stays in the list (the view model checks
+  `components.avatar`); a toast says the User Card is in Settings ▸ Accounts.
+- **Accessibility and logs:** the glyph slots are described ("Wi-Fi, 3 of 3 bars", "Mobile data",
+  "Offline", "Volume 2 of 3", "Volume muted", "Battery gauge, 2 of 3 bars", "Theme logo"); debug and
+  profiling builds log one `XrossStatus` line per change of what the slots show (never per minute).
+
+Device-test lessons (in `test-theme.sh` and `display-matrix.sh` now):
+
+- Only the focused row shows its subtitle: move onto a row before expecting its summary.
+- Compose leaves alpha-0 nodes out of the accessibility tree, so while the HUD is open the right
+  cluster reads as empty; the check compares the clock's and battery's bounds before and after.
+- With Android's volume panel up, uiautomator doesn't list a slot that just appeared, so the
+  `VOLUME` checks read `XrossStatus`. On the emulator a volume key while the panel is hidden only
+  raises the panel, keys sent milliseconds apart both count as that, and
+  `cmd media_session volume --set` doesn't move the speaker volume: press the keys one at a time.
+- A resting-frames window that crosses a minute boundary sees the clock's one frame; the suite's
+  `rest_frames` waits past the boundary first.
+- `harness.sh`'s `top()` climbs onto the avatar and back down: with the avatar left out it lands
+  on the second row, so go to the top with `press DPAD_UP 25` instead.
+- The emulator's `dumpsys battery set ac 1` charger gives no charge-time estimate (−1), so only
+  the percentage fallback of `TIME_REMAINING` was seen on a device.
+
+### Notes for 2b.7b–e (from 2b.7a)
+
+- Every `components` key is already decoded, cascaded, saved under `display.components` and
+  carried in `ResolvedComponents` (`miniPlayer`, `glyphs`, `pills`, `telemetry`, `topLeft`); a
+  slice only has to draw it and add its Settings row. One-value rows extend `ComponentRow` and
+  `ComponentOverrides.get` / `with`; `badgePills` (multi-select) needs its own Options list, like
+  the slot editor.
+- 2b.7b's `STATUS_TICKER` belongs in the right cluster before the avatar, inside the row that
+  `contentAlpha` fades (`ResolvedComponents.rightOfText`).
+- 2b.7c's social stack goes after the left slots in the same clipped row of `StatusBar`'s
+  `Layout`; it gets the width the right cluster leaves, and `leftMaxHeight` keeps it above the
+  category bar.
+- A new watched source belongs in `StatusNeeds` so it only runs while something shows it.
 
 ---
 
@@ -371,4 +461,8 @@ Defaults chosen in this doc (change before the slice starts if needed):
 - The particle slowdown on the A55 during navigation (STATUS §3.28): 2b.7d's `RICH_CARD` adds
   per-focus work, so measure it with the same interleaved rounds.
 - `PHASE_2B3_PENDING_TESTS.md` items still open (idle CPU at rest 16–21% vs < 10%); the status
-  bar's new slots must not add wakeups at rest beyond the minute tick and real changes.
+  bar's new slots must not add wakeups at rest beyond the minute tick and real changes. Measured
+  in 2b.7a on the emulator: 3-second windows at rest draw 0 frames, a minute tick 1; idle CPU on
+  the A55 not re-measured.
+- 2b.7a on the A55 at 120 Hz: volume keys and mute, Wi-Fi bars walking away from the router, a
+  real `TIME_REMAINING` estimate on a charger, and an Android 9 image for the `WifiManager` path.

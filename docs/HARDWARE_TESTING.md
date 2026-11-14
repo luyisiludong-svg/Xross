@@ -55,11 +55,11 @@ seeds its own fixtures, so any of them runs on its own and in any order.
 | --- | --- | --- | --- |
 | `tools/device-tests/smoke.sh` | 12 | ~30 s | Quick sanity: Xross starts, creates its database, scans the seeded ROMs, draws the category bar and Games root, opens the first platform, L1/R1, no crash. No media, theme, database or battery fixtures |
 | `tools/device-tests/test-library.sh` | 41 | ~2 min | Platform detection, `.cue`/`.bin` pairing, title cleaning, favorites, per-game emulator, search, game tiles and Details paging, categories, rescan and fingerprinting |
-| `tools/device-tests/test-theme.sh` | 134 | ~5 min | Settings ▸ Theme rows (with the 2b.4f effect rows, Pick custom wallpaper and Reset to theme defaults), quick profiles, color layers (circadian, `dumpsys battery` tint and charging pulse), Sound, v2 packs and hot reload (a pack's `wallpaper.png`: shown, stops the wave, pre-blurred; focus frame, icon mask and filter with the Apps icons cached; foreground particles and their 10 s rest; a background filter and a custom `postprocess.agsl` that rests, and fails safely), `.xtheme` import and variants, game-art palette |
-| `tools/device-tests/test-media.sh` | 31 | ~2 min | Photo viewer and zoom, Set as Xross wallpaper and back to the theme's, music from tags, the music driving the shader's audio uniforms (0 when paused), Now Playing, Select shortcut and mini-player, music pausing for video and games |
+| `tools/device-tests/test-theme.sh` | 197 | ~12 min | Settings ▸ Theme rows (with the 2b.4f effect rows, Pick custom wallpaper and Reset to theme defaults), quick profiles, color layers (circadian, `dumpsys battery` tint and charging pulse), Sound, v2 packs and hot reload (a pack's `wallpaper.png`: shown, stops the wave, pre-blurred; focus frame, icon mask and filter with the Apps icons cached; foreground particles and their 10 s rest; a background filter and a custom `postprocess.agsl` that rests, and fails safely), `.xtheme` import and variants, game-art palette, boot intro and launch curtains (2b.5d), Settings ▸ Theme ▸ Components (2b.7a: battery modes on and off the charger, clock formats, three slot orders under the avatar HUD, airplane mode, the volume keys, the avatar left out, a minute tick at rest). `XROSS_SHOTS=<dir>` keeps its screenshots |
+| `tools/device-tests/test-media.sh` | 56 | ~2 min | Photo viewer and zoom, Set as Xross wallpaper and back to the theme's, music from tags, the music driving the shader's audio uniforms (0 when paused), Now Playing, Select shortcut and mini-player, music pausing for video and games |
 | `tools/device-tests/test-input.sh` | 11 | ~45 s | Deadzone cycle, ten-button remap and its saved mapping, touch swipes and drag |
 | `tools/device-tests/test-integration.sh` | 9 | ~35 s | Avatar mini-HUD, RetroAchievements dashboard, no secrets in `Xross/config`, RetroArch launch through the stub |
-| `tools/device-tests/run-all.sh` (or `smoke.sh --all`) | 226 | ~10 min | Every suite in sequence with one summary; exit 0 only when nothing failed |
+| `tools/device-tests/run-all.sh` (or `smoke.sh --all`) | 314 | ~18 min | Every suite in sequence with one summary; exit 0 only when nothing failed |
 
 `smoke.sh <suite>` runs one suite (`smoke.sh theme`); `run-all.sh theme input` runs a chosen set.
 
@@ -267,6 +267,26 @@ logos and hero art.
 ```bash
 pid=$(adb shell pidof dev.xross.launcher); t0=$(adb shell cat /proc/$pid/stat | awk '{print $14+$15}'); sleep 20; t1=$(adb shell cat /proc/$pid/stat | awk '{print $14+$15}'); echo "CPU $(( (t1 - t0) * 100 / 20 / 100 ))%"
 ```
+
+## 6d. Status bar components (Phase 2b.7a)
+
+**Settings ▸ Theme ▸ Components.** `test-theme.sh` covers these on the emulator; on the phone the
+point is real radios, real volume keys and 120 Hz.
+
+- [ ] The default bar looks as before: date and time, "NN%", the gauge, the avatar
+- [ ] Battery display: Icon, Percentage, Icon and percentage; Time to full on the charger shows
+      "1 h 20 m to full" (or the percentage if Android has no estimate yet), the percentage off it
+- [ ] Clock format: 24 h, 12 h, Date and time, Time only; Theme pack brings the default back
+- [ ] Status bar left ▸ Add ▸ Network and Volume: the Wi-Fi bars follow you walking away from the
+      router and back; mobile data shows its own glyph with Wi-Fi off; airplane mode shows the
+      offline glyph within 2 s
+- [ ] Volume keys: the volume glyph appears at once and hides 3 s after the last press; at 0 it
+      shows the muted glyph
+- [ ] In every slot order, Up from the top of a category opens the avatar HUD: the right cluster
+      fades out, the left one stays, and both come back in place when it closes. No jitter
+- [ ] Status bar right ▸ Avatar ▸ Remove: no avatar, Up at the top stays in the list; Reset to
+      theme defaults brings it back
+- [ ] At rest, the bar adds nothing: idle CPU as in §6c, with Network and Volume shown
 
 ## 7. Photo, Music and Video
 
