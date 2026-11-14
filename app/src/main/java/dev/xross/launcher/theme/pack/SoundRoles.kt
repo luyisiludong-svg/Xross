@@ -95,6 +95,7 @@ internal fun resolveGainPatch(where: String, audio: ThemeManifest.Audio?, proble
     if (audio.sounds.isNotEmpty()) problems += "$where.audio.sounds: only soundGains and bgmFile can change here (sound files are the pack's)"
     if (audio.panAmount != null) problems += "$where.audio.panAmount: only soundGains and bgmFile can change here"
     if (audio.cursorJitter != null) problems += "$where.audio.cursorJitter: only soundGains and bgmFile can change here"
+    if (audio.bootVideo != null) problems += "$where.audio.bootVideo: only the pack's base has a boot video"
     return gainsOf("$where.audio", audio, problems).takeIf { it.isNotEmpty() }
 }
 

@@ -186,10 +186,15 @@ data class ThemeManifest(
          * Unset: the pack's `bgm.ogg` / `bgm.mp3` if it has one.
          */
         @kotlinx.serialization.json.JsonNames("bgm") val bgmFile: String? = null,
+        /**
+         * The boot video (2b.5d, [BootVideoRef]): a video file from the pack root, or `none`.
+         * Unset: the pack's `boot.mp4` if it has one. Only the pack's base reads it.
+         */
+        @kotlinx.serialization.json.JsonNames("boot") val bootVideo: String? = null,
     ) {
         companion object {
             /** Every property `audio` recognizes; others are reported like unknown `effects` keys. */
-            val KEYS: Set<String> = setOf("sounds", "soundGains", "panAmount", "cursorJitter", "bgmFile", "bgm")
+            val KEYS: Set<String> = setOf("sounds", "soundGains", "panAmount", "cursorJitter", "bgmFile", "bgm", "bootVideo", "boot")
 
             /** Problems for the keys of every `audio` block in [root] that aren't in [KEYS]. */
             fun unknownKeys(root: JsonObject): List<String> = blockProblems(root, "audio") { where, key ->
@@ -247,6 +252,16 @@ data class ThemeManifest(
         @kotlinx.serialization.json.JsonNames("postProcess") val uiFilter: String? = null,
         /** CUSTOM's AGSL file, from the pack root (default `postprocess.agsl`); alone it implies CUSTOM. */
         @kotlinx.serialization.json.JsonNames("postProcessPath") val uiFilterPath: String? = null,
+        /**
+         * What a cold start shows ([BootIntro], 2b.5d): `VIDEO` (the pack's boot video; the default
+         * when it has one), `SHADER` (the background shader ramped up from black) or `OFF` (the fade-in).
+         */
+        @kotlinx.serialization.json.JsonNames("intro") val bootIntro: String? = null,
+        /**
+         * The curtain before a game starts ([LaunchCurtain], 2b.5d): `BLOOM` (default),
+         * `FADE_BLACK`, `IRIS` or `FLASH`.
+         */
+        @kotlinx.serialization.json.JsonNames("curtain") val launchCurtain: String? = null,
     ) {
         companion object {
             /**
@@ -260,6 +275,7 @@ data class ThemeManifest(
                 "focusFrameStyle", "focusFrame", "iconMask", "iconFilter",
                 "foregroundParticles", "particles",
                 "backgroundFilter", "uiFilter", "postProcess", "uiFilterPath", "postProcessPath",
+                "bootIntro", "intro", "launchCurtain", "curtain",
             )
 
             /**

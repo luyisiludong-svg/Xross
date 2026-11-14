@@ -72,6 +72,12 @@ data seeded):
   menu starts no snaps (same on main). `AudioDirector` logs `XrossMix music=… snap=…` in debug
   and profiling builds for when a seeded library is available; `AudioDirectorTest` pins the
   0.2 duck. Music pausing for a game launch wasn't run either (it launches a real emulator).
+- Device suites, caught up after 2b.5d: `test-theme.sh` now drills into the Theme folders (Colors,
+  Background, Effects, Menu and profile) instead of walking the old flat rows. Same 149 checks;
+  the E-Ink color-layer check now expects the prep slice's "Off (set by Monochrome E-Ink)". It passes
+  **149/149** on `emulator-5554` (debug build, 471 s). `test-media.sh` now reaches its Xross
+  wallpaper check through Theme ▸ Background and passes **56/56** there (218 s). That includes the
+  two XrossAudio checks 2b.5b listed as failing.
 
 Differences from the prompt below:
 - Lint: the 10 errors were already fixed in `5281d15`, and AGP's `check` already runs
@@ -416,6 +422,63 @@ Differences from the prompt below:
 ---
 
 ## Slice 2b.5d: Boot sequence and launch curtain
+
+**Status (2026-11-13, `feat/theme-2b5`):** done in code, unit-tested (757 tests, lint 0 errors),
+device-checked on the emulator (`emulator-5554`, debug build) by the new "Boot intro and launch
+curtain (2b.5d)" section of `test-theme.sh` (15/15, run on its own over a fresh setup), with a
+generated 3 s `boot.mp4` (test pattern and a 440 Hz tone):
+- Cold start: the video plays as `USAGE_GAME` / `CONTENT_TYPE_MOVIE`; a key skips it
+  (`mode=VIDEO file=boot.mp4 skipped=true at=597 ms`), that key doesn't move the menu and the next
+  one switches category. Untouched it ends by itself (`skipped=false at=3339 ms`). A new activity in
+  the same process (warm start) shows nothing.
+- Boot intro ▸ Shader over the pack's video: `uTransition=1.00 at=2520 ms`, then
+  `mode=SHADER skipped=false at=2505 ms`; screenshots show black, the Starfield emerging, the warp
+  building, the menu fading in. E-Ink gives `mode=FADE`.
+- Each curtain on a stub launch of Chrono Trigger: the pack's `IRIS`, then `FLASH`, `FADE_BLACK`,
+  `BLOOM` from Settings, and `BLACK` under E-Ink. Screenshots of `IRIS` show the circle closing on
+  the focused tile.
+- `am start -W` on the emulator, over three runs: 640–750 ms to the first frame without a boot
+  video, 630–850 ms with one; the intro is decided about 1 s after the process starts (≈ 250 ms of
+  black after the first frame). Keys are taken from the first frame on.
+- **The whole theme suite is stale:** 46 of 149 passed. The failures start at the first Down
+  from Theme pack: the suite still walks the flat Settings ▸ Theme rows that the prep slice grouped
+  into folders (`test-theme.sh` was last updated in 2b.4f). Not re-run on the build before 2b.5d.
+  Since fixed: 149/149 (see the prep-slice status).
+  Run in the full suite, the 2b.5d section also failed until it reset Boot intro and Launch curtain
+  itself (the stale sections had changed them by pressing Confirm on the wrong rows).
+- **Not checked on the A55** (not connected): cold-start times there, and that the video doesn't
+  stutter at 120 Hz.
+
+Differences from the prompt below:
+- **A key or touch before the intro is decided skips it in advance.** The device check found that a
+  key in the ≈ 250 ms between the first frame and the decision (the saved pack still loading)
+  reached the menu and the video started after it. Now that key goes to the skip handler, and so
+  does leaving Xross in that window; leaving during an intro ends it at once.
+- A cold start stays black until the intro is decided (it was the wave with the menu fading in).
+  The fade-in now lifts that black over 350 ms (the old reveal delay), then fades the menu in as
+  before, so the wave comes up from black too instead of popping in.
+- "Muted" means either Startup sound off or Startup and game cues at 0%. The shader intro is also
+  off while Wave background is off (nothing to ramp).
+- The user's Boot intro ▸ Shader plays even over a pack's video; only a pack's own `SHADER` loses to
+  its video. Video without a video falls back to the fade-in.
+- `audio.bootVideo`'s alias is `boot` (the prompt's alias is the key itself); `none` turns a
+  root `boot.mp4` off. Only the pack's base reads it; variants, overrides and rules that set it are
+  reported. Folder packs only, like the theme music. The 15 s limit cuts playback; the file's
+  length isn't read at load.
+- `uTransition` follows a smoothstep 0 → 1 over 2.5 s and then eases back like after a category
+  switch; the black over the shader lifts over the first 1.5 s and the menu fades in from 1.2 s.
+- The boot video plays without audio focus (`USAGE_GAME` / `CONTENT_TYPE_MOVIE`), counted as
+  Xross's own player in the playback census, fitted on black rather than cropped, and the wave
+  pauses under it. It draws on a `SurfaceView` above the window, not a `TextureView`, so its frames
+  don't wait for Xross's UI frames.
+- Curtains close in 900 ms (inside the 1100 ms hand-off); `IRIS` closes on the crosshair, where the
+  focused tile is, with the title glowing in once it is three-quarters shut. Each launch logs
+  `XrossBoot curtain=IRIS title=…` (`BLACK` under E-Ink). Aliases: `FADE`/`BLACK` → `FADE_BLACK`,
+  `CIRCLE` → `IRIS`, `WHITE_FLASH` → `FLASH`, `GLOW` → `BLOOM`; `FADE`/`NONE` → `OFF` for
+  `bootIntro`.
+- The two rows live in a new Settings ▸ Theme ▸ Intro and transitions folder (between Effects and
+  Menu and profile); the Boot intro row says why it won't play (E-Ink, startup sound off, no video
+  in the pack).
 
 ```markdown
 ### Task: Implement Phase 2b.5d — boot video or shader intro, and the launch curtain

@@ -60,7 +60,8 @@ Xross/themes/<theme_id>/
 ├── shader.frag     optional: a CUSTOM background shader (or effects.shaderPath)
 ├── postprocess.agsl optional: a CUSTOM UI filter, Android 13+ (or effects.uiFilterPath)
 ├── wallpaper.png   optional: drawn behind the menu (or .jpg / .webp, or effects.wallpaperPath)
-└── bgm.ogg         optional: ambient music loop, at most 20 MB (or bgm.mp3, or audio.bgmFile)
+├── bgm.ogg         optional: ambient music loop, at most 20 MB (or bgm.mp3, or audio.bgmFile)
+└── boot.mp4        optional: cold-start video, at most 30 MB, cut at 15 s (or audio.bootVideo)
 ```
 
 * File names are matched without regard to case, and a pack can't reach files outside its folder
@@ -192,6 +193,11 @@ Sounds (`audio/UiSounds.kt`) come from the active theme pack:
   focus, so it never pauses another app. Under a game's video snap it pauses, or plays at 20% with
   Music during video snaps ▸ Lower; it stops for a game and starts over afterwards. Master loops
   near −16 LUFS like the cues, a little quieter if the pack is meant as a backdrop.
+* **Boot video** (`audio.bootVideo`, alias `boot`): played full-screen on a cold start in place of
+  the `opening` cue (§8, Boot intro). Unset, a `boot.mp4` at the pack root; `"none"` turns it
+  off. `.mp4`, `.m4v`, `.webm`, `.mkv` or `.3gp`, at most 30 MB, from the pack root; it is cut at
+  15 s. Its sound plays at Settings ▸ Sound ▸ Startup and game cues, without audio focus. Only the
+  pack's base names one (variants, overrides and rules that do are reported). Folder packs only.
 
 ```json
 "audio": {
@@ -242,7 +248,7 @@ from Settings ▸ Theme; editing the file by hand works too and is picked up on 
 | `themeVariant` | a variant id; empty = the pack's base look | Theme variant (§9) |
 | `surfaceStyle` | a built-in or pack surface id; empty = the pack's | Surface style (§4) |
 | `customWallpaper` | a `content://` URI or a file path; empty = the pack's wallpaper | Xross wallpaper (§8) |
-| `effects` | `shaderPreset`, `backgroundFilter`, `uiFilter`, `focusFrameStyle`, `foregroundParticles`, `iconMask`; empty = the pack's | Effect rows (§11) |
+| `effects` | `shaderPreset`, `backgroundFilter`, `uiFilter`, `focusFrameStyle`, `foregroundParticles`, `iconMask`, `bootIntro`, `launchCurtain`; empty = the pack's | Effect rows (§11) |
 | `quickProfile` | `NONE`, `OLED_TRUE_BLACK`, `Y2K_CYBER_PASTEL`, `MONOCHROME_EINK` | Quick profile (§10) |
 | `adaptiveGamePalette`, `circadianCurve`, `batteryTint` | `true` / `false`; `null` follows the pack | Adaptive colors / Circadian curve / Battery alert tint (§10) |
 | `wave` | `true` / `false` | Wave background on or off |
@@ -337,6 +343,37 @@ with it (3 s without input, in the background, under E-Ink). A compile error tur
 with a toast. Android 12 and below ignore it. Every pass costs a full-screen offscreen render, so
 prefer the background filter on slow GPUs.
 
+### Boot intro
+
+`effects.bootIntro` (alias `intro`) is what a cold start shows (once per process start; a warm
+start shows the menu straight away):
+
+* `VIDEO`: the pack's boot video (§5), full-screen and fitted on black, with its own sound
+  instead of the `opening` cue; theme music waits for it. The default when the pack has one, and
+  a pack's video beats its own `SHADER`.
+* `SHADER`: the background shader rises from black over 2.5 s while `uTransition` ramps from 0 to
+  1 (a pack shader can build a warp or a reveal on it; it then eases back to 0 as after a category
+  switch), under the `opening` cue, the menu fading in over the last 1.3 s.
+* `OFF` (aliases `FADE`, `NONE`): the menu's fade-in under the `opening` cue.
+
+Any button or touch ends an intro with a 300 ms crossfade, and the menu takes the next input (a
+button pressed before the intro starts skips it). It is off under Monochrome E-Ink, while
+Settings ▸ Sound ▸ Startup sound is off or Startup and game cues is at 0%, and (`SHADER`) while
+Wave background is off. Debug builds log `XrossBoot` (`mode=VIDEO file=boot.mp4 skipped=true at=1840 ms`).
+
+### Launch curtain
+
+`effects.launchCurtain` (alias `curtain`) is drawn over the 1.1 s hand-off to the emulator while
+`gameboot` plays, with the game's title glowing in over it:
+
+* `BLOOM` (default, alias `GLOW`): the menu dims under a glow blooming from the centre.
+* `FADE_BLACK` (aliases `FADE`, `BLACK`): the menu fades to black.
+* `IRIS` (alias `CIRCLE`): a circle closes on the focused tile, black outside it.
+* `FLASH` (alias `WHITE_FLASH`): a white flash that falls to black.
+
+Under Monochrome E-Ink it is plain black at once. Variants, overrides and rules may set it (a
+system override can give that system's games their own curtain).
+
 ### `effects` reference
 
 Every key a pack's `effects` block (in the base, a variant, an override or a rule's `apply`)
@@ -357,6 +394,8 @@ instead of being ignored silently, so a typo shows up.
 | `backgroundFilter` | `NONE`, `SCANLINES`, `CRT`, `LCD_GRID` | 2b.4f |
 | `uiFilter` (`postProcess`) | `NONE`, `SCANLINES_UI`, `BLOOM`, `CUSTOM` (Android 13+) | 2b.4f |
 | `uiFilterPath` (`postProcessPath`) | an `.agsl` in the pack (implies `CUSTOM`) | 2b.4f |
+| `bootIntro` (`intro`) | `VIDEO`, `SHADER`, `OFF` | 2b.5d |
+| `launchCurtain` (`curtain`) | `BLOOM`, `FADE_BLACK`, `IRIS`, `FLASH` | 2b.5d |
 
 ## 9. Variants, overrides and context rules
 
@@ -376,7 +415,7 @@ a quarter second.
 
 Each may set `palette` roles, `effects.surfaceStyle`, `effects.shaderPreset`,
 `effects.wallpaperPath`, `effects.focusFrameStyle`, `iconMask`, `iconFilter`,
-`foregroundParticles`, `backgroundFilter`, `uiFilter` and `cardAspectRatio` (a system's aspect
+`foregroundParticles`, `backgroundFilter`, `uiFilter`, `bootIntro`, `launchCurtain` and `cardAspectRatio` (a system's aspect
 shapes that system's game tiles), `audio.soundGains` and `audio.bgmFile` (§5).
 
 Precedence, lowest to highest: Default pack → pack → variant → category → system → your own
@@ -441,16 +480,19 @@ Precedence, lowest to highest: Default pack → pack → variant → overrides �
 * *Focus frame style* (Breathing halo, Static neon, Hard shadow, Gold bezel)
 * *Ambient particles* (Off, Snow, Bokeh, Dust motes)
 * *App icon mask* (System, Squircle, Circle, Chrome)
+* *Boot intro* (Video, Shader, Off) and *Launch curtain* (Bloom, Fade to black, Iris, Flash), in
+  Settings ▸ Theme ▸ Intro and transitions; a chosen Shader plays even over a pack's video
 
 Confirm steps through "Theme pack (…)" and then each choice; Options lists them all. They are saved
 under `display.effects` in `settings.json` (`shaderPreset`, `backgroundFilter`, `uiFilter`,
-`focusFrameStyle`, `foregroundParticles`, `iconMask`; empty follows the pack) and win in every
+`focusFrameStyle`, `foregroundParticles`, `iconMask`, `bootIntro`, `launchCurtain`; empty follows
+the pack) and win in every
 category and rule.
 
 *Xross wallpaper* picks any picture through the system picker (Pick custom…; the read access is
 kept across restarts) or goes back to the theme's (Reset to theme).
 
-*Reset to theme defaults* clears every pick that overrides the pack's look (those six, the surface
+*Reset to theme defaults* clears every pick that overrides the pack's look (those eight, the surface
 style, the three color layers and the Xross wallpaper) and keeps the pack, its variant, the theme
 color, the quick profile and the wave settings.
 
@@ -461,7 +503,7 @@ Import theme (.xtheme)…**. The archive is checked before anything is written:
 
 * no `..` or absolute paths;
 * only `.json` / `.md` / `.txt`, `wallpaper.png`, `bgm.ogg` / `bgm.mp3` (at most 20 MB),
-  `shader.frag` and `postprocess.agsl` at the top,
+  `boot.mp4` (at most 30 MB), `shader.frag` and `postprocess.agsl` at the top,
   and fonts, sounds (or `audio/`), icons, shaders and `wallpapers/` in their folders with their
   own file types;
 * no programs;

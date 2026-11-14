@@ -90,6 +90,8 @@ data class ThemeSetup(
     val packWallpaper: Boolean = false,
     /** The active pack brings ambient music (`bgm.ogg` / `bgm.mp3`); filled in by Phase 2b.5c, which plays it. */
     val packMusic: Boolean = false,
+    /** The active pack brings a boot video (`boot.mp4` or `audio.bootVideo`, 2b.5d). */
+    val packBootVideo: Boolean = false,
     /**
      * The pack's own look per variant id ("" = its base), no category open, before the user's
      * picks (2b.4f): what the effect rows call "Theme pack (…)".
@@ -178,6 +180,7 @@ class MenuTree(private val s: MenuSnapshot) {
         key == DISPLAY_COLORS -> colorSettings()
         key == DISPLAY_BACKGROUND -> backgroundSettings()
         key == DISPLAY_EFFECTS -> effectSettings()
+        key == DISPLAY_INTRO -> introSettings()
         key == DISPLAY_MENU -> menuLookSettings()
         key == SOUND -> soundSettings()
         key == MEDIA_SETTINGS -> mediaSettings()
@@ -901,6 +904,7 @@ class MenuTree(private val s: MenuSnapshot) {
         folder(DISPLAY_COLORS, "Colors", GlyphKey.DISPLAY, profiled(ProfileField.THEME_COLOR, themeColorLabel())),
         folder(DISPLAY_BACKGROUND, "Background", GlyphKey.DISPLAY, backgroundSummary()),
         folder(DISPLAY_EFFECTS, "Effects", GlyphKey.DISPLAY, profiled(ProfileField.SURFACE, surfaceSummary())),
+        folder(DISPLAY_INTRO, "Intro and transitions", GlyphKey.DISPLAY, introSummary()),
         folder(DISPLAY_MENU, "Menu and profile", GlyphKey.USERS, "Profile customization, button hints, platform folders"),
         resetThemeRow(),
         setting(
@@ -935,8 +939,18 @@ class MenuTree(private val s: MenuSnapshot) {
     private fun effectSettings() = listOf(
         setting("disp:surface", "Surface style", profiled(ProfileField.SURFACE, surfaceSummary()), GlyphKey.DISPLAY, Command.CycleSurfaceStyle),
     ) + dev.xross.launcher.theme.pack.EffectSlot.entries
-        .filter { it != dev.xross.launcher.theme.pack.EffectSlot.SHADER && it != dev.xross.launcher.theme.pack.EffectSlot.BACKGROUND_FILTER }
+        .filter { it !in BACKGROUND_SLOTS && it !in INTRO_SLOTS }
         .map(::effectRow)
+
+    /** Settings ▸ Theme ▸ Intro and transitions (2b.5d): the cold-start intro and the launch curtain. */
+    private fun introSettings() = INTRO_SLOTS.map(::effectRow)
+
+    /** "Theme pack (Video) · Bloom". */
+    private fun introSummary(): String =
+        INTRO_SLOTS.joinToString(" · ") { slot ->
+            val own = s.settings.effectOverrides[slot]
+            if (own.isEmpty()) slot.packLabel(s.themes.packLook(s.settings.themeVariant), s.themes.packBootVideo) else slot.label(own)
+        }
 
     /** Settings ▸ Theme ▸ Menu and profile: how the menu is laid out, not how it is colored. */
     private fun menuLookSettings() = listOf(
@@ -1016,6 +1030,14 @@ class MenuTree(private val s: MenuSnapshot) {
             dev.xross.launcher.theme.pack.EffectSlot.FOCUS_FRAME -> "Around the focused item"
             dev.xross.launcher.theme.pack.EffectSlot.PARTICLES -> "Over the art, resting when idle"
             dev.xross.launcher.theme.pack.EffectSlot.ICON_MASK -> "Installed apps' icons"
+            dev.xross.launcher.theme.pack.EffectSlot.BOOT_INTRO -> when {
+                activeProfile.stillMotion -> "Off in ${activeProfile.label}"
+                !s.settings.bootSound || s.settings.cueVolume <= 0f -> "Off while the startup sound is off"
+                own == dev.xross.launcher.theme.pack.BootIntro.VIDEO.name && !s.themes.packBootVideo -> "This pack has no boot video"
+                else -> "On a cold start; any button skips it"
+            }
+            dev.xross.launcher.theme.pack.EffectSlot.LAUNCH_CURTAIN ->
+                if (activeProfile.stillMotion) "Plain black in ${activeProfile.label}" else "Before a game starts"
         }
         val id = "disp:fx:" + slot.name.lowercase(Locale.ROOT)
         return XmbNode(
@@ -1025,7 +1047,7 @@ class MenuTree(private val s: MenuSnapshot) {
             icon = NodeIcon.Glyph(GlyphKey.DISPLAY),
             action = NodeAction.Run(Command.CycleEffect(slot)),
             menu = listOf(
-                MenuOption(slot.packLabel(look), command = Command.SetEffect(slot, ""), selected = own.isEmpty()),
+                MenuOption(slot.packLabel(look, s.themes.packBootVideo), command = Command.SetEffect(slot, ""), selected = own.isEmpty()),
             ) + slot.choices.map { (name, label) ->
                 MenuOption(label, command = Command.SetEffect(slot, name), selected = own == name)
             },
@@ -1035,7 +1057,7 @@ class MenuTree(private val s: MenuSnapshot) {
     /** "Theme pack (Wave)" when [slot] follows the pack, else the user's choice. */
     private fun effectShown(slot: dev.xross.launcher.theme.pack.EffectSlot): String {
         val own = s.settings.effectOverrides[slot]
-        return if (own.isEmpty()) slot.packLabel(s.themes.packLook(s.settings.themeVariant)) else slot.label(own)
+        return if (own.isEmpty()) slot.packLabel(s.themes.packLook(s.settings.themeVariant), s.themes.packBootVideo) else slot.label(own)
     }
 
     /** Reset to theme defaults: what it would clear, or that nothing is overridden. */
@@ -1379,9 +1401,16 @@ class MenuTree(private val s: MenuSnapshot) {
         const val DISPLAY_BACKGROUND = "settings:display:background"
         const val DISPLAY_EFFECTS = "settings:display:effects"
         const val DISPLAY_MENU = "settings:display:menu"
+        const val DISPLAY_INTRO = "settings:display:intro"
+
+        /** The effect rows in Settings ▸ Theme ▸ Background; the rest of the 2b.4f rows are in Effects. */
+        private val BACKGROUND_SLOTS = setOf(dev.xross.launcher.theme.pack.EffectSlot.SHADER, dev.xross.launcher.theme.pack.EffectSlot.BACKGROUND_FILTER)
+
+        /** The effect rows in Settings ▸ Theme ▸ Intro and transitions (2b.5d). */
+        private val INTRO_SLOTS = listOf(dev.xross.launcher.theme.pack.EffectSlot.BOOT_INTRO, dev.xross.launcher.theme.pack.EffectSlot.LAUNCH_CURTAIN)
 
         /** Settings ▸ Theme and its folders, top level first. */
-        val THEME_LISTS = listOf(DISPLAY, DISPLAY_COLORS, DISPLAY_BACKGROUND, DISPLAY_EFFECTS, DISPLAY_MENU)
+        val THEME_LISTS = listOf(DISPLAY, DISPLAY_COLORS, DISPLAY_BACKGROUND, DISPLAY_EFFECTS, DISPLAY_INTRO, DISPLAY_MENU)
         const val SOUND = "settings:sound"
         const val MEDIA_SETTINGS = "settings:media"
         const val APPS_SETTINGS = "settings:apps"

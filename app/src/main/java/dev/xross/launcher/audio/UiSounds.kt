@@ -209,7 +209,12 @@ class UiSounds(
         }
     }
 
+    /** Tests: every cue asked for, before volume or a missing file can drop it. */
+    @androidx.annotation.VisibleForTesting
+    internal var cueRequested: ((UiCue) -> Unit)? = null
+
     fun playCue(cue: UiCue, cueVolume: Float = volume) {
+        cueRequested?.invoke(cue)
         stopCue()
         if (cueVolume <= 0f) return
         val source = sources[cue.role] ?: return

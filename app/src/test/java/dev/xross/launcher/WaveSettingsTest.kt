@@ -151,9 +151,9 @@ class WaveSettingsTest {
             ),
         )
         val rows = tree.list(MenuTree.DISPLAY)
-        assertEquals(listOf("disp:pack", "disp:profile", MenuTree.DISPLAY_COLORS, MenuTree.DISPLAY_BACKGROUND, MenuTree.DISPLAY_EFFECTS, MenuTree.DISPLAY_MENU,
-            "disp:reset", "disp:import"), rows.map { it.id })
-        assertEquals(listOf("Colors", "Background", "Effects", "Menu and profile"), rows.subList(2, 6).map { it.title })
+        assertEquals(listOf("disp:pack", "disp:profile", MenuTree.DISPLAY_COLORS, MenuTree.DISPLAY_BACKGROUND, MenuTree.DISPLAY_EFFECTS, MenuTree.DISPLAY_INTRO,
+            MenuTree.DISPLAY_MENU, "disp:reset", "disp:import"), rows.map { it.id })
+        assertEquals(listOf("Colors", "Background", "Effects", "Intro and transitions", "Menu and profile"), rows.subList(2, 7).map { it.title })
         assertEquals("Theme pack · Sakura", rows[2].subtitle)
         assertEquals(listOf("disp:avatar", "disp:hints", "disp:allgames"), tree.list(MenuTree.DISPLAY_MENU).map { it.id })
         val pack = rows[0]
