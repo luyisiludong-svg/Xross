@@ -13,7 +13,7 @@ import dev.xross.launcher.scrape.DownloadResult
 import dev.xross.launcher.scrape.HttpClient
 import dev.xross.launcher.scrape.HttpResponse
 import dev.xross.launcher.state.UnlockQueue
-import dev.xross.launcher.state.XmbViewModel
+import dev.xross.launcher.state.RaController
 import dev.xross.launcher.storage.XrossEnvironment
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
@@ -114,6 +114,6 @@ class UnlockToastTest {
         assertNull(q.next())
         val serials = listOf(UnlockQueue().apply { offer(listOf(badge("x", "1"), badge("y", "2"))) }.let { listOf(it.next()!!.serial, it.next()!!.serial) })
         assertEquals(listOf(listOf(1L, 2L)), serials)
-        assertTrue(XmbViewModel.UNLOCK_TOAST_MS in 3_000..6_000)
+        assertTrue(RaController.UNLOCK_TOAST_MS in 3_000..6_000)
     }
 }

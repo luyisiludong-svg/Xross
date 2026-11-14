@@ -1,10 +1,6 @@
 package dev.xross.launcher
 
-import android.content.Context
-import android.os.Looper
-import androidx.test.core.app.ApplicationProvider
 import dev.xross.launcher.input.NavAction
-import dev.xross.launcher.state.Categories
 import dev.xross.launcher.state.Command
 import dev.xross.launcher.state.MenuSnapshot
 import dev.xross.launcher.state.MenuTree
@@ -14,23 +10,16 @@ import dev.xross.launcher.state.ProfileCard
 import dev.xross.launcher.state.ProfileCardButton
 import dev.xross.launcher.state.ProfileCardEffect
 import dev.xross.launcher.state.ProfileCardState
-import dev.xross.launcher.state.XmbViewModel
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.Shadows.shadowOf
 
-/** The User Card's buttons, status bar avatar focus, and Settings ▸ Accounts. */
+/** The User Card's buttons and Settings ▸ Accounts (avatar focus is in [RaControllerTest]). */
 @RunWith(RobolectricTestRunner::class)
 class ProfileCardTest {
-    private val context: Context = ApplicationProvider.getApplicationContext()
-    private fun idle() = shadowOf(Looper.getMainLooper()).idle()
-
     @Test fun buttonsDependOnWhetherAnAccountIsLinked() {
         assertEquals(listOf(ProfileCardButton.REFRESH, ProfileCardButton.UNLINK, ProfileCardButton.CLOSE), ProfileCard.buttons(linked = true))
         assertEquals(listOf(ProfileCardButton.LINK, ProfileCardButton.CLOSE), ProfileCard.buttons(linked = false))
@@ -81,65 +70,5 @@ class ProfileCardTest {
         val subtitle = linked.first().subtitle!!
         assertTrue(subtitle, subtitle.startsWith("Linked as MaxMilyin"))
         assertTrue(subtitle, subtitle.contains("4,616") || subtitle.contains("4616"))
-    }
-
-    @Test fun upFromTheTopOfACategoryExpandsTheAvatarHudInPlace() {
-        val vm = XmbViewModel(context, AppContainer(context), storageAccess = { false }).also { idle() }
-        fun press(a: NavAction) {
-            vm.onAction(a)
-            idle()
-        }
-        // Settings root: the cursor starts on the first row.
-        while (vm.state.value.let { it.categories[it.categoryIndex].id } != Categories.SETTINGS) press(NavAction.LEFT)
-        assertEquals(0, vm.state.value.focusedIndex)
-        assertFalse(vm.state.value.avatarFocused)
-
-        press(NavAction.UP)
-        assertTrue(vm.state.value.avatarFocused)
-        press(NavAction.DOWN)
-        assertFalse("Down returns to the list", vm.state.value.avatarFocused)
-        assertEquals(0, vm.state.value.focusedIndex)
-
-        // Back collapses the HUD too, and no full-screen card replaces the menu on the way.
-        press(NavAction.UP)
-        assertTrue(vm.state.value.avatarFocused)
-        assertNull(vm.state.value.profileCard)
-        press(NavAction.BACK)
-        assertFalse(vm.state.value.avatarFocused)
-        assertNull(vm.state.value.profileCard)
-
-        // Touch: a tap on the avatar expands the HUD, a tap outside it collapses it again.
-        vm.onAvatarTapped()
-        idle()
-        assertTrue(vm.state.value.avatarFocused)
-        assertNull(vm.state.value.profileCard)
-        vm.closeAvatarHud()
-        idle()
-        assertFalse(vm.state.value.avatarFocused)
-
-        // Account management stays one press away: Options on the HUD opens the full User Card.
-        press(NavAction.UP)
-        press(NavAction.OPTIONS)
-        assertNotNull(vm.state.value.profileCard)
-        assertFalse(vm.state.value.avatarFocused)
-        assertFalse(vm.state.value.profile.linked)
-        vm.onProfileCardButtonTapped(1) // Close (unlinked: Link account…, Close)
-        idle()
-        assertNull(vm.state.value.profileCard)
-    }
-
-    @Test fun upInsideAListStillMovesTheCursor() {
-        val vm = XmbViewModel(context, AppContainer(context), storageAccess = { false }).also { idle() }
-        while (vm.state.value.let { it.categories[it.categoryIndex].id } != Categories.SETTINGS) {
-            vm.onAction(NavAction.LEFT)
-            idle()
-        }
-        vm.onAction(NavAction.DOWN)
-        idle()
-        assertEquals(1, vm.state.value.focusedIndex)
-        vm.onAction(NavAction.UP)
-        idle()
-        assertEquals(0, vm.state.value.focusedIndex)
-        assertFalse(vm.state.value.avatarFocused)
     }
 }
