@@ -314,7 +314,7 @@ class ComponentsTest {
         assertEquals("Right: Clock · Battery · Avatar · Icon and percentage", folder.subtitle)
         val rows = tree.list(MenuTree.DISPLAY_COMPONENTS)
         assertEquals(
-            listOf("disp:comp:left", "disp:comp:right", "disp:comp:battery", "disp:comp:clock", "disp:comp:mini_player", "disp:comp:glyphs", "disp:comp:pills", "disp:comp:top_left"),
+            listOf("disp:comp:left", "disp:comp:right", "disp:comp:battery", "disp:comp:clock", "disp:comp:mini_player", "disp:comp:glyphs", "disp:comp:pills", "disp:comp:top_left", "disp:comp:telemetry"),
             rows.map { it.id },
         )
         assertEquals("Empty (theme pack) · Top-left", rows[0].subtitle)

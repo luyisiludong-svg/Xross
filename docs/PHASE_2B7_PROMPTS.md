@@ -32,8 +32,8 @@ it doesn't block 2b.7.
 | 2b.7a | ✅ on `feat/theme-2b7` (2026-11-14): 793 unit tests, `lintDebug` 0 errors, theme suite **197/197** on the API 37 emulator (new 48-check "Components (2b.7a)" section), `display-matrix.sh` 12/12 default and stress, `palette-perf.sh` 0.15–0.75% janky ([STATUS §3.29](STATUS.md)). **Open:** the A55 pass (volume keys, Wi-Fi bars, 120 Hz), an Android 9 image, a real charge-time estimate. As built: [2b.7a notes](#as-built-2b7a-2026-11-14) |
 | 2b.7b | ✅ on `feat/theme-2b7` (2026-11-14): 805 unit tests, `lintDebug` 0 errors, theme suite **235/235** on the API 37 emulator (new 38-check "Components (2b.7b)" section), `palette-perf.sh` 0.15–0.74% janky with badges ([STATUS §3.30](STATUS.md)). **Open:** the A55 pass (a real pad, touch on the ticker, 120 Hz), `RA_PROGRESS` with an account, `display-matrix.sh` with the ticker and badges. As built: [2b.7b notes](#as-built-2b7b-2026-11-14) |
 | 2b.7c | ✅ on `feat/theme-2b7` (2026-11-14): friend API verified live ([RETROACHIEVEMENTS_API.md](RETROACHIEVEMENTS_API.md)), 825 unit tests, `lintDebug` 0 errors, theme suite **259/259** on the API 37 emulator (new 24-check "Components (2b.7c)" section) ([STATUS §3.31](STATUS.md)). **Open:** the A55 with real followed users (the test account follows nobody), the 10-minute silent-at-rest check. As built: [2b.7c notes](#as-built-2b7c-2026-11-14) |
-| 2b.7d | ⬜ next |
-| 2b.7e | ⬜ |
+| 2b.7d | ✅ on `feat/theme-2b7` (2026-11-14): 836 unit tests, `lintDebug` 0 errors, theme suite **281/281** on the API 37 emulator (new 22-check "Components (2b.7d)" section, the friend strip live with the `.env` account), `palette-perf.sh` card median 0.45% vs pill 0.30% janky over 11 pairs ([STATUS §3.32](STATUS.md)). **Open:** the A55 pass (120 Hz, the interleaved rounds), portrait, real followed users. As built: [2b.7d notes](#as-built-2b7d-2026-11-14) |
+| 2b.7e | ⬜ next |
 
 ---
 
@@ -487,6 +487,65 @@ Device-test lessons (in `test-theme.sh` now):
   the A55 GPU note in STATUS).
 ```
 
+### As built (2b.7d, 2026-11-14)
+
+| Piece | Where |
+|---|---|
+| `GameTelemetry` gains `uuid`, `raGameId`, `platform`, `slots` and `offline` | `state/RaHub.kt` (`GameTelemetry.of(…, platform, peeked, uuid)`) |
+| Card rules: the badge row, "18/42 · 120/400 pts", the friend strip, `shows` | `state/TelemetryCard.kt` (`TelemetryCard`, `TelemetrySlot`, `FriendStrip`) |
+| Telemetry loading (platform tag, offline flag), `RICH_CARD` in `friendsWanted()` | `state/RaController.kt` |
+| Drawing: `GameTelemetryCorner` (off / pill / card), the card, its badges and strip | `ui/TelemetryCard.kt`; the pill stays `GameTelemetryBadge` in `ui/GameTile.kt` |
+| Settings | `ComponentRow.TELEMETRY` ("Achievement badge"), the **last** Components row |
+
+Decisions made while building:
+
+- **"Never fetches"** means the card adds no request: it shows the telemetry the focus already
+  loads (the saved copy 250 ms after the cursor rests, a fresh one 450 ms later, as the pill
+  always did) and `FriendsState` as it stands. Friends are never fetched on focus; the rich card
+  joins the social stack in `friendsWanted()`, so turning it on fetches them once when none are
+  saved, and the profile's refresh keeps them current.
+- **Offline** is either the friend refresh failing (`FriendsState.Offline`) or this game's fetch
+  failing (the progress falls back to the saved copy, `GameTelemetry.offline`). The saved copy
+  read before the fetch isn't offline yet, so the strip doesn't blink while the fetch runs.
+  `FriendsState.Loading` keeps the strip it had.
+- **Badge row:** the six newest unlocks; with fewer, the next locked ones in the game's order fill
+  the row, greyed (saturation 0, 38% alpha); a set with fewer than six leaves empty cells, so the
+  card keeps its width.
+- **Icon:** the library's box art (box, grid, 3D box, screenshot) cropped square, like the
+  Achievements header; the trophy without art. The platform pill is the library's short tag
+  ("SNES"), RetroAchievements' console name when there is none.
+- **Strip:** friends whose `activity.gameId` is this game, most recently active first, three
+  avatars then "+N". Only the 20 fetched friends have activity, so only they can appear.
+- **Switching games:** the card keeps its game for 700 ms after the focus leaves it, dimmed to
+  55%, then crossfades to the next game's (`AnimatedContent` keyed by game) or fades out. Art and
+  badge loads are `produceState`s of the shown card, so leaving a game cancels them; telemetry
+  itself only arrives once the cursor rests, so scrolling never queues loads.
+- **Accessibility and the suite:** the card reads "RetroAchievements: 2/8 · 10/40 pts" (",
+  mastered"), the strip "Recently played by Alice, Bob, Carol and 1 more".
+- **Switching games, as measured:** the first version crossfaded with `AnimatedContent` and a
+  size transform and cost 2–3 janky frames a pass over the pill; a plain `Crossfade` keyed by game
+  (the last two games' telemetry kept for the outgoing card) brought it to about one.
+
+Device-test lessons (in `test-theme.sh` and `palette-perf.sh` now):
+
+- A recognized game needs no real ROM: `matches.json` (the game's uuid, size and modified time
+  from the database, `listVersion` 2) and `game-<id>.json` make `peek` and an offline `load` use
+  the saved copy; badges are read from `Xross/media/ra/badges/<name>.png`.
+- Inside a folder Up stops at the first row and never reaches the avatar: open the HUD with a tap
+  on the avatar (content-desc is the user name).
+- For the strip the game's fetch must succeed, so it needs the debug build's `.env` account
+  online; its `friends.json` must be owned by that user and fresh (`followingFetchedAtMs` and each
+  activity's `fetchedAtMs` now), or the profile's refresh replaces it with the real list.
+- `palette-perf.sh` with `PERF_TELEMETRY=1` seeds progress for its 12 games and alternates the
+  card and the pill; keys 450 ms apart reach the saved copy (250 ms) but never the fetch (700 ms).
+
+### Notes for 2b.7e (from 2b.7d)
+
+- Add the hub's sidebar to `RaController.friendsWanted()` (the rich card is there now).
+- `TelemetryCard.friendStrip` shows how to match friends to a game by `activity.gameId`; the
+  sidebar's Confirm on a friend needs the reverse (a RetroAchievements id to a library game),
+  which `matches.json` holds per uuid (not exposed by `AchievementsRepository` yet).
+
 ---
 
 ## Slice 2b.7e: RetroAchievements hub upgrade
@@ -552,7 +611,8 @@ Defaults chosen in this doc (change before the slice starts if needed):
 - 2b.5d on the A55: cold-start time with and without a boot video, and the video at 120 Hz.
 - 2b.6 (haptics) can run before or after 2b.7; it touches input, not components.
 - The particle slowdown on the A55 during navigation (STATUS §3.28): 2b.7d's `RICH_CARD` adds
-  per-focus work, so measure it with the same interleaved rounds.
+  per-focus work (about one janky frame a pass on the emulator), so measure it on the A55 with
+  `PERF_TELEMETRY=1 palette-perf.sh` and the same interleaved rounds.
 - `PHASE_2B3_PENDING_TESTS.md` items still open (idle CPU at rest 16–21% vs < 10%); the status
   bar's new slots must not add wakeups at rest beyond the minute tick and real changes. Measured
   in 2b.7a on the emulator: 3-second windows at rest draw 0 frames, a minute tick 1; idle CPU on

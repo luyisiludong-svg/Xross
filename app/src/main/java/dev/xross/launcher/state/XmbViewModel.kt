@@ -726,10 +726,16 @@ class XmbViewModel(
                 "Link a RetroAchievements account to see who you follow".takeIf {
                     c.topLeft == dev.xross.launcher.theme.pack.TopLeftClusterMode.SOCIAL_STACK && !container.credentials.current.retroAchievementsLinked
                 }
+            dev.xross.launcher.theme.pack.ComponentRow.TELEMETRY ->
+                "Link a RetroAchievements account to see your progress".takeIf {
+                    c.telemetry != dev.xross.launcher.theme.pack.TelemetryMode.OFF && !container.credentials.current.retroAchievementsLinked
+                }
             dev.xross.launcher.theme.pack.ComponentRow.MINI_PLAYER, dev.xross.launcher.theme.pack.ComponentRow.GLYPHS -> null
         }
         note?.let { toast(it) }
-        if (row == dev.xross.launcher.theme.pack.ComponentRow.TOP_LEFT) ra.onFriendsWanted(components = c)
+        if (row == dev.xross.launcher.theme.pack.ComponentRow.TOP_LEFT || row == dev.xross.launcher.theme.pack.ComponentRow.TELEMETRY) {
+            ra.onFriendsWanted(components = c)
+        }
     }
 
     private fun setEffect(slot: dev.xross.launcher.theme.pack.EffectSlot, value: String) {

@@ -114,13 +114,15 @@ class RaController(
                 delay(TELEMETRY_PEEK_MS)
                 val game = games.get(id) ?: return@collectLatest
                 if (RaConsoles.of(game.platformId) == null) return@collectLatest
-                GameTelemetry.of(id, achievements.peek(game))?.let { known -> _state.update { it.copy(telemetry = known) } }
+                val platform = dev.xross.launcher.storage.PlatformRegistry.byId(game.platformId)?.shortName
+                GameTelemetry.of(id, achievements.peek(game), platform, peeked = true, uuid = game.uuid)?.let { known -> _state.update { it.copy(telemetry = known) } }
                 delay(TELEMETRY_LOAD_MS)
                 when (val fresh = achievements.load(game)) {
                     is AchievementsState.Ready,
                     AchievementsState.NoMatch,
-                    -> _state.update { it.copy(telemetry = GameTelemetry.of(id, fresh)) }
-                    else -> Unit // offline or refused: keep what the Xross folder had
+                    -> _state.update { it.copy(telemetry = GameTelemetry.of(id, fresh, platform, uuid = game.uuid)) }
+                    // Offline or refused: keep what the Xross folder had, now known to be offline.
+                    else -> _state.update { s -> s.copy(telemetry = s.telemetry?.takeIf { it.gameId == id }?.copy(offline = true)) }
                 }
             }
         }
@@ -137,8 +139,9 @@ class RaController(
     }
 
     /**
-     * The social stack was turned on (Settings ▸ Theme ▸ Components ▸ Top-left), or the app started
-     * with it on: without this, a stack with no cache would collapse and never be opened to fetch.
+     * The social stack or the rich telemetry card was turned on (Settings ▸ Theme ▸ Components ▸
+     * Top-left, Achievement badge), or the app started with one on: without this, a stack with no
+     * cache would collapse and never be opened to fetch, and the card's strip would stay empty.
      * Fetches when stale, or at startup ([onlyWithoutCache]) only when nothing was ever fetched.
      * [components]: the bar as just saved, when the host's copy may not have caught up yet.
      */
@@ -351,9 +354,10 @@ class RaController(
 
     // region Social stack (2b.7c)
 
-    /** Something draws friend data: the social stack (2b.7d's rich card and 2b.7e's sidebar add to this). */
+    /** Something draws friend data: the social stack or the rich telemetry card's strip (2b.7e's sidebar adds to this). */
     private fun friendsWanted(components: dev.xross.launcher.theme.pack.ResolvedComponents = host.components()): Boolean =
-        components.topLeft == dev.xross.launcher.theme.pack.TopLeftClusterMode.SOCIAL_STACK
+        components.topLeft == dev.xross.launcher.theme.pack.TopLeftClusterMode.SOCIAL_STACK ||
+            components.telemetry == dev.xross.launcher.theme.pack.TelemetryMode.RICH_CARD
 
     /** The stack is in the bar now (see [SocialStack.shows]). */
     fun socialStackShown(): Boolean = SocialStack.shows(host.components(), _state.value.friends)

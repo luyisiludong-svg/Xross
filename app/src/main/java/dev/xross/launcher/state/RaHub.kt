@@ -46,7 +46,9 @@ object RaHub {
 
 /**
  * The focused game's RetroAchievements numbers for the badge in the bottom corner of the menu.
- * Only games RetroAchievements recognizes and has a set for get one.
+ * Only games RetroAchievements recognizes and has a set for get one. The compact pill (2b.7d
+ * `COMPACT_PILL`) draws the counts; the rich card (`RICH_CARD`) also the platform, the newest
+ * unlocks ([slots]) and who of the followed users played it last (by [raGameId]).
  */
 @Immutable
 data class GameTelemetry(
@@ -55,16 +57,51 @@ data class GameTelemetry(
     val total: Int,
     val earnedPoints: Int,
     val totalPoints: Int,
+    /** The library game's art key, for the rich card's icon; "" when unknown. */
+    val uuid: String = "",
+    /** RetroAchievements' id of the game; 0 when unknown. Friends' latest games match by it. */
+    val raGameId: Int = 0,
+    /** The library's short tag of the system ("SNES"), else RetroAchievements' console name. */
+    val platform: String = "",
+    /** The rich card's badge row: the newest unlocks first, then locked ones; [TelemetryCard.SLOTS] at most. */
+    val slots: List<TelemetrySlot> = emptyList(),
+    /**
+     * The progress is the saved copy because RetroAchievements didn't answer (a failed fetch, not
+     * the instant copy read before the fetch): the rich card leaves out its friend strip.
+     */
+    val offline: Boolean = false,
 ) {
     /** Every achievement unlocked. */
     val mastered: Boolean get() = total > 0 && unlocked >= total
 
     companion object {
-        /** Null for anything but a recognized game with achievements (unlinked, unsupported, unhashed, failed). */
-        fun of(gameId: Long, state: AchievementsState?): GameTelemetry? {
-            val progress = (state as? AchievementsState.Ready)?.progress ?: return null
+        /**
+         * Null for anything but a recognized game with achievements (unlinked, unsupported,
+         * unhashed, failed). [platform]: the library's tag for the game's system. [peeked]: the
+         * instant copy read before the fetch, never [offline] (the fetch hasn't failed yet).
+         */
+        fun of(
+            gameId: Long,
+            state: AchievementsState?,
+            platform: String? = null,
+            peeked: Boolean = false,
+            uuid: String = "",
+        ): GameTelemetry? {
+            val ready = state as? AchievementsState.Ready ?: return null
+            val progress = ready.progress
             if (progress.total == 0) return null
-            return GameTelemetry(gameId, progress.unlocked, progress.total, progress.earnedPoints, progress.totalPoints)
+            return GameTelemetry(
+                gameId = gameId,
+                unlocked = progress.unlocked,
+                total = progress.total,
+                earnedPoints = progress.earnedPoints,
+                totalPoints = progress.totalPoints,
+                uuid = uuid,
+                raGameId = progress.gameId,
+                platform = platform?.takeIf { it.isNotBlank() } ?: progress.consoleName,
+                slots = TelemetryCard.slots(progress),
+                offline = ready.offline && !peeked,
+            )
         }
     }
 }

@@ -612,6 +612,62 @@ class FriendsTest {
         }
     }
 
+    @Test fun richCardWantsFriendsButFocusingGamesNeverFetchesThem() = runBlocking {
+        val clock = FakeClock()
+        val ra = FakeRa(names(3), clock)
+        val friends = repo(ra, clock)
+        val client = RetroAchievementsClient(ra, clock = { clock.now })
+        val container = AppContainer(context)
+        val scope = kotlinx.coroutines.MainScope()
+        val host = Host(ResolvedComponents(telemetry = dev.xross.launcher.theme.pack.TelemetryMode.RICH_CARD))
+        val controller = dev.xross.launcher.state.RaController(
+            scope = scope,
+            profiles = dev.xross.launcher.profile.ProfileRepository(client, credentials, { layout }, clock = { clock.now }),
+            achievements = dev.xross.launcher.profile.AchievementsRepository(client, credentials, { layout }, hashes = { null }),
+            friends = friends,
+            credentials = credentials,
+            games = container.games,
+            sounds = container.sounds,
+            artVersion = { 0L },
+            host = host,
+        )
+        fun friendCalls() = ra.followingCalls + ra.activityCalls
+        val focus = kotlinx.coroutines.flow.MutableStateFlow<Long?>(null)
+        try {
+            controller.watch(focus)
+            // Nothing saved yet: the card being on (at startup or turned on) fetches once, for its strip.
+            controller.onFriendsWanted(onlyWithoutCache = true)
+            await("friends for the rich card") { controller.state.value.friends.friends.size == 3 }
+            val known = friendCalls()
+            assertEquals(4, known)
+
+            // Focus moving across games reads telemetry and the friends as they stand: no friend call.
+            for (id in listOf(1L, 2L, 3L, null, 4L)) {
+                focus.value = id
+                repeat(5) { controller.state.value.friends; idle() }
+            }
+            Thread.sleep(200)
+            idle()
+            controller.onFriendsWanted(onlyWithoutCache = true)
+            idle()
+            assertEquals("a saved list isn't fetched again at startup", known, friendCalls())
+
+            // The compact pill wants no friend data, even when it's stale.
+            host.components = ResolvedComponents.DEFAULT
+            clock.now += FriendsRepository.FOLLOWING_STALE_MS * 2
+            controller.onFriendsWanted()
+            Thread.sleep(100)
+            idle()
+            assertEquals(known, friendCalls())
+            // Back on the rich card, a stale list is fetched when asked (the profile's refresh, turning it on).
+            host.components = ResolvedComponents(telemetry = dev.xross.launcher.theme.pack.TelemetryMode.RICH_CARD)
+            controller.onFriendsWanted()
+            await("the stale list's refresh") { friendCalls() > known }
+        } finally {
+            scope.cancel()
+        }
+    }
+
     private fun idle() = shadowOf(Looper.getMainLooper()).idle()
 
     // endregion

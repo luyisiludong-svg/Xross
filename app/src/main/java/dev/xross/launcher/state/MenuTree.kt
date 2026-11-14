@@ -978,8 +978,8 @@ class MenuTree(private val s: MenuSnapshot) {
 
     /**
      * Settings ▸ Theme ▸ Components: the status bar's clusters, battery display and clock (2b.7a),
-     * the mini player, button glyphs and title badges (2b.7b), the top-left cluster (2b.7c).
-     * 2b.7d–e add rows here.
+     * the mini player, button glyphs and title badges (2b.7b), the top-left cluster (2b.7c), the
+     * achievement badge (2b.7d).
      */
     private fun componentSettings() = listOf(
         statusSlotsRow(dev.xross.launcher.theme.pack.StatusSide.LEFT),
@@ -989,8 +989,9 @@ class MenuTree(private val s: MenuSnapshot) {
         componentRow(dev.xross.launcher.theme.pack.ComponentRow.MINI_PLAYER),
         componentRow(dev.xross.launcher.theme.pack.ComponentRow.GLYPHS),
         badgePillsRow(),
-        // Last, so the rows before it keep their places (2b.7d–e add theirs after it).
+        // After the earlier slices' rows, so those keep their places.
         componentRow(dev.xross.launcher.theme.pack.ComponentRow.TOP_LEFT),
+        componentRow(dev.xross.launcher.theme.pack.ComponentRow.TELEMETRY),
     )
 
     /** Title badges: Confirm and Options both open the list of badges to turn on and off. */
@@ -1051,6 +1052,13 @@ class MenuTree(private val s: MenuSnapshot) {
                 dev.xross.launcher.theme.pack.MiniPlayerMode.FLOATING_CARD -> "What plays, above the hints"
             }
             dev.xross.launcher.theme.pack.ComponentRow.GLYPHS -> "Labels only: Confirm follows your controller"
+            dev.xross.launcher.theme.pack.ComponentRow.TELEMETRY -> when {
+                shownComponents.telemetry == dev.xross.launcher.theme.pack.TelemetryMode.OFF -> "No RetroAchievements badge on games"
+                !s.accounts.retroAchievementsLinked -> "Needs a RetroAchievements account (Settings ▸ Accounts)"
+                shownComponents.telemetry == dev.xross.launcher.theme.pack.TelemetryMode.RICH_CARD ->
+                    "Newest unlocks and friends who played it, above the hints"
+                else -> "The focused game's unlocks and points, above the hints"
+            }
         }
         return XmbNode(
             id = "disp:comp:" + row.name.lowercase(Locale.ROOT),

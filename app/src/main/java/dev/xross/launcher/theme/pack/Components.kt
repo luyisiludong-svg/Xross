@@ -490,6 +490,7 @@ data class ComponentOverrides(
         ComponentRow.CLOCK -> clockFormat
         ComponentRow.MINI_PLAYER -> miniPlayerMode
         ComponentRow.GLYPHS -> glyphOverride
+        ComponentRow.TELEMETRY -> telemetryMode
     }
 
     /** A copy with [row] set to [value] (normalized; null or unknown follows the pack). */
@@ -499,6 +500,7 @@ data class ComponentOverrides(
         ComponentRow.CLOCK -> copy(clockFormat = value?.let { ClockFormat.filter(it).first })
         ComponentRow.MINI_PLAYER -> copy(miniPlayerMode = ComponentNames.miniPlayer(value)?.name)
         ComponentRow.GLYPHS -> copy(glyphOverride = ComponentNames.glyphs(value)?.name)
+        ComponentRow.TELEMETRY -> copy(telemetryMode = ComponentNames.telemetry(value)?.name)
     }
 
     /** A copy with the title badges set to [pills] in that order (each once); null follows the pack, empty draws none. */
@@ -543,6 +545,12 @@ enum class ComponentRow(val title: String, val choices: List<Pair<String, String
             GlyphOverrideMode.MONOCHROME_MINIMAL.name to "Minimal outlines",
         ),
     ),
+
+    /** `telemetryMode` (2b.7d). */
+    TELEMETRY(
+        "Achievement badge",
+        listOf(TelemetryMode.OFF.name to "Off", TelemetryMode.COMPACT_PILL.name to "Compact", TelemetryMode.RICH_CARD.name to "Rich card"),
+    ),
     ;
 
     /** The label of [value]; "Theme pack" for null. */
@@ -559,6 +567,7 @@ enum class ComponentRow(val title: String, val choices: List<Pair<String, String
         CLOCK -> c.clock
         MINI_PLAYER -> c.miniPlayer.name
         GLYPHS -> c.glyphs.name
+        TELEMETRY -> c.telemetry.name
     }
 
     /** "Theme pack (Icon and percentage)". */

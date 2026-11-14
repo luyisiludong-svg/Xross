@@ -629,10 +629,24 @@ The Default pack: left `[]`, right `[CLOCK, BATTERY, AVATAR]`, `BOTH`, empty clo
   refresh, opening the stack when it is stale, turning it on), never on focus or a timer; see
   [RETROACHIEVEMENTS_API.md](RETROACHIEVEMENTS_API.md).
 
-### The other keys
+### Achievement badge
 
-Read and stored now, drawn by a later 2b.7 slice: `telemetryMode` (`OFF`, `COMPACT_PILL`,
-`RICH_CARD`).
+* `telemetryMode`: the focused game's RetroAchievements progress in the bottom corner, above the
+  button hints and below the mini player's floating card (with the ticker or no mini player it
+  has the corner). `OFF` draws nothing; `COMPACT_PILL` (the default) the trophy, unlocked/total
+  and points in a pill; `RICH_CARD` a card on the surface (`effects.surfaceStyle`) with the game's
+  box art cropped square, a platform pill (and ★ MASTERED at 100%), six badges (the newest
+  unlocks first, then locked ones greyed in the game's order), a progress bar with
+  "18/42 · 120/400 pts" (no points part for a set worth none) and a `RECENTLY PLAYED` strip: up to
+  three followed users whose latest game this is, most recent first, then "+N".
+* Recognized games with achievements only; nothing for other games, apps and media, unlinked, or
+  under an overlay or the avatar's HUD. The card keeps its game for a moment (dimmed) while the
+  focus moves, then crossfades to the next game's or fades out.
+* Offline (the friend refresh or this game's own fetch failed), the card draws from the saved
+  progress without the strip; no friend on the game, no strip. The card never fetches: it shows
+  the progress the focus already loads (as the pill always did) and the saved friends. Turning
+  the rich card on fetches the friends once when none are saved; the profile's refresh then
+  keeps them current, as for the social stack.
 
 ### `components` reference
 
@@ -667,7 +681,8 @@ leaving the rest of the block.
 * *Title badges*: Confirm (or Options) opens the list: Theme pack, None, then System, Release year,
   Developer, Playtime and Achievements; Confirm turns a badge on (at the end) or off, and the list
   stays open on it.
-* *Top-left* (last): Theme pack, Social stack, Empty.
+* *Top-left*: Theme pack, Social stack, Empty.
+* *Achievement badge* (last): Theme pack, Off, Compact, Rich card.
 
 Saved as `display.components` in `settings.json` (`null` follows the pack); Reset to theme
 defaults clears it, quick profiles never touch it.

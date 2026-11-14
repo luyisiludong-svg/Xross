@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Theme suite (259 checks): Settings ▸ Theme and its folders (theme color, wave and avatar panels,
+# Theme suite (281 checks): Settings ▸ Theme and its folders (theme color, wave and avatar panels,
 # platform folders, surface style, the 2b.4f effect rows, Pick custom wallpaper, Reset to theme
 # defaults), quick profiles (OLED, Y2K, E-Ink), color layers (adaptive colors,
 # circadian curve, battery tint and charging pulse through `dumpsys battery`), the Sound section,
@@ -14,7 +14,8 @@
 # the system volume, the avatar left out, a minute tick at rest; 2b.7b: the mini player as a card,
 # a status-bar ticker and off, each button-glyph set in the hints, Search and the HUD, and title
 # badges on a scraped game, an unscraped one and an app; 2b.7c: the social stack's collapse cases,
-# its cached friends and badge offline, the panel by keys and touch).
+# its cached friends and badge offline, the panel by keys and touch; 2b.7d: the achievement badge
+# off, compact and as the rich card, offline without its friend strip, online with it).
 #
 #   tools/device-tests/test-theme.sh
 #
@@ -24,7 +25,7 @@
 # The battery override is always reset at exit, even after Ctrl-C.
 set -u
 . "$(dirname "$0")/lib/harness.sh"
-suite_begin theme 259
+suite_begin theme 281
 
 setup_base_env
 setup_theme_fixtures
@@ -1253,6 +1254,158 @@ if adb shell run-as "$PKG" true 2>/dev/null; then
   await_flat '"topLeftCluster":null' && ok "Theme pack hands the top-left back (null)" || bad "topLeftCluster not reset"
 else
   skip 24 "the social-stack checks need a debuggable build (credentials are written with run-as)"
+fi
+
+section "Components (2b.7d)"
+# Achievement badge (the last Components row): Theme pack → Off → Compact → Rich card. The rich
+# card is described "RetroAchievements: 2/8 · 10/40 pts" and its friend strip "Recently played by
+# …". Chrono Trigger's progress comes from a saved copy (matches.json and game-228.json in
+# Xross/data/ra, badges in Xross/media/ra/badges) read with the fake account in airplane mode, so
+# its fetch fails: the card from the saved copy, without the strip. With the debug build's .env
+# account online the fetch works, and the saved friends on that game make the strip.
+telemetry_row() { comp_row 8; }
+card_desc() { descs | grep -o 'content-desc="RetroAchievements: [^"]*"' | head -1 | sed 's/content-desc="//; s/"$//'; }
+strip_desc() { descs | grep -o 'content-desc="Recently played by [^"]*"' | head -1 | sed 's/content-desc="//; s/"$//'; }
+pill_shown() { screen | grep -qxF " unlocked"; }
+await_card() { for _ in $(seq 12); do [ -n "$(card_desc)" ] && return 0; pause 0.5; done; return 1; }
+ra_user() { adb shell run-as "$PKG" cat shared_prefs/xross_credentials.xml 2>/dev/null | grep -oE 'name="retroachievements_user">[^<]+' | sed 's/.*>//'; }
+seed_progress() { # Chrono Trigger matched to RetroAchievements game 228: 8 achievements, 2 unlocked, badges on disk
+  local db d row uuid size mod
+  db=$(tmpdir db-telemetry); d=$(tmpdir ra-telemetry)
+  for f in xross.db xross.db-wal xross.db-shm; do adb exec-out run-as "$PKG" cat "databases/$f" > "$db/$f" 2>/dev/null; done
+  [ -s "$db/xross.db-wal" ] || rm -f "$db/xross.db-wal" "$db/xross.db-shm"
+  row=$(sqlite3 -separator ' ' "$db/xross.db" "SELECT uuid, sizeBytes, lastModified FROM games WHERE fileName LIKE 'Chrono Trigger%' LIMIT 1")
+  read -r uuid size mod <<<"$row"
+  [ -n "$uuid" ] || return 1
+  printf '{"%s":{"raId":228,"kind":"HASH","size":%s,"modified":%s,"listVersion":2}}' "$uuid" "$size" "$mod" > "$d/matches.json"
+  python3 - "$d" <<'PY'
+import json, struct, sys, zlib, os
+d = sys.argv[1]
+ach = []
+for i in range(1, 9):
+    a = {"id": 9000 + i, "title": "Smoke %d" % i, "points": 5, "badgeName": "9%04d" % i, "displayOrder": i}
+    if i <= 2: a["unlockedAt"] = "2026-11-0%d 10:00:00" % i
+    ach.append(a)
+json.dump({"gameId": 228, "title": "Chrono Trigger", "consoleName": "SNES", "achievements": ach}, open(os.path.join(d, "game-228.json"), "w"))
+def png(path, rgb):  # a 64 × 64 solid square
+    raw = b"".join(b"\0" + bytes(rgb) * 64 for _ in range(64))
+    chunk = lambda t, b: struct.pack(">I", len(b)) + t + b + struct.pack(">I", zlib.crc32(t + b) & 0xFFFFFFFF)
+    open(path, "wb").write(b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", 64, 64, 8, 2, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b""))
+os.makedirs(os.path.join(d, "badges"), exist_ok=True)
+for i in range(1, 9): png(os.path.join(d, "badges", "9%04d.png" % i), (30 * i, 200 - 20 * i, 120))
+PY
+  adb shell mkdir -p /sdcard/Xross/data/ra /sdcard/Xross/media/ra/badges
+  adb push "$d/matches.json" /sdcard/Xross/data/ra/matches.json >/dev/null
+  adb push "$d/game-228.json" /sdcard/Xross/data/ra/game-228.json >/dev/null
+  for f in "$d"/badges/*.png; do adb push "$f" /sdcard/Xross/media/ra/badges/ >/dev/null; done
+}
+# Four followed users, fetched just now (nothing is stale): Alice, Bob, Carol and Dave last played
+# game 228, Erin another one.
+seed_card_friends() { # seed_card_friends <owner>
+  local d now act=""; d=$(tmpdir ra-card-friends); now=$(now_ms)
+  for f in "Alice 01ALICE 228 2026-11-14 10:00:00" "Bob 01BOB 228 2026-11-13 10:00:00" "Carol 01CAROL 228 2026-11-12 10:00:00" \
+    "Dave 01DAVE 228 2026-11-11 10:00:00" "Erin 01ERIN 77 2026-11-14 12:00:00"; do
+    read -r u id g day time <<<"$f"
+    act="$act${act:+,}\"$id\":{\"user\":\"$u\",\"ulid\":\"$id\",\"gameId\":$g,\"gameTitle\":\"Game $g\",\"lastPlayed\":\"$day $time\",\"lastSeen\":\"$day $time\",\"fetchedAtMs\":$now}"
+  done
+  printf '{"version":1,"owner":"%s","followingFetchedAtMs":%s,"following":[%s],"total":5,"activity":{%s},"seen":{},"stackOpenedAtMs":%s}' \
+    "$1" "$now" '{"user":"Alice","ulid":"01ALICE"},{"user":"Bob","ulid":"01BOB"},{"user":"Carol","ulid":"01CAROL"},{"user":"Dave","ulid":"01DAVE"},{"user":"Erin","ulid":"01ERIN"}' \
+    "$act" "$now" > "$d/friends.json"
+  adb shell mkdir -p /sdcard/Xross/data/ra
+  adb push "$d/friends.json" /sdcard/Xross/data/ra/friends.json >/dev/null
+}
+chrono() { home; all_games "$(collections_above)"; key KEYCODE_DPAD_CENTER; pause 1; }
+
+if command -v sqlite3 >/dev/null && adb shell run-as "$PKG" true 2>/dev/null; then
+  telemetry_row
+  expect "Theme pack (Compact) · The focused game's unlocks and points" "Achievement badge follows the pack (Compact), last in Components"
+  key KEYCODE_DPAD_CENTER
+  await_flat '"telemetryMode":"OFF"' && ok "Off is saved as display.components.telemetryMode" || bad "telemetryMode OFF not saved"
+  expect "Off · No RetroAchievements badge on games" "Off says what it does"
+
+  # Offline, the fake account, Chrono Trigger's saved progress and friends on it.
+  adb shell am force-stop "$PKG"
+  adb shell cmd connectivity airplane-mode enable
+  link_fake_account
+  seed_progress || bad "no Chrono Trigger in the library to seed"
+  seed_card_friends SmokeUser
+  adb logcat -c
+  start_app
+  chrono
+  [ -z "$(card_desc)" ] && ! pill_shown && ok "Off: a recognized game shows neither the pill nor the card" || bad "Off draws: '$(card_desc)'"
+  shot telemetry-off
+  telemetry_row
+  key KEYCODE_DPAD_CENTER
+  await_flat '"telemetryMode":"COMPACT_PILL"' && ok "Compact is saved" || bad "telemetryMode COMPACT_PILL not saved"
+  chrono
+  for _ in $(seq 10); do pill_shown && break; pause 0.5; done
+  pill_shown && [ -z "$(card_desc)" ] && ok "Compact: today's pill, from the saved progress" || { bad "no compact pill"; show "$(screen)"; }
+  shot telemetry-compact
+  telemetry_row
+  key KEYCODE_DPAD_CENTER
+  await_flat '"telemetryMode":"RICH_CARD"' && ok "Rich card is saved" || bad "telemetryMode RICH_CARD not saved"
+  expect "Rich card · Newest unlocks and friends who played it" "Rich card says what it shows"
+  chrono
+  await_card
+  [ "$(card_desc)" = "RetroAchievements: 2/8 · 10/40 pts" ] && ok "the rich card draws the saved progress" || { bad "card: '$(card_desc)'"; show "$(screen)"; }
+  expect_line "SNES" "the card carries the platform pill"
+  pause 1.5
+  [ -z "$(strip_desc)" ] && ok "offline (the game's fetch failed): the card has no friend strip" || bad "offline strip: '$(strip_desc)'"
+  [ -z "$(ra_log)" ] && ok "focusing the game fetched no friends" || bad "friends fetched on focus: $(ra_log)"
+  shot telemetry-rich-offline
+  key KEYCODE_DPAD_DOWN
+  pause 2
+  [ -z "$(card_desc)" ] && ok "an unrecognized game (EarthBound) lets the card go" || bad "EarthBound shows: '$(card_desc)'"
+  key KEYCODE_DPAD_UP
+  await_card && ok "back on Chrono Trigger, the card returns" || bad "no card back on Chrono Trigger"
+  # Inside a folder Up doesn't reach the avatar: a tap on it opens the HUD, Back closes it.
+  ab=$(xml | grep -oE 'content-desc="SmokeUser"[^>]*bounds="\[[0-9]+,[0-9]+\]\[[0-9]+,[0-9]+\]' | grep -oE '\[[0-9]+,[0-9]+\]\[[0-9]+,[0-9]+\]$' | head -1)
+  read -r x1 y1 x2 y2 <<<"$(tr '[],' '   ' <<<"${ab:-[0,0][0,0]}")"
+  adb shell input tap $(( (x1 + x2) / 2 )) $(( (y1 + y2) / 2 )); pause 1
+  [ -n "$ab" ] && [ -z "$(card_desc)" ] && ok "the avatar's HUD covers the card" || bad "card under the HUD (avatar at '$ab'): '$(card_desc)'"
+  key KEYCODE_BACK
+  await_card && ok "closing the HUD gives the card back" || bad "no card after the HUD closed"
+  category 5
+  pause 1.5
+  [ -z "$(card_desc)" ] && ok "apps get no card" || bad "an app shows: '$(card_desc)'"
+
+  # Online with the .env account (debug builds with secrets): the fetch works, the strip shows.
+  adb shell am force-stop "$PKG"
+  adb shell cmd connectivity airplane-mode disable
+  unlink_fake_account
+  start_app
+  user=$(ra_user)
+  if [ -n "$user" ]; then
+    adb shell am force-stop "$PKG"
+    seed_card_friends "$user"
+    adb logcat -c
+    start_app
+    chrono
+    await_card
+    for _ in $(seq 12); do [ -n "$(strip_desc)" ] && break; pause 0.5; done
+    [ "$(strip_desc)" = "Recently played by Alice, Bob, Carol and 1 more" ] \
+      && ok "online: RECENTLY PLAYED lists the three most recent friends on this game, then +1" || { bad "strip: '$(strip_desc)'"; show "$(screen)"; }
+    expect_line "+1" "the strip ends with +1"
+    shot telemetry-rich-strip
+    [ -z "$(ra_log | grep -v '^friends=5 activity=0 calls=0')" ] && ok "nothing fetched friends on focus ($(ra_log | tr '\n' ' '))" || bad "friends fetched: $(ra_log)"
+    # Airplane mode: the next fetch fails, the card stays without its strip.
+    adb shell am force-stop "$PKG"
+    adb shell cmd connectivity airplane-mode enable
+    start_app
+    chrono
+    await_card
+    pause 1.5
+    [ -n "$(card_desc)" ] && [ -z "$(strip_desc)" ] && ok "airplane mode: the card without the strip" || bad "airplane: card '$(card_desc)', strip '$(strip_desc)'"
+    adb shell cmd connectivity airplane-mode disable
+  else
+    skip 4 "the friend strip needs the debug build's .env RetroAchievements account"
+  fi
+  adb shell rm -rf /sdcard/Xross/data/ra/friends.json /sdcard/Xross/data/ra/matches.json /sdcard/Xross/data/ra/game-228.json /sdcard/Xross/media/ra/badges
+  telemetry_row
+  key KEYCODE_DPAD_CENTER
+  await_flat '"telemetryMode":null' && ok "Theme pack hands the badge back (null)" || bad "telemetryMode not reset"
+else
+  skip 22 "the telemetry checks need sqlite3 on the host and a debuggable build"
 fi
 
 suite_end

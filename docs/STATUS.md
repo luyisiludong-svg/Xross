@@ -29,6 +29,7 @@ Legend: ✅ done and verified · ◐ partial · ❌ not started · 🧪 verified
 | Phase 2b.7a (components block and status-bar clusters): `components` in the manifest (Default pack → pack → variant → `display.components`; never overrides or rules), `statusBarLeft` / `statusBarRight` slots (`LOGO`, `WIFI`, `VOLUME`, `BATTERY`, `CLOCK`, `AVATAR` always last), battery modes with time to full, clock skeletons, Settings ▸ Theme ▸ Components | ✅ 🧪 on `feat/theme-2b7` (2026-11-14): 793 unit tests, `lintDebug` 0 errors; theme suite **197/197** on the API 37 emulator, display matrix 12/12 default and stress, `palette-perf.sh` 0.15–0.75% janky (§3.29). Not yet on the A55 |
 | Phase 2b.7b (mini player, glyphs, badge pills): `miniPlayerMode` (`FLOATING_CARD`, `STATUS_TICKER` in the status bar before the avatar, `OFF`), `glyphOverride` (`AUTO`, `PLAYSTATION`, colored `XBOX`, `NINTENDO`, `MONOCHROME_MINIMAL`; labels only), `badgePills` beside the focused title; Settings ▸ Theme ▸ Components rows | ✅ 🧪 on `feat/theme-2b7` (2026-11-14): 805 unit tests, `lintDebug` 0 errors; theme suite **235/235** on the API 37 emulator, `palette-perf.sh` 0.15–0.74% janky with badges (§3.30). Not yet on the A55 |
 | Phase 2b.7c (friend data and the social stack): followed users (`API_GetUsersIFollow`) and their latest game (`API_GetUserSummary`), cached in `Xross/data/ra/friends.json`, fetched on refresh only, ≤ 20 activity calls 350 ms apart; `topLeftCluster: SOCIAL_STACK` with a `9+` badge and a FOLLOWING panel; Settings ▸ Theme ▸ Components ▸ Top-left | ✅ 🧪 on `feat/theme-2b7` (2026-11-14): API verified live ([RETROACHIEVEMENTS_API.md](RETROACHIEVEMENTS_API.md)); 825 unit tests, `lintDebug` 0 errors; theme suite **259/259** on the API 37 emulator (§3.31). Not yet on the A55; the test account follows nobody |
+| Phase 2b.7d (telemetry tiers): `telemetryMode` `OFF`, `COMPACT_PILL` (today's pill) and `RICH_CARD`: box art, platform pill, the six newest unlocks (locked ones greyed), progress with "18/42 · 120/400 pts" and a `RECENTLY PLAYED` strip of followed users on that game; offline without the strip; never fetches; Settings ▸ Theme ▸ Components ▸ Achievement badge | ✅ 🧪 on `feat/theme-2b7` (2026-11-14): 836 unit tests, `lintDebug` 0 errors; theme suite **281/281** on the API 37 emulator, the strip shown live with the `.env` account; `palette-perf.sh` card 0.30–1.37% janky (one 4.22% outlier in 11 passes) vs pill 0.15–1.16% (§3.32). Not yet on the A55 |
 | Phase 3 (dual screen, hot-swap, RetroAchievements, Web Portal, FTPS) | ◐ RetroAchievements account linking, status bar avatar and User Card (§3.12), per-game achievement lists and unlock toasts (§3.13), live on the emulator and the Galaxy A55 (§3.14); hot-swap and live resolution change done; dual screen, docking, Portal and FTPS not started |
 | Phase 4 (onboarding, triage, profiling, plugin API) | ◐ app triage and performance work started |
 
@@ -149,6 +150,7 @@ parked until an API is documented.
 | Status bar components | ✅ 🧪 | `components.statusBarLeft` / `statusBarRight` slots (logo, network, system volume, battery, clock, avatar), battery modes including time to full, clock skeletons; Settings ▸ Theme ▸ Components (2b.7a, §3.29) |
 | Mini player modes, button glyphs, title badges | ✅ 🧪 | `components.miniPlayerMode`, `glyphOverride`, `badgePills`; Settings ▸ Theme ▸ Components (2b.7b, §3.30) |
 | Social stack | ✅ 🧪 | `components.topLeftCluster: SOCIAL_STACK`: followed RetroAchievements users, an unread badge and a FOLLOWING panel; cached for offline (2b.7c, §3.31) |
+| Achievement badge tiers | ✅ 🧪 | `components.telemetryMode`: off, the compact pill, or a rich card with recent badges and the friends who last played the game (2b.7d, §3.32) |
 | Game tiles and avatar style | ✅ 🧪 | 16:9 XMB tiles in Games; `profile.avatarStyle` with Settings ▸ Theme ▸ Profile customization (Phase 2b.1, §3.15) |
 
 ### 3.5 Device integration & form factors
@@ -1468,6 +1470,42 @@ avatar, the social stack's front avatar included.
 **Not covered:** a stack with real followed users (the test account follows nobody), the A55,
 `palette-perf.sh` with the stack (it adds no per-frame work; not measured), the 10-minute
 silent-at-rest check (15 s in the suite).
+
+### 3.32 Phase 2b.7d: telemetry tiers (2026-11-14)
+
+On `feat/theme-2b7`, API 37 emulator (`-gpu host`, 2400×1080).
+
+**Host:** 836 unit tests pass (4 skipped): the new `TelemetryCardTest` (the badge row with fewer
+than six unlocks, many unlocks, a mastered set of two worth no points, large counts; the platform
+fallback; the strip matched by RetroAchievements game id, newest first, `+N`, kept while loading,
+none for another game or an unknown id; collapse when unlinked, unrecognized, failed or without
+achievements; offline from the friend refresh or the game's own fetch, and the saved copy before
+the fetch not counted as offline; the Achievement badge row and its subtitles), a controller test
+in `FriendsTest` (the rich card fetches friends once without a cache; focusing games, startup with
+a cache and the compact pill fetch none; a stale list is fetched when asked), and `ComponentsTest`
+with the new row. `lintDebug` 0 errors.
+
+**Theme suite: 281/281** (the 259 before plus a new 22-check "Components (2b.7d)" section): the
+row cycling Off, Compact and Rich card into `display.components.telemetryMode`; with a seeded
+saved copy for Chrono Trigger (`matches.json`, `game-228.json`, badges) and the fake account in
+airplane mode: nothing with Off, today's pill with Compact, the card "2/8 · 10/40 pts" with its
+SNES pill and no strip (the fetch failed), no friend refresh on focus, gone on EarthBound
+(unrecognized) and back on Chrono Trigger, covered by the avatar's HUD (opened by a tap) and back,
+none on apps. With the debug build's `.env` account online, the live fetch (game 228, 89
+achievements) and four saved friends on it drew "Recently played by Alice, Bob, Carol and 1
+more" with `+1`, no friend call; in airplane mode the card again without the strip.
+
+**Performance (`PERF_TELEMETRY=1 palette-perf.sh`, new):** the 12 test games get saved progress
+and badges, the passes run in airplane mode and alternate the rich card and the pill. With the
+first version (`AnimatedContent` with a size transform) the card was 0.59–0.71% janky against
+0.29–0.30% in all three rounds; the shipped one is a plain `Crossfade` (every card has the same
+size). Over 11 interleaved pairs: card median 0.45% (0.30–1.37%, one pass at 4.22% that didn't
+recur), pill median 0.30% (0.15–1.16%), about one frame per pass; both went up together while the
+emulator ran slow (p50 23 ms). No GC or Davey lines from Xross in the passes logged.
+
+**Not covered:** the A55 (120 Hz, the gate with the interleaved rounds there), portrait (the
+emulator ignored `wm size` in this run; `display-matrix.sh` doesn't focus a recognized game),
+real followed users (the strip used seeded friends).
 
 ## 4. Display matrix & performance
 

@@ -466,7 +466,7 @@ fun XmbScreen(
 
         // Floating mini player: at the root, outside the menu's fade, so it rides across every
         // category (miniCovered, above, hides it and the ticker alike).
-        // The mini player stacks above the focused game's RetroAchievements badge, which sits
+        // The mini player stacks above the focused game's RetroAchievements badge or card, which sits
         // just above the hints; each takes no room while hidden, so the other settles into place.
         Column(
             horizontalAlignment = Alignment.End,
@@ -485,9 +485,16 @@ fun XmbScreen(
                 onLongClick = onMiniPlayerLongPress,
                 mode = components.miniPlayer,
             )
-            GameTelemetryBadge(
-                telemetry = state.focusedTelemetry.takeIf { !miniCovered && !state.avatarFocused },
+            // telemetryMode (2b.7d): nothing, the compact pill or the rich card; the mini player's
+            // ticker and Off modes leave the corner to it.
+            GameTelemetryCorner(
+                mode = components.telemetry,
+                telemetry = state.focusedTelemetry,
+                hidden = miniCovered || state.avatarFocused,
+                friends = state.friends,
                 size = m.subtitleSize.sp(),
+                loadArt = loadArt,
+                loadBadge = loadBadge,
             )
         }
 
