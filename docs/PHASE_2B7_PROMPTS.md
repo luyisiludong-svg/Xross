@@ -31,8 +31,8 @@ it doesn't block 2b.7.
 | 2b.7-prep | ✅ merged into `main` (`f67f532`): `RaController`, `StatusBarState` / `StatusBarSource`, `model/GlyphKey` and `GlyphSet` |
 | 2b.7a | ✅ on `feat/theme-2b7` (2026-11-14): 793 unit tests, `lintDebug` 0 errors, theme suite **197/197** on the API 37 emulator (new 48-check "Components (2b.7a)" section), `display-matrix.sh` 12/12 default and stress, `palette-perf.sh` 0.15–0.75% janky ([STATUS §3.29](STATUS.md)). **Open:** the A55 pass (volume keys, Wi-Fi bars, 120 Hz), an Android 9 image, a real charge-time estimate. As built: [2b.7a notes](#as-built-2b7a-2026-11-14) |
 | 2b.7b | ✅ on `feat/theme-2b7` (2026-11-14): 805 unit tests, `lintDebug` 0 errors, theme suite **235/235** on the API 37 emulator (new 38-check "Components (2b.7b)" section), `palette-perf.sh` 0.15–0.74% janky with badges ([STATUS §3.30](STATUS.md)). **Open:** the A55 pass (a real pad, touch on the ticker, 120 Hz), `RA_PROGRESS` with an account, `display-matrix.sh` with the ticker and badges. As built: [2b.7b notes](#as-built-2b7b-2026-11-14) |
-| 2b.7c | ⬜ next (verify the friend API first) |
-| 2b.7d | ⬜ |
+| 2b.7c | ✅ on `feat/theme-2b7` (2026-11-14): friend API verified live ([RETROACHIEVEMENTS_API.md](RETROACHIEVEMENTS_API.md)), 825 unit tests, `lintDebug` 0 errors, theme suite **259/259** on the API 37 emulator (new 24-check "Components (2b.7c)" section) ([STATUS §3.31](STATUS.md)). **Open:** the A55 with real followed users (the test account follows nobody), the 10-minute silent-at-rest check. As built: [2b.7c notes](#as-built-2b7c-2026-11-14) |
+| 2b.7d | ⬜ next |
 | 2b.7e | ⬜ |
 
 ---
@@ -386,6 +386,70 @@ locally either way (requirement 3).
 - Airplane mode: the stack shows the cache; with the cache deleted, it collapses. Unlink: collapses.
 - At rest with the stack shown: no network calls for 10 min (`XrossRa` log silent).
 ```
+
+### As built (2b.7c, 2026-11-14)
+
+The verify step's answers are in [RETROACHIEVEMENTS_API.md](RETROACHIEVEMENTS_API.md): the
+following list carries name, ULID, points and follow-back but **no avatar or activity**; a friend's
+latest game and when come from `API_GetUserSummary` with `g=1&a=1` (`RecentlyPlayed[0].LastPlayed`
+and `RichPresenceMsgDate`; `LastActivity` is dead); the limit is a burst of about 7 calls that
+refills at about 3 a second (429, no `Retry-After`). The project's test account follows nobody.
+
+| Piece | Where |
+|---|---|
+| `RaFollowed`, `RaFriendActivity`, `fetchFollowing`, `fetchFriendActivity`, parsers; `RaResult.Failed.busy` on a 429 | `profile/RetroAchievementsClient.kt` |
+| `FriendsRepository` (`Xross/data/ra/friends.json`, avatars in `media/avatars/friends/`), `FriendsState`, `Friend` | `profile/FriendsRepository.kt` |
+| `RaState.friends` / `socialPanel`, refresh triggers, the panel's input | `state/RaController.kt`; pure rules (`shows`, panel input, "how long ago") in `state/SocialStack.kt` |
+| Drawing | `ui/SocialStack.kt` (`SocialStackSlot` in `StatusBar`'s left row, `SocialPanel` over the menu) |
+| Settings | `ComponentRow.TOP_LEFT`, the **last** row of Components (so 2b.7a–b's rows keep their places) |
+
+Decisions made while building:
+
+- **`fetchFollowing(apiKey)`**, no user: the endpoint answers for the key's account. One call with
+  `c=200`; it keeps paging past a short page while `Total` says there are more (up to 4 pages).
+- **Caps adjusted to the measured limit:** 350 ms between call starts (not 250: the passing run was
+  really ~330 ms apart); on a 429, one retry after 2 s, then the refresh ends. Any other failure
+  ends it at once (offline, 20 failing calls would say nothing new).
+- **Which 20:** the 15 most recently active, then the others least recently fetched first, so a list
+  longer than 20 is covered over a few refreshes instead of never.
+- **Refresh triggers** (A.13: never focus, hover, composition or a timer): the hub's Primary action
+  (always), the profile's own refresh (only while something shows friends: `SOCIAL_STACK` now,
+  `RICH_CARD` and the hub sidebar later), opening the stack when stale (list > 6 h or no activity
+  in 30 min), turning Top-left to Social stack, and at startup only when nothing was ever fetched
+  (else a stack with no cache would collapse and could never be opened to fetch).
+- **`newActivity`:** per friend, game id and last activity at the time the stack was opened; a
+  friend it never showed counts if they were active after that. The first refresh of an account
+  records the current state (nothing is news), like unlock toasts.
+- **States:** at startup the cache is `Ready` (no fetch failed yet); a failed refresh is `Offline`
+  with the saved list; `Loading` keeps the list it had. The stack collapses when unlinked, or the
+  list is empty (offline without a cache, following nobody).
+- **Focus:** Left from the avatar's HUD crosses to the stack (Left from the HUD moved category
+  before, and still does without a stack); Up at the top opens it only when the bar has no avatar.
+  In the panel Up/Down move, Right goes back to the avatar, L1/R1 move category, Back or a tap
+  outside closes. Opening clears the badge; the panel still dots who was new.
+- **Logs:** debug and profiling builds log `XrossRa friends=N activity=M calls=K` (`failed` when it
+  ended early) once per refresh.
+
+Device-test lessons (in `test-theme.sh` now):
+
+- Debug builds link the developer's `.env` account at every start (`AppContainer`,
+  `DEBUG_RETROACHIEVEMENTS_*`), so a cleared app is never unlinked there. The suite seeds its own
+  account (`SmokeUser`, a fake key, run in airplane mode) by writing the credentials file with
+  `run-as`, and checks "unlinked" only on builds without those secrets; with them, it checks the
+  live refresh instead.
+- Settings writes are read back through `components`, a derived flow that lags the save by a
+  moment: code acting on a just-saved component must settle it from `settingsStore.current`.
+- `wm size` reports the natural (portrait) size; the UI dump's root bounds follow the rotation.
+- Never edit a suite while it runs: bash reads the script as it goes.
+
+### Notes for 2b.7d–e (from 2b.7c)
+
+- `RaState.friends` / `XmbUiState.friends` carry everything: `Friend.activity.gameId` is the
+  RetroAchievements game id for 2b.7d's `RECENTLY PLAYED` strip; `gameIconUrl` for the card.
+- Add `RICH_CARD` (2b.7d) and the hub sidebar (2b.7e) to `RaController.friendsWanted()`, so the
+  profile's refresh fetches friends for them too.
+- Only the 20 fetched friends have activity (and avatars); the rest of a long list are names and
+  points. The sidebar sorts by points, so it can list everyone; the latest game shows for those 20.
 
 ---
 

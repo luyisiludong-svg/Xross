@@ -978,7 +978,8 @@ class MenuTree(private val s: MenuSnapshot) {
 
     /**
      * Settings ▸ Theme ▸ Components: the status bar's clusters, battery display and clock (2b.7a),
-     * the mini player, button glyphs and title badges (2b.7b). 2b.7c–e add rows here.
+     * the mini player, button glyphs and title badges (2b.7b), the top-left cluster (2b.7c).
+     * 2b.7d–e add rows here.
      */
     private fun componentSettings() = listOf(
         statusSlotsRow(dev.xross.launcher.theme.pack.StatusSide.LEFT),
@@ -988,6 +989,8 @@ class MenuTree(private val s: MenuSnapshot) {
         componentRow(dev.xross.launcher.theme.pack.ComponentRow.MINI_PLAYER),
         componentRow(dev.xross.launcher.theme.pack.ComponentRow.GLYPHS),
         badgePillsRow(),
+        // Last, so the rows before it keep their places (2b.7d–e add theirs after it).
+        componentRow(dev.xross.launcher.theme.pack.ComponentRow.TOP_LEFT),
     )
 
     /** Title badges: Confirm and Options both open the list of badges to turn on and off. */
@@ -1033,6 +1036,11 @@ class MenuTree(private val s: MenuSnapshot) {
         val own = s.settings.componentOverrides[row]
         val shown = if (own == null) row.packLabel(packComponents) else row.label(own)
         val note = when (row) {
+            dev.xross.launcher.theme.pack.ComponentRow.TOP_LEFT -> when {
+                shownComponents.topLeft != dev.xross.launcher.theme.pack.TopLeftClusterMode.SOCIAL_STACK -> "Friends you follow on RetroAchievements, after the left slots"
+                !s.accounts.retroAchievementsLinked -> "Needs a RetroAchievements account (Settings ▸ Accounts)"
+                else -> "Friends you follow, newest activity first"
+            }
             dev.xross.launcher.theme.pack.ComponentRow.BATTERY ->
                 if (!shownComponents.shows(dev.xross.launcher.theme.pack.StatusSlot.BATTERY)) "Battery isn't in the status bar" else "Time to full shows the percentage unless charging"
             dev.xross.launcher.theme.pack.ComponentRow.CLOCK ->

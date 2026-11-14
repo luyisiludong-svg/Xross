@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Theme suite (235 checks): Settings ▸ Theme and its folders (theme color, wave and avatar panels,
+# Theme suite (259 checks): Settings ▸ Theme and its folders (theme color, wave and avatar panels,
 # platform folders, surface style, the 2b.4f effect rows, Pick custom wallpaper, Reset to theme
 # defaults), quick profiles (OLED, Y2K, E-Ink), color layers (adaptive colors,
 # circadian curve, battery tint and charging pulse through `dumpsys battery`), the Sound section,
@@ -13,7 +13,8 @@
 # the charger, clock formats, three slot orders with the avatar HUD, network in airplane mode,
 # the system volume, the avatar left out, a minute tick at rest; 2b.7b: the mini player as a card,
 # a status-bar ticker and off, each button-glyph set in the hints, Search and the HUD, and title
-# badges on a scraped game, an unscraped one and an app).
+# badges on a scraped game, an unscraped one and an app; 2b.7c: the social stack's collapse cases,
+# its cached friends and badge offline, the panel by keys and touch).
 #
 #   tools/device-tests/test-theme.sh
 #
@@ -23,7 +24,7 @@
 # The battery override is always reset at exit, even after Ctrl-C.
 set -u
 . "$(dirname "$0")/lib/harness.sh"
-suite_begin theme 235
+suite_begin theme 259
 
 setup_base_env
 setup_theme_fixtures
@@ -1094,5 +1095,164 @@ fi
 comp_row 6
 key KEYCODE_DPAD_CENTER KEYCODE_DPAD_CENTER
 await_flat '"badgePills":null' && ok "Theme pack hands the badges back (null)" || bad "badgePills not reset"
+
+section "Components (2b.7c)"
+# Top-left (the last Components row): Theme pack → Social stack → Empty. The stack is described
+# "Friends: N" (", K with new activity" while the badge shows); its panel lists FOLLOWING. The
+# linked account here is fake (no key reaches RetroAchievements: the checks run in airplane mode),
+# its profile and friends come from caches written into the Xross folder. Debug builds log one
+# XrossRa line per friends refresh.
+topleft_row() { comp_row 7; }
+stack_desc() { xml | grep -o 'content-desc="Friends: [^"]*"' | head -1 | sed 's/content-desc="//; s/"$//'; }
+now_ms() { echo "$(adb shell date +%s | tr -d '\r')000"; }
+ra_log() { adb logcat -d -s XrossRa:I | grep -o 'friends=.*' ; }
+link_fake_account() { # credentials in the app's own preferences (debug build), plus a fresh profile cache
+  local d; d=$(tmpdir ra-link)
+  printf '%s\n' "<?xml version='1.0' encoding='utf-8' standalone='yes' ?>" \
+    '<map><string name="retroachievements_user">SmokeUser</string><string name="retroachievements_web_api_key">NotARealKey000</string></map>' > "$d/creds.xml"
+  adb push "$d/creds.xml" /data/local/tmp/xross-creds.xml >/dev/null
+  adb shell chmod 644 /data/local/tmp/xross-creds.xml
+  adb shell run-as "$PKG" sh -c "'mkdir -p shared_prefs && cp /data/local/tmp/xross-creds.xml shared_prefs/xross_credentials.xml'"
+  adb shell rm -f /data/local/tmp/xross-creds.xml
+  printf '{"version":1,"username":"SmokeUser","profile":{"username":"SmokeUser","totalPoints":100,"fetchedAtMs":%s}}' "$(now_ms)" > "$d/profile.json"
+  adb push "$d/profile.json" /sdcard/Xross/data/retroachievements.json >/dev/null
+}
+# Debug builds link the developer's .env account at every start (AppContainer,
+# DEBUG_RETROACHIEVEMENTS_*): then nothing on the device is ever unlinked.
+seeded_account() { adb shell run-as "$PKG" cat shared_prefs/xross_credentials.xml 2>/dev/null | grep -qE 'name="retroachievements_user">[^<]+'; }
+unlink_fake_account() { adb shell run-as "$PKG" rm -f shared_prefs/xross_credentials.xml; adb shell rm -f /sdcard/Xross/data/retroachievements.json; }
+write_friends() { # write_friends <following JSON array> <activity JSON object> <seen JSON object>
+  local d now; d=$(tmpdir ra-friends); now=$(now_ms)
+  printf '{"version":1,"owner":"SmokeUser","followingFetchedAtMs":%s,"following":%s,"total":3,"activity":%s,"seen":%s,"stackOpenedAtMs":%s}' \
+    "$((now - 3600000))" "$1" "$2" "$3" "$((now - 7200000))" > "$d/friends.json"
+  adb shell mkdir -p /sdcard/Xross/data/ra
+  adb push "$d/friends.json" /sdcard/Xross/data/ra/friends.json >/dev/null
+}
+# Three followed users, each fetched an hour ago (stale: opening the stack refreshes): Alice and
+# Carol moved on since the stack was last opened, Bob didn't.
+FOLLOWING='[{"user":"Alice","ulid":"01ALICE"},{"user":"Bob","ulid":"01BOB"},{"user":"Carol","ulid":"01CAROL"}]'
+activity() { # activity <user> <ulid> <game id> <title> <date>
+  printf '"%s":{"user":"%s","ulid":"%s","gameId":%s,"gameTitle":"%s","consoleName":"Dreamcast","lastPlayed":"%s","lastSeen":"%s","fetchedAtMs":%s}' \
+    "$2" "$1" "$2" "$3" "$4" "$5" "$5" "$(( $(now_ms) - 3600000 ))"
+}
+ACTIVITY="{$(activity Alice 01ALICE 3750 'Elemental Gimmick Gear' '2026-11-14 10:00:00'),$(activity Bob 01BOB 12 'Twelve' '2026-11-13 09:00:00'),$(activity Carol 01CAROL 77 'Seventy-seven' '2026-11-12 08:00:00')}"
+SEEN='{"01ALICE":"1@2026-11-01 10:00:00","01BOB":"12@2026-11-13 09:00:00","01CAROL":"5@2026-11-01 10:00:00"}'
+
+if adb shell run-as "$PKG" true 2>/dev/null; then
+  topleft_row
+  expect "Theme pack (Empty) · Friends you follow on RetroAchievements" "Top-left follows the pack (Empty), last in Components"
+  key KEYCODE_DPAD_CENTER
+  await_flat '"topLeftCluster":"SOCIAL_STACK"' && ok "Social stack is saved as display.components.topLeftCluster" || bad "topLeftCluster not saved"
+  if seeded_account; then
+    # Linked to the .env account, online: turning the stack on refreshed it against the live API.
+    expect "Social stack · Friends you follow" "linked (the debug build's .env account), the row says what it shows"
+    for _ in $(seq 20); do [ -n "$(ra_log)" ] && break; pause 0.5; done
+    ra_log | grep -qE '^friends=[0-9]+ activity=[0-9]+ calls=[0-9]+$' && ok "turning the stack on refreshed it live ($(ra_log | tail -1))" || bad "no live refresh: $(ra_log)"
+  else
+    expect "Social stack · Needs a RetroAchievements account" "without an account the row says what it needs"
+    category 0
+    pause 0.5
+    [ -z "$(stack_desc)" ] && ok "unlinked: the stack collapses" || bad "unlinked, the stack shows: $(stack_desc)"
+  fi
+  shot social-turned-on
+
+  # Linked, offline, with a cache: the cached friends, newest activity first, and the badge.
+  adb shell am force-stop "$PKG"
+  adb shell cmd connectivity airplane-mode enable
+  link_fake_account
+  write_friends "$FOLLOWING" "$ACTIVITY" "$SEEN"
+  adb logcat -c
+  start_app
+  category 0
+  pause 0.5
+  d=$(stack_desc)
+  [ "$d" = "Friends: 3, 2 with new activity" ] && ok "offline with a cache: the stack shows the cached friends and a 2 badge" || bad "stack: '$d'"
+  [ -z "$(ra_log)" ] && ok "a fresh profile and a friends cache at startup: no friends refresh" || bad "refreshed at startup: $(ra_log)"
+  sx=$(xml | grep -oE 'content-desc="Friends: [^"]*"[^>]*bounds="\[[0-9]+' | grep -oE '\[[0-9]+$' | tr -d '[')
+  cx=$(x_of '[0-9]{1,2}/[0-9]{1,2}  .*')
+  [ -n "$sx" ] && [ -n "$cx" ] && [ "$sx" -lt "$cx" ] && ok "the stack sits top-left, left of the clock" || bad "stack x=$sx, clock x=$cx"
+  shot social-stack
+
+  # Up opens the avatar HUD; Left crosses to the stack's panel, which refreshes the stale list and,
+  # offline, keeps the saved one.
+  key KEYCODE_DPAD_UP KEYCODE_DPAD_LEFT
+  expect "FOLLOWING" "Left from the avatar HUD opens the stack's panel"
+  s=$(screen)
+  a=$(grep -nxF "Alice" <<<"$s" | cut -d: -f1); b=$(grep -nxF "Bob" <<<"$s" | cut -d: -f1); c=$(grep -nxF "Carol" <<<"$s" | cut -d: -f1)
+  [ -n "$a" ] && [ -n "$b" ] && [ -n "$c" ] && [ "$a" -lt "$b" ] && [ "$b" -lt "$c" ] \
+    && ok "the panel lists the friends, most recent activity first" || { bad "panel order: Alice=$a Bob=$b Carol=$c"; show "$s"; }
+  expect "Elemental Gimmick Gear · Dreamcast" "each friend shows their latest game"
+  for _ in $(seq 10); do ra_log | grep -q "failed" && break; pause 0.5; done
+  ra_log | grep -qE '^friends=3 activity=0 calls=1 failed' && ok "opening the stale stack refreshed once and stopped at the first failure ($(ra_log | tail -1))" || bad "XrossRa: $(ra_log | tr '\n' ' ')"
+  expect "Offline · saved list" "offline, the panel keeps the saved list"
+  shot social-panel
+  key KEYCODE_BACK
+  pause 0.5
+  screen | grep -qxF "FOLLOWING" && bad "Back left the panel open" || ok "Back closes the panel"
+  d=$(stack_desc)
+  [ "$d" = "Friends: 3" ] && ok "opening the stack cleared its badge" || bad "after opening: '$d'"
+  adb shell am force-stop "$PKG"
+  start_app
+  category 0
+  pause 0.5
+  [ "$(stack_desc)" = "Friends: 3" ] && ok "the cleared badge is kept in friends.json" || bad "after a restart: '$(stack_desc)'"
+  adb shell cat /sdcard/Xross/data/ra/friends.json | grep -q "NotARealKey000" && bad "the key is in friends.json" || ok "friends.json holds no key"
+
+  # Touch: a tap on the stack opens the panel, a tap outside closes it.
+  b=$(xml | grep -oE 'content-desc="Friends: [^"]*"[^>]*bounds="\[[0-9]+,[0-9]+\]\[[0-9]+,[0-9]+\]' | grep -oE '\[[0-9]+,[0-9]+\]\[[0-9]+,[0-9]+\]$')
+  if [ -n "$b" ]; then
+    read -r x1 y1 x2 y2 <<<"$(tr '[],' '   ' <<<"$b")"
+    adb shell input tap $(( (x1 + x2) / 2 )) $(( (y1 + y2) / 2 )); pause 0.8
+    screen | grep -qxF "FOLLOWING" && ok "a tap on the stack opens the panel" || bad "tap on the stack: no panel"
+    # Anywhere off the panel: three quarters across and down the screen as drawn now (the UI
+    # dump's root bounds follow the rotation; `wm size` doesn't).
+    read -r sw sh <<<"$(xml | grep -oE 'bounds="\[0,0\]\[[0-9]+,[0-9]+\]"' | head -1 | grep -oE '\[[0-9]+,[0-9]+\]"$' | tr -d '[]"' | tr ',' ' ')"
+    adb shell input tap $(( ${sw:-1000} * 3 / 4 )) $(( ${sh:-1000} * 3 / 4 )); pause 0.8
+    screen | grep -qxF "FOLLOWING" && bad "a tap outside left the panel open" || ok "a tap outside closes the panel"
+  else
+    bad "no stack bounds to tap"; bad "no stack to close"
+  fi
+
+  # Offline without a cache: collapsed (the refresh at startup fails).
+  adb shell am force-stop "$PKG"
+  adb shell rm -f /sdcard/Xross/data/ra/friends.json
+  adb logcat -c
+  start_app
+  category 0
+  pause 1
+  [ -z "$(stack_desc)" ] && ok "offline without a cache: the stack collapses" || bad "no cache, the stack shows: $(stack_desc)"
+  ra_log | grep -q failed && ok "with nothing cached, startup tried one refresh ($(ra_log | tail -1))" || bad "no startup refresh logged: $(ra_log)"
+
+  # Following nobody: collapsed; at rest, no further calls.
+  adb shell am force-stop "$PKG"
+  write_friends '[]' '{}' '{}'
+  adb shell "sed -i 's/\"followingFetchedAtMs\":[0-9]*/\"followingFetchedAtMs\":$(now_ms)/' /sdcard/Xross/data/ra/friends.json"
+  adb logcat -c
+  start_app
+  category 0
+  pause 0.5
+  [ -z "$(stack_desc)" ] && ok "following nobody: the stack collapses" || bad "following nobody, the stack shows: $(stack_desc)"
+  pause 15
+  [ -z "$(ra_log)" ] && ok "at rest for 15 s: no friends refresh" || bad "refreshed at rest: $(ra_log)"
+
+  # Unlinked with a cache on disk: collapsed. (A debug build with .env secrets links its own
+  # account again at start: SmokeUser's cache then belongs to another account, also collapsed.)
+  adb shell am force-stop "$PKG"
+  write_friends "$FOLLOWING" "$ACTIVITY" "$SEEN"
+  unlink_fake_account
+  start_app
+  category 0
+  pause 0.5
+  what=$(seeded_account && echo "another account's cache is ignored" || echo "unlinked, even with a cache")
+  [ -z "$(stack_desc)" ] && ok "$what: the stack collapses" || bad "$what: $(stack_desc)"
+
+  adb shell cmd connectivity airplane-mode disable
+  adb shell rm -f /sdcard/Xross/data/ra/friends.json
+  topleft_row
+  key KEYCODE_DPAD_CENTER KEYCODE_DPAD_CENTER
+  await_flat '"topLeftCluster":null' && ok "Theme pack hands the top-left back (null)" || bad "topLeftCluster not reset"
+else
+  skip 24 "the social-stack checks need a debuggable build (credentials are written with run-as)"
+fi
 
 suite_end

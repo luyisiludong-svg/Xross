@@ -71,7 +71,7 @@ private val GlyphDim = Color(0x59FFFFFF)
 
 /**
  * The status bar (2b.7a): the `statusBarLeft` slots at the top-left and the `statusBarRight` slots
- * at the top-right, in array order, each its own composable. With an `AVATAR` slot the right
+ * at the top-right, in array order, each its own composable, and after the left slots the social stack (2b.7c). With an `AVATAR` slot the right
  * cluster keeps room at its far right ([trailingWidth] × [trailingHeight]) for the profile avatar,
  * which [AvatarHud] draws over that space; while the avatar's mini-HUD expands, [contentAlpha]
  * fades every right-cluster slot (read in the draw phase only). The left cluster never fades; it
@@ -96,6 +96,14 @@ fun StatusBar(
     tickerCovered: Boolean = false,
     onTickerTap: () -> Unit = {},
     onTickerLongPress: () -> Unit = {},
+    /** `topLeftCluster: SOCIAL_STACK` (2b.7c): the friends to stack after the left slots; empty: collapsed. */
+    social: List<dev.xross.launcher.profile.Friend> = emptyList(),
+    /** The stack's unread badge ("", "1"–"9", "9+"). */
+    socialBadge: String = "",
+    socialOpen: Boolean = false,
+    /** Profile customization ▸ Glow, for the stack's front avatar. */
+    socialGlow: Boolean = true,
+    onSocialTap: () -> Unit = {},
 ) {
     val bar by source.collectAsStateWithLifecycle()
 
@@ -135,6 +143,8 @@ fun StatusBar(
                 modifier = Modifier.clipToBounds(),
             ) {
                 for (s in components.left) slot(s)
+                // The social stack follows the left slots in the same clipped row (2b.7c).
+                if (social.isNotEmpty()) SocialStackSlot(social, socialBadge, heightDp * 1.15f, textSize, socialOpen, socialGlow, onSocialTap)
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 // Read in the draw phase, so the HUD's expansion never recomposes or re-lays-out the bar.
@@ -252,8 +262,10 @@ private fun DrawScope.drawNetwork(status: NetworkStatus, stroke: Float, lit: Col
             val cy = size.height * 0.94f
             val arcs = StatusLevels.LEVELS - 1
             drawCircle(if (offline) dim else lit, stroke * 0.9f, Offset(cx, cy - stroke * 0.6f))
+            // The outer arc's stroke ends inside the slot: the row clips at its top.
+            val outer = cy - stroke * 0.6f
             for (i in 1..arcs) {
-                val r = size.height * (0.12f + 0.27f * i)
+                val r = outer * (0.12f + 0.27f * i) / (0.12f + 0.27f * arcs)
                 val on = !offline && i <= status.level
                 drawArc(
                     if (on) lit else dim, startAngle = -135f, sweepAngle = 90f, useCenter = false,

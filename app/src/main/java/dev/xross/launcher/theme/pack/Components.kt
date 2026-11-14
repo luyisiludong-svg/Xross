@@ -485,6 +485,7 @@ data class ComponentOverrides(
 
     /** The value of [row] (null: the pack's). */
     operator fun get(row: ComponentRow): String? = when (row) {
+        ComponentRow.TOP_LEFT -> topLeftCluster
         ComponentRow.BATTERY -> batteryMode
         ComponentRow.CLOCK -> clockFormat
         ComponentRow.MINI_PLAYER -> miniPlayerMode
@@ -493,6 +494,7 @@ data class ComponentOverrides(
 
     /** A copy with [row] set to [value] (normalized; null or unknown follows the pack). */
     fun with(row: ComponentRow, value: String?): ComponentOverrides = when (row) {
+        ComponentRow.TOP_LEFT -> copy(topLeftCluster = ComponentNames.topLeft(value)?.name)
         ComponentRow.BATTERY -> copy(batteryMode = ComponentNames.battery(value)?.name)
         ComponentRow.CLOCK -> copy(clockFormat = value?.let { ClockFormat.filter(it).first })
         ComponentRow.MINI_PLAYER -> copy(miniPlayerMode = ComponentNames.miniPlayer(value)?.name)
@@ -509,6 +511,11 @@ data class ComponentOverrides(
 
 /** A one-value Settings ▸ Theme ▸ Components row, with its choices in row order: (value, label). */
 enum class ComponentRow(val title: String, val choices: List<Pair<String, String>>) {
+    /** `topLeftCluster` (2b.7c). */
+    TOP_LEFT(
+        "Top-left",
+        listOf(TopLeftClusterMode.SOCIAL_STACK.name to "Social stack", TopLeftClusterMode.EMPTY.name to "Empty"),
+    ),
     BATTERY(
         "Battery display",
         listOf(
@@ -547,6 +554,7 @@ enum class ComponentRow(val title: String, val choices: List<Pair<String, String
 
     /** What [c] (the pack's components) shows for this row, as a label. */
     fun packValue(c: ResolvedComponents): String = when (this) {
+        TOP_LEFT -> c.topLeft.name
         BATTERY -> c.battery.name
         CLOCK -> c.clock
         MINI_PLAYER -> c.miniPlayer.name

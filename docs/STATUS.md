@@ -28,6 +28,7 @@ Legend: ✅ done and verified · ◐ partial · ❌ not started · 🧪 verified
 | Phase 2b.4f (post-processing and Settings rows): `effects.backgroundFilter` (`SCANLINES`, `CRT`, `LCD_GRID`) as a GL pass snapped to render pixels, `effects.uiFilter` (`SCANLINES_UI`, `BLOOM`, custom `postprocess.agsl`) as an AGSL `RenderEffect` on Android 13+, Settings ▸ Theme rows for every 2b.4 effect (`display.effects`), Pick custom wallpaper, Reset to theme defaults, the `effects` schema | ✅ 🧪 on `feat/theme-2b4` (2026-11-13): 645 unit tests; 226/226 device checks on the API 37 emulator (theme 134/134); `palette-perf.sh` 0.30–0.45% janky, the same as the build before it, and 0.30–0.44% with CRT and Bloom on. **Galaxy A55** (2026-11-13): 645 unit tests, `lintDebug` 0 errors, **215/226** device checks (theme 134/134; the 11 are seeded-media checks), every slice checked by hand, `palette-perf.sh` 0.12–0.19% janky (0.06–0.19% with CRT and Bloom) (§3.28). **2b.4 is complete on the emulator and the A55** |
 | Phase 2b.7a (components block and status-bar clusters): `components` in the manifest (Default pack → pack → variant → `display.components`; never overrides or rules), `statusBarLeft` / `statusBarRight` slots (`LOGO`, `WIFI`, `VOLUME`, `BATTERY`, `CLOCK`, `AVATAR` always last), battery modes with time to full, clock skeletons, Settings ▸ Theme ▸ Components | ✅ 🧪 on `feat/theme-2b7` (2026-11-14): 793 unit tests, `lintDebug` 0 errors; theme suite **197/197** on the API 37 emulator, display matrix 12/12 default and stress, `palette-perf.sh` 0.15–0.75% janky (§3.29). Not yet on the A55 |
 | Phase 2b.7b (mini player, glyphs, badge pills): `miniPlayerMode` (`FLOATING_CARD`, `STATUS_TICKER` in the status bar before the avatar, `OFF`), `glyphOverride` (`AUTO`, `PLAYSTATION`, colored `XBOX`, `NINTENDO`, `MONOCHROME_MINIMAL`; labels only), `badgePills` beside the focused title; Settings ▸ Theme ▸ Components rows | ✅ 🧪 on `feat/theme-2b7` (2026-11-14): 805 unit tests, `lintDebug` 0 errors; theme suite **235/235** on the API 37 emulator, `palette-perf.sh` 0.15–0.74% janky with badges (§3.30). Not yet on the A55 |
+| Phase 2b.7c (friend data and the social stack): followed users (`API_GetUsersIFollow`) and their latest game (`API_GetUserSummary`), cached in `Xross/data/ra/friends.json`, fetched on refresh only, ≤ 20 activity calls 350 ms apart; `topLeftCluster: SOCIAL_STACK` with a `9+` badge and a FOLLOWING panel; Settings ▸ Theme ▸ Components ▸ Top-left | ✅ 🧪 on `feat/theme-2b7` (2026-11-14): API verified live ([RETROACHIEVEMENTS_API.md](RETROACHIEVEMENTS_API.md)); 825 unit tests, `lintDebug` 0 errors; theme suite **259/259** on the API 37 emulator (§3.31). Not yet on the A55; the test account follows nobody |
 | Phase 3 (dual screen, hot-swap, RetroAchievements, Web Portal, FTPS) | ◐ RetroAchievements account linking, status bar avatar and User Card (§3.12), per-game achievement lists and unlock toasts (§3.13), live on the emulator and the Galaxy A55 (§3.14); hot-swap and live resolution change done; dual screen, docking, Portal and FTPS not started |
 | Phase 4 (onboarding, triage, profiling, plugin API) | ◐ app triage and performance work started |
 
@@ -147,6 +148,7 @@ parked until an API is documented.
 | Aspect-ratio overrides | ❌ | Xross stays immersive (Android's system bars hidden); showing Android's status bar was dropped (2026-11-14). Xross's own status-bar slots are below |
 | Status bar components | ✅ 🧪 | `components.statusBarLeft` / `statusBarRight` slots (logo, network, system volume, battery, clock, avatar), battery modes including time to full, clock skeletons; Settings ▸ Theme ▸ Components (2b.7a, §3.29) |
 | Mini player modes, button glyphs, title badges | ✅ 🧪 | `components.miniPlayerMode`, `glyphOverride`, `badgePills`; Settings ▸ Theme ▸ Components (2b.7b, §3.30) |
+| Social stack | ✅ 🧪 | `components.topLeftCluster: SOCIAL_STACK`: followed RetroAchievements users, an unread badge and a FOLLOWING panel; cached for offline (2b.7c, §3.31) |
 | Game tiles and avatar style | ✅ 🧪 | 16:9 XMB tiles in Games; `profile.avatarStyle` with Settings ▸ Theme ▸ Profile customization (Phase 2b.1, §3.15) |
 
 ### 3.5 Device integration & form factors
@@ -1419,6 +1421,53 @@ Search keyboard's own Space key for the hint's.
 **Not covered:** the A55 (a real pad's glyph sets, touch on the ticker, 120 Hz), the
 `RA_PROGRESS` badge on a device (needs a linked account), the ticker's 30-second hide after a
 pause on a device (unit-tested on virtual time), `display-matrix.sh` with badges and the ticker.
+
+### 3.31 Phase 2b.7c: friend data and the social stack (2026-11-14)
+
+On `feat/theme-2b7`, API 37 emulator (`-gpu host`, 2400×1080).
+
+**Verify step (live, the project's test account):** `API_GetUsersIFollow` (no user parameter, `c`
+≤ 500) carries name, ULID, points and follow-back, no avatar or activity; a friend's latest game
+and when come from `API_GetUserSummary` with `g=1&a=1`; the limit is a burst of about 7 calls
+refilling at about 3 a second, answered with a bare 429. Details and the measurements in
+[RETROACHIEVEMENTS_API.md](RETROACHIEVEMENTS_API.md). The account follows nobody.
+
+**Host:** 825 unit tests pass (4 skipped): the new `FriendsTest` (both parsers with empty,
+paginated and malformed answers; one call for up to 200, paging past a short page; activity by
+ULID and a 429 flagged busy; cache freshness at 30 min and 6 h; the 20-friend cap with call starts
+≥ 350 ms apart and the rotation through a longer list; no call from loading, reading state,
+staleness checks or opening; new activity across refreshes and after opening, the `9+` cap and
+across sessions; offline stopping at the first failure with the cache kept; one retry after a
+429; following nobody; another account's cache ignored and unlink clearing the file and avatars;
+no key in any file; the collapse rules; the panel's input; "how long ago"; the Top-left row; the
+controller's refresh triggers, Left from the HUD and taps), and `ComponentsTest` with the new row.
+`lintDebug` 0 errors, 61 warnings (as before).
+
+**Theme suite: 259/259** (the 235 before plus a new 24-check "Components (2b.7c)" section): the
+Top-left row saved as `display.components.topLeftCluster`; turning it on with the debug build's
+`.env` account refreshed it **live** (`friends=0 activity=0 calls=1`); in airplane mode with a
+seeded account, profile and `friends.json`: the cached friends and a 2 badge at the top-left with
+no refresh at startup, Left from the HUD opening FOLLOWING in activity order with each latest
+game, the stale stack's one failed refresh keeping the saved list ("Offline · saved list"), Back
+and a tap outside closing it, a tap opening it, the badge cleared and kept across a restart, no
+key in `friends.json`; collapsed offline without a cache (after one startup try), following
+nobody (and no refresh in 15 s at rest), and with another account's cache.
+
+**Found and fixed on the device:** turning the stack on didn't fetch (the view model read the
+components before its flow caught up with the saved setting). Suite fixes: debug builds link the
+`.env` account at every start, so "unlinked" can't be set up on them; the outside tap used
+`wm size`, which doesn't follow the rotation.
+
+**From the first look (2026-11-14):** the PlayStation shapes were uneven (the font draws ○ small,
+△ and ✕ off center): every shape label (✕ ○ △ □ ▽ ▷ ◁) is now drawn as strokes of one size,
+centered, still read as its character by accessibility and the suite. The `WIFI` fan's outer arc
+reached past the top of its slot and was clipped: the arcs now fit the slot. Profile customization
+▸ Glow (which already turned the breathing glow off) now also turns off the halo on a focused
+avatar, the social stack's front avatar included.
+
+**Not covered:** a stack with real followed users (the test account follows nobody), the A55,
+`palette-perf.sh` with the stack (it adds no per-frame work; not measured), the 10-minute
+silent-at-rest check (15 s in the suite).
 
 ## 4. Display matrix & performance
 

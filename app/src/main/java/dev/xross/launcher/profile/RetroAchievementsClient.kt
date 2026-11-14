@@ -69,8 +69,74 @@ sealed interface RaResult {
     /** The Web API key was refused. */
     data object InvalidCredentials : RaResult
     data object UserNotFound : RaResult
-    /** Network trouble or an unexpected answer. [reason] is safe to show (no URL, no key). */
-    data class Failed(val reason: String) : RaResult
+    /**
+     * Network trouble or an unexpected answer. [reason] is safe to show (no URL, no key). [busy]:
+     * RetroAchievements answered 429, so further calls now would be refused too.
+     */
+    data class Failed(val reason: String, val busy: Boolean = false) : RaResult
+}
+
+/** One user the linked account follows (`API_GetUsersIFollow`). Public data. */
+@Serializable
+data class RaFollowed(
+    /** The user name as RetroAchievements spells it today (names can change since 2025). */
+    val user: String,
+    /** The stable id; empty if RetroAchievements didn't send one. */
+    val ulid: String = "",
+    /** Hardcore points. */
+    val points: Long = 0,
+    val softcorePoints: Long = 0,
+    /** They follow the linked account too. */
+    val followsBack: Boolean = false,
+) {
+    /** What the friend is known by in the cache: the ULID, else the name in lower case. */
+    val key: String get() = ulid.ifEmpty { user.lowercase() }
+}
+
+/**
+ * What a followed user did last (`API_GetUserSummary` with one recent game). Public data. Dates
+ * are "yyyy-MM-dd HH:mm:ss" in UTC, as RetroAchievements sends them; empty when unknown.
+ */
+@Serializable
+data class RaFriendActivity(
+    val user: String,
+    val ulid: String = "",
+    /** Absolute HTTPS URL of the avatar. */
+    val avatarUrl: String = "",
+    val points: Long = 0,
+    /** The RetroAchievements game played last; 0 when they never played one. */
+    val gameId: Int = 0,
+    val gameTitle: String = "",
+    val consoleName: String = "",
+    /** Absolute HTTPS URL of the game's icon. */
+    val gameIconUrl: String = "",
+    /** When they last played [gameId]. */
+    val lastPlayed: String = "",
+    /** Their last rich presence line ("Exploring Clay's house | ♥ 100 / 100"). */
+    val richPresence: String = "",
+    /** When the rich presence last changed: the latest sign of life RetroAchievements gives. */
+    val lastSeen: String = "",
+    /** RetroAchievements' own "Online" status at fetch time. */
+    val online: Boolean = false,
+    /** When this was fetched (epoch ms). */
+    val fetchedAtMs: Long = 0,
+) {
+    /** The later of [lastPlayed] and [lastSeen] (text order is time order); empty when neither is known. */
+    val lastActive: String get() = maxOf(lastPlayed, lastSeen)
+
+    /** What [FriendsRepository] compares to tell new activity: the game and when they were last active. */
+    val signature: String get() = "$gameId@$lastActive"
+}
+
+sealed interface RaFollowingResult {
+    /** [users] in RetroAchievements' order, at most [RetroAchievementsClient.MAX_FOLLOWING]; [total] is how many the account follows. */
+    data class Ok(val users: List<RaFollowed>, val total: Int) : RaFollowingResult
+    data class Error(val result: RaResult) : RaFollowingResult
+}
+
+sealed interface RaFriendResult {
+    data class Ok(val activity: RaFriendActivity) : RaFriendResult
+    data class Error(val result: RaResult) : RaFriendResult
 }
 
 /**
@@ -160,6 +226,56 @@ class RetroAchievementsClient(
         }
     }
 
+    /**
+     * The users the key's account follows (`API_GetUsersIFollow`; the endpoint has no user
+     * parameter: it always answers for the key). Pages until RetroAchievements has no more or
+     * [MAX_FOLLOWING] are read; RetroAchievements allows up to 500 per page, so that is one call.
+     */
+    suspend fun fetchFollowing(apiKey: String): RaFollowingResult {
+        if (apiKey.isBlank()) return RaFollowingResult.Error(RaResult.InvalidCredentials)
+        val users = ArrayList<RaFollowed>()
+        var total = 0
+        var page = 0
+        while (users.size < MAX_FOLLOWING && page < MAX_FOLLOWING_PAGES) {
+            val want = MAX_FOLLOWING - users.size
+            val url = "$apiBase/$FOLLOWING?c=$want&o=${users.size}&y=${enc(apiKey.trim())}"
+            val element = when (val r = getUrl(url, MAX_JSON_BYTES)) {
+                is Answer.Error -> return if (page == 0) RaFollowingResult.Error(r.result) else RaFollowingResult.Ok(users, total)
+                is Answer.Json -> r.element
+            }
+            val (pageTotal, entries, served) = parseFollowing(element) ?: return if (page == 0) {
+                RaFollowingResult.Error(RaResult.Failed("RetroAchievements sent an unreadable answer"))
+            } else {
+                RaFollowingResult.Ok(users, total)
+            }
+            total = pageTotal
+            val known = users.mapTo(HashSet()) { it.key }
+            users += entries.filter { known.add(it.key) }
+            page++
+            // An empty page or the end of the list: nothing more to ask for. (A short page alone isn't
+            // the end: the server may serve fewer per page than asked.)
+            if (served == 0 || users.size >= total) break
+        }
+        return RaFollowingResult.Ok(users.take(MAX_FOLLOWING), maxOf(total, users.size))
+    }
+
+    /**
+     * What [friend] did last: their latest game and when (`API_GetUserSummary`, `g=1&a=1`, the
+     * smallest answer that carries it). Asked by ULID when known, so a renamed friend still answers.
+     */
+    suspend fun fetchFriendActivity(apiKey: String, friend: RaFollowed): RaFriendResult {
+        if (apiKey.isBlank()) return RaFriendResult.Error(RaResult.InvalidCredentials)
+        val who = friend.ulid.ifEmpty { friend.user }.trim()
+        // RetroAchievements answers 422 for anything but letters and digits; don't ask.
+        if (who.isEmpty() || !who.all { it.isLetterOrDigit() }) return RaFriendResult.Error(RaResult.UserNotFound)
+        return when (val r = getJson(SUMMARY, who, apiKey.trim(), "&g=1&a=1")) {
+            is Answer.Error -> RaFriendResult.Error(r.result)
+            is Answer.Json -> parseFriendActivity(r.element, clock())
+                ?.let { RaFriendResult.Ok(it) }
+                ?: RaFriendResult.Error(RaResult.UserNotFound)
+        }
+    }
+
     private sealed interface Answer {
         class Json(val element: JsonElement) : Answer
         class Error(val result: RaResult) : Answer
@@ -188,7 +304,7 @@ class RetroAchievementsClient(
             }
             401, 403 -> Answer.Error(RaResult.InvalidCredentials)
             404, 422 -> Answer.Error(RaResult.UserNotFound)
-            429 -> Answer.Error(RaResult.Failed("RetroAchievements is busy — try again in a minute"))
+            429 -> Answer.Error(RaResult.Failed("RetroAchievements is busy — try again in a minute", busy = true))
             else -> Answer.Error(RaResult.Failed("RetroAchievements answered ${response.code}"))
         }
     }
@@ -201,6 +317,11 @@ class RetroAchievementsClient(
         const val RECENT = "API_GetUserRecentAchievements.php"
         const val GAME_PROGRESS = "API_GetGameInfoAndUserProgress.php"
         const val GAME_LIST = "API_GetGameList.php"
+        const val FOLLOWING = "API_GetUsersIFollow.php"
+
+        /** Followed users read per refresh (2b.7c). */
+        const val MAX_FOLLOWING = 200
+        private const val MAX_FOLLOWING_PAGES = 4
 
         /** Recent unlocks look back 30 days. */
         const val RECENT_MINUTES = 30 * 24 * 60
@@ -318,6 +439,63 @@ class RetroAchievementsClient(
             }
         }
 
+        /**
+         * `API_GetUsersIFollow` → (Total, the entries that parse, how many entries the page had);
+         * null when the answer isn't that object. Entries without a user name are skipped.
+         */
+        internal fun parseFollowing(element: JsonElement): Triple<Int, List<RaFollowed>, Int>? {
+            val o = element as? JsonObject ?: return null
+            val results = o["Results"] as? JsonArray ?: return null
+            val users = results.mapNotNull { item ->
+                val x = item as? JsonObject ?: return@mapNotNull null
+                val user = x.str("User")?.trim()?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+                RaFollowed(
+                    user = user,
+                    ulid = x.str("ULID")?.trim()?.takeIf { u -> u.all { it.isLetterOrDigit() } }.orEmpty(),
+                    points = x.long("Points") ?: 0,
+                    softcorePoints = x.long("PointsSoftcore") ?: 0,
+                    followsBack = x.bool("IsFollowingMe"),
+                )
+            }
+            val total = o.long("Total")?.toInt()?.coerceAtLeast(0) ?: users.size
+            return Triple(total, users, results.size)
+        }
+
+        /**
+         * `API_GetUserSummary` (with `g=1`) → the friend's latest game and when; null when the
+         * answer names no user. The latest game comes from `RecentlyPlayed`, else `LastGame`.
+         */
+        internal fun parseFriendActivity(element: JsonElement, fetchedAtMs: Long = 0): RaFriendActivity? {
+            val o = element as? JsonObject ?: return null
+            val user = o.str("User")?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+            val recent = (o["RecentlyPlayed"] as? JsonArray)?.firstOrNull() as? JsonObject
+            val last = o["LastGame"] as? JsonObject
+            val gameId = recent?.long("GameID")?.toInt() ?: last?.long("ID")?.toInt() ?: o.long("LastGameID")?.toInt() ?: 0
+            // LastGame describes LastGameID, which may be newer than the recently-played list.
+            val game = recent?.takeIf { it.long("GameID")?.toInt() == gameId } ?: last?.takeIf { it.long("ID")?.toInt() == gameId }
+            return RaFriendActivity(
+                user = user,
+                ulid = o.str("ULID")?.trim()?.takeIf { u -> u.all { it.isLetterOrDigit() } }.orEmpty(),
+                avatarUrl = absoluteMedia(o.str("UserPic") ?: "/UserPic/$user.png"),
+                points = o.long("TotalPoints") ?: 0,
+                gameId = gameId.coerceAtLeast(0),
+                gameTitle = game?.str("Title").orEmpty(),
+                consoleName = game?.str("ConsoleName").orEmpty(),
+                gameIconUrl = game?.str("ImageIcon")?.takeIf { it.isNotBlank() }?.let(::absoluteMedia).orEmpty(),
+                lastPlayed = recent?.takeIf { it === game }?.str("LastPlayed")?.takeIf(::isDate).orEmpty(),
+                richPresence = o.str("RichPresenceMsg")?.trim().orEmpty().take(MAX_PRESENCE),
+                lastSeen = o.str("RichPresenceMsgDate")?.takeIf(::isDate).orEmpty(),
+                online = o.str("Status").equals("Online", ignoreCase = true),
+                fetchedAtMs = fetchedAtMs,
+            )
+        }
+
+        private const val MAX_PRESENCE = 200
+        private val DATE = Regex("""\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}""")
+
+        /** Only "yyyy-MM-dd HH:mm:ss" dates are kept: they sort as text. */
+        private fun isDate(s: String) = DATE.matches(s)
+
         /** Badge image of an achievement; [locked] is the greyed version RetroAchievements serves. */
         fun badgeUrl(badgeName: String, locked: Boolean = false): String =
             "$MEDIA_BASE/Badge/${badgeName.filter { it.isLetterOrDigit() }}${if (locked) "_lock" else ""}.png"
@@ -339,6 +517,13 @@ class RetroAchievementsClient(
 
         private fun JsonObject.str(key: String): String? =
             (this[key] as? JsonPrimitive)?.takeIf { it !is kotlinx.serialization.json.JsonNull }?.contentOrNull
+
+        /** true / 1 / "true" / "1". */
+        private fun JsonObject.bool(key: String): Boolean {
+            val p = this[key] as? JsonPrimitive ?: return false
+            if (p is kotlinx.serialization.json.JsonNull) return false
+            return p.contentOrNull?.trim()?.lowercase() in setOf("true", "1")
+        }
 
         /** Numbers arrive as numbers or numeric strings depending on the endpoint. */
         private fun JsonObject.long(key: String): Long? {

@@ -194,6 +194,15 @@ class AppContainer(context: Context) {
         )
     }
 
+    /** Followed RetroAchievements users and what they played last (2b.7c). */
+    val friends: dev.xross.launcher.profile.FriendsRepository by lazy {
+        dev.xross.launcher.profile.FriendsRepository(
+            client = RetroAchievementsClient(http),
+            credentials = credentials,
+            layout = { environment.current },
+        )
+    }
+
     /** RetroAchievements game lists and progress for the Details and Achievements screens. */
     val achievements: dev.xross.launcher.profile.AchievementsRepository by lazy {
         dev.xross.launcher.profile.AchievementsRepository(

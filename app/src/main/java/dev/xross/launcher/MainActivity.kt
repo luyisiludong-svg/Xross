@@ -378,6 +378,8 @@ class MainActivity : ComponentActivity() {
                     onCloseAchievements = viewModel::closeAchievements,
                     onDetailsAchievements = viewModel::onDetailsAchievementsTapped,
                     onCloseAvatarHud = viewModel::closeAvatarHud,
+                    onSocialTap = viewModel::onSocialStackTapped,
+                    onCloseSocialPanel = viewModel::closeSocialPanel,
                     onAvatarRowTap = viewModel::onAvatarRowTapped,
                     onAvatarSlider = viewModel::onAvatarSliderChanged,
                     onCloseAvatarStyle = viewModel::closeAvatarStyle,

@@ -68,6 +68,11 @@ fun ProfileAvatar(
     ringWidth: Dp = 1.5.dp,
     style: AvatarStyleConfig? = null,
     animateGlow: Boolean = true,
+    /**
+     * The halo around a focused avatar. Off with Profile customization ▸ Glow (the white focus
+     * ring stays): [style]'s switch, or the user's for avatars drawn without their style (friends).
+     */
+    focusGlow: Boolean = style?.glowEnabled ?: true,
 ) {
     val px = with(LocalDensity.current) { size.roundToPx() }
     val bitmap by produceState<ImageBitmap?>(null, avatar, avatarVersion, px) {
@@ -119,7 +124,7 @@ fun ProfileAvatar(
                 if (focus <= 0f) return@drawBehind
                 val r = this.size.minDimension / 2
                 // Glow: a white halo fading outwards, its strength following the shared pulse.
-                drawCircle(
+                if (focusGlow) drawCircle(
                     Brush.radialGradient(
                         0.55f to ThemeAccent.halo.value.copy(alpha = 0.45f * focus * (0.5f + 0.5f * pulse())),
                         1f to Color.Transparent,

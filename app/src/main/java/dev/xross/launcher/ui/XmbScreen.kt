@@ -224,6 +224,9 @@ fun XmbScreen(
     onCloseAchievements: () -> Unit = {},
     onDetailsAchievements: () -> Unit = {},
     onCloseAvatarHud: () -> Unit = {},
+    /** Touch: the social stack (2b.7c) opens or closes its panel; a tap outside the panel closes it. */
+    onSocialTap: () -> Unit = {},
+    onCloseSocialPanel: () -> Unit = {},
     onAvatarRowTap: (Int) -> Unit = {},
     onAvatarSlider: (Int, Float) -> Unit = { _, _ -> },
     onCloseAvatarStyle: () -> Unit = {},
@@ -403,7 +406,29 @@ fun XmbScreen(
             tickerCovered = miniCovered,
             onTickerTap = onMiniPlayerTap,
             onTickerLongPress = onMiniPlayerLongPress,
+            social = if (dev.xross.launcher.state.SocialStack.shows(components, state.friends)) state.friends.friends else emptyList(),
+            socialBadge = state.friends.badge,
+            socialOpen = state.socialPanel != null,
+            socialGlow = state.settings.avatarStyle.glowEnabled,
+            onSocialTap = onSocialTap,
         )
+        state.socialPanel?.let { panel ->
+            // A tap anywhere outside the panel closes it.
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .clickable(remember { MutableInteractionSource() }, indication = null, onClick = onCloseSocialPanel),
+            )
+            SocialPanel(
+                friends = state.friends,
+                state = panel,
+                textSize = m.subtitleSize.sp(),
+                width = (m.s * 0.82f).coerceAtMost(m.width * 0.62f).dp(),
+                nowMs = remember(panel, state.friends) { System.currentTimeMillis() },
+                backGlyph = if (state.confirm == ConfirmLayout.EAST) state.glyphs.south else state.glyphs.east,
+                modifier = Modifier.align(Alignment.TopStart).padding(top = statusTop + StatusAvatarBox + 6.dp, start = statusEnd),
+            )
+        }
         if (state.avatarFocused && components.avatar) {
             // A tap anywhere outside the expanded HUD collapses it.
             Box(
@@ -1549,18 +1574,29 @@ internal fun Hint(glyph: String, label: String, size: TextUnit) {
     val glyphs = LocalGlyphs.current
     val face = if (glyphs.style == GlyphStyle.PLAIN) null else glyphs.faceOf(glyph)
     val shape = RoundedCornerShape(50)
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            glyph,
-            style = shadowed(size, color = face?.let { glyphColor(glyphs.style, it) } ?: TextBright, weight = FontWeight.Bold),
-            modifier = Modifier
-                .clip(shape)
-                .then(
-                    if (face != null && glyphs.style == GlyphStyle.OUTLINE) Modifier.border(1.dp, Color(0xCCFFFFFF), shape)
-                    else Modifier.background(Pill),
-                )
-                .padding(horizontal = 7.dp, vertical = 2.dp),
+    val pill = Modifier
+        .clip(shape)
+        .then(
+            if (face != null && glyphs.style == GlyphStyle.OUTLINE) Modifier.border(1.dp, Color(0xCCFFFFFF), shape)
+            else Modifier.background(Pill),
         )
+    val color = face?.let { glyphColor(glyphs.style, it) } ?: TextBright
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        val drawn = FaceShape.of(glyph)
+        if (drawn != null) {
+            // Shapes are drawn, not set in the font, so all four are the same size and centered;
+            // the pill keeps the height a text label's would have.
+            val line = with(LocalDensity.current) { (size * 1.17f).toDp() }
+            Box(contentAlignment = Alignment.Center, modifier = pill.padding(horizontal = 5.dp, vertical = 2.dp).size(line)) {
+                FaceShapeGlyph(drawn, glyph, line * 0.72f, color)
+            }
+        } else {
+            Text(
+                glyph,
+                style = shadowed(size, color = color, weight = FontWeight.Bold),
+                modifier = pill.padding(horizontal = 7.dp, vertical = 2.dp),
+            )
+        }
         Spacer(Modifier.width(6.dp))
         Text(label, style = shadowed(size), maxLines = 1, softWrap = false)
     }

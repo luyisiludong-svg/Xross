@@ -127,6 +127,10 @@ data class XmbUiState(
     val profileCard: ProfileCardState? = null,
     /** The status bar avatar has the focus (Up from the top of a category). */
     val avatarFocused: Boolean = false,
+    /** Followed users (2b.7c), for the social stack. */
+    val friends: dev.xross.launcher.profile.FriendsState = dev.xross.launcher.profile.FriendsState.Unlinked,
+    /** The social stack's panel while it is open. */
+    val socialPanel: SocialPanelState? = null,
     /** Current settings (the wave uniforms and the Wave settings panel read them). */
     val settings: dev.xross.launcher.data.XrossSettings = dev.xross.launcher.data.XrossSettings(),
     /** Settings ▸ Theme ▸ Wave settings while it is open. */
@@ -235,6 +239,7 @@ class XmbViewModel(
         scope = viewModelScope,
         profiles = container.profiles,
         achievements = container.achievements,
+        friends = container.friends,
         credentials = container.credentials,
         games = container.games,
         sounds = container.sounds,
@@ -245,6 +250,7 @@ class XmbViewModel(
             override fun promptLink(user: String, linked: Boolean) = emit(UiEffect.PromptRetroAchievements(user, linked))
             override fun moveCategory(delta: Int) = this@XmbViewModel.moveCategory(delta)
             override fun dismissMenus() = transient.update { it.copy(optionsMenu = null, details = null) }
+            override fun components() = this@XmbViewModel.components.value
         },
     )
 
@@ -387,6 +393,8 @@ class XmbViewModel(
             profile = sd.profile,
             profileCard = sd.ra.profileCard,
             avatarFocused = sd.ra.avatarFocused,
+            friends = sd.ra.friends,
+            socialPanel = sd.ra.socialPanel,
             settings = settings,
             waveEditor = tr.waveEditor,
             achievements = sd.ra.achievements,
@@ -498,7 +506,13 @@ class XmbViewModel(
         when (action) {
             // Up from the top of a category root climbs into the status bar: the avatar opens its mini-HUD.
             // Without an AVATAR slot (2b.7a) there is nothing to climb into; the User Card stays in Settings ▸ Accounts.
-            NavAction.UP -> if (ui.depth == 0 && ui.focusedIndex == 0 && components.value.avatar) ra.focusAvatar() else moveCursor(-1)
+            // Without one, the social stack (2b.7c) is what Up climbs into, when it shows.
+            NavAction.UP -> when {
+                ui.depth != 0 || ui.focusedIndex != 0 -> moveCursor(-1)
+                components.value.avatar -> ra.focusAvatar()
+                ra.socialStackShown() -> ra.openSocialPanel()
+                else -> moveCursor(-1)
+            }
             NavAction.DOWN -> moveCursor(+1)
             NavAction.LEFT -> if (ui.depth > 0) back() else moveCategory(-1)
             NavAction.RIGHT -> when {
@@ -553,6 +567,10 @@ class XmbViewModel(
     fun closeAvatarHud() = ra.closeAvatarHud()
 
     fun onAvatarTapped() = ra.onAvatarTapped()
+
+    fun onSocialStackTapped() = ra.onSocialStackTapped()
+
+    fun closeSocialPanel() = ra.closeSocialPanel()
 
     fun closeProfileCard() = ra.closeProfileCard()
 
@@ -699,13 +717,19 @@ class XmbViewModel(
 
     private fun setComponent(row: dev.xross.launcher.theme.pack.ComponentRow, value: String?) {
         settingsStore.update { it.copy(componentOverrides = it.componentOverrides.with(row, value)) }
-        val c = components.value
+        // Settled from what was just saved: [components] catches up a moment later.
+        val c = settingsStore.current.let { st -> container.themes.active.value.components(st.themeVariant, st.componentOverrides) }
         val note = when (row) {
             dev.xross.launcher.theme.pack.ComponentRow.BATTERY -> "Battery isn't in the status bar".takeIf { !c.shows(dev.xross.launcher.theme.pack.StatusSlot.BATTERY) }
             dev.xross.launcher.theme.pack.ComponentRow.CLOCK -> "Clock isn't in the status bar".takeIf { !c.shows(dev.xross.launcher.theme.pack.StatusSlot.CLOCK) }
+            dev.xross.launcher.theme.pack.ComponentRow.TOP_LEFT ->
+                "Link a RetroAchievements account to see who you follow".takeIf {
+                    c.topLeft == dev.xross.launcher.theme.pack.TopLeftClusterMode.SOCIAL_STACK && !container.credentials.current.retroAchievementsLinked
+                }
             dev.xross.launcher.theme.pack.ComponentRow.MINI_PLAYER, dev.xross.launcher.theme.pack.ComponentRow.GLYPHS -> null
         }
         note?.let { toast(it) }
+        if (row == dev.xross.launcher.theme.pack.ComponentRow.TOP_LEFT) ra.onFriendsWanted(components = c)
     }
 
     private fun setEffect(slot: dev.xross.launcher.theme.pack.EffectSlot, value: String) {

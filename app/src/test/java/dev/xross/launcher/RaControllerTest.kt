@@ -145,6 +145,8 @@ class RaControllerTest {
         val prompts = mutableListOf<Pair<String, Boolean>>()
         val moves = mutableListOf<Int>()
         var dismissed = 0
+        var components = dev.xross.launcher.theme.pack.ResolvedComponents.DEFAULT
+        override fun components() = components
         override fun toast(message: String) { toasts += message }
         override fun fail(message: String) { toasts += message }
         override fun promptLink(user: String, linked: Boolean) { prompts += user to linked }
@@ -160,6 +162,7 @@ class RaControllerTest {
         scope = scope,
         profiles = container.profiles,
         achievements = container.achievements,
+        friends = container.friends,
         credentials = container.credentials,
         games = container.games,
         sounds = container.sounds,

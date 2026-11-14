@@ -601,8 +601,9 @@ The Default pack: left `[]`, right `[CLOCK, BATTERY, AVATAR]`, `BOTH`, empty clo
   avatar HUD). `AUTO` (the default) draws the detected controller's own; `PLAYSTATION` ✕ ○ △ □;
   `XBOX` A B X Y, each in its color (A green, B red, X blue, Y yellow); `NINTENDO` A B X Y in
   Nintendo places (south reads B); `MONOCHROME_MINIMAL` an outlined triangle pointing at the
-  button's place on the pad (▽ ▷ △ ◁), in outlined pills. Labels only: which button confirms still
-  follows the controller and Settings ▸ Controls.
+  button's place on the pad (▽ ▷ △ ◁), in outlined pills. The shapes (✕ ○ △ □ and the
+  triangles) are drawn, not set in the font, so all four are the same size and centered. Labels
+  only: which button confirms still follows the controller and Settings ▸ Controls.
 * `badgePills`: pills after the focused game's title, on the line under it, in array order, each
   skipped when its data is missing: `SYSTEM` (the platform's short tag, e.g. DC, GC), `YEAR` (from
   the release date, full or partial), `DEVELOPER` (cut at 18 characters), `PLAYTIME` ("1h 15m";
@@ -611,10 +612,27 @@ The Default pack: left `[]`, right `[CLOCK, BATTERY, AVATAR]`, `BOTH`, empty clo
   the surface (`effects.surfaceStyle`) at a small radius, with figures in the `mono` font; games
   only, never apps or media. The Default pack lists none.
 
+### Social stack
+
+* `topLeftCluster`: `EMPTY` (the default: nothing) or `SOCIAL_STACK`: the RetroAchievements users
+  the linked account follows, after the left slots in the same clipped row. Up to 4 overlapping
+  round avatars, the most recently active on top, with an amber badge counting the friends whose
+  latest game or last activity changed since the stack was last opened (`1`–`9`, then `9+`).
+* Opening it shows a panel below it: FOLLOWING, then each friend with their latest game and
+  console and how long ago they were active ("12 min", "3 h", "online"), newest first; friends new
+  since the last opening carry a dot. It opens with Left from the avatar's HUD (or Up at the top of
+  a list when the bar has no avatar), or a tap; Up and Down move, Right goes to the avatar, Back
+  or a tap outside closes. Opening it clears the badge.
+* It collapses (draws nothing, takes no room) when no account is linked, when offline with nothing
+  saved, or when the account follows nobody. Offline with a saved list, it shows that list.
+* Friend data is fetched only on a refresh (Games ▸ RetroAchievements' Refresh, the profile's own
+  refresh, opening the stack when it is stale, turning it on), never on focus or a timer; see
+  [RETROACHIEVEMENTS_API.md](RETROACHIEVEMENTS_API.md).
+
 ### The other keys
 
-Read and stored now, drawn by later 2b.7 slices: `topLeftCluster` (`EMPTY`, `SOCIAL_STACK`) and
-`telemetryMode` (`OFF`, `COMPACT_PILL`, `RICH_CARD`).
+Read and stored now, drawn by a later 2b.7 slice: `telemetryMode` (`OFF`, `COMPACT_PILL`,
+`RICH_CARD`).
 
 ### `components` reference
 
@@ -649,6 +667,7 @@ leaving the rest of the block.
 * *Title badges*: Confirm (or Options) opens the list: Theme pack, None, then System, Release year,
   Developer, Playtime and Achievements; Confirm turns a badge on (at the end) or off, and the list
   stays open on it.
+* *Top-left* (last): Theme pack, Social stack, Empty.
 
 Saved as `display.components` in `settings.json` (`null` follows the pack); Reset to theme
 defaults clears it, quick profiles never touch it.
