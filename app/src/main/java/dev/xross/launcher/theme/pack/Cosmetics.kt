@@ -153,6 +153,10 @@ data class Cosmetics(
     val backgroundFilter: BackgroundFilter? = null,
     /** The AGSL filter over the menu (2b.4f, Android 13+). */
     val uiFilter: UiFilterRef? = null,
+    /** What a cold start shows (2b.5d); null: the pack's video if it has one, else the fade-in. */
+    val bootIntro: BootIntro? = null,
+    /** The curtain before a game starts (2b.5d). */
+    val launchCurtain: LaunchCurtain? = null,
 ) {
     /** These values with every one [patch] sets replacing them. */
     fun over(patch: Cosmetics?): Cosmetics = if (patch == null) this else Cosmetics(
@@ -162,6 +166,8 @@ data class Cosmetics(
         particles = patch.particles ?: particles,
         backgroundFilter = patch.backgroundFilter ?: backgroundFilter,
         uiFilter = patch.uiFilter ?: uiFilter,
+        bootIntro = patch.bootIntro ?: bootIntro,
+        launchCurtain = patch.launchCurtain ?: launchCurtain,
     )
 
     val empty: Boolean get() = this == NONE
@@ -180,6 +186,9 @@ data class Cosmetics(
 
     /** The background filter drawn: [backgroundFilter], else [BackgroundFilter.NONE]. */
     val bgFilter: BackgroundFilter get() = backgroundFilter ?: BackgroundFilter.NONE
+
+    /** The curtain drawn: [launchCurtain], else [LaunchCurtain.BLOOM]. */
+    val curtain: LaunchCurtain get() = launchCurtain ?: LaunchCurtain.BLOOM
 
     /** The UI filter asked for: [uiFilter], else off (whether it can run is [dev.xross.launcher.ui.UiFilterSupport]'s call). */
     val screenFilter: UiFilterRef get() = uiFilter ?: UiFilterRef.OFF
@@ -201,8 +210,27 @@ data class Cosmetics(
                 particles = enumOf<ParticlePreset>(where, "foregroundParticles", effects.foregroundParticles, problems),
                 backgroundFilter = enumOf<BackgroundFilter>(where, "backgroundFilter", effects.backgroundFilter, problems),
                 uiFilter = UiFilterRef.of(where, effects.uiFilter, effects.uiFilterPath, problems),
+                bootIntro = aliased(where, "bootIntro", effects.bootIntro, BootIntro::byName, BootIntro.entries, problems),
+                launchCurtain = aliased(where, "launchCurtain", effects.launchCurtain, LaunchCurtain::byName, LaunchCurtain.entries, problems),
             )
             return c.takeUnless { it.empty }
+        }
+
+        /** [parse] (with its own aliases) for `effects.[key]` at [where]; an unknown name is reported and left unset. */
+        fun <E : Enum<E>> aliased(
+            where: String,
+            key: String,
+            text: String?,
+            parse: (String?) -> E?,
+            values: List<E>,
+            problems: MutableList<String>,
+        ): E? {
+            val t = text?.trim().orEmpty()
+            if (t.isEmpty()) return null
+            return parse(t) ?: run {
+                problems += "$where.effects.$key: $t isn't one of ${values.joinToString { it.name }}"
+                null
+            }
         }
 
         /** [text] as one of [E]'s names, matched ignoring case, `-` and spaces; null (and nothing reported) when blank or unknown. */

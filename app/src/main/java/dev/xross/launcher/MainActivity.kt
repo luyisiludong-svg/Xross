@@ -252,6 +252,9 @@ class MainActivity : ComponentActivity() {
                 dev.xross.launcher.ui.ThemeSurfaces.active = resolved.surface
             }
             var backdropCovers by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+            // Cold-start intro (2b.5d): the black, the boot video or the shader ramp, then the menu.
+            val bootReveal = dev.xross.launcher.ui.rememberBootReveal(state.coldBoot, state.bootPending, state.boot)
+            var bootCovers by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
             // Resting: no input for a few seconds and nothing playing. Music and video snaps keep
             // the screen awake (the mini player and the snap are live content).
             val noInput by inactivity.idle.collectAsStateWithLifecycle()
@@ -290,7 +293,7 @@ class MainActivity : ComponentActivity() {
                     battery = viewModel.battery,
                     settings = s,
                     enabled = state.waveEnabled && !fullscreenMedia,
-                    paused = backdropCovers && state.waveEditor == null,
+                    paused = (backdropCovers && state.waveEditor == null) || bootCovers,
                     idle = uiIdle,
                     shaders = shaderLibrary,
                     shader = shaderLibrary.keyOf(look.shader),
@@ -298,6 +301,9 @@ class MainActivity : ComponentActivity() {
                     health = container.shaderHealth,
                     audio = container.music.energy,
                     filter = look.cosmetics.bgFilter,
+                    intro = state.boot?.takeIf { it.plan.mode == dev.xross.launcher.ui.BootMode.SHADER }?.let {
+                        dev.xross.launcher.ui.WaveIntro(it.startedAtNanos, dev.xross.launcher.ui.BootSequence.SHADER_MS, it.endedAtNanos)
+                    },
                 )
                 // Focus frame and app-icon look (2b.4d): the look's, colored by the active palette.
                 val cosmetics = look.cosmetics
@@ -375,8 +381,18 @@ class MainActivity : ComponentActivity() {
                     particlesIdle = particlesIdle,
                     onUiFilterError = container.shaderHealth::notice,
                     onCrosshairX = container.sounds::setCrosshair,
+                    reveal = { bootReveal.menu },
                 )
                 }
+                dev.xross.launcher.ui.BootOverlay(
+                    reveal = bootReveal,
+                    boot = state.boot,
+                    pending = state.bootPending,
+                    videoVolume = container.audio.cueVolume,
+                    onSkip = viewModel::skipBoot,
+                    onVideoEnded = viewModel::onBootVideoEnded,
+                    onCovering = { bootCovers = it },
+                )
             }
             }
         }

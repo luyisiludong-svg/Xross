@@ -36,7 +36,7 @@ sealed interface InstallResult {
  * - **Zip slip:** an entry whose path contains `..`, starts with `/` or `\`, has a drive letter
  *   or a NUL is rejected, and every written file is checked to stay inside the staging folder.
  * - **Known folders only:** `.json` (and `.md` / `.txt` notes), `wallpaper.png` / `.jpg` /
- *   `.webp`, `bgm.ogg` / `bgm.mp3` (at most [BgmRef.MAX_BYTES]), `shader.frag` and `postprocess.agsl` at the root; fonts, sounds (also `audio/`, as in the spec's manifest
+ *   `.webp`, `bgm.ogg` / `bgm.mp3` (at most [BgmRef.MAX_BYTES]), `boot.mp4` (at most [BootVideoRef.MAX_BYTES]), `shader.frag` and `postprocess.agsl` at the root; fonts, sounds (also `audio/`, as in the spec's manifest
  *   example), icons, shaders and wallpapers in their folders, with their own file types. Programs (`.apk`, `.dex`, `.so`, `.sh`, …) and anything else abort the import.
  *   macOS `__MACOSX/` and `.DS_Store` litter is skipped.
  * - **Size cap:** at most [maxBytes] (50 MB) uncompressed, checked against the declared sizes and
@@ -82,6 +82,7 @@ class ThemeArchive(
             if (entry.isDirectory || parts.isEmpty() || junk(parts)) continue
             if (entry.size > 0) declared += entry.size
             if (rootBgm(parts) && entry.size > BgmRef.MAX_BYTES) return ArchiveResult.Rejected(bgmTooLarge(fileName, parts))
+            if (rootBootVideo(parts) && entry.size > BootVideoRef.MAX_BYTES) return ArchiveResult.Rejected(bootVideoTooLarge(fileName, parts))
             if (declared > maxBytes) return ArchiveResult.Rejected("$fileName is larger than ${maxBytes / MB} MB unpacked")
             files += entry to parts
         }
@@ -115,6 +116,7 @@ class ThemeArchive(
                 if (!out.canonicalPath.startsWith(stagingPath)) return reject(staging, "$fileName: ${entry.name} leaves the pack")
                 out.parentFile?.mkdirs()
                 val bgm = rootBgm(p)
+                val boot = rootBootVideo(p)
                 var fileBytes = 0L
                 zip.getInputStream(entry).use { input ->
                     out.outputStream().use { output ->
@@ -126,6 +128,7 @@ class ThemeArchive(
                             fileBytes += n
                             if (written > maxBytes) return reject(staging, "$fileName is larger than ${maxBytes / MB} MB unpacked")
                             if (bgm && fileBytes > BgmRef.MAX_BYTES) return reject(staging, bgmTooLarge(fileName, p))
+                            if (boot && fileBytes > BootVideoRef.MAX_BYTES) return reject(staging, bootVideoTooLarge(fileName, p))
                             output.write(buf, 0, n)
                         }
                     }
@@ -200,14 +203,21 @@ class ThemeArchive(
         )
         private val ROOT_TYPES = setOf("json", "md", "txt")
 
-        /** Files the loader looks for at the pack root by name: the wallpaper, the music loop and the CUSTOM shader. */
-        private val ROOT_FILES = WallpaperRef.DEFAULT_NAMES.toSet() + BgmRef.DEFAULT_NAMES + "shader.frag" + UiFilterRef.DEFAULT_FILE
+        /** Files the loader looks for at the pack root by name: the wallpaper, the music loop, the boot video and the CUSTOM shader. */
+        private val ROOT_FILES = WallpaperRef.DEFAULT_NAMES.toSet() + BgmRef.DEFAULT_NAMES + BootVideoRef.DEFAULT_NAMES +
+            "shader.frag" + UiFilterRef.DEFAULT_FILE
 
         /** The pack's root music loop (`bgm.ogg` / `bgm.mp3`), capped at [BgmRef.MAX_BYTES]. */
         private fun rootBgm(parts: List<String>) = parts.size == 1 && parts[0].lowercase(Locale.ROOT) in BgmRef.DEFAULT_NAMES
 
         private fun bgmTooLarge(fileName: String, parts: List<String>) =
             "$fileName: ${parts.joinToString("/")} is larger than ${BgmRef.MAX_BYTES / MB} MB (theme music)"
+
+        /** The pack's root boot video (`boot.mp4`, 2b.5d), capped at [BootVideoRef.MAX_BYTES]. */
+        private fun rootBootVideo(parts: List<String>) = parts.size == 1 && parts[0].lowercase(Locale.ROOT) in BootVideoRef.DEFAULT_NAMES
+
+        private fun bootVideoTooLarge(fileName: String, parts: List<String>) =
+            "$fileName: ${parts.joinToString("/")} is larger than ${BootVideoRef.MAX_BYTES / MB} MB (boot video)"
         private val PROGRAMS = setOf(
             "apk", "apks", "xapk", "aab", "dex", "odex", "vdex", "oat", "jar", "class", "so", "elf", "bin",
             "sh", "bash", "zsh", "bat", "cmd", "ps1", "exe", "dll", "msi", "py", "js", "lua", "pl", "rb",
@@ -229,7 +239,7 @@ class ThemeArchive(
             if (ext in PROGRAMS) return "$path is a program; theme packs hold data only"
             if (parts.size == 1) {
                 val ok = ext in ROOT_TYPES || parts[0].lowercase(Locale.ROOT) in ROOT_FILES
-                return if (ok) null else "unexpected file $path (only .json, wallpaper.png, bgm.ogg, shader.frag and postprocess.agsl at the top level)"
+                return if (ok) null else "unexpected file $path (only .json, wallpaper.png, bgm.ogg, boot.mp4, shader.frag and postprocess.agsl at the top level)"
             }
             val types = FOLDERS[parts[0].lowercase(Locale.ROOT)]
                 ?: return "unexpected folder ${parts[0]}/ (use fonts/, sounds/, audio/, icons/, shaders/ or wallpapers/)"

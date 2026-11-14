@@ -134,8 +134,12 @@ class AudioDirector(
     fun onBootVideo(playing: Boolean) {
         if (playing == bootVideo) return
         bootVideo = playing
+        recount()
         applyBgm()
     }
+
+    /** The boot video's level (2b.5d): it replaces the `opening` cue, so it plays at the cue volume. */
+    val cueVolume: Float get() = mix().cue
 
     /** The emulator couldn't be started: back in the menu without a game. */
     fun onLaunchFailed() {
@@ -205,10 +209,10 @@ class AudioDirector(
         logBgm(d)
     }
 
-    /** Players by kind that Xross itself runs: the music player, a snap and the video player; theme music. */
+    /** Players by kind that Xross itself runs: the music player, a snap and the video player; theme music and the boot video. */
     private fun ownPlayers(): Map<PlaybackCensus.Kind, Int> = mapOf(
         PlaybackCensus.Kind.MEDIA to (if (music.playing) 1 else 0) + (if (snap != SnapState.NONE) 1 else 0) + (if (fullScreenVideo) 1 else 0),
-        PlaybackCensus.Kind.GAME_MUSIC to (bgm?.activePlayers ?: 0),
+        PlaybackCensus.Kind.GAME_MUSIC to (bgm?.activePlayers ?: 0) + (if (bootVideo) 1 else 0),
     )
 
     /** The platform's active players changed ([PlaybackWatcher]); [snapshot] is the first count after [onStarted]. */

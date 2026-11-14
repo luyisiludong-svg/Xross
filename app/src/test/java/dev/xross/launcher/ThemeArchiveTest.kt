@@ -96,7 +96,7 @@ class ThemeArchiveTest {
     @Test fun onlyKnownFoldersAndTypesAreAccepted() {
         for ((path, why) in listOf(
             "scripts/setup.json" to "unexpected folder scripts/",
-            "cover.png" to "only .json, wallpaper.png, bgm.ogg, shader.frag and postprocess.agsl at the top level",
+            "cover.png" to "only .json, wallpaper.png, bgm.ogg, boot.mp4, shader.frag and postprocess.agsl at the top level",
             "wallpapers/night.gif" to "wallpapers/ holds jpeg, jpg, png, webp",
             "fonts/readme.pdf" to "fonts/ holds otf, ttf",
             "icons/a/b/c/deep.svg" to "nested too deep",

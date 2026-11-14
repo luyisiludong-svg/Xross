@@ -110,6 +110,8 @@ data class LoadedTheme(
     val bgm: BgmRef = BgmRef.NONE,
     /** Each loop file the pack names, by its pack-relative path (missing and oversized ones absent). */
     val bgmFiles: Map<String, File> = emptyMap(),
+    /** The pack's boot video (2b.5d): `audio.bootVideo`, else its `boot.mp4`; null for none (or missing, or too large). */
+    val bootVideo: File? = null,
     /** The pack's own focus frame, icon mask and icon filter (2b.4d), over the Default pack's. */
     val cosmetics: Cosmetics = Cosmetics.NONE,
     /** Text of each CUSTOM UI filter (`postprocess.agsl`, 2b.4f) the pack names, by pack-relative path. */
@@ -239,6 +241,7 @@ sealed interface PackLoad {
  *   shader.frag  GLSL ES 3.0 fragment shader for "effects": { "shaderPreset": "CUSTOM" } (or effects.shaderPath)
  *   wallpaper.png  static wallpaper behind the menu (or .jpg / .webp, or effects.wallpaperPath)
  *   bgm.ogg      ambient music loop (or bgm.mp3, or audio.bgmFile), at most 20 MB
+ *   boot.mp4     cold-start video (or audio.bootVideo), at most 30 MB, cut at 15 s
  * ```
  *
  * File lookups ignore case (FAT-formatted SD cards and hand-made packs disagree on it) and never
@@ -386,6 +389,7 @@ class ThemePackLoader(
         val bgmRefs = listOf(bgm) + variants.mapNotNull { it.bgm } +
             (categoryPatches.values + systemPatches.values).mapNotNull { it.bgm } + rules.mapNotNull { it.patch?.bgm }
         val bgmFiles = bgmFiles(folder, bgmRefs, problems)
+        val bootVideo = BootVideoRef.resolve(folder, BootVideoRef.of(m.audio?.bootVideo, problems), problems)
         val cosmetics = (base?.cosmetics ?: Cosmetics.NONE).over(Cosmetics.of("theme", m.effects, problems))
         // 2b.4f: the AGSL of each CUSTOM UI filter the base, a variant, an override or a rule names.
         val uiFilterPaths = (listOf(cosmetics) + variants.mapNotNull { it.cosmetics } +
@@ -420,6 +424,7 @@ class ThemePackLoader(
             wallpapers = wallpapers,
             bgm = bgm,
             bgmFiles = bgmFiles,
+            bootVideo = bootVideo,
             cosmetics = cosmetics,
             customUiFilters = customUiFilters,
             problems = problems,

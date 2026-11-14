@@ -134,7 +134,7 @@ parked until an API is documented.
 | Day/night color shift | ✅ | Brightness follows the time of day |
 | Battery-level color blending | ✅ 🧪 | `palette.batteryTint` / Settings ▸ Theme ▸ Battery alert tint: amber to red below 20%, a green pulse while charging (2b.3, §3.19) |
 | Coldboot: fade-in + startup sound | ✅ | Once per process start, `01. opening.wav` (was the coldboot cue); can be turned off |
-| Custom boot animations | ❌ | |
+| Custom boot animations | ✅ 🧪 | A pack's `boot.mp4` (or `audio.bootVideo`) or `effects.bootIntro: SHADER` (the shader rising from black, `uTransition` 0 → 1) on a cold start, skippable by any button or touch (2b.5d); launch curtains `BLOOM`, `FADE_BLACK`, `IRIS`, `FLASH` over the game hand-off; both also in Settings ▸ Theme ▸ Intro and transitions |
 | UI sound effects + volume, game-start cue | ✅ | SoundPool for short effects, MediaPlayer for long cues |
 | Volume mixer: effects, cues, theme music, music, video snaps | ✅ 🧪 | Settings ▸ Sound (2b.5b), each 0–100% in `settings.json`; music pauses under a video snap with sound (or lowers to 20%), resuming only what Xross paused |
 | Theme music (pack BGM) | ✅ 🧪 | `bgm.ogg` / `bgm.mp3` or `audio.bgmFile` through variants, overrides and rules (2b.5c); a second ExoPlayer without audio focus, only while no song is loaded, no other app plays media, no game or full-screen video; paused or lowered under snaps, stopped for games |
