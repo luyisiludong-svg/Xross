@@ -189,7 +189,25 @@ badges in `Xross/media/avatars/` and `Xross/media/ra/badges/`.
   [Theme 2.0 specification](THEME_SPECIFICATION.md#wallpaper)); it can also be set as the Android
   wallpaper.
 * **Music:** background music player with media-session controls. Select (or a held Guide button)
-  opens the media controls. Music pauses for games and videos.
+  opens the media controls. Music pauses for games and videos, and for a game's video snap once
+  the snap's sound starts (it fades back in when the cursor moves on; a song you paused stays
+  paused). **Settings ▸ Sound ▸ Music during video snaps ▸ Lower** keeps it playing at 20% instead.
+  In Now Playing, ↓ stops the music and empties the queue.
+* **Theme music:** a theme pack can bring an ambient loop (`bgm.ogg`). It plays only while nothing
+  else does: it stops when you start a song (a paused song counts; stop it from Now Playing to
+  hear the theme's music again), stays silent while another app plays media, pauses under a game's
+  video snap and stops for a game. It never takes audio focus, so it doesn't pause other apps.
+* **Boot intro and launch curtain:** a theme pack can open a cold start with its own video
+  (`boot.mp4`) or by raising its background shader from black; any button or touch skips it.
+  Settings ▸ Theme ▸ Intro and transitions picks Video, Shader or Off, and the curtain drawn while
+  a game starts (Bloom, Fade to black, Iris, Flash). The intro stays off under Monochrome E-Ink and
+  while the startup sound is off.
+* **Settings ▸ Sound** has separate volumes for effects, startup and game cues, theme music
+  (the pack's loop), Xross's music player (on top of the phone's media volume) and video snaps:
+  Confirm steps each 10%, Options offer Mute, 50% and 100%; Theme music at 0% turns the pack's
+  loop off. They are `sound.effectsVolume`,
+  `cueVolume`, `bgmVolume`, `musicVolume` and `snapVolume` (0–1) in `settings.json`, with
+  `sound.musicUnderSnaps` (`PAUSE` or `DUCK`). Reset to theme defaults leaves them alone.
 * **Video:** video player.
 * **Albums:** an album found in more than one folder (the same rip as FLAC and MP3, say) shows
   once per folder, labelled by format ("… · FLAC") or, when the formats match, by folder name.
@@ -226,7 +244,7 @@ What works today, by area. [`Roadmap.md`](../Roadmap.md) tracks what is left and
 | Theme packs | Done. `Xross/themes/<id>/` with a v2 `theme.json` (imports, palette roles, font roles, surfaces), fonts, SVG/PNG icons and sounds, reloaded live when edited; the bundled icons and sounds are the built-in Default pack |
 | RetroAchievements | Done. Account linking, status bar avatar with an expanding mini-HUD, User Card, Games ▸ RetroAchievements dashboard, per-game telemetry and achievement lists, unlock toasts. Linking and lists verified live on an emulator and the Galaxy A55; the 2b.1 HUD and dashboard are unit-tested only; unlock toasts not yet seen after a real session |
 | Library organization | Done. Hide apps (Options ▸ Hide, Settings ▸ Apps ▸ Hidden apps, Hide system apps), app folders (Emulators, Streaming, Tools or your own name, with emulators suggested), base ROMs folder with Create system folders, and custom Photo/Video folders that also find files MediaStore skips. Tested on the Galaxy A55 |
-| Customization | 16:9 XMB game tiles (logo, wide art or a title plate); Settings ▸ Theme ▸ Profile customization for the avatar's border and glow (`profile.avatarStyle` in `settings.json`). Theme 2.0 packs with variants, overrides and context rules, palettes from game art, an hourly circadian curve, a battery tint and quick profiles (OLED True Black, Y2K Cyber-Pastel, Monochrome E-Ink); background shader presets and a pack's own `shader.frag` (music-reactive through Xross's player), a pack wallpaper or a picture set as Xross wallpaper, frosted surfaces over art and wallpapers, focus frames, icon masks, ambient particles, a GL background filter (scanlines, CRT, LCD grid) and an experimental AGSL filter over the menu on Android 13+, each also pickable in Settings ▸ Theme. BGM and haptics are planned, see Roadmap §4.3 |
+| Customization | 16:9 XMB game tiles (logo, wide art or a title plate); Settings ▸ Theme ▸ Profile customization for the avatar's border and glow (`profile.avatarStyle` in `settings.json`). Theme 2.0 packs with variants, overrides and context rules, palettes from game art, an hourly circadian curve, a battery tint and quick profiles (OLED True Black, Y2K Cyber-Pastel, Monochrome E-Ink); background shader presets and a pack's own `shader.frag` (music-reactive through Xross's player), a pack wallpaper or a picture set as Xross wallpaper, frosted surfaces over art and wallpapers, focus frames, icon masks, ambient particles, a GL background filter (scanlines, CRT, LCD grid) and an experimental AGSL filter over the menu on Android 13+, each also pickable in Settings ▸ Theme; a pack's ambient music loop (only while nothing else plays), boot video or shader intro, and launch curtain. Haptics are planned, see Roadmap §4.3 |
 | Extras | Android apps (games sorted into Games ▸ Android Games), 8 color themes including Original (a color per month), busy indicator, optional button hints, Information screen, can be set as the HOME launcher, Android TV leanback entry |
 | XMB fidelity | Closer. The home menu's layout, motion, navigation, status bar and options panel match the XMB; games show their own tiles, and focusing one brings up its art and video. An XMB-style typeface, Resume/Quit Game and the folder drill-down are missing. Details in [`XMB_FIDELITY.md`](XMB_FIDELITY.md) |
 | Not started | On-screen controller, dual screen, Xross Portal, FTPS |

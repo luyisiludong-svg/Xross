@@ -363,7 +363,13 @@ class MediaOverlayController(
                 music.toggleRepeat()
                 toast(if (music.player.repeatMode == Player.REPEAT_MODE_ALL) "Repeat all" else "Repeat off")
             }
-            NavAction.DOWN -> Unit
+            // Clears the queue, so the theme pack's music can come back (2b.5c): a paused song keeps it away.
+            NavAction.DOWN -> {
+                music.stop()
+                sounds.play(UiSound.BACK)
+                toast("Music stopped")
+                close()
+            }
             NavAction.BACK, NavAction.MEDIA -> {
                 sounds.play(UiSound.BACK)
                 close()

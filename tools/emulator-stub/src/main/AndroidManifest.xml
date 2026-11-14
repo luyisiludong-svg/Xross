@@ -1,7 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- ToneService: "another app playing media" for Xross's theme-music checks. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <application android:label="Emulator stub" android:theme="@android:style/Theme.Material.NoActionBar">
         <activity android:name=".StubActivity" android:exported="false" />
+        <service android:name=".ToneService" android:exported="true" android:foregroundServiceType="mediaPlayback" />
         <!-- Same component name the real emulator exposes, so Xross's explicit intent resolves. -->
         <activity-alias
             android:name="${entryActivity}"

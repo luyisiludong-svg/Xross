@@ -18,7 +18,10 @@
       "opening": "01. opening.wav",
       "gameboot": "gameboot.wav"
     },
-    "soundGains": { "cursor": 0.55, "ok": 0.8, "system_ng": 0.8 }
+    "soundGains": {
+      "cursor": 0.5, "category_switch": 0.6, "confirm": 0.7, "option": 0.7, "back": 0.6,
+      "ok": 0.6, "system_ng": 0.6, "trophy": 0.8
+    }
   },
   "icons": {
     "album": "game_disc.svg",

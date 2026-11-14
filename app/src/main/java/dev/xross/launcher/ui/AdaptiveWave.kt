@@ -53,6 +53,8 @@ fun AdaptiveWave(
     audio: dev.xross.launcher.media.energy.AudioLevels? = null,
     /** The GL-side filter over the background (2b.4f). */
     filter: dev.xross.launcher.theme.pack.BackgroundFilter = dev.xross.launcher.theme.pack.BackgroundFilter.NONE,
+    /** The cold-start shader intro while it plays (2b.5d). */
+    intro: WaveIntro? = null,
 ) {
     val artColors by art.collectAsStateWithLifecycle()
     val level by battery.collectAsStateWithLifecycle()
@@ -76,7 +78,7 @@ fun AdaptiveWave(
     }
     val s = settings
     val batteryLevel = level?.percent?.let { it.coerceIn(0, 100) / 100f } ?: 1f
-    val params = remember(palette, s.waveSpeed, s.waveLineCount, s.waveTurbulence, s.waveThickness, pulse, shader, category, batteryLevel, filter) {
+    val params = remember(palette, s.waveSpeed, s.waveLineCount, s.waveTurbulence, s.waveThickness, pulse, shader, category, batteryLevel, filter, intro) {
         WaveParams(
             speed = s.waveSpeed,
             palette = palette,
@@ -88,6 +90,7 @@ fun AdaptiveWave(
             category = category,
             battery = batteryLevel,
             filter = filter,
+            intro = intro,
         )
     }
     WaveBackground(

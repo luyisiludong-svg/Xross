@@ -54,11 +54,14 @@ Xross/themes/<theme_id>/
 ├── surfaces.json   optional: any JSON file listed in "imports" is merged under theme.json
 ├── fonts/          .ttf/.otf; "typography" names one per role (display, body, mono)
 ├── icons/          <icon id>.svg / .png / .webp, e.g. settings.svg, games.png
-├── sounds/         cursor.wav, confirm.wav, back.wav, option.wav, ok.wav, system_ng.wav,
-│                   trophy.wav, 01. opening.wav, gameboot.wav
+├── sounds/         cursor.wav, category_switch.wav, confirm.wav, drill_in.wav, drill_out.wav,
+│                   back.wav, option.wav, ok.wav, system_ng.wav, trophy.wav, 01. opening.wav,
+│                   gameboot.wav
 ├── shader.frag     optional: a CUSTOM background shader (or effects.shaderPath)
 ├── postprocess.agsl optional: a CUSTOM UI filter, Android 13+ (or effects.uiFilterPath)
-└── wallpaper.png   optional: drawn behind the menu (or .jpg / .webp, or effects.wallpaperPath)
+├── wallpaper.png   optional: drawn behind the menu (or .jpg / .webp, or effects.wallpaperPath)
+├── bgm.ogg         optional: ambient music loop, at most 20 MB (or bgm.mp3, or audio.bgmFile)
+└── boot.mp4        optional: cold-start video, at most 30 MB, cut at 15 s (or audio.bootVideo)
 ```
 
 * File names are matched without regard to case, and a pack can't reach files outside its folder
@@ -145,22 +148,67 @@ drawn, layer by layer:
 
 Sounds (`audio/UiSounds.kt`) come from the active theme pack:
 
-| Event | Pack file |
-| --- | --- |
-| Every D-pad step, horizontal and vertical (cursor and category moves) | `cursor.wav` |
-| Opening a list or running an item | `confirm.wav` (Default: `cursor.wav`) |
-| Back | `back.wav` |
-| Options menu | `option.wav` (Default: `cursor.wav`) |
-| A setting saved, an action that worked | `ok.wav` |
-| Errors and actions that aren't allowed (Options on a row without a menu, Confirm on an information row, a slider at its end) | `system_ng.wav` |
-| Achievement unlocked | `trophy.wav` |
-| Startup, with the fade-in | `01. opening.wav` |
-| Game start | `gameboot.wav` |
+| Event | Role | Pack file | If the pack has no file |
+| --- | --- | --- | --- |
+| A step up or down a list, or through an overlay | `cursor` | `cursor.wav` | Default pack |
+| Left / Right between categories | `category_switch` | `category_switch.wav` | the pack's `cursor` |
+| Running an item, confirming a choice | `confirm` | `confirm.wav` | Default pack (its `cursor.wav`) |
+| Into a folder or sub-list | `drill_in` | `drill_in.wav` | the pack's `confirm` |
+| Out of a folder or sub-list | `drill_out` | `drill_out.wav` | the pack's `back` |
+| Back, closing an overlay | `back` | `back.wav` | Default pack |
+| Options menu | `option` | `option.wav` | Default pack (its `cursor.wav`) |
+| A setting saved, an action that worked | `ok` | `ok.wav` | Default pack |
+| Errors and actions that aren't allowed (Options on a row without a menu, Confirm on an information row, a slider at its end) | `system_ng` | `system_ng.wav` | Default pack |
+| Achievement unlocked | `trophy` | `trophy.wav` | Default pack |
+| Startup, with the fade-in | `opening` | `01. opening.wav` | Default pack |
+| Game start | `gameboot` | `gameboot.wav` | Default pack |
 
 * In `audio.sounds`, a bare file name is looked up in `sounds/`, a path ("audio/tick.wav") from the
-  pack root. `audio.soundGains` scales a role's volume.
-* The Theme 2.0 names `cancel`, `optionOpen`, `gameLaunch` and `achievementUnlock` are accepted for
-  `back`, `option`, `gameboot` and `trophy`.
+  pack root. `audio.soundGains` sets a role's level, 0–1 (it can only lower a sample, so ship
+  files at full level: short clicks peaking near −3 dBFS, longer cues near −16 LUFS).
+* A role with a fallback (`category_switch`, `drill_in`, `drill_out`) that the pack has no file for
+  plays the fallback's file **from the same pack**, at the fallback's gain, before the Default
+  pack's: a pack with only `cursor.wav` ticks with it on category switches too.
+* Role keys ignore case, `_` and `-` (`system_ng`, `systemNg` and `SYSTEM_NG` are one key), and
+  the Theme 2.0 names `cancel`, `optionOpen`, `gameLaunch` and `achievementUnlock` are accepted for
+  `back`, `option`, `gameboot` and `trophy`. Unknown role keys, and unknown `audio` properties, are
+  listed with the pack's problems.
+* **Gains through the cascade:** variants, `categoryOverrides`, `systemOverrides` and `rules`
+  (`apply`) may carry `"audio": { "soundGains": { … } }`; the last layer that names a role wins
+  (§7 order), and so may `bgmFile`. Only gains and the music loop change there: sound files,
+  panning and jitter are the pack's.
+* `audio.panAmount` (0–1, default 0.35): effects pan with the crosshair's X position across the
+  screen, times this amount, so a centred XMB stays centred; a category switch leans a little
+  further toward the direction of travel. 0 keeps every effect centred.
+* `audio.cursorJitter` (default false): the `cursor` and `category_switch` ticks play at a random
+  rate between 0.98 and 1.02, so a long scroll sounds less mechanical.
+* **Theme music** (`audio.bgmFile`, alias `bgm`): a loop played on repeat behind the menu, gapless.
+  Unset, a `bgm.ogg` or `bgm.mp3` at the pack root; `"none"` turns it off. Any of `.ogg`, `.mp3`,
+  `.m4a`, `.aac`, `.opus`, `.flac`, `.wav`, at most 20 MB, from the pack root. Variants, overrides
+  and rules may name another loop or `none` (`"audio": { "bgmFile": "games.ogg" }` in
+  `categoryOverrides.GAMES` gives Games its own); a change while it plays crossfades over 600 ms.
+  It plays at Settings ▸ Sound ▸ Theme music (`sound.bgmVolume`, 60% by default) only while
+  nothing else does: no song in Xross's music player (a paused song counts; stop it from Now
+  Playing with ↓), no other app playing media, no game, no full-screen video. It takes no audio
+  focus, so it never pauses another app. Under a game's video snap it pauses, or plays at 20% with
+  Music during video snaps ▸ Lower; it stops for a game and starts over afterwards. Master loops
+  near −16 LUFS like the cues, a little quieter if the pack is meant as a backdrop.
+* **Boot video** (`audio.bootVideo`, alias `boot`): played full-screen on a cold start in place of
+  the `opening` cue (§8, Boot intro). Unset, a `boot.mp4` at the pack root; `"none"` turns it
+  off. `.mp4`, `.m4v`, `.webm`, `.mkv` or `.3gp`, at most 30 MB, from the pack root; it is cut at
+  15 s. Its sound plays at Settings ▸ Sound ▸ Startup and game cues, without audio focus. Only the
+  pack's base names one (variants, overrides and rules that do are reported). Folder packs only.
+
+```json
+"audio": {
+  "sounds": { "cursor": "tick.wav", "categorySwitch": "swish.wav" },
+  "soundGains": { "cursor": 0.5, "drillIn": 0.7 },
+  "panAmount": 0.35,
+  "cursorJitter": true,
+  "bgmFile": "audio/ambient_loop.ogg"
+}
+```
+
 * **Settings ▸ Sound** toggles effects, volume, the startup sound and the game-start sound.
 
 ## 6. Wave background and Wave settings
@@ -200,7 +248,7 @@ from Settings ▸ Theme; editing the file by hand works too and is picked up on 
 | `themeVariant` | a variant id; empty = the pack's base look | Theme variant (§9) |
 | `surfaceStyle` | a built-in or pack surface id; empty = the pack's | Surface style (§4) |
 | `customWallpaper` | a `content://` URI or a file path; empty = the pack's wallpaper | Xross wallpaper (§8) |
-| `effects` | `shaderPreset`, `backgroundFilter`, `uiFilter`, `focusFrameStyle`, `foregroundParticles`, `iconMask`; empty = the pack's | Effect rows (§11) |
+| `effects` | `shaderPreset`, `backgroundFilter`, `uiFilter`, `focusFrameStyle`, `foregroundParticles`, `iconMask`, `bootIntro`, `launchCurtain`; empty = the pack's | Effect rows (§11) |
 | `quickProfile` | `NONE`, `OLED_TRUE_BLACK`, `Y2K_CYBER_PASTEL`, `MONOCHROME_EINK` | Quick profile (§10) |
 | `adaptiveGamePalette`, `circadianCurve`, `batteryTint` | `true` / `false`; `null` follows the pack | Adaptive colors / Circadian curve / Battery alert tint (§10) |
 | `wave` | `true` / `false` | Wave background on or off |
@@ -295,6 +343,37 @@ with it (3 s without input, in the background, under E-Ink). A compile error tur
 with a toast. Android 12 and below ignore it. Every pass costs a full-screen offscreen render, so
 prefer the background filter on slow GPUs.
 
+### Boot intro
+
+`effects.bootIntro` (alias `intro`) is what a cold start shows (once per process start; a warm
+start shows the menu straight away):
+
+* `VIDEO`: the pack's boot video (§5), full-screen and fitted on black, with its own sound
+  instead of the `opening` cue; theme music waits for it. The default when the pack has one, and
+  a pack's video beats its own `SHADER`.
+* `SHADER`: the background shader rises from black over 2.5 s while `uTransition` ramps from 0 to
+  1 (a pack shader can build a warp or a reveal on it; it then eases back to 0 as after a category
+  switch), under the `opening` cue, the menu fading in over the last 1.3 s.
+* `OFF` (aliases `FADE`, `NONE`): the menu's fade-in under the `opening` cue.
+
+Any button or touch ends an intro with a 300 ms crossfade, and the menu takes the next input (a
+button pressed before the intro starts skips it). It is off under Monochrome E-Ink, while
+Settings ▸ Sound ▸ Startup sound is off or Startup and game cues is at 0%, and (`SHADER`) while
+Wave background is off. Debug builds log `XrossBoot` (`mode=VIDEO file=boot.mp4 skipped=true at=1840 ms`).
+
+### Launch curtain
+
+`effects.launchCurtain` (alias `curtain`) is drawn over the 1.1 s hand-off to the emulator while
+`gameboot` plays, with the game's title glowing in over it:
+
+* `BLOOM` (default, alias `GLOW`): the menu dims under a glow blooming from the centre.
+* `FADE_BLACK` (aliases `FADE`, `BLACK`): the menu fades to black.
+* `IRIS` (alias `CIRCLE`): a circle closes on the focused tile, black outside it.
+* `FLASH` (alias `WHITE_FLASH`): a white flash that falls to black.
+
+Under Monochrome E-Ink it is plain black at once. Variants, overrides and rules may set it (a
+system override can give that system's games their own curtain).
+
 ### `effects` reference
 
 Every key a pack's `effects` block (in the base, a variant, an override or a rule's `apply`)
@@ -315,6 +394,8 @@ instead of being ignored silently, so a typo shows up.
 | `backgroundFilter` | `NONE`, `SCANLINES`, `CRT`, `LCD_GRID` | 2b.4f |
 | `uiFilter` (`postProcess`) | `NONE`, `SCANLINES_UI`, `BLOOM`, `CUSTOM` (Android 13+) | 2b.4f |
 | `uiFilterPath` (`postProcessPath`) | an `.agsl` in the pack (implies `CUSTOM`) | 2b.4f |
+| `bootIntro` (`intro`) | `VIDEO`, `SHADER`, `OFF` | 2b.5d |
+| `launchCurtain` (`curtain`) | `BLOOM`, `FADE_BLACK`, `IRIS`, `FLASH` | 2b.5d |
 
 ## 9. Variants, overrides and context rules
 
@@ -334,8 +415,8 @@ a quarter second.
 
 Each may set `palette` roles, `effects.surfaceStyle`, `effects.shaderPreset`,
 `effects.wallpaperPath`, `effects.focusFrameStyle`, `iconMask`, `iconFilter`,
-`foregroundParticles`, `backgroundFilter`, `uiFilter` and `cardAspectRatio` (a system's aspect
-shapes that system's game tiles).
+`foregroundParticles`, `backgroundFilter`, `uiFilter`, `bootIntro`, `launchCurtain` and `cardAspectRatio` (a system's aspect
+shapes that system's game tiles), `audio.soundGains` and `audio.bgmFile` (§5).
 
 Precedence, lowest to highest: Default pack → pack → variant → category → system → your own
 Settings (a fixed theme color, a chosen surface style or any effect picked in Settings ▸ Theme wins
@@ -399,16 +480,19 @@ Precedence, lowest to highest: Default pack → pack → variant → overrides �
 * *Focus frame style* (Breathing halo, Static neon, Hard shadow, Gold bezel)
 * *Ambient particles* (Off, Snow, Bokeh, Dust motes)
 * *App icon mask* (System, Squircle, Circle, Chrome)
+* *Boot intro* (Video, Shader, Off) and *Launch curtain* (Bloom, Fade to black, Iris, Flash), in
+  Settings ▸ Theme ▸ Intro and transitions; a chosen Shader plays even over a pack's video
 
 Confirm steps through "Theme pack (…)" and then each choice; Options lists them all. They are saved
 under `display.effects` in `settings.json` (`shaderPreset`, `backgroundFilter`, `uiFilter`,
-`focusFrameStyle`, `foregroundParticles`, `iconMask`; empty follows the pack) and win in every
+`focusFrameStyle`, `foregroundParticles`, `iconMask`, `bootIntro`, `launchCurtain`; empty follows
+the pack) and win in every
 category and rule.
 
 *Xross wallpaper* picks any picture through the system picker (Pick custom…; the read access is
 kept across restarts) or goes back to the theme's (Reset to theme).
 
-*Reset to theme defaults* clears every pick that overrides the pack's look (those six, the surface
+*Reset to theme defaults* clears every pick that overrides the pack's look (those eight, the surface
 style, the three color layers and the Xross wallpaper) and keeps the pack, its variant, the theme
 color, the quick profile and the wave settings.
 
@@ -418,7 +502,8 @@ A pack zipped into one file (the folder itself or its contents) installs with **
 Import theme (.xtheme)…**. The archive is checked before anything is written:
 
 * no `..` or absolute paths;
-* only `.json` / `.md` / `.txt`, `wallpaper.png`, `shader.frag` and `postprocess.agsl` at the top,
+* only `.json` / `.md` / `.txt`, `wallpaper.png`, `bgm.ogg` / `bgm.mp3` (at most 20 MB),
+  `boot.mp4` (at most 30 MB), `shader.frag` and `postprocess.agsl` at the top,
   and fonts, sounds (or `audio/`), icons, shaders and `wallpapers/` in their folders with their
   own file types;
 * no programs;

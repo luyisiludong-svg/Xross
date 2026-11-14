@@ -134,9 +134,10 @@ parked until an API is documented.
 | Day/night color shift | ✅ | Brightness follows the time of day |
 | Battery-level color blending | ✅ 🧪 | `palette.batteryTint` / Settings ▸ Theme ▸ Battery alert tint: amber to red below 20%, a green pulse while charging (2b.3, §3.19) |
 | Coldboot: fade-in + startup sound | ✅ | Once per process start, `01. opening.wav` (was the coldboot cue); can be turned off |
-| Custom boot animations | ❌ | |
+| Custom boot animations | ✅ 🧪 | A pack's `boot.mp4` (or `audio.bootVideo`) or `effects.bootIntro: SHADER` (the shader rising from black, `uTransition` 0 → 1) on a cold start, skippable by any button or touch (2b.5d); launch curtains `BLOOM`, `FADE_BLACK`, `IRIS`, `FLASH` over the game hand-off; both also in Settings ▸ Theme ▸ Intro and transitions |
 | UI sound effects + volume, game-start cue | ✅ | SoundPool for short effects, MediaPlayer for long cues |
-| BGM and video-snap volume sliders | ◐ | Music uses system media volume; separate sliders planned in Phase 2b.5 |
+| Volume mixer: effects, cues, theme music, music, video snaps | ✅ 🧪 | Settings ▸ Sound (2b.5b), each 0–100% in `settings.json`; music pauses under a video snap with sound (or lowers to 20%), resuming only what Xross paused |
+| Theme music (pack BGM) | ✅ 🧪 | `bgm.ogg` / `bgm.mp3` or `audio.bgmFile` through variants, overrides and rules (2b.5c); a second ExoPlayer without audio focus, only while no song is loaded, no other app plays media, no game or full-screen video; paused or lowered under snaps, stopped for games |
 | Loadable sound packs / theme packs | ✅ | `Xross/themes/<id>/` (theme.json, fonts, icons, sounds); the bundled icons and sounds are the built-in Default pack in `assets/themes/default`. Variants, category and system overrides, and single-file `.xtheme` import (§3.18) |
 | Icons from the design SVGs | ✅ | `tools/icons/svg_icons.py` → 29 SVGs in the Default pack, read by `SvgIcon` at runtime |
 | Custom fonts | ✅ | One .ttf/.otf per theme pack, applied to all launcher text |

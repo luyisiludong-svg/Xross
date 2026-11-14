@@ -65,6 +65,11 @@ import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.ClipOp
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.clipPath
+import dev.xross.launcher.theme.pack.LaunchCurtain
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -188,7 +193,6 @@ fun XmbScreen(
     onCloseInfo: () -> Unit = {},
     snap: SnapPlayer? = null,
     videoFile: suspend (String) -> java.io.File? = { null },
-    snapVolume: Float = 0.75f,
     onPlayDetails: () -> Unit = {},
     onCloseDetails: () -> Unit = {},
     onAvatarTap: () -> Unit = {},
@@ -219,6 +223,10 @@ fun XmbScreen(
     particlesIdle: Boolean = false,
     /** A UI filter (2b.4f) couldn't be built: (key, toast text), announced once per key. */
     onUiFilterError: (String, String) -> Unit = { _, _ -> },
+    /** The crosshair's X over the screen width (0–1) as laid out, for panning the UI sounds (2b.5a). */
+    onCrosshairX: (Float) -> Unit = {},
+    /** The menu's alpha on a cold start ([BootReveal.menu], 2b.5d): the fade-in, or 1 under the boot video. */
+    reveal: () -> Float = { 1f },
 ) {
     val palette = rememberActivePalette(state.theme, (LocalThemeLook.current ?: LocalThemePack.current?.look())?.palette)
     // The pack's layout with the context rules that hold and the quick profile's motion (MainActivity).
@@ -232,10 +240,6 @@ fun XmbScreen(
     val idle = LocalUiIdle.current
     val pulse by rememberFocusPulse(running = started && !idle)
 
-    // Cold boot: fade the whole interface in once per process start.
-    val reveal = remember { Animatable(if (state.coldBoot) 0f else 1f) }
-    LaunchedEffect(Unit) { reveal.animateTo(1f, tween(1400, delayMillis = 350, easing = LinearEasing)) }
-
     // The experimental UI filter (2b.4f, Android 13+): an AGSL RenderEffect on the whole menu.
     // Static filters never animate; a custom one that reads uTime rests with the screen.
     val filterRef = LocalThemeLook.current?.cosmetics?.screenFilter ?: dev.xross.launcher.theme.pack.UiFilterRef.OFF
@@ -247,13 +251,15 @@ fun XmbScreen(
         Modifier
             .fillMaxSize()
             .uiFilter(filterRef, filterSource, started, idle, filterStill, onUiFilterError)
-            .graphicsLayer { alpha = reveal.value }
+            .graphicsLayer { alpha = reveal() }
             .frostHost()
             .swipeNavigation(onAction),
     ) {
         val m = remember(constraints.maxWidth, constraints.maxHeight, layout) {
             XmbMetrics(constraints.maxWidth.toFloat(), constraints.maxHeight.toFloat(), layout)
         }
+        val reportCrosshair by rememberUpdatedState(onCrosshairX)
+        LaunchedEffect(m.anchorX, m.width) { if (m.width > 0f) reportCrosshair(m.anchorX / m.width) }
         val density = LocalDensity.current
         fun Float.sp(): TextUnit = with(density) { this@sp.toSp() }
         fun Float.dp(): Dp = with(density) { this@dp.toDp() }
@@ -296,7 +302,6 @@ fun XmbScreen(
                 uuid = state.details?.uuid ?: focusedArt?.uuid.takeIf { quiet },
                 snap = snap,
                 videoFile = videoFile,
-                volume = snapVolume,
             )
             val playing by snap.player.collectAsState()
             playing?.let { SnapVideo(it, Modifier.fillMaxSize(), scrim = 0.55f, onCovering = { c -> videoCovers = c }) }
@@ -571,7 +576,7 @@ fun XmbScreen(
         )
 
         state.remap?.let { RemapOverlay(it, m, onCancelRemap) }
-        state.booting?.let { GameBootOverlay(it, palette, m) }
+        state.booting?.let { GameBootOverlay(it, palette, m, LocalThemeLook.current?.cosmetics?.curtain ?: LaunchCurtain.BLOOM, LocalStillMotion.current) }
 
         // Unlock toasts: top right under the status bar; drawn only, never focused.
         UnlockToast(
@@ -1505,37 +1510,99 @@ private fun RemapOverlay(session: RemapSession, m: XmbMetrics, onCancel: () -> U
 }
 
 /** Game start transition: a bright bloom washes over the screen while the start cue plays. */
+/**
+ * The start transition (2b.5d, `effects.launchCurtain`), timed to the 1100 ms hand-off while the
+ * `gameboot` cue plays: [LaunchCurtain.BLOOM] a glow over the dimmed menu, [LaunchCurtain.FADE_BLACK]
+ * the menu fading to black, [LaunchCurtain.IRIS] a circle closing on the focused tile, and
+ * [LaunchCurtain.FLASH] a white flash falling to black. The game's title glows in over each.
+ * [still] (E-Ink) is black at once.
+ */
 @Composable
-private fun GameBootOverlay(title: String, palette: ThemePalette, m: XmbMetrics) {
-    val progress = remember(title) { Animatable(0f) }
-    LaunchedEffect(title) { progress.animateTo(1f, tween(900, easing = FastOutSlowInEasing)) }
+private fun GameBootOverlay(title: String, palette: ThemePalette, m: XmbMetrics, curtain: LaunchCurtain, still: Boolean) {
+    val progress = remember(title) { Animatable(if (still) 1f else 0f) }
+    LaunchedEffect(title) {
+        if (dev.xross.launcher.BuildConfig.PERF_LOG) {
+            android.util.Log.i("XrossBoot", "curtain=${if (still) "BLACK" else curtain.name} title=$title")
+        }
+        if (!still) progress.animateTo(1f, tween(LaunchCurtainTiming.CLOSE_MS, easing = if (curtain == LaunchCurtain.IRIS) LinearEasing else FastOutSlowInEasing))
+    }
     val density = LocalDensity.current
+    val focus = Offset(m.anchorX, m.focusedY)
     Box(
         contentAlignment = Alignment.Center,
         modifier = Modifier
             .fillMaxSize()
             .drawBehind {
                 val p = progress.value
-                // Fade the menu out first so only the bloom and the game title remain.
-                drawRect(Color.Black.copy(alpha = 0.92f * (p * 1.6f).coerceAtMost(1f)))
-                drawCircle(
-                    Brush.radialGradient(
-                        0f to palette.glowColor.copy(alpha = 0.85f * p),
-                        0.6f to palette.glowColor.copy(alpha = 0.25f * p),
-                        1f to Color.Transparent,
-                        center = center,
-                        radius = size.maxDimension * (0.2f + 0.6f * p),
-                    ),
-                    radius = size.maxDimension,
-                )
+                when {
+                    still -> drawRect(Color.Black)
+                    curtain == LaunchCurtain.BLOOM -> {
+                        // Fade the menu out first so only the bloom and the game title remain.
+                        drawRect(Color.Black.copy(alpha = 0.92f * (p * 1.6f).coerceAtMost(1f)))
+                        drawCircle(
+                            Brush.radialGradient(
+                                0f to palette.glowColor.copy(alpha = 0.85f * p),
+                                0.6f to palette.glowColor.copy(alpha = 0.25f * p),
+                                1f to Color.Transparent,
+                                center = center,
+                                radius = size.maxDimension * (0.2f + 0.6f * p),
+                            ),
+                            radius = size.maxDimension,
+                        )
+                    }
+                    curtain == LaunchCurtain.FADE_BLACK -> drawRect(Color.Black.copy(alpha = p))
+                    curtain == LaunchCurtain.IRIS -> {
+                        val r = LaunchCurtainTiming.irisRadius(p, focus, size)
+                        val hole = Path().apply { addOval(Rect(focus, r)) }
+                        clipPath(hole, ClipOp.Difference) { drawRect(Color.Black) }
+                        if (r <= 0.5f) drawRect(Color.Black)
+                    }
+                    else -> {
+                        // FLASH: white up to full in the first part, then falling into black.
+                        val (white, black) = LaunchCurtainTiming.flash(p)
+                        drawRect(Color.Black.copy(alpha = black))
+                        drawRect(Color.White.copy(alpha = white))
+                    }
+                }
             },
     ) {
         GlowText(
             title,
             fontSize = with(density) { (m.titleSize * 1.4f).toSp() },
             glow = { 1f },
-            modifier = Modifier.graphicsLayer { alpha = progress.value },
+            modifier = Modifier.graphicsLayer { alpha = LaunchCurtainTiming.titleAlpha(curtain, progress.value, still) },
         )
+    }
+}
+
+/** The launch curtains' shapes over their progress (0 → 1 over [CLOSE_MS]), pure for tests. */
+internal object LaunchCurtainTiming {
+    /** The curtain closes over this; the hand-off to the emulator is at 1100 ms. */
+    const val CLOSE_MS = 900
+
+    /** IRIS: the circle's radius around [focus], from past the farthest corner to 0. */
+    fun irisRadius(p: Float, focus: Offset, size: androidx.compose.ui.geometry.Size): Float {
+        val far = maxOf(
+            (focus - Offset.Zero).getDistance(), (focus - Offset(size.width, 0f)).getDistance(),
+            (focus - Offset(0f, size.height)).getDistance(), (focus - Offset(size.width, size.height)).getDistance(),
+        )
+        return (far * (1f - p.coerceIn(0f, 1f))).coerceAtLeast(0f)
+    }
+
+    /** FLASH: (white alpha, black alpha): white peaks at 15%, then gives way to black by 70%. */
+    fun flash(p: Float): Pair<Float, Float> {
+        val q = p.coerceIn(0f, 1f)
+        val white = if (q < 0.15f) q / 0.15f else (1f - (q - 0.15f) / 0.55f).coerceIn(0f, 1f)
+        val black = ((q - 0.1f) / 0.3f).coerceIn(0f, 1f)
+        return white to black
+    }
+
+    /** The title glows in as the curtain closes (after the flash, as the iris shuts: not over the rows still showing). */
+    fun titleAlpha(curtain: LaunchCurtain, p: Float, still: Boolean): Float = when {
+        still -> 1f
+        curtain == LaunchCurtain.FLASH -> ((p - 0.6f) / 0.4f).coerceIn(0f, 1f)
+        curtain == LaunchCurtain.IRIS -> ((p - 0.75f) / 0.25f).coerceIn(0f, 1f)
+        else -> p
     }
 }
 

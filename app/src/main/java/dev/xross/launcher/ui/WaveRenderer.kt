@@ -56,12 +56,32 @@ data class WaveParams(
     val battery: Float = 1f,
     /** The GL-side post-process over the background program (2b.4f, `effects.backgroundFilter`). */
     val filter: BackgroundFilter = BackgroundFilter.NONE,
+    /** The cold-start shader intro (2b.5d) while it plays: `uTransition` follows its ramp instead of category switches. */
+    val intro: WaveIntro? = null,
 ) {
     // Converted once per parameter change, not per frame, so the GL loop allocates nothing.
     internal val topRgb = palette.top.rgb()
     internal val bottomRgb = palette.bottom.rgb()
     internal val waveRgb = palette.wave.rgb()
     internal val glowRgb = palette.glow.rgb()
+}
+
+/**
+ * The cold-start shader intro (2b.5d, [BootMode.SHADER]) as the renderer sees it: it ramps
+ * `uTransition` from 0 to 1 over [durationMs] from [startedAtNanos] (`SystemClock.elapsedRealtimeNanos`),
+ * or until [endedAtNanos] when it was skipped; from there `uTransition` eases back to 0 as after a
+ * category switch, so STARFIELD's warp builds through the intro and settles as the menu appears.
+ */
+data class WaveIntro(val startedAtNanos: Long, val durationMs: Long, val endedAtNanos: Long = 0L) {
+    /** The ramp at [nowNanos]: 0 → 1, eased in. */
+    fun level(nowNanos: Long): Float {
+        val t = ((nowNanos - startedAtNanos) / (durationMs * 1e6)).toFloat().coerceIn(0f, 1f)
+        return t * t * (3f - 2f * t)
+    }
+
+    /** True once the ramp is over: it reached 1, or the intro was skipped. */
+    fun over(nowNanos: Long): Boolean =
+        nowNanos - startedAtNanos >= durationMs * 1_000_000L || (endedAtNanos > 0L && nowNanos >= endedAtNanos)
 }
 
 /**
@@ -191,6 +211,8 @@ class WaveRenderer(
     private var lastFrameNs = 0L
     private var lastCategory: String? = null
     private var transition = 0f
+    /** The intro whose ramp has run ([WaveIntro.startedAtNanos]), so a finished one isn't replayed. */
+    private var introDone = 0L
     private var travel = 0.0
     private var daylight = daylight(Calendar.getInstance())
     private var daylightCheckedAt = 0L
@@ -284,6 +306,18 @@ class WaveRenderer(
             val step = dt.coerceAtMost(0.1f)
             travel = (travel + step * transition * WARP_TRAVEL) % 1000.0
             transition *= exp(-step / TRANSITION_S)
+        }
+        // Cold-start shader intro (2b.5d): the ramp drives uTransition until it ends.
+        val intro = p.intro
+        if (intro != null && intro.startedAtNanos != introDone && !still) {
+            transition = intro.level(now)
+            if (intro.over(now)) {
+                introDone = intro.startedAtNanos
+                lastCategory = p.category
+                if (BuildConfig.PERF_LOG) {
+                    Log.i("XrossBoot", "uTransition=%.2f at=%d ms".format(transition, (now - intro.startedAtNanos) / 1_000_000))
+                }
+            }
         }
 
         val source = audio
