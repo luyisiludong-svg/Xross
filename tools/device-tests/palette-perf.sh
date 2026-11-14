@@ -6,6 +6,8 @@
 #   tools/device-tests/palette-perf.sh [pairs]     # default 3 pairs of passes
 #   PERF_EFFECTS='{"backgroundFilter": "CRT", "uiFilter": "BLOOM"}' tools/device-tests/palette-perf.sh
 #                                                  # the same with Settings ▸ Theme effects on
+#   PERF_COMPONENTS='{"badgePills": ["SYSTEM", "YEAR", "DEVELOPER", "PLAYTIME"]}' tools/device-tests/palette-perf.sh
+#                                                  # the same with Settings ▸ Theme ▸ Components picks
 #
 # Installs the debug build to seed 12 scraped SNES games with distinct hero art (it must be
 # debuggable to edit the database), then the profiling build over it (same signing, data kept).
@@ -45,6 +47,8 @@ import json, os, sys
 p = sys.argv[1]; s = json.load(open(p)); d = s["display"]
 # The pack's own effects unless PERF_EFFECTS names some (2b.4f, display.effects).
 d["effects"] = json.loads(os.environ.get("PERF_EFFECTS") or "{}")
+# The pack's own components unless PERF_COMPONENTS names some (2b.7, display.components).
+d["components"] = json.loads(os.environ.get("PERF_COMPONENTS") or "{}")
 d.update(theme="LAVENDER", themePack="default", themeVariant="", surfaceStyle="", quickProfile="NONE",
          adaptiveGamePalette=sys.argv[2] == "true")
 for k in ("circadianCurve", "batteryTint"): d.pop(k, None)

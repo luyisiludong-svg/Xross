@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Full device regression: every suite in sequence, each from a fresh app reset, then one summary.
-# 314 checks: library 41, theme 197, media 56, input 11, integration 9.
+# 352 checks: library 41, theme 235, media 56, input 11, integration 9.
 #
 #   ./gradlew :app:installDebug :emulator-stub:installRetroarchDebug
 #   tools/device-tests/run-all.sh                    # all suites (same as smoke.sh --all)
@@ -13,7 +13,7 @@
 set -u
 HERE=$(cd "$(dirname "$0")" && pwd)
 ALL=(library theme media input integration)
-TOTAL_CHECKS=314
+TOTAL_CHECKS=352
 if [ $# -gt 0 ]; then SUITES=("$@"); else SUITES=("${ALL[@]}"); fi
 for s in "${SUITES[@]}"; do
   [ -x "$HERE/test-$s.sh" ] || { echo "unknown suite '$s' (${ALL[*]})"; exit 2; }

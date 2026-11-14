@@ -27,6 +27,7 @@ Legend: ✅ done and verified · ◐ partial · ❌ not started · 🧪 verified
 | Phase 2b.4e (foreground particles): `effects.foregroundParticles` (`SNOW`, `BOKEH`, `DUST_MOTES`) as layer 4, ≤48 particles in flat arrays drawn in one `graphicsLayer`; resting after 10 s without input, in the background, and hidden under a snap, full-screen media and E-Ink | ✅ 🧪 on `feat/theme-2b4` (2026-11-13): 622 unit tests; theme suite 102/102 on the API 37 emulator; profiling build: UI thread 0.3 ms p50 per frame with or without particles, 0.2–0.4% janky in most windows (as without). **Galaxy A55** (2026-11-13): 120 Hz, 0 frames at rest, hidden under a playing snap; during game navigation 7 of 16 passes doubled the render time (deadline jank unchanged, §3.28) |
 | Phase 2b.4f (post-processing and Settings rows): `effects.backgroundFilter` (`SCANLINES`, `CRT`, `LCD_GRID`) as a GL pass snapped to render pixels, `effects.uiFilter` (`SCANLINES_UI`, `BLOOM`, custom `postprocess.agsl`) as an AGSL `RenderEffect` on Android 13+, Settings ▸ Theme rows for every 2b.4 effect (`display.effects`), Pick custom wallpaper, Reset to theme defaults, the `effects` schema | ✅ 🧪 on `feat/theme-2b4` (2026-11-13): 645 unit tests; 226/226 device checks on the API 37 emulator (theme 134/134); `palette-perf.sh` 0.30–0.45% janky, the same as the build before it, and 0.30–0.44% with CRT and Bloom on. **Galaxy A55** (2026-11-13): 645 unit tests, `lintDebug` 0 errors, **215/226** device checks (theme 134/134; the 11 are seeded-media checks), every slice checked by hand, `palette-perf.sh` 0.12–0.19% janky (0.06–0.19% with CRT and Bloom) (§3.28). **2b.4 is complete on the emulator and the A55** |
 | Phase 2b.7a (components block and status-bar clusters): `components` in the manifest (Default pack → pack → variant → `display.components`; never overrides or rules), `statusBarLeft` / `statusBarRight` slots (`LOGO`, `WIFI`, `VOLUME`, `BATTERY`, `CLOCK`, `AVATAR` always last), battery modes with time to full, clock skeletons, Settings ▸ Theme ▸ Components | ✅ 🧪 on `feat/theme-2b7` (2026-11-14): 793 unit tests, `lintDebug` 0 errors; theme suite **197/197** on the API 37 emulator, display matrix 12/12 default and stress, `palette-perf.sh` 0.15–0.75% janky (§3.29). Not yet on the A55 |
+| Phase 2b.7b (mini player, glyphs, badge pills): `miniPlayerMode` (`FLOATING_CARD`, `STATUS_TICKER` in the status bar before the avatar, `OFF`), `glyphOverride` (`AUTO`, `PLAYSTATION`, colored `XBOX`, `NINTENDO`, `MONOCHROME_MINIMAL`; labels only), `badgePills` beside the focused title; Settings ▸ Theme ▸ Components rows | ✅ 🧪 on `feat/theme-2b7` (2026-11-14): 805 unit tests, `lintDebug` 0 errors; theme suite **235/235** on the API 37 emulator, `palette-perf.sh` 0.15–0.74% janky with badges (§3.30). Not yet on the A55 |
 | Phase 3 (dual screen, hot-swap, RetroAchievements, Web Portal, FTPS) | ◐ RetroAchievements account linking, status bar avatar and User Card (§3.12), per-game achievement lists and unlock toasts (§3.13), live on the emulator and the Galaxy A55 (§3.14); hot-swap and live resolution change done; dual screen, docking, Portal and FTPS not started |
 | Phase 4 (onboarding, triage, profiling, plugin API) | ◐ app triage and performance work started |
 
@@ -145,6 +146,7 @@ parked until an API is documented.
 | UI scale slider (50–150%) | ❌ | Layout already scales automatically (§4) |
 | Aspect-ratio overrides | ❌ | Xross stays immersive (Android's system bars hidden); showing Android's status bar was dropped (2026-11-14). Xross's own status-bar slots are below |
 | Status bar components | ✅ 🧪 | `components.statusBarLeft` / `statusBarRight` slots (logo, network, system volume, battery, clock, avatar), battery modes including time to full, clock skeletons; Settings ▸ Theme ▸ Components (2b.7a, §3.29) |
+| Mini player modes, button glyphs, title badges | ✅ 🧪 | `components.miniPlayerMode`, `glyphOverride`, `badgePills`; Settings ▸ Theme ▸ Components (2b.7b, §3.30) |
 | Game tiles and avatar style | ✅ 🧪 | 16:9 XMB tiles in Games; `profile.avatarStyle` with Settings ▸ Theme ▸ Profile customization (Phase 2b.1, §3.15) |
 
 ### 3.5 Device integration & form factors
@@ -1382,6 +1384,41 @@ suite's rest windows now avoid the boundary.
 **Not covered:** the Galaxy A55 (volume keys, Wi-Fi strength walking away from the router, 120 Hz),
 an Android 9 image for the `WifiManager` RSSI path, a real charge-time estimate (the emulator's
 `dumpsys battery` charger gives −1, so only the percentage fallback was seen on a device).
+
+### 3.30 Phase 2b.7b: mini player modes, button glyphs, title badges (2026-11-14)
+
+On `feat/theme-2b7`, API 37 emulator (`-gpu host`, 2400×1080).
+
+**Host:** 805 unit tests pass (4 skipped): the new `ComponentsTwoBTest` (every `glyphOverride`
+over every detected family; the labels change and the confirm side doesn't, through the view
+model; year parsing from full and partial dates; missing data skipping a badge; the developer cut
+at 18 characters; `RA_PROGRESS` only with telemetry; game rows carrying their badges, with
+`SYSTEM` and `PLAYTIME` leaving the subtitle; no badges on settings, music or apps; card, ticker
+and off; the ticker following the card's visibility and pause timeout; the Mini player and Button
+glyphs rows; Title badges toggled in order through the view model and cleared by Reset), and
+`ComponentsTest` with the three new rows. `lintDebug` 0 errors, 61 warnings (as before).
+
+**Theme suite: 235/235** (the 197 before plus a new 38-check "Components (2b.7b)" section): a
+song from the media fixtures as the floating card, then as the ticker ("Smoke Song 2 — Smoke
+Artist" after the battery, before the avatar), faded under the avatar HUD and back in place,
+paused with its pause glyph, then Off with the music still playing; each glyph set in the menu's
+hints (Enter, ✕ ○ △, A B Y in color, B on the south for Nintendo, ▽ ▷ △), in Search (△ Space) and
+in the avatar HUD; Title badges turned on in order, Chrono Trigger (a release date, a developer
+and 75 minutes patched into the database) showing SNES, 1995, Square and 1h 15m with the
+playtime gone from its subtitle, badges only on the focused game, an unscraped game keeping SNES,
+none on an app; each row back to Theme pack.
+
+**`palette-perf.sh`** (profiling, 3 interleaved pairs, new `PERF_COMPONENTS`): the Default
+components 0.29–0.74% janky (deadline), with System, Release year, Developer and Playtime badges
+0.15–0.74%: within the gate and the noise. The perf seed's games carry no release date or
+playtime, so that run drew the System badge alone.
+
+**Found and fixed on the device:** nothing in the app; the suite's glyph reader first took the
+Search keyboard's own Space key for the hint's.
+
+**Not covered:** the A55 (a real pad's glyph sets, touch on the ticker, 120 Hz), the
+`RA_PROGRESS` badge on a device (needs a linked account), the ticker's 30-second hide after a
+pause on a device (unit-tested on virtual time), `display-matrix.sh` with badges and the ticker.
 
 ## 4. Display matrix & performance
 

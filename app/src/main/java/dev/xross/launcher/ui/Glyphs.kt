@@ -32,6 +32,12 @@ val LocalThemeLook = androidx.compose.runtime.compositionLocalOf<dev.xross.launc
 val LocalComponents = androidx.compose.runtime.compositionLocalOf { dev.xross.launcher.theme.pack.ResolvedComponents.DEFAULT }
 
 /**
+ * The face-button labels on screen (2b.7b): the detected controller's or the set `glyphOverride`
+ * picks. [Hint] reads it to draw a label in its set's style (Xbox colors, outlined).
+ */
+val LocalGlyphs = androidx.compose.runtime.compositionLocalOf { dev.xross.launcher.model.GlyphSet.KEYBOARD }
+
+/**
  * The layout drawn now: the pack's, with the tile shapes and `layout` patches of the context rules
  * that hold, and the quick profile's motion (E-Ink moves instantly). Null: the pack's own.
  */

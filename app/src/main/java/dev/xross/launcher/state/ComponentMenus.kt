@@ -1,5 +1,6 @@
 package dev.xross.launcher.state
 
+import dev.xross.launcher.theme.pack.BadgePill
 import dev.xross.launcher.theme.pack.ResolvedComponents
 import dev.xross.launcher.theme.pack.StatusSide
 import dev.xross.launcher.theme.pack.StatusSlot
@@ -145,4 +146,44 @@ object ComponentMenus {
             ?: sub.indexOfFirst { (it.command as? Command.EditStatusSlot)?.edit in setOf(SlotEdit.EARLIER, SlotEdit.LATER) }.coerceAtLeast(0)
         return OptionsMenuState(title, listOf(root, OptionsMenuState.Level(options[at].label, sub, again)))
     }
+
+    // region Title badges (2b.7b)
+
+    /** "System · Release year", or "None". */
+    fun pillSummary(pills: List<BadgePill>): String = if (pills.isEmpty()) "None" else pills.joinToString(" · ") { it.label }
+
+    /** [current] with [pill] taken out if it is there, else added at the end (badges are drawn in this order). */
+    fun togglePill(current: List<BadgePill>, pill: BadgePill): List<BadgePill> = if (pill in current) current - pill else current + pill
+
+    /**
+     * The Options list of Title badges: Theme pack ([pack]'s badges, selected while the user hasn't
+     * set them, [userSet]), None, then each badge, ticked when [shown] draws it, with its place.
+     * Confirm on a badge turns it on (at the end) or off; the list stays open.
+     */
+    fun pillOptions(shown: List<BadgePill>, pack: List<BadgePill>, userSet: Boolean): List<MenuOption> = buildList {
+        add(MenuOption("Theme pack", detail = pillSummary(pack), command = Command.SetBadgePills(null), selected = !userSet))
+        add(MenuOption("None", detail = "No badges beside the title", command = Command.SetBadgePills(emptyList()), selected = userSet && shown.isEmpty()))
+        for (p in BadgePill.entries) {
+            val at = shown.indexOf(p)
+            val detail = when {
+                at >= 0 -> "On · ${at + 1} of ${shown.size}"
+                p == BadgePill.RA_PROGRESS -> "Off · recognized games only"
+                p == BadgePill.PLAYTIME -> "Off · on, it takes the playtime out of the subtitle"
+                else -> "Off"
+            }
+            add(MenuOption(p.label, detail = detail, command = Command.ToggleBadgePill(p), selected = at >= 0))
+        }
+    }
+
+    /** The Title badges list reopened after an edit, on the row of [pill] (else Theme pack or None). */
+    fun reopenPills(title: String, options: List<MenuOption>, pill: BadgePill?, none: Boolean): OptionsMenuState {
+        val at = when {
+            pill != null -> options.indexOfFirst { it.command == Command.ToggleBadgePill(pill) }
+            none -> 1
+            else -> 0
+        }
+        return OptionsMenuState(title, listOf(OptionsMenuState.Level(title, options, at.coerceAtLeast(0))))
+    }
+
+    // endregion
 }

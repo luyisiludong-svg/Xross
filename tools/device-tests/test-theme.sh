@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Theme suite (197 checks): Settings ▸ Theme and its folders (theme color, wave and avatar panels,
+# Theme suite (235 checks): Settings ▸ Theme and its folders (theme color, wave and avatar panels,
 # platform folders, surface style, the 2b.4f effect rows, Pick custom wallpaper, Reset to theme
 # defaults), quick profiles (OLED, Y2K, E-Ink), color layers (adaptive colors,
 # circadian curve, battery tint and charging pulse through `dumpsys battery`), the Sound section,
@@ -11,7 +11,9 @@
 # and the cold-start intro and launch curtains (2b.5d: a generated boot.mp4, the shader ramp, E-Ink,
 # each curtain on a stub launch), and Settings ▸ Theme ▸ Components (2b.7a: battery modes on and off
 # the charger, clock formats, three slot orders with the avatar HUD, network in airplane mode,
-# the system volume, the avatar left out, a minute tick at rest).
+# the system volume, the avatar left out, a minute tick at rest; 2b.7b: the mini player as a card,
+# a status-bar ticker and off, each button-glyph set in the hints, Search and the HUD, and title
+# badges on a scraped game, an unscraped one and an app).
 #
 #   tools/device-tests/test-theme.sh
 #
@@ -21,7 +23,7 @@
 # The battery override is always reset at exit, even after Ctrl-C.
 set -u
 . "$(dirname "$0")/lib/harness.sh"
-suite_begin theme 197
+suite_begin theme 235
 
 setup_base_env
 setup_theme_fixtures
@@ -927,5 +929,170 @@ adb shell sleep $((60 - s + 3))
 frames=$(adb shell dumpsys gfxinfo "$PKG" | grep -m1 'Total frames rendered' | grep -o '[0-9]*$')
 [ -n "$frames" ] && [ "$frames" -le 3 ] && ok "a minute tick at rest draws $frames frame(s)" || bad "a minute at rest drew ${frames:-?} frames"
 adb shell dumpsys battery reset
+
+section "Components (2b.7b)"
+# Mini player (Theme pack → Floating card → Status bar ticker → Off), Button glyphs (Theme pack →
+# Controller's own → Shapes → Colored letters → Letters, A on the right → Minimal outlines) and
+# Title badges (an Options list: Theme pack, None, then each badge, on in the order turned on).
+# The suite's keys come from the virtual keyboard, so the controller's own glyphs are Enter, Esc, Tab.
+comp_row() { open_components; [ "$1" -gt 0 ] && press DPAD_DOWN "$1"; }
+playing() { for _ in $(seq 12); do [ "$(music_state)" = "PLAYING" ] && return 0; pause 0.5; done; return 1; }
+ticker_bounds() { xml | grep -oE 'text="Smoke Song [12] — Smoke Artist"[^>]*bounds="[^"]*"' | grep -o 'bounds="[^"]*"'; }
+# The glyph drawn just before a hint's label ("✕" before "Select"); the hints come last on screen
+# (Search's keyboard has a "Space" key of its own).
+glyph_before() { screen | grep -B1 -xF "$1" | tail -2 | head -1; }
+
+if setup_media_fixtures; then
+  adb shell am force-stop "$PKG"
+  start_app
+  category 2
+  expect "Shuffle all" "Music lists Shuffle all for the mini-player checks"
+  key KEYCODE_DPAD_CENTER
+  playing && ok "a song plays" || bad "no song playing (state $(music_state))"
+  category 0
+  pause 0.5
+  s=$(screen)
+  grep -qxF "Smoke Artist" <<<"$s" && grep -qxE "Smoke Song [12]" <<<"$s" \
+    && ok "Floating card (the default) draws the title and the artist on their own lines" || { bad "no floating card"; show "$s"; }
+  shot mini-card
+  comp_row 4
+  expect "Theme pack (Floating card)" "Mini player follows the pack (Floating card)"
+  key KEYCODE_DPAD_CENTER KEYCODE_DPAD_CENTER
+  await_flat '"miniPlayerMode":"STATUS_TICKER"' && ok "Status bar ticker is saved as display.components.miniPlayerMode" || bad "miniPlayerMode not saved"
+  pause 0.5
+  s=$(screen)
+  grep -qxE "Smoke Song [12] — Smoke Artist" <<<"$s" && ok "the ticker draws 'Title — Artist' in the status bar" || { bad "no ticker"; show "$s"; }
+  grep -qxF "Smoke Artist" <<<"$s" && bad "the floating card is still drawn with the ticker" || ok "no floating card with the ticker"
+  shot mini-ticker
+  tx=$(x_of 'Smoke Song [12] — Smoke Artist'); bx=$(x_of '[0-9]{1,3}%')
+  [ -n "$tx" ] && [ -n "$bx" ] && [ "$tx" -gt "$bx" ] && ok "the ticker sits after the battery, before the avatar" || bad "ticker x=$tx, battery x=$bx"
+  category 0
+  pause 1
+  before=$(ticker_bounds); key KEYCODE_DPAD_UP; pause 0.8; during=$(ticker_bounds); shot mini-ticker-hud
+  key KEYCODE_DPAD_DOWN; pause 0.8; after=$(ticker_bounds)
+  [ -n "$before" ] && [ -z "$during" ] && [ "$before" = "$after" ] \
+    && ok "the HUD fades the ticker and gives it back in place" || bad "ticker before | under the HUD | after: $before | $during | $after"
+  adb shell cmd media_session dispatch pause
+  pause 1
+  has_desc "❚❚  Smoke Song" && ok "paused, the ticker stays with the pause glyph" || bad "no paused ticker ($(descs | grep -i smoke | tr '\n' ' '))"
+  shot mini-ticker-paused
+  adb shell cmd media_session dispatch play
+  playing
+  comp_row 4
+  key KEYCODE_DPAD_CENTER
+  await_flat '"miniPlayerMode":"OFF"' && ok "Off is saved" || bad "miniPlayerMode OFF not saved"
+  expect "Off · Music still plays" "Mini player Off says the music carries on"
+  category 0
+  pause 0.5
+  screen | grep -qE "^Smoke Song [12]" && bad "Off still draws a card or a ticker" || ok "Off draws neither the card nor the ticker"
+  [ "$(music_state)" = "PLAYING" ] && ok "playback carries on with the mini player off" || bad "music state $(music_state) with the mini player off"
+  shot mini-off
+  comp_row 4
+  key KEYCODE_DPAD_CENTER
+  await_flat '"miniPlayerMode":null' && ok "Theme pack hands the mini player back (null)" || bad "miniPlayerMode not reset"
+  adb shell cmd media_session dispatch pause
+else
+  skip 15 "the mini-player checks need ffmpeg on the host for the song fixtures"
+fi
+
+# Button glyphs: the labels change, the confirm side doesn't (DPAD_CENTER confirms throughout).
+comp_row 5
+expect "Theme pack (Controller's own) · Labels only" "Button glyphs follows the pack (the controller's own)"
+[ "$(glyph_before Select)" = "Enter" ] && ok "the keyboard's own glyphs: Enter selects" || bad "Select is labelled '$(glyph_before Select)'"
+key KEYCODE_DPAD_CENTER KEYCODE_DPAD_CENTER
+await_flat '"glyphOverride":"PLAYSTATION"' && ok "Shapes is saved as display.components.glyphOverride" || bad "glyphOverride not saved"
+[ "$(glyph_before Select)" = "✕" ] && [ "$(glyph_before Back)" = "○" ] && [ "$(glyph_before Options)" = "△" ] \
+  && ok "Shapes: ✕ selects, ○ goes back, △ opens Options" || bad "Shapes: $(glyph_before Select) $(glyph_before Back) $(glyph_before Options)"
+shot glyphs-shapes
+key KEYCODE_DPAD_CENTER
+[ "$(glyph_before Select)" = "A" ] && [ "$(glyph_before Back)" = "B" ] && [ "$(glyph_before Options)" = "Y" ] \
+  && ok "Colored letters: A selects, B goes back, Y opens Options" || bad "Colored letters: $(glyph_before Select) $(glyph_before Back) $(glyph_before Options)"
+shot glyphs-xbox
+key KEYCODE_DPAD_CENTER
+[ "$(glyph_before Select)" = "B" ] && [ "$(glyph_before Back)" = "A" ] \
+  && ok "Nintendo letters on a south-confirm controller: Select is the south button, labelled B" || bad "Nintendo: $(glyph_before Select) $(glyph_before Back)"
+key KEYCODE_DPAD_CENTER
+await_flat '"glyphOverride":"MONOCHROME_MINIMAL"' && ok "Minimal outlines is saved" || bad "MONOCHROME_MINIMAL not saved"
+[ "$(glyph_before Select)" = "▽" ] && [ "$(glyph_before Back)" = "▷" ] && [ "$(glyph_before Options)" = "△" ] \
+  && ok "Minimal outlines: ▽ selects, ▷ goes back, △ opens Options" || bad "Minimal: $(glyph_before Select) $(glyph_before Back) $(glyph_before Options)"
+shot glyphs-minimal
+home
+key KEYCODE_DPAD_UP KEYCODE_DPAD_CENTER
+expect "Space" "Search opens"
+[ "$(glyph_before Space)" = "△" ] && ok "Search's hints draw the minimal set (△ Space)" || bad "Search: '$(glyph_before Space)' before Space"
+shot glyphs-search
+key KEYCODE_BACK
+category 0
+key KEYCODE_DPAD_UP
+pause 0.8
+s=$(screen)
+grep -qxF "▽" <<<"$s" && ok "the avatar HUD's hints draw the minimal set" || { bad "HUD hints"; show "$s"; }
+shot glyphs-hud
+key KEYCODE_DPAD_DOWN
+comp_row 5
+key KEYCODE_DPAD_CENTER
+await_flat '"glyphOverride":null' && ok "Theme pack hands the glyphs back (null)" || bad "glyphOverride not reset"
+[ "$(glyph_before Select)" = "Enter" ] && ok "the keyboard's own glyphs are back" || bad "Select is labelled '$(glyph_before Select)'"
+
+# Title badges: System, Release year, Developer and Playtime, on in that order. Chrono Trigger gets
+# a release date, a developer and 75 minutes of playtime in the library database (as in the
+# game-art block); EarthBound has none of them, Super Metroid isn't scraped.
+comp_row 6
+expect "None (theme pack) · Beside the focused game's title" "Title badges follows the pack (none)"
+key KEYCODE_DPAD_CENTER
+expect "Achievements" "Title badges opens the list of badges"
+press DPAD_DOWN 2 KEYCODE_DPAD_CENTER
+press DPAD_DOWN 1 KEYCODE_DPAD_CENTER
+press DPAD_DOWN 1 KEYCODE_DPAD_CENTER
+press DPAD_DOWN 1 KEYCODE_DPAD_CENTER
+expect "On · 4 of 4" "the list stays open, the last badge 4th of 4"
+key KEYCODE_BACK
+await_flat '"badgePills":["SYSTEM","YEAR","DEVELOPER","PLAYTIME"]' && ok "the badges are saved in the order turned on" \
+  || bad "badgePills not saved ($(flat_settings | grep -o '"badgePills":[^]]*]'))"
+if command -v sqlite3 >/dev/null && adb shell run-as "$PKG" true 2>/dev/null; then
+  db=$(tmpdir db-pills)
+  adb shell am force-stop "$PKG"
+  for f in xross.db xross.db-wal xross.db-shm; do adb exec-out run-as "$PKG" cat "databases/$f" > "$db/$f" 2>/dev/null; done
+  [ -s "$db/xross.db-wal" ] || rm -f "$db/xross.db-wal" "$db/xross.db-shm"
+  sqlite3 "$db/xross.db" "INSERT OR IGNORE INTO game_metadata (gameId, locked) SELECT id, 0 FROM games WHERE fileName LIKE 'Chrono Trigger%';
+    UPDATE game_metadata SET releaseDate = '1995-03-11', developer = 'Square' WHERE gameId IN (SELECT id FROM games WHERE fileName LIKE 'Chrono Trigger%');
+    UPDATE games SET playTimeMs = 4500000 WHERE fileName LIKE 'Chrono Trigger%';
+    PRAGMA journal_mode = DELETE;" >/dev/null
+  adb push "$db/xross.db" /data/local/tmp/xross-smoke.db >/dev/null
+  adb shell chmod 644 /data/local/tmp/xross-smoke.db
+  adb shell run-as "$PKG" sh -c "'cp /data/local/tmp/xross-smoke.db databases/xross.db && rm -f databases/xross.db-wal databases/xross.db-shm'"
+  adb shell rm -f /data/local/tmp/xross-smoke.db
+  start_app
+  home
+  all_games "$(collections_above)"
+  key KEYCODE_DPAD_CENTER
+  pause 1
+  s=$(screen)
+  if grep -qxF "SNES" <<<"$s" && grep -qxF "1995" <<<"$s" && grep -qxF "Square" <<<"$s" && grep -qxF "1h 15m" <<<"$s"; then
+    ok "a scraped game shows System, Release year, Developer and Playtime"
+  else
+    bad "Chrono Trigger's badges"; show "$s"
+  fi
+  grep -q "Playtime:" <<<"$s" && bad "the playtime is still in the subtitle" || ok "the Playtime badge takes the playtime out of the subtitle"
+  shot pills-scraped
+  key KEYCODE_DPAD_DOWN
+  pause 0.8
+  s=$(screen)
+  ! grep -qxF "1995" <<<"$s" && ! grep -qxF "Square" <<<"$s" && grep -qxF "SNES" <<<"$s" \
+    && ok "badges are drawn on the focused game only, and a game without the data skips them" || { bad "EarthBound's badges"; show "$s"; }
+  key KEYCODE_DPAD_DOWN
+  pause 0.8
+  expect_line "SNES" "an unscraped game keeps its System badge"
+  shot pills-unscraped
+  category 5
+  pause 0.8
+  s=$(screen)
+  grep -qxE "SNES|1995|Square" <<<"$s" && bad "an app shows title badges" || ok "apps get no title badges"
+else
+  skip 5 "the title-badge data needs sqlite3 on the host and a debuggable build"
+fi
+comp_row 6
+key KEYCODE_DPAD_CENTER KEYCODE_DPAD_CENTER
+await_flat '"badgePills":null' && ok "Theme pack hands the badges back (null)" || bad "badgePills not reset"
 
 suite_end

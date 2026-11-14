@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.xross.launcher.media.NowPlaying
 import dev.xross.launcher.state.NetworkKind
 import dev.xross.launcher.state.NetworkStatus
 import dev.xross.launcher.state.StatusBarState
@@ -58,6 +59,9 @@ import dev.xross.launcher.theme.pack.ThemeIcon
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
 import kotlin.math.max
+
+/** The ticker's fixed width, in status-text heights (about 20 characters). */
+private const val TICKER_WIDTH_EMS = 10f
 
 /** How long `VOLUME` stays after the volume changes, unless `components.volumeAlways`. */
 private const val VOLUME_SHOWN_MS = 3_000L
@@ -86,6 +90,12 @@ fun StatusBar(
     trailingWidth: Dp = 0.dp,
     trailingHeight: Dp = 0.dp,
     leftMaxHeight: Dp = Dp.Infinity,
+    /** `miniPlayerMode: STATUS_TICKER` (2b.7b): what plays, drawn last before the avatar; null: no ticker. */
+    ticker: NowPlaying? = null,
+    /** The mini player is covered (the same rule as the floating card's). */
+    tickerCovered: Boolean = false,
+    onTickerTap: () -> Unit = {},
+    onTickerLongPress: () -> Unit = {},
 ) {
     val bar by source.collectAsStateWithLifecycle()
 
@@ -128,12 +138,23 @@ fun StatusBar(
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 // Read in the draw phase, so the HUD's expansion never recomposes or re-lays-out the bar.
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(gap),
-                    modifier = Modifier.fadeAlpha(contentAlpha),
-                ) {
-                    for (s in components.rightOfText) slot(s)
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fadeAlpha(contentAlpha)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(gap)) {
+                        for (s in components.rightOfText) slot(s)
+                    }
+                    // The ticker brings its own gap, so the bar is unchanged while nothing plays.
+                    if (ticker != null) {
+                        MiniPlayerTicker(
+                            nowPlaying = ticker,
+                            covered = tickerCovered,
+                            style = style.copy(fontSize = textSize * 0.85f),
+                            height = heightDp,
+                            width = heightDp * TICKER_WIDTH_EMS,
+                            leading = if (components.rightOfText.isEmpty()) 0.dp else gap,
+                            onClick = onTickerTap,
+                            onLongClick = onTickerLongPress,
+                        )
+                    }
                 }
                 if (components.avatar && trailingWidth > 0.dp) Spacer(Modifier.size(width = trailingWidth, height = trailingHeight))
             }

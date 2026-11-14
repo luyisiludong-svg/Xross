@@ -30,8 +30,8 @@ it doesn't block 2b.7.
 |---|---|
 | 2b.7-prep | ✅ merged into `main` (`f67f532`): `RaController`, `StatusBarState` / `StatusBarSource`, `model/GlyphKey` and `GlyphSet` |
 | 2b.7a | ✅ on `feat/theme-2b7` (2026-11-14): 793 unit tests, `lintDebug` 0 errors, theme suite **197/197** on the API 37 emulator (new 48-check "Components (2b.7a)" section), `display-matrix.sh` 12/12 default and stress, `palette-perf.sh` 0.15–0.75% janky ([STATUS §3.29](STATUS.md)). **Open:** the A55 pass (volume keys, Wi-Fi bars, 120 Hz), an Android 9 image, a real charge-time estimate. As built: [2b.7a notes](#as-built-2b7a-2026-11-14) |
-| 2b.7b | ⬜ next; see [Notes for 2b.7b–e](#notes-for-2b7be-from-2b7a) |
-| 2b.7c | ⬜ |
+| 2b.7b | ✅ on `feat/theme-2b7` (2026-11-14): 805 unit tests, `lintDebug` 0 errors, theme suite **235/235** on the API 37 emulator (new 38-check "Components (2b.7b)" section), `palette-perf.sh` 0.15–0.74% janky with badges ([STATUS §3.30](STATUS.md)). **Open:** the A55 pass (a real pad, touch on the ticker, 120 Hz), `RA_PROGRESS` with an account, `display-matrix.sh` with the ticker and badges. As built: [2b.7b notes](#as-built-2b7b-2026-11-14) |
+| 2b.7c | ⬜ next (verify the friend API first) |
 | 2b.7d | ⬜ |
 | 2b.7e | ⬜ |
 
@@ -304,6 +304,35 @@ Device-test lessons (in `test-theme.sh` and `display-matrix.sh` now):
 - Pills on a scraped game, an unscraped one and an app; Games navigation janky frames unchanged
   (`palette-perf.sh`).
 ```
+
+### As built (2b.7b, 2026-11-14)
+
+| Piece | Where |
+|---|---|
+| Glyph sets and styles (`Face`, `GlyphStyle`, `XBOX_COLORED`, `MINIMAL`) | `model/GlyphSet.kt` |
+| `glyphOverride` × detected family | `state/Glyphs.kt` (`GlyphOverrideMode.glyphsFor`); `XmbViewModel.state` combines the components' mode, so `state.glyphs` follows it |
+| Drawing a styled label | `ui/XmbScreen.kt` `Hint` reads `LocalGlyphs` (provided in MainActivity): a face label of an Xbox set takes its color, of the minimal set an outlined pill. The 43 hint call sites are unchanged |
+| Mini-player placement | `state/MiniPlayerLine.kt` (`spot`, `shows`, `tickerText`); the ticker is `MiniPlayerTicker` in `ui/MiniPlayerCard.kt`, drawn by `StatusBar` at the end of the faded right row |
+| Badge pills | `state/BadgePills.kt` (`TitlePill`, year parsing, developer cut, playtime); `MenuTree.gameNode` fills `XmbNode.pills`; `ItemColumn` hands the focused row its pills with `RA_PROGRESS` filled from `focusedTelemetry`; `SubtitleLine` draws them |
+| Settings | `ComponentRow.MINI_PLAYER` / `GLYPHS`; Title badges is an Options list (`ComponentMenus.pillOptions`, `togglePill`, `reopenPills`; commands `SetBadgePills`, `ToggleBadgePill`) |
+
+Decisions made while building:
+
+- **`MONOCHROME_MINIMAL`** is an outlined triangle pointing at the button's place on the pad
+  (south ▽, east ▷, north △, west ◁) in an outlined pill: shapes, no letters, and plain text, so a
+  glyph quoted in a sentence ("press ▽ to try again") reads the same.
+- **`XBOX`** colors the letter (A green, B red, X blue, Y yellow) on the usual pill; `AUTO` with an
+  Xbox pad stays plain, as before.
+- **Ticker:** 10 status-text heights wide (about 20 characters), the text at 85% of the status
+  size, after the right cluster's text slots and before the avatar. It brings its own gap, so the
+  bar is unchanged while nothing plays; it hides under the same overlays as the card.
+- **Pills** sit on the line under the title, before the subtitle, never taller than that line, so
+  focusing a game with badges doesn't move its title. They are composed for the focused row only
+  and fade in with it. Listing `SYSTEM` also takes the platform tag (and an extension that only
+  repeats it) out of the subtitle, like `PLAYTIME` takes the playtime; `PLAYTIME` draws nothing
+  before the first minute ("Never played" leaves with the subtitle part).
+- **Title badges list:** Theme pack, None, then each badge; Confirm turns one on (at the end) or
+  off and the list reopens on it, so the order is the order they were turned on.
 
 ---
 

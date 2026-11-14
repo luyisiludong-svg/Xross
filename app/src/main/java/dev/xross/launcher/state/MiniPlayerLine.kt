@@ -1,6 +1,7 @@
 package dev.xross.launcher.state
 
 import dev.xross.launcher.media.NowPlaying
+import dev.xross.launcher.theme.pack.MiniPlayerMode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -37,7 +38,28 @@ object MiniPlayerLine {
 
     fun text(now: NowPlaying): String? =
         now.song?.let { "${if (now.isPlaying) "♪" else "❚❚"}  ${it.title} — ${it.artist}" }
+
+    /** The status-bar ticker's line (2b.7b): "Title — Artist", or the title alone without an artist. */
+    fun tickerText(now: NowPlaying): String? =
+        now.song?.let { if (it.artist.isBlank()) it.title else "${it.title} — ${it.artist}" }
+
+    /** Where `miniPlayerMode` draws the mini player (2b.7b); null for [MiniPlayerMode.OFF]. */
+    fun spot(mode: MiniPlayerMode): MiniPlayerSpot? = when (mode) {
+        MiniPlayerMode.FLOATING_CARD -> MiniPlayerSpot.CARD
+        MiniPlayerMode.STATUS_TICKER -> MiniPlayerSpot.TICKER
+        MiniPlayerMode.OFF -> null
+    }
+
+    /**
+     * [spot] is drawn under [mode] while [MiniPlayerVisibility] says [visible]: the card and the
+     * ticker share the same rules (a pause hides either after [PAUSED_HIDE_MS]); [MiniPlayerMode.OFF]
+     * draws neither, and playback and its notification carry on.
+     */
+    fun shows(mode: MiniPlayerMode, spot: MiniPlayerSpot, visible: Boolean): Boolean = visible && spot(mode) == spot
 }
+
+/** The two forms of the mini player: the floating card in the lower-right corner, the status-bar ticker. */
+enum class MiniPlayerSpot { CARD, TICKER }
 
 /**
  * Drives the mini player's visibility from [NowPlaying] updates, including the paused timeout.

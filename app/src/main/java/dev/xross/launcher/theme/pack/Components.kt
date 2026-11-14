@@ -487,13 +487,20 @@ data class ComponentOverrides(
     operator fun get(row: ComponentRow): String? = when (row) {
         ComponentRow.BATTERY -> batteryMode
         ComponentRow.CLOCK -> clockFormat
+        ComponentRow.MINI_PLAYER -> miniPlayerMode
+        ComponentRow.GLYPHS -> glyphOverride
     }
 
     /** A copy with [row] set to [value] (normalized; null or unknown follows the pack). */
     fun with(row: ComponentRow, value: String?): ComponentOverrides = when (row) {
         ComponentRow.BATTERY -> copy(batteryMode = ComponentNames.battery(value)?.name)
         ComponentRow.CLOCK -> copy(clockFormat = value?.let { ClockFormat.filter(it).first })
+        ComponentRow.MINI_PLAYER -> copy(miniPlayerMode = ComponentNames.miniPlayer(value)?.name)
+        ComponentRow.GLYPHS -> copy(glyphOverride = ComponentNames.glyphs(value)?.name)
     }
+
+    /** A copy with the title badges set to [pills] in that order (each once); null follows the pack, empty draws none. */
+    fun withPills(pills: List<BadgePill>?): ComponentOverrides = copy(badgePills = pills?.distinct()?.map { it.name })
 
     companion object {
         val NONE = ComponentOverrides()
@@ -510,6 +517,25 @@ enum class ComponentRow(val title: String, val choices: List<Pair<String, String
         ),
     ),
     CLOCK("Clock format", ClockFormat.PRESETS),
+
+    /** `miniPlayerMode` (2b.7b). */
+    MINI_PLAYER(
+        "Mini player",
+        listOf(
+            MiniPlayerMode.FLOATING_CARD.name to "Floating card", MiniPlayerMode.STATUS_TICKER.name to "Status bar ticker",
+            MiniPlayerMode.OFF.name to "Off",
+        ),
+    ),
+
+    /** `glyphOverride` (2b.7b). */
+    GLYPHS(
+        "Button glyphs",
+        listOf(
+            GlyphOverrideMode.AUTO.name to "Controller's own", GlyphOverrideMode.PLAYSTATION.name to "Shapes (✕ ○ △ □)",
+            GlyphOverrideMode.XBOX.name to "Colored letters (A B X Y)", GlyphOverrideMode.NINTENDO.name to "Letters, A on the right",
+            GlyphOverrideMode.MONOCHROME_MINIMAL.name to "Minimal outlines",
+        ),
+    ),
     ;
 
     /** The label of [value]; "Theme pack" for null. */
@@ -523,6 +549,8 @@ enum class ComponentRow(val title: String, val choices: List<Pair<String, String
     fun packValue(c: ResolvedComponents): String = when (this) {
         BATTERY -> c.battery.name
         CLOCK -> c.clock
+        MINI_PLAYER -> c.miniPlayer.name
+        GLYPHS -> c.glyphs.name
     }
 
     /** "Theme pack (Icon and percentage)". */
@@ -535,6 +563,16 @@ enum class ComponentRow(val title: String, val choices: List<Pair<String, String
         return ids[(at + 1) % ids.size]
     }
 }
+
+/** Names of the title badges, for Settings. */
+val BadgePill.label: String
+    get() = when (this) {
+        BadgePill.SYSTEM -> "System"
+        BadgePill.YEAR -> "Release year"
+        BadgePill.DEVELOPER -> "Developer"
+        BadgePill.PLAYTIME -> "Playtime"
+        BadgePill.RA_PROGRESS -> "Achievements"
+    }
 
 /** Short names of the slots, for Settings. */
 val StatusSlot.label: String

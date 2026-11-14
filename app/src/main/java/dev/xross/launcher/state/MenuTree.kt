@@ -290,16 +290,20 @@ class MenuTree(private val s: MenuSnapshot) {
 
     private fun gameNode(game: GameEntity, showPlatform: Boolean): XmbNode {
         val platform = PlatformRegistry.byId(game.platformId)
+        val meta = s.metadata[game.id]
+        // Title badges (2b.7b): a listed SYSTEM or PLAYTIME pill takes its part out of the subtitle.
+        val pills = shownComponents.pills
+        val systemPill = dev.xross.launcher.theme.pack.BadgePill.SYSTEM in pills
         val parts = buildList {
             if (isOffline(game.path)) add("Not connected")
             if (game.favorite) add("★")
-            if (showPlatform && platform != null) add(platform.shortName)
-            s.metadata[game.id]?.region?.let { add(it) }
+            if (showPlatform && platform != null && !systemPill) add(platform.shortName)
+            meta?.region?.let { add(it) }
             // Skip the extension when it only repeats the platform ("GBA · GBA").
             val ext = game.fileName.substringAfterLast('.', "").uppercase(Locale.ROOT)
-            if (!(showPlatform && ext == platform?.shortName?.uppercase(Locale.ROOT))) add(ext)
+            if (!((showPlatform || systemPill) && ext == platform?.shortName?.uppercase(Locale.ROOT))) add(ext)
             // Tracked playtime where the file size used to be (the size is in Information).
-            add(playtimeSubtitle(game.playTimeMs))
+            if (dev.xross.launcher.theme.pack.BadgePill.PLAYTIME !in pills) add(playtimeSubtitle(game.playTimeMs))
         }
         return XmbNode(
             id = "game:${game.id}",
@@ -308,6 +312,7 @@ class MenuTree(private val s: MenuSnapshot) {
             icon = gameIcon(game, platform),
             action = NodeAction.LaunchGame(game.id),
             menu = gameMenu(game, platform),
+            pills = if (pills.isEmpty()) emptyList() else BadgePills.of(pills, platform?.shortName, meta?.releaseDate, meta?.developer, game.playTimeMs),
         )
     }
 
@@ -971,13 +976,33 @@ class MenuTree(private val s: MenuSnapshot) {
     private val packComponents by lazy { s.themes.components(s.settings.themeVariant) }
     private val shownComponents by lazy { s.themes.components(s.settings.themeVariant, s.settings.componentOverrides) }
 
-    /** Settings ▸ Theme ▸ Components: the status bar's clusters, battery display and clock. 2b.7b–e add rows here. */
+    /**
+     * Settings ▸ Theme ▸ Components: the status bar's clusters, battery display and clock (2b.7a),
+     * the mini player, button glyphs and title badges (2b.7b). 2b.7c–e add rows here.
+     */
     private fun componentSettings() = listOf(
         statusSlotsRow(dev.xross.launcher.theme.pack.StatusSide.LEFT),
         statusSlotsRow(dev.xross.launcher.theme.pack.StatusSide.RIGHT),
         componentRow(dev.xross.launcher.theme.pack.ComponentRow.BATTERY),
         componentRow(dev.xross.launcher.theme.pack.ComponentRow.CLOCK),
+        componentRow(dev.xross.launcher.theme.pack.ComponentRow.MINI_PLAYER),
+        componentRow(dev.xross.launcher.theme.pack.ComponentRow.GLYPHS),
+        badgePillsRow(),
     )
+
+    /** Title badges: Confirm and Options both open the list of badges to turn on and off. */
+    private fun badgePillsRow(): XmbNode {
+        val userSet = s.settings.componentOverrides.badgePills != null
+        val shown = ComponentMenus.pillSummary(shownComponents.pills) + if (userSet) "" else " (theme pack)"
+        return XmbNode(
+            id = "disp:comp:pills",
+            title = "Title badges",
+            subtitle = "$shown · Beside the focused game's title",
+            icon = NodeIcon.Glyph(GlyphKey.DISPLAY),
+            action = NodeAction.Run(Command.ShowOptions),
+            menu = ComponentMenus.pillOptions(shownComponents.pills, packComponents.pills, userSet),
+        )
+    }
 
     /** "Right: Clock · Battery · Avatar · Icon and percentage". */
     private fun componentsSummary(): String {
@@ -1012,6 +1037,12 @@ class MenuTree(private val s: MenuSnapshot) {
                 if (!shownComponents.shows(dev.xross.launcher.theme.pack.StatusSlot.BATTERY)) "Battery isn't in the status bar" else "Time to full shows the percentage unless charging"
             dev.xross.launcher.theme.pack.ComponentRow.CLOCK ->
                 if (!shownComponents.shows(dev.xross.launcher.theme.pack.StatusSlot.CLOCK)) "Clock isn't in the status bar" else "Date and time in the status bar"
+            dev.xross.launcher.theme.pack.ComponentRow.MINI_PLAYER -> when (shownComponents.miniPlayer) {
+                dev.xross.launcher.theme.pack.MiniPlayerMode.OFF -> "Music still plays; the notification controls it"
+                dev.xross.launcher.theme.pack.MiniPlayerMode.STATUS_TICKER -> "One line before the avatar"
+                dev.xross.launcher.theme.pack.MiniPlayerMode.FLOATING_CARD -> "What plays, above the hints"
+            }
+            dev.xross.launcher.theme.pack.ComponentRow.GLYPHS -> "Labels only: Confirm follows your controller"
         }
         return XmbNode(
             id = "disp:comp:" + row.name.lowercase(Locale.ROOT),

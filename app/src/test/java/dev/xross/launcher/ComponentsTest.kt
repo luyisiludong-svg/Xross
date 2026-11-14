@@ -313,7 +313,10 @@ class ComponentsTest {
         assertEquals("Components", folder.title)
         assertEquals("Right: Clock · Battery · Avatar · Icon and percentage", folder.subtitle)
         val rows = tree.list(MenuTree.DISPLAY_COMPONENTS)
-        assertEquals(listOf("disp:comp:left", "disp:comp:right", "disp:comp:battery", "disp:comp:clock"), rows.map { it.id })
+        assertEquals(
+            listOf("disp:comp:left", "disp:comp:right", "disp:comp:battery", "disp:comp:clock", "disp:comp:mini_player", "disp:comp:glyphs", "disp:comp:pills"),
+            rows.map { it.id },
+        )
         assertEquals("Empty (theme pack) · Top-left", rows[0].subtitle)
         assertEquals("Clock · Battery · Avatar (theme pack) · Top-right; the avatar stays last", rows[1].subtitle)
         assertEquals(NodeAction.Run(Command.ShowOptions), rows[1].action)

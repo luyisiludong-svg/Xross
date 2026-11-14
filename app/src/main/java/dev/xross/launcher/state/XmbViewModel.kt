@@ -88,9 +88,9 @@ data class XmbUiState(
     val focusedIndex: Int = 0,
     val toast: String? = null,
     val remap: RemapSession? = null,
-    /** The detected controller: picks the AUTO confirm side (and, for now, the glyphs). */
+    /** The detected controller: picks the AUTO confirm side (and, under `glyphOverride: AUTO`, the glyphs). */
     val family: ControllerFamily = ControllerFamily.KEYBOARD,
-    /** Face-button labels every hint draws (the detected family's; 2b.7b lets a theme pick another set). */
+    /** Face-button labels every hint draws: the detected family's, or the set `glyphOverride` picks (2b.7b). */
     val glyphs: GlyphSet = ControllerFamily.KEYBOARD.glyphs,
     val confirm: ConfirmLayout = ConfirmLayout.SOUTH,
     val waveEnabled: Boolean = true,
@@ -348,7 +348,10 @@ class XmbViewModel(
         Settled(tr, st, ov, pr, r)
     }
 
-    val state: StateFlow<XmbUiState> = combine(tree, nav, settled, live) { t, n, sd, lv ->
+    /** The components' `glyphOverride` (2b.7b): which labels the hints draw. */
+    private val glyphMode = components.map { it.glyphs }.distinctUntilChanged()
+
+    val state: StateFlow<XmbUiState> = combine(tree, nav, settled, live, glyphMode) { t, n, sd, lv, glyphs ->
         val tr = sd.transient
         val settings = sd.settings
         val view = resolve(t, n, lv)
@@ -363,7 +366,7 @@ class XmbViewModel(
             toast = tr.toast,
             remap = tr.remap,
             family = tr.family,
-            glyphs = tr.family.glyphs,
+            glyphs = glyphs.glyphsFor(tr.family),
             confirm = settings.confirmLayout.resolve(tr.family),
             waveEnabled = settings.waveEnabled,
             waveSpeed = settings.waveSpeed,
@@ -393,7 +396,10 @@ class XmbViewModel(
             telemetry = sd.ra.telemetry,
             gamePlatforms = t.platformByGame,
         )
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, XmbUiState(coldBoot = coldBoot, bootPending = coldBoot))
+    }.stateIn(
+        viewModelScope, SharingStarted.Eagerly,
+        XmbUiState(coldBoot = coldBoot, bootPending = coldBoot, glyphs = components.value.glyphs.glyphsFor(ControllerFamily.KEYBOARD)),
+    )
 
     private data class ListView(
         val breadcrumb: List<String>,
@@ -678,12 +684,26 @@ class XmbViewModel(
         }
     }
 
+    /**
+     * Settings ▸ Theme ▸ Components ▸ Title badges (2b.7b): the user's badges set to [pills] (null:
+     * the pack's), and the list reopened on the badge just turned on or off ([toggled]).
+     */
+    private fun editBadgePills(pills: List<dev.xross.launcher.theme.pack.BadgePill>?, toggled: dev.xross.launcher.theme.pack.BadgePill?) {
+        settingsStore.update { it.copy(componentOverrides = it.componentOverrides.withPills(pills)) }
+        val after = settingsStore.current
+        val pack = container.themes.active.value
+        val now = pack.components(after.themeVariant, after.componentOverrides)
+        val options = ComponentMenus.pillOptions(now.pills, pack.components(after.themeVariant).pills, after.componentOverrides.badgePills != null)
+        transient.update { it.copy(optionsMenu = ComponentMenus.reopenPills("Title badges", options, toggled, pills?.isEmpty() == true)) }
+    }
+
     private fun setComponent(row: dev.xross.launcher.theme.pack.ComponentRow, value: String?) {
         settingsStore.update { it.copy(componentOverrides = it.componentOverrides.with(row, value)) }
         val c = components.value
         val note = when (row) {
             dev.xross.launcher.theme.pack.ComponentRow.BATTERY -> "Battery isn't in the status bar".takeIf { !c.shows(dev.xross.launcher.theme.pack.StatusSlot.BATTERY) }
             dev.xross.launcher.theme.pack.ComponentRow.CLOCK -> "Clock isn't in the status bar".takeIf { !c.shows(dev.xross.launcher.theme.pack.StatusSlot.CLOCK) }
+            dev.xross.launcher.theme.pack.ComponentRow.MINI_PLAYER, dev.xross.launcher.theme.pack.ComponentRow.GLYPHS -> null
         }
         note?.let { toast(it) }
     }
@@ -2322,6 +2342,8 @@ class XmbViewModel(
             is Command.EditStatusSlot -> editStatusSlot(command)
             is Command.CycleComponent -> setComponent(command.row, command.row.next(settingsStore.current.componentOverrides[command.row]))
             is Command.SetComponent -> setComponent(command.row, command.value)
+            is Command.SetBadgePills -> editBadgePills(command.pills, null)
+            is Command.ToggleBadgePill -> editBadgePills(ComponentMenus.togglePill(components.value.pills, command.pill), command.pill)
             Command.ShowOptions -> current().focused?.let(::openOptions) ?: refuse()
             is Command.CycleEffect -> setEffect(command.slot, command.slot.next(settingsStore.current.effectOverrides[command.slot]))
             is Command.SetEffect -> setEffect(command.slot, command.value)

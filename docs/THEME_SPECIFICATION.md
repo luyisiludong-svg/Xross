@@ -554,7 +554,10 @@ category or battery level.
   "batteryMode": "TIME_REMAINING",
   "clockFormat": "EMMMdm",
   "logo": "art/logo.svg",
-  "volumeAlways": false
+  "volumeAlways": false,
+  "miniPlayerMode": "STATUS_TICKER",
+  "glyphOverride": "AUTO",
+  "badgePills": ["SYSTEM", "YEAR", "RA_PROGRESS"]
 }
 ```
 
@@ -586,12 +589,32 @@ category or battery level.
 
 The Default pack: left `[]`, right `[CLOCK, BATTERY, AVATAR]`, `BOTH`, empty clock format.
 
+### Mini player, glyphs and title badges
+
+* `miniPlayerMode`: `FLOATING_CARD` (the default: art, title, artist and play/pause in the
+  lower-right corner), `STATUS_TICKER` (one line in the status bar's right cluster, just before
+  the avatar: the play/pause glyph and "Title — Artist" scrolling in a fixed width, faded with the
+  other slots while the avatar's HUD is open) or `OFF` (neither; music and its notification carry
+  on). Card and ticker share their rules: hidden while a screen or panel covers the menu, and 30 s
+  after a pause. Tap opens the audio controls, long press plays or pauses.
+* `glyphOverride`: the button labels in every hint (the menu, Search, Options, Achievements, the
+  avatar HUD). `AUTO` (the default) draws the detected controller's own; `PLAYSTATION` ✕ ○ △ □;
+  `XBOX` A B X Y, each in its color (A green, B red, X blue, Y yellow); `NINTENDO` A B X Y in
+  Nintendo places (south reads B); `MONOCHROME_MINIMAL` an outlined triangle pointing at the
+  button's place on the pad (▽ ▷ △ ◁), in outlined pills. Labels only: which button confirms still
+  follows the controller and Settings ▸ Controls.
+* `badgePills`: pills after the focused game's title, on the line under it, in array order, each
+  skipped when its data is missing: `SYSTEM` (the platform's short tag, e.g. DC, GC), `YEAR` (from
+  the release date, full or partial), `DEVELOPER` (cut at 18 characters), `PLAYTIME` ("1h 15m";
+  none before the first minute), `RA_PROGRESS` ("🏆 18/42", recognized games with achievements
+  only). Listing `SYSTEM` or `PLAYTIME` takes that part out of the line under the title. Pills use
+  the surface (`effects.surfaceStyle`) at a small radius, with figures in the `mono` font; games
+  only, never apps or media. The Default pack lists none.
+
 ### The other keys
 
-Read and stored now, drawn by later 2b.7 slices: `topLeftCluster` (`EMPTY`, `SOCIAL_STACK`),
-`telemetryMode` (`OFF`, `COMPACT_PILL`, `RICH_CARD`), `miniPlayerMode` (`FLOATING_CARD`,
-`STATUS_TICKER`, `OFF`), `glyphOverride` (`AUTO`, `PLAYSTATION`, `XBOX`, `NINTENDO`,
-`MONOCHROME_MINIMAL`) and `badgePills` (`SYSTEM`, `YEAR`, `DEVELOPER`, `PLAYTIME`, `RA_PROGRESS`).
+Read and stored now, drawn by later 2b.7 slices: `topLeftCluster` (`EMPTY`, `SOCIAL_STACK`) and
+`telemetryMode` (`OFF`, `COMPACT_PILL`, `RICH_CARD`).
 
 ### `components` reference
 
@@ -620,6 +643,12 @@ leaving the rest of the block.
 * *Battery display*: Theme pack, Icon, Percentage, Icon and percentage, Time to full.
 * *Clock format*: Theme pack, 24 h (`MdHm`), 12 h (`Mdhma`), Date and time (`EMMMdm`), Time only
   (`m`).
+* *Mini player*: Theme pack, Floating card, Status bar ticker, Off.
+* *Button glyphs*: Theme pack, Controller's own, Shapes (✕ ○ △ □), Colored letters (A B X Y),
+  Letters, A on the right, Minimal outlines.
+* *Title badges*: Confirm (or Options) opens the list: Theme pack, None, then System, Release year,
+  Developer, Playtime and Achievements; Confirm turns a badge on (at the end) or off, and the list
+  stays open on it.
 
 Saved as `display.components` in `settings.json` (`null` follows the pack); Reset to theme
 defaults clears it, quick profiles never touch it.
