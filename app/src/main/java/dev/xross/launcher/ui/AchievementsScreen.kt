@@ -163,7 +163,7 @@ private fun Header(v: AchievementsViewState, m: XmbMetrics, loadArt: suspend (St
             contentAlignment = Alignment.Center,
         ) {
             art?.let { Image(it, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()) }
-                ?: Image(glyphPainter(dev.xross.launcher.state.GlyphKey.TROPHY), null, modifier = Modifier.fillMaxSize().padding(10.dp))
+                ?: Image(glyphPainter(dev.xross.launcher.model.GlyphKey.TROPHY), null, modifier = Modifier.fillMaxSize().padding(10.dp))
         }
         Spacer(Modifier.width((m.s * 0.03f).dp()))
         Column(Modifier.weight(1f)) {
@@ -192,7 +192,7 @@ private fun Header(v: AchievementsViewState, m: XmbMetrics, loadArt: suspend (St
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     TrophyCount(ready.progress.unlocked, ready.progress.total, m.subtitleSize.sp())
                     Spacer(Modifier.width(6.dp))
-                    Image(glyphPainter(dev.xross.launcher.state.GlyphKey.TROPHY), null, colorFilter = ColorFilter.tint(Pastel.Amber), modifier = Modifier.size((m.subtitleSize * 1.1f).dp()))
+                    Image(glyphPainter(dev.xross.launcher.model.GlyphKey.TROPHY), null, colorFilter = ColorFilter.tint(Pastel.Amber), modifier = Modifier.size((m.subtitleSize * 1.1f).dp()))
                 }
                 Spacer(Modifier.height(5.dp))
                 ProgressBar(ready.progress.completion, height = (m.s * 0.014f).dp().coerceAtLeast(6.dp))

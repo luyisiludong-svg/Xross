@@ -134,7 +134,7 @@ private fun CardBody(
                 Image(image, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
             } else {
                 Image(
-                    glyphPainter(dev.xross.launcher.state.GlyphKey.MUSIC),
+                    glyphPainter(dev.xross.launcher.model.GlyphKey.MUSIC),
                     contentDescription = null,
                     colorFilter = ColorFilter.tint(Color(0xCCFFFFFF)),
                     modifier = Modifier.size(22.dp),

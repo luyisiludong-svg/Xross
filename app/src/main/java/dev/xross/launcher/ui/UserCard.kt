@@ -195,7 +195,7 @@ private fun Stats(p: RaProfile, size: TextUnit) {
         Column {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 androidx.compose.foundation.Image(
-                    glyphPainter(dev.xross.launcher.state.GlyphKey.TROPHY),
+                    glyphPainter(dev.xross.launcher.model.GlyphKey.TROPHY),
                     contentDescription = null,
                     colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(Pastel.Amber),
                     modifier = Modifier.height(with(LocalDensity.current) { (size * 1.3f).toDp() }).width(with(LocalDensity.current) { (size * 1.3f).toDp() }),

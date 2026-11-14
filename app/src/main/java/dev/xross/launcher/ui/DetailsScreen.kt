@@ -258,7 +258,7 @@ private fun AchievementsSummary(
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Image(
-                glyphPainter(dev.xross.launcher.state.GlyphKey.TROPHY),
+                glyphPainter(dev.xross.launcher.model.GlyphKey.TROPHY),
                 contentDescription = null,
                 colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(Pastel.Amber),
                 modifier = Modifier.height((m.subtitleSize * 1.2f).dp()).width((m.subtitleSize * 1.2f).dp()),

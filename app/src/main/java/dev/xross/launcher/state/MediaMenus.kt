@@ -1,5 +1,6 @@
 package dev.xross.launcher.state
 
+import dev.xross.launcher.model.GlyphKey
 import dev.xross.launcher.media.MediaLibrary
 import dev.xross.launcher.media.NowPlaying
 import dev.xross.launcher.media.Photo
