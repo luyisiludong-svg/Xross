@@ -112,12 +112,27 @@ data class SettingsFile(
         val wave: String = D.waveColors.wave,
     )
 
+    /**
+     * Volumes are 0–1. A file from before 2b.5b has none of the four newer ones (null here): cues
+     * and snaps then take [effectsVolume], which drove them until then, music 1 and theme music
+     * 0.6, so nobody's mix changes on upgrade.
+     */
     @Serializable
     data class Sound(
         val effects: Boolean = D.soundEffects,
         val effectsVolume: Float = D.soundVolume,
         val startupSound: Boolean = D.bootSound,
         val gameStartSound: Boolean = D.gameBootSound,
+        /** The `opening` and `gameboot` cues. */
+        val cueVolume: Float? = null,
+        /** The theme pack's ambient music. */
+        val bgmVolume: Float? = null,
+        /** Xross's music player, on top of the system media volume. */
+        val musicVolume: Float? = null,
+        /** Video snaps. */
+        val snapVolume: Float? = null,
+        /** PAUSE (default) or DUCK (`LOWER` also reads as DUCK). */
+        val musicUnderSnaps: String? = null,
     )
 
     @Serializable
@@ -255,7 +270,17 @@ object ConfigCodec {
             buttonHints = s.showButtonHints,
             allGamesFolder = s.allGamesFolder,
         ),
-        sound = SettingsFile.Sound(s.soundEffects, s.soundVolume, s.bootSound, s.gameBootSound),
+        sound = SettingsFile.Sound(
+            effects = s.soundEffects,
+            effectsVolume = s.soundVolume,
+            startupSound = s.bootSound,
+            gameStartSound = s.gameBootSound,
+            cueVolume = s.cueVolume,
+            bgmVolume = s.bgmVolume,
+            musicVolume = s.musicVolume,
+            snapVolume = s.snapVolume,
+            musicUnderSnaps = s.musicUnderSnaps.name,
+        ),
         media = SettingsFile.Media(s.slideshowSeconds, s.resumeMusicAfterGames, s.videoLoop),
         metadata = SettingsFile.Metadata(
             s.scrapeAutomatically, s.scrapeWifiOnly, s.scrapeVideos, s.scrapeRegion, s.scrapeLanguage, s.hasheousEnabled,
@@ -307,6 +332,11 @@ object ConfigCodec {
         allGamesFolder = f.display.allGamesFolder,
         soundEffects = f.sound.effects,
         soundVolume = f.sound.effectsVolume.finiteOr(D.soundVolume).coerceIn(0f, 1f),
+        cueVolume = f.sound.cueVolume.volumeOr(f.sound.effectsVolume.finiteOr(D.soundVolume)),
+        bgmVolume = f.sound.bgmVolume.volumeOr(D.bgmVolume),
+        musicVolume = f.sound.musicVolume.volumeOr(D.musicVolume),
+        snapVolume = f.sound.snapVolume.volumeOr(f.sound.effectsVolume.finiteOr(D.soundVolume)),
+        musicUnderSnaps = dev.xross.launcher.audio.MusicUnderSnaps.parse(f.sound.musicUnderSnaps),
         bootSound = f.sound.startupSound,
         gameBootSound = f.sound.gameStartSound,
         slideshowSeconds = f.media.slideshowSeconds.coerceIn(1, 600),
@@ -454,4 +484,7 @@ object ConfigCodec {
     // endregion
 
     private fun Float.finiteOr(fallback: Float) = if (isFinite()) this else fallback
+
+    /** A volume from the file, clamped to 0–1; missing or not a number takes [fallback] (also clamped). */
+    private fun Float?.volumeOr(fallback: Float) = (this?.takeIf { it.isFinite() } ?: fallback).coerceIn(0f, 1f)
 }

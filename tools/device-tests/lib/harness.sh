@@ -7,7 +7,7 @@
 #
 # Teardown runs on EXIT, INT and TERM, however the suite ends: `dumpsys battery reset`, the
 # RetroArch stub stopped, host temp files removed and every test file the suites put on the device
-# deleted (seeded ROMs, media, theme packs, .xtheme files, hero art). XROSS_KEEP_FIXTURES=1 keeps
+# deleted (seeded ROMs, media, theme packs, .xtheme files, hero art, video snaps). XROSS_KEEP_FIXTURES=1 keeps
 # the device files for debugging a failure.
 
 PKG=dev.xross.launcher
@@ -240,10 +240,10 @@ png(d + "/heroes/EarthBound (USA).png", (12, 60, 24), (230, 40, 200))
 PY
 }
 remove_theme_fixtures() {
-  adb shell rm -rf /sdcard/Xross/themes/smoke_pack /sdcard/Xross/themes/smoke-variants /sdcard/Xross/themes/smoke-variants-2 \
+  adb shell rm -rf /sdcard/Xross/themes/smoke_pack /sdcard/Xross/themes/smoke-variants /sdcard/Xross/themes/smoke-variants-2 /sdcard/Xross/themes/smoke_bgm /sdcard/Xross/themes/smoke_boot \
     /sdcard/Download/smoke_variants.xtheme /sdcard/Download/smoke_slip.xtheme \
     "'/sdcard/Xross/media/heroes/snes/Chrono Trigger (USA).png'" "'/sdcard/Xross/media/heroes/snes/EarthBound (USA).png'" \
-    /data/local/tmp/xross-smoke.db
+    "'/sdcard/Xross/media/snaps/snes/Chrono Trigger (USA).mp4'" /data/local/tmp/xross-smoke.db
 }
 
 # endregion

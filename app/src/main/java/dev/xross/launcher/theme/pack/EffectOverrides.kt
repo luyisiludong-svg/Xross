@@ -27,6 +27,10 @@ data class EffectOverrides(
     val focusFrameStyle: String = "",
     val foregroundParticles: String = "",
     val iconMask: String = "",
+    /** [BootIntro] (2b.5d): what a cold start shows. */
+    val bootIntro: String = "",
+    /** [LaunchCurtain] (2b.5d): the curtain before a game starts. */
+    val launchCurtain: String = "",
 ) {
     val shader: ShaderPreset? get() = ShaderPreset.byName(shaderPreset)?.takeIf { it != ShaderPreset.CUSTOM }
 
@@ -38,6 +42,8 @@ data class EffectOverrides(
             particles = Cosmetics.parse<ParticlePreset>(foregroundParticles),
             backgroundFilter = Cosmetics.parse<BackgroundFilter>(backgroundFilter),
             uiFilter = Cosmetics.parse<UiFilter>(uiFilter)?.takeIf { it != UiFilter.CUSTOM }?.let { UiFilterRef(it) },
+            bootIntro = BootIntro.byName(bootIntro),
+            launchCurtain = LaunchCurtain.byName(launchCurtain),
         )
 
     /** True when nothing is overridden: the pack's look as it is. */
@@ -58,6 +64,8 @@ data class EffectOverrides(
         EffectSlot.FOCUS_FRAME -> focusFrameStyle
         EffectSlot.PARTICLES -> foregroundParticles
         EffectSlot.ICON_MASK -> iconMask
+        EffectSlot.BOOT_INTRO -> bootIntro
+        EffectSlot.LAUNCH_CURTAIN -> launchCurtain
     }
 
     /** A copy with [slot] set to [value] (normalized; empty or unknown follows the pack). */
@@ -70,6 +78,8 @@ data class EffectOverrides(
             EffectSlot.FOCUS_FRAME -> copy(focusFrameStyle = v)
             EffectSlot.PARTICLES -> copy(foregroundParticles = v)
             EffectSlot.ICON_MASK -> copy(iconMask = v)
+            EffectSlot.BOOT_INTRO -> copy(bootIntro = v)
+            EffectSlot.LAUNCH_CURTAIN -> copy(launchCurtain = v)
         }
     }
 
@@ -125,12 +135,28 @@ enum class EffectSlot(val title: String, val choices: List<Pair<String, String>>
             IconMask.CIRCLE.name to "Circle", IconMask.Y2K_CHROME_FRAME.name to "Chrome",
         ),
     ),
+    BOOT_INTRO(
+        "Boot intro",
+        listOf(BootIntro.VIDEO.name to "Video", BootIntro.SHADER.name to "Shader", BootIntro.OFF.name to "Off"),
+    ),
+    LAUNCH_CURTAIN(
+        "Launch curtain",
+        listOf(
+            LaunchCurtain.BLOOM.name to "Bloom", LaunchCurtain.FADE_BLACK.name to "Fade to black",
+            LaunchCurtain.IRIS.name to "Iris", LaunchCurtain.FLASH.name to "Flash",
+        ),
+    ),
     ;
 
-    /** [text] as one of this row's names (ignoring case, `-` and spaces), else empty. */
+    /** [text] as one of this row's names (ignoring case, `-` and spaces, and the pack aliases of the 2b.5d rows), else empty. */
     fun normalize(text: String): String {
         val t = text.trim().replace('-', '_').replace(' ', '_')
         if (t.isEmpty()) return ""
+        when (this) {
+            BOOT_INTRO -> return BootIntro.byName(t)?.name.orEmpty()
+            LAUNCH_CURTAIN -> return LaunchCurtain.byName(t)?.name.orEmpty()
+            else -> Unit
+        }
         return choices.firstOrNull { it.first.equals(t, ignoreCase = true) }?.first.orEmpty()
     }
 
@@ -143,19 +169,28 @@ enum class EffectSlot(val title: String, val choices: List<Pair<String, String>>
         return ids[(ids.indexOf(normalize(current)).coerceAtLeast(0) + 1) % ids.size]
     }
 
-    /** What the pack's [look] shows for this row, as a choice name. */
-    fun packValue(look: ThemeLook): String = when (this) {
+    /**
+     * What the pack's [look] shows for this row, as a choice name. [bootVideo]: the pack has a boot
+     * video, which is its intro unless it says otherwise (and beats its shader intro).
+     */
+    fun packValue(look: ThemeLook, bootVideo: Boolean = false): String = when (this) {
         SHADER -> look.shader.preset.name
         BACKGROUND_FILTER -> look.cosmetics.bgFilter.name
         UI_FILTER -> look.cosmetics.screenFilter.filter.name
         FOCUS_FRAME -> look.cosmetics.frame.name
         PARTICLES -> look.cosmetics.particleField.name
         ICON_MASK -> look.cosmetics.mask.name
+        BOOT_INTRO -> when (look.cosmetics.bootIntro) {
+            BootIntro.OFF -> BootIntro.OFF.name
+            BootIntro.SHADER -> if (bootVideo) BootIntro.VIDEO.name else BootIntro.SHADER.name
+            else -> if (bootVideo) BootIntro.VIDEO.name else BootIntro.OFF.name
+        }
+        LAUNCH_CURTAIN -> look.cosmetics.curtain.name
     }
 
     /** "Theme pack (Bokeh)" for a pack value; CUSTOM names the pack's own code. */
-    fun packLabel(look: ThemeLook): String {
-        val v = packValue(look)
+    fun packLabel(look: ThemeLook, bootVideo: Boolean = false): String {
+        val v = packValue(look, bootVideo)
         val name = choices.firstOrNull { it.first == v }?.second ?: when (this) {
             SHADER -> if (look.shader.preset == ShaderPreset.CUSTOM) "the pack's shader" else v
             UI_FILTER -> if (v == UiFilter.CUSTOM.name) "the pack's AGSL" else v

@@ -10,6 +10,7 @@ import dev.xross.launcher.state.MenuSnapshot
 import dev.xross.launcher.state.MenuTree
 import dev.xross.launcher.state.NodeAction
 import dev.xross.launcher.state.NodeIcon
+import dev.xross.launcher.state.ThemeSetup
 import dev.xross.launcher.theme.XrossTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -63,6 +64,46 @@ class MenuSettingsTest {
         assertEquals("50%", items["Effects volume"])
         assertEquals("On", items["Startup sound"])
         assertEquals("Off", items["Game start sound"])
+    }
+
+    @Test fun soundRowsComeInOrderWithTheirVolumes() {
+        val s = XrossSettings(soundVolume = 0.5f, cueVolume = 0f, bgmVolume = 0.6f, musicVolume = 1f, snapVolume = 0.3f)
+        val rows = MenuTree(MenuSnapshot(settings = s)).list(MenuTree.SOUND)
+        assertEquals(
+            listOf(
+                "Sound effects", "Effects volume", "Startup and game cues", "Theme music", "Music", "Video snaps",
+                "Music during video snaps", "Startup sound", "Game start sound",
+            ),
+            rows.map { it.title },
+        )
+        val byId = rows.associateBy { it.id }
+        assertEquals("Muted", byId.getValue("snd:cues").subtitle)
+        assertEquals("100%", byId.getValue("snd:music").subtitle)
+        assertEquals("30%", byId.getValue("snd:snaps").subtitle)
+        // Confirm steps the volume; Options offer Mute, 50% and 100%, the current one marked.
+        val snaps = byId.getValue("snd:snaps")
+        assertEquals(NodeAction.Run(Command.CycleVolume(dev.xross.launcher.audio.VolumeChannel.SNAPS)), snaps.action)
+        assertEquals(listOf("Mute", "50%", "100%"), snaps.menu.map { it.label })
+        assertEquals(Command.SetVolume(dev.xross.launcher.audio.VolumeChannel.SNAPS, 0.5f), snaps.menu[1].command)
+        assertEquals(listOf(false, false, true), byId.getValue("snd:music").menu.map { it.selected })
+        assertEquals(listOf(true, false, false), byId.getValue("snd:cues").menu.map { it.selected })
+    }
+
+    @Test fun themeMusicSaysWhenThePackHasNone() {
+        fun row(packMusic: Boolean) = MenuTree(MenuSnapshot(settings = XrossSettings(), themes = ThemeSetup(packMusic = packMusic)))
+            .list(MenuTree.SOUND).single { it.id == "snd:bgm" }.subtitle
+        assertEquals("60% · No theme music in this pack", row(false))
+        assertEquals("60%", row(true))
+    }
+
+    @Test fun musicDuringSnapsRowCyclesPauseAndLower() {
+        fun row(mode: dev.xross.launcher.audio.MusicUnderSnaps) = MenuTree(MenuSnapshot(settings = XrossSettings(musicUnderSnaps = mode)))
+            .list(MenuTree.SOUND).single { it.id == "snd:undersnaps" }
+        val pause = row(dev.xross.launcher.audio.MusicUnderSnaps.PAUSE)
+        assertTrue(pause.subtitle!!.startsWith("Pause"))
+        assertEquals(NodeAction.Run(Command.CycleMusicUnderSnaps), pause.action)
+        assertEquals(listOf("Pause", "Lower"), pause.menu.map { it.label })
+        assertEquals("Lower · Lower to 20% while the snap plays", row(dev.xross.launcher.audio.MusicUnderSnaps.DUCK).subtitle)
     }
 
     @Test fun themeSettingShowsThemeLabel() {

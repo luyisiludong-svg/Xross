@@ -1,5 +1,7 @@
 package dev.xross.launcher.state
 
+import dev.xross.launcher.audio.MusicUnderSnaps
+import dev.xross.launcher.audio.VolumeChannel
 import androidx.core.net.toUri
 import android.content.Context
 import android.content.Intent
@@ -95,6 +97,10 @@ data class XmbUiState(
     val booting: String? = null,
     /** True on the first screen after process start: the UI fades in with the startup cue. */
     val coldBoot: Boolean = false,
+    /** The cold-start intro on screen (2b.5d): the boot video or the shader ramp, or its crossfade out. */
+    val boot: dev.xross.launcher.ui.BootState? = null,
+    /** Cold start, before the saved theme pack is loaded and the intro decided: the screen stays black. */
+    val bootPending: Boolean = false,
     /** Full-screen photo viewer / video player / Now Playing, if open. */
     val overlay: MediaOverlay? = null,
     /** Music state for the mini indicator and Now Playing. */
@@ -154,6 +160,8 @@ private data class Transient(
     val remap: RemapSession? = null,
     val family: ControllerFamily = ControllerFamily.KEYBOARD,
     val booting: String? = null,
+    val boot: dev.xross.launcher.ui.BootState? = null,
+    val bootPending: Boolean = false,
     val optionsMenu: OptionsMenuState? = null,
     val search: SearchState? = null,
     val nameEntry: NameEntry? = null,
@@ -217,7 +225,7 @@ class XmbViewModel(
             stacks = mapOf(Categories.GAMES to listOf(Frame(Categories.rootKey(Categories.GAMES), "Games", index = 1))),
         ),
     )
-    private val transient = MutableStateFlow(Transient())
+    private val transient = MutableStateFlow(Transient(bootPending = coldBoot))
     private val env = MutableStateFlow(
         MenuSnapshot(versionName = BuildConfig.VERSION_NAME, settings = settingsStore.current),
     )
@@ -327,6 +335,8 @@ class XmbViewModel(
             theme = settings.theme,
             booting = tr.booting,
             coldBoot = coldBoot,
+            boot = tr.boot,
+            bootPending = tr.bootPending,
             overlay = sd.overlay,
             nowPlaying = lv.nowPlaying,
             optionsMenu = tr.optionsMenu,
@@ -348,7 +358,7 @@ class XmbViewModel(
             telemetry = tr.telemetry,
             gamePlatforms = t.platformByGame,
         )
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, XmbUiState(coldBoot = coldBoot))
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, XmbUiState(coldBoot = coldBoot, bootPending = coldBoot))
 
     private data class ListView(
         val breadcrumb: List<String>,
@@ -423,6 +433,13 @@ class XmbViewModel(
     // region Input
 
     override fun onAction(action: NavAction) {
+        // The cold-start intro takes the first key (any key skips it); the menu gets the next one.
+        // A key before the intro is decided (the saved pack still loading) skips it in advance.
+        if (transient.value.bootPending) {
+            bootSkippedEarly = true
+            return
+        }
+        if (transient.value.boot?.ending == false) return skipBoot()
         if (transient.value.remap != null || transient.value.booting != null) return
         transient.value.nameEntry?.let { return nameEntryAction(it, action) }
         if (action == NavAction.MEDIA) return toggleMediaControls()
@@ -761,6 +778,7 @@ class XmbViewModel(
             slot == dev.xross.launcher.theme.pack.EffectSlot.UI_FILTER && v.isNotEmpty() && v != "NONE" &&
                 !dev.xross.launcher.ui.UiFilterSupport.supported() -> "UI filters need Android 13 or later"
             slot == dev.xross.launcher.theme.pack.EffectSlot.SHADER && !settingsStore.current.waveEnabled -> "Turn Wave background on to see it"
+            slot == dev.xross.launcher.theme.pack.EffectSlot.BOOT_INTRO -> "Shown on the next cold start"
             else -> null
         }
         note?.let { toast(it) }
@@ -1607,7 +1625,7 @@ class XmbViewModel(
     fun onCategoryTapped(index: Int) {
         if (index == nav.value.categoryIndex) {
             val category = categories[index]
-            if (nav.value.stack(category.id, category.title).size > 1) sounds.play(UiSound.BACK)
+            if (nav.value.stack(category.id, category.title).size > 1) sounds.play(UiSound.DRILL_OUT)
             nav.value = nav.value.jumpTo(index, category.id, category.title, frame = null)
         } else {
             moveCategory(index - nav.value.categoryIndex)
@@ -1944,8 +1962,16 @@ class XmbViewModel(
 
     private var backupJob: Job? = null
 
+    /** The launcher is visible again (`onStart`): theme music may continue. */
+    fun onStarted() = audio.onStarted(true)
+
     /** The launcher is no longer visible: back up the library shortly after, if it changed. */
     fun onStopped() {
+        // Leaving during the intro ends it (and one not decided yet won't start): the video
+        // doesn't play on behind another app.
+        if (transient.value.bootPending) bootSkippedEarly = true
+        if (transient.value.boot != null) endBoot(skipped = false, crossfade = false)
+        audio.onStarted(false)
         backupJob?.cancel()
         backupJob = viewModelScope.launch {
             delay(BACKUP_DELAY_MS)
@@ -2100,7 +2126,8 @@ class XmbViewModel(
         val after = before.moveCategory(delta, categories.size)
         if (after.categoryIndex != before.categoryIndex) {
             nav.value = after
-            sounds.play(UiSound.MOVE)
+            // Leans toward the direction of travel (2b.5a).
+            sounds.play(UiSound.CATEGORY, sounds.pan(travel = delta))
         }
     }
 
@@ -2108,7 +2135,7 @@ class XmbViewModel(
         val category = categories[nav.value.categoryIndex]
         nav.value.pop(category.id, category.title)?.let {
             nav.value = it
-            sounds.play(UiSound.BACK)
+            sounds.play(UiSound.DRILL_OUT)
         }
     }
 
@@ -2117,7 +2144,7 @@ class XmbViewModel(
             is NodeAction.OpenList -> {
                 val category = categories[nav.value.categoryIndex]
                 nav.update { it.push(category.id, category.title, Frame(action.key, node.title)) }
-                sounds.play(UiSound.ENTER)
+                sounds.play(UiSound.DRILL_IN)
             }
             is NodeAction.LaunchGame -> launchGame(action.gameId)
             is NodeAction.LaunchApp -> launchApp(action.packageName, action.activityName)
@@ -2144,6 +2171,109 @@ class XmbViewModel(
         }
     }
 
+    /** Settings ▸ Sound: saves [channel]'s level; a playing song or snap follows through the settings flow. */
+    private fun setVolume(channel: VolumeChannel, value: Float) {
+        settingsStore.update { channel.set(it, value) }
+        if (channel == VolumeChannel.EFFECTS) {
+            audio.onSettingsChanged(settingsStore.current)
+            sounds.play(UiSound.OK) // preview the new level
+        }
+    }
+
+    // region Cold-start intro (2b.5d)
+
+    private var bootJob: Job? = null
+
+    /** A key or touch came while the intro was still being decided: it is skipped as soon as it is. */
+    private var bootSkippedEarly = false
+
+    /**
+     * Decides the cold-start intro for the active pack and the settings ([BootSequence]) and starts
+     * it: the boot video (its own sound, theme music held), or the shader ramp or the fade-in under
+     * the `opening` cue. Each ends on its own after its length, at [BootSequence.MAX_MS] at most.
+     */
+    private fun startBoot() {
+        val s = settingsStore.current
+        val pack = container.themes.active.value
+        val look = pack.look(s.themeVariant, category = state.value.categoryId)
+        val user = s.effectOverrides.cosmetics.bootIntro
+        val plan = dev.xross.launcher.ui.BootSequence.resolve(
+            dev.xross.launcher.ui.BootInputs(
+                coldBoot = true,
+                intro = user ?: look.cosmetics.bootIntro,
+                userChoice = user != null,
+                video = pack.bootVideo,
+                stillMotion = dev.xross.launcher.theme.QuickProfile.byName(s.quickProfile).stillMotion,
+                startupSound = s.bootSound,
+                cueVolume = s.cueVolume,
+                waveEnabled = s.waveEnabled,
+            ),
+        ) ?: return
+        val now = android.os.SystemClock.elapsedRealtimeNanos()
+        if (BuildConfig.PERF_LOG) {
+            val sinceStart = android.os.SystemClock.uptimeMillis() - android.os.Process.getStartUptimeMillis()
+            android.util.Log.i("XrossBoot", "start mode=${plan.mode} file=${plan.fileName} early=$bootSkippedEarly after=$sinceStart ms")
+        }
+        if (bootSkippedEarly) {
+            // Skipped before it began: no video, no ramp and no slow fade-in, just the crossfade to the menu.
+            logBoot(plan, skipped = true, atMs = 0)
+            audio.onColdBoot()
+            val quick = dev.xross.launcher.ui.BootState(dev.xross.launcher.ui.BootPlan(dev.xross.launcher.ui.BootMode.FADE), now, ending = true, endedAtNanos = now)
+            transient.update { it.copy(bootPending = false, boot = quick) }
+            bootJob = viewModelScope.launch {
+                delay(dev.xross.launcher.ui.BootSequence.CROSSFADE_MS)
+                transient.update { it.copy(boot = null) }
+            }
+            return
+        }
+        if (plan.mode == dev.xross.launcher.ui.BootMode.FADE) {
+            transient.update { it.copy(bootPending = false) }
+            logBoot(plan, skipped = false, atMs = 0)
+            audio.onColdBoot()
+            return
+        }
+        transient.update { it.copy(bootPending = false, boot = dev.xross.launcher.ui.BootState(plan, now)) }
+        if (plan.mode == dev.xross.launcher.ui.BootMode.VIDEO) audio.onBootVideo(true) else audio.onColdBoot()
+        bootJob = viewModelScope.launch {
+            delay(plan.maxMs)
+            endBoot(skipped = false)
+        }
+    }
+
+    /** A key or a touch during the intro: it crossfades to the menu. */
+    fun skipBoot() {
+        if (transient.value.bootPending) bootSkippedEarly = true
+        else if (transient.value.boot?.ending == false) endBoot(skipped = true)
+    }
+
+    /** The boot video reached its end (or couldn't be played). */
+    fun onBootVideoEnded() {
+        if (transient.value.boot?.ending == false) endBoot(skipped = false)
+    }
+
+    private fun endBoot(skipped: Boolean, crossfade: Boolean = true) {
+        val boot = transient.value.boot ?: return
+        bootJob?.cancel()
+        val now = android.os.SystemClock.elapsedRealtimeNanos()
+        if (!boot.ending) logBoot(boot.plan, skipped, (now - boot.startedAtNanos) / 1_000_000)
+        audio.onBootVideo(false)
+        if (!crossfade) {
+            transient.update { it.copy(boot = null) }
+            return
+        }
+        transient.update { it.copy(boot = boot.copy(ending = true, endedAtNanos = now)) }
+        bootJob = viewModelScope.launch {
+            delay(dev.xross.launcher.ui.BootSequence.CROSSFADE_MS)
+            transient.update { it.copy(boot = null) }
+        }
+    }
+
+    private fun logBoot(plan: dev.xross.launcher.ui.BootPlan, skipped: Boolean, atMs: Long) {
+        if (BuildConfig.PERF_LOG) android.util.Log.i("XrossBoot", dev.xross.launcher.ui.BootSequence.describe(plan, skipped, atMs))
+    }
+
+    // endregion
+
     private fun launchGame(gameId: Long) = viewModelScope.launch {
         val game = container.games.get(gameId) ?: return@launch
         when (val plan = container.launcher.plan(game, settingsStore.current.emulatorChoice[game.platformId])) {
@@ -2166,6 +2296,7 @@ class XmbViewModel(
     /** The emulator couldn't be started after all (uninstalled meanwhile, refused the URI). */
     fun onLaunchFailed(message: String) {
         container.sessions.disarm()
+        audio.onLaunchFailed()
         transient.update { it.copy(booting = null) }
         fail(message)
     }
@@ -2359,11 +2490,12 @@ class XmbViewModel(
                 it.copy(surfaceStyle = ids[(i + 1) % ids.size])
             }
             Command.ToggleSoundEffects -> settingsStore.update { it.copy(soundEffects = !it.soundEffects) }
-            Command.CycleSoundVolume -> {
-                settingsStore.update { it.copy(soundVolume = VOLUMES.nextAfter(it.soundVolume)) }
-                audio.onSettingsChanged(settingsStore.current)
-                sounds.play(UiSound.OK) // preview the new level
+            is Command.CycleVolume -> setVolume(command.channel, VolumeChannel.next(command.channel.of(settingsStore.current)))
+            is Command.SetVolume -> setVolume(command.channel, command.value)
+            Command.CycleMusicUnderSnaps -> settingsStore.update {
+                it.copy(musicUnderSnaps = MusicUnderSnaps.entries[(it.musicUnderSnaps.ordinal + 1) % MusicUnderSnaps.entries.size])
             }
+            is Command.SetMusicUnderSnaps -> settingsStore.update { it.copy(musicUnderSnaps = command.mode) }
             Command.ToggleBootSound -> settingsStore.update { it.copy(bootSound = !it.bootSound) }
             Command.ToggleGameBootSound -> settingsStore.update { it.copy(gameBootSound = !it.gameBootSound) }
             Command.ToggleLargeImageHashing -> {
@@ -2567,6 +2699,11 @@ class XmbViewModel(
         viewModelScope.launch {
             settingsStore.settings.collect(audio::onSettingsChanged)
         }
+        // Theme music (2b.5c) waits for the music player's queue and the full-screen video player.
+        viewModelScope.launch { music.state.collect { audio.onMusicChanged() } }
+        viewModelScope.launch {
+            media.overlay.map { it is MediaOverlay.VideoPlayback }.distinctUntilChanged().collect(audio::onFullScreenVideo)
+        }
         // Keep open search results in step with the library (favorites, playtime, rescans).
         viewModelScope.launch {
             tree.collect { if (transient.value.search?.query?.isNotBlank() == true) runSearch(0) }
@@ -2575,11 +2712,15 @@ class XmbViewModel(
         viewModelScope.launch { container.shaderHealth.notices.collect { toast(it) } }
         // Theme pack: discover, activate the saved one, and keep sounds and Settings ▸ Theme in step.
         viewModelScope.launch {
-            container.themes.rediscover()
-            val wanted = settingsStore.current.themePack
-            if (wanted != container.themes.active.value.id) container.themes.select(wanted)
-            // Startup sound once the pack's sounds are in place (01. opening.wav by default).
-            if (coldBoot) audio.onColdBoot()
+            try {
+                container.themes.rediscover()
+                val wanted = settingsStore.current.themePack
+                if (wanted != container.themes.active.value.id) container.themes.select(wanted)
+            } finally {
+                // The intro and the startup sound once the pack is in place (01. opening.wav by
+                // default); even if the scan failed, so a cold start never stays black.
+                if (coldBoot) startBoot()
+            }
         }
         viewModelScope.launch {
             combine(container.themes.packs, container.themes.active, container.themes.rejected) { packs, active, rejected ->
@@ -2602,6 +2743,8 @@ class XmbViewModel(
                             rejected = rejected.map { r -> "${r.id}: ${r.reason}" },
                             packFlags = active.flags,
                             packWallpaper = active.hasWallpaper,
+                            packMusic = active.hasBgm,
+                            packBootVideo = active.bootVideo != null,
                             looks = (listOf("") + active.variants.map { v -> v.id }).associateWith { v -> active.look(v) },
                         ),
                     )
@@ -2650,7 +2793,6 @@ class XmbViewModel(
         internal val DEADZONES = listOf(0f, 0.15f, 0.25f, 0.35f, 0.45f, 0.55f)
         private val AXIAL_DEADZONES = listOf(0f, 0.1f, 0.2f, 0.3f)
         private const val INFO_PAGE = 5
-        private val VOLUMES = listOf(0.25f, 0.5f, 0.75f, 1f)
         private val SLIDESHOW_SECONDS = listOf(3, 5, 10, 20)
         private const val GAMEBOOT_HANDOFF_MS = 1100L
         internal const val UNLOCK_TOAST_MS = 4_500L

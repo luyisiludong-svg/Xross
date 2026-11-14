@@ -161,13 +161,47 @@ data class ThemeManifest(
     @Serializable
     data class Typography(val display: String = "", val body: String = "", val mono: String = "")
 
+    /**
+     * The `audio` block (Appendix A.9). Role keys are [SoundRole] keys in any case, with or
+     * without underscores (`system_ng`, `systemNg`), or a spec alias (`cancel`, `optionOpen`).
+     * Variants, overrides and rules may carry an `audio` block too, but only its [soundGains] and
+     * [bgmFile].
+     */
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
     @Serializable
     data class Audio(
         /** [SoundRole] key (or a spec alias) → a file in `sounds/`, or a path from the pack root. */
         val sounds: Map<String, String> = emptyMap(),
-        /** [SoundRole] key → 0–1 playback gain. */
+        /** [SoundRole] key → 0–1 playback gain (a gain can only lower a sample). */
         val soundGains: Map<String, Float> = emptyMap(),
-    )
+        /**
+         * 0–1: how far the effects pan with the crosshair's X position (2b.5a). 0 keeps them
+         * centred; unset, 0.35, so a crosshair in the middle of the screen stays centred.
+         */
+        val panAmount: Float? = null,
+        /** A random playback rate in 0.98–1.02 for `cursor` and `category_switch`, so long scrolls sound less mechanical. */
+        val cursorJitter: Boolean? = null,
+        /**
+         * The ambient music loop ([BgmRef], 2b.5c): an audio file from the pack root, or `none`.
+         * Unset: the pack's `bgm.ogg` / `bgm.mp3` if it has one.
+         */
+        @kotlinx.serialization.json.JsonNames("bgm") val bgmFile: String? = null,
+        /**
+         * The boot video (2b.5d, [BootVideoRef]): a video file from the pack root, or `none`.
+         * Unset: the pack's `boot.mp4` if it has one. Only the pack's base reads it.
+         */
+        @kotlinx.serialization.json.JsonNames("boot") val bootVideo: String? = null,
+    ) {
+        companion object {
+            /** Every property `audio` recognizes; others are reported like unknown `effects` keys. */
+            val KEYS: Set<String> = setOf("sounds", "soundGains", "panAmount", "cursorJitter", "bgmFile", "bgm", "bootVideo", "boot")
+
+            /** Problems for the keys of every `audio` block in [root] that aren't in [KEYS]. */
+            fun unknownKeys(root: JsonObject): List<String> = blockProblems(root, "audio") { where, key ->
+                if (key in KEYS) null else "$where.audio.$key isn't an audio property (see docs/THEME_SPECIFICATION.md, audio reference)"
+            }
+        }
+    }
 
     @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
     @Serializable
@@ -218,6 +252,16 @@ data class ThemeManifest(
         @kotlinx.serialization.json.JsonNames("postProcess") val uiFilter: String? = null,
         /** CUSTOM's AGSL file, from the pack root (default `postprocess.agsl`); alone it implies CUSTOM. */
         @kotlinx.serialization.json.JsonNames("postProcessPath") val uiFilterPath: String? = null,
+        /**
+         * What a cold start shows ([BootIntro], 2b.5d): `VIDEO` (the pack's boot video; the default
+         * when it has one), `SHADER` (the background shader ramped up from black) or `OFF` (the fade-in).
+         */
+        @kotlinx.serialization.json.JsonNames("intro") val bootIntro: String? = null,
+        /**
+         * The curtain before a game starts ([LaunchCurtain], 2b.5d): `BLOOM` (default),
+         * `FADE_BLACK`, `IRIS` or `FLASH`.
+         */
+        @kotlinx.serialization.json.JsonNames("curtain") val launchCurtain: String? = null,
     ) {
         companion object {
             /**
@@ -231,30 +275,15 @@ data class ThemeManifest(
                 "focusFrameStyle", "focusFrame", "iconMask", "iconFilter",
                 "foregroundParticles", "particles",
                 "backgroundFilter", "uiFilter", "postProcess", "uiFilterPath", "postProcessPath",
+                "bootIntro", "intro", "launchCurtain", "curtain",
             )
 
             /**
              * Problems for the keys of every `effects` block in a pack's merged JSON [root] (the base,
              * each variant, category and system override, and each rule) that aren't in [KEYS].
              */
-            fun unknownKeys(root: JsonObject): List<String> {
-                val out = ArrayList<String>()
-                fun check(where: String, effects: kotlinx.serialization.json.JsonElement?) {
-                    val obj = effects as? JsonObject ?: return
-                    for (key in obj.keys) if (key !in KEYS) out += "$where.effects.$key isn't an effects property (see docs/THEME_SPECIFICATION.md, effects reference)"
-                }
-                fun obj(e: kotlinx.serialization.json.JsonElement?) = e as? JsonObject
-                fun arr(e: kotlinx.serialization.json.JsonElement?) = e as? kotlinx.serialization.json.JsonArray
-                check("theme", root["effects"])
-                arr(root["variants"])?.forEachIndexed { i, v ->
-                    val id = (obj(v)?.get("id") as? kotlinx.serialization.json.JsonPrimitive)?.content ?: "$i"
-                    check("variants.$id", obj(v)?.get("effects"))
-                }
-                for (block in listOf("categoryOverrides", "systemOverrides")) {
-                    obj(root[block])?.forEach { (k, v) -> check("$block.$k", obj(v)?.get("effects")) }
-                }
-                arr(root["rules"])?.forEachIndexed { i, r -> check("rules[$i]", obj(obj(r)?.get("apply"))?.get("effects")) }
-                return out
+            fun unknownKeys(root: JsonObject): List<String> = blockProblems(root, "effects") { where, key ->
+                if (key in KEYS) null else "$where.effects.$key isn't an effects property (see docs/THEME_SPECIFICATION.md, effects reference)"
             }
         }
     }
@@ -277,6 +306,33 @@ data class ThemeManifest(
         }
 
         fun colorText(argb: Int): String = "#%06X".format(argb and 0xFFFFFF)
+
+        /** Every problem a pack's merged JSON has: unknown `effects` and `audio` properties. */
+        fun schemaProblems(root: JsonObject): List<String> = Effects.unknownKeys(root) + Audio.unknownKeys(root)
+
+        /**
+         * [check] on each key of every [block] object in a pack's merged JSON [root]: the base, each
+         * variant, category and system override, and each rule's `apply`. Non-null results are the problems.
+         */
+        internal fun blockProblems(root: JsonObject, block: String, check: (where: String, key: String) -> String?): List<String> {
+            val out = ArrayList<String>()
+            fun scan(where: String, element: kotlinx.serialization.json.JsonElement?) {
+                val obj = element as? JsonObject ?: return
+                for (key in obj.keys) check(where, key)?.let(out::add)
+            }
+            fun obj(e: kotlinx.serialization.json.JsonElement?) = e as? JsonObject
+            fun arr(e: kotlinx.serialization.json.JsonElement?) = e as? kotlinx.serialization.json.JsonArray
+            scan("theme", root[block])
+            arr(root["variants"])?.forEachIndexed { i, v ->
+                val id = (obj(v)?.get("id") as? kotlinx.serialization.json.JsonPrimitive)?.content ?: "$i"
+                scan("variants.$id", obj(v)?.get(block))
+            }
+            for (overrides in listOf("categoryOverrides", "systemOverrides")) {
+                obj(root[overrides])?.forEach { (k, v) -> scan("$overrides.$k", obj(v)?.get(block)) }
+            }
+            arr(root["rules"])?.forEachIndexed { i, r -> scan("rules[$i]", obj(obj(r)?.get("apply"))?.get(block)) }
+            return out
+        }
 
         /**
          * Deep merge for `imports`: objects merge key by key, anything else in [over] replaces
@@ -302,6 +358,8 @@ data class ThemeVariant(
     val name: String = "",
     val palette: ThemeManifest.Palette? = null,
     val effects: ThemeManifest.Effects? = null,
+    /** Only `soundGains` (2b.5a) and `bgmFile` (2b.5c): this colorway's sound levels and music. */
+    val audio: ThemeManifest.Audio? = null,
 )
 
 /**
@@ -313,16 +371,21 @@ data class ThemeOverride(
     val palette: ThemeManifest.Palette? = null,
     val effects: ThemeManifest.Effects? = null,
     val cardAspectRatio: String? = null,
+    /** Only `soundGains` (2b.5a) and `bgmFile` (2b.5c): sound levels and music while this category is open or this system's game is focused. */
+    val audio: ThemeManifest.Audio? = null,
 )
 
 /**
  * UI sound roles and their canonical file names in a pack's `sounds/` folder. [stream] roles are
  * long cues played with MediaPlayer; the rest are preloaded into a SoundPool.
+ *
+ * A role with a [fallback] (2b.5a) that a pack has no file for plays its fallback's file from the
+ * same pack, before the Default pack's: a pack with only `cursor.wav` uses it for category switches too.
  */
 enum class SoundRole(val key: String, val file: String, val stream: Boolean = false) {
-    /** Horizontal and vertical D-pad navigation (cursor and category moves). */
+    /** A vertical D-pad step through a list (and moves inside overlays). */
     CURSOR("cursor", "cursor.wav"),
-    /** Opening a list or running an item. */
+    /** Running an item or confirming a choice. */
     CONFIRM("confirm", "confirm.wav"),
     BACK("back", "back.wav"),
     /** The Options (△ / Y) menu opening. */
@@ -336,10 +399,25 @@ enum class SoundRole(val key: String, val file: String, val stream: Boolean = fa
     OPENING("opening", "01. opening.wav", stream = true),
     /** Game start transition. */
     GAMEBOOT("gameboot", "gameboot.wav", stream = true),
+    /** Left / Right between categories (falls back to [CURSOR]). */
+    CATEGORY_SWITCH("category_switch", "category_switch.wav"),
+    /** Into a folder or sub-list (falls back to [CONFIRM]). */
+    DRILL_IN("drill_in", "drill_in.wav"),
+    /** Out of a folder or sub-list (falls back to [BACK]). */
+    DRILL_OUT("drill_out", "drill_out.wav"),
     ;
 
+    /** The role whose file this one plays when the pack has none of its own. */
+    val fallback: SoundRole?
+        get() = when (this) {
+            CATEGORY_SWITCH -> CURSOR
+            DRILL_IN -> CONFIRM
+            DRILL_OUT -> BACK
+            else -> null
+        }
+
     companion object {
-        /** Names the Theme 2.0 spec uses for existing roles (Roadmap §5). */
+        /** Names the Theme 2.0 spec (Appendix A.9) uses for roles with another key here. */
         private val ALIASES = mapOf(
             "cancel" to BACK,
             "optionopen" to OPTION,
@@ -347,10 +425,18 @@ enum class SoundRole(val key: String, val file: String, val stream: Boolean = fa
             "achievementunlock" to TROPHY,
         )
 
-        fun byKey(key: String): SoundRole? {
-            val k = key.trim()
-            return entries.firstOrNull { it.key.equals(k, ignoreCase = true) } ?: ALIASES[k.lowercase()]
+        /** Case, `_` and `-` don't count: `system_ng`, `systemNg` and `SYSTEM-NG` are one key. */
+        private fun normal(key: String): String = buildString(key.length) {
+            for (c in key.trim()) if (c != '_' && c != '-') append(c.lowercaseChar())
         }
+
+        private val BY_KEY: Map<String, SoundRole> = entries.associateBy { normal(it.key) } + ALIASES
+
+        /** The role [key] names (a role key in any spelling, or an A.9 alias); null if none. */
+        fun byKey(key: String): SoundRole? = BY_KEY[normal(key)]
+
+        /** Every role, each after its [fallback], so fallbacks resolve first. */
+        val resolveOrder: List<SoundRole> = entries.sortedBy { if (it.fallback == null) 0 else 1 }
     }
 }
 

@@ -57,6 +57,8 @@ data class RuleApplication(
     val cardAspectRatio: String? = null,
     /** Any `layout` key ([LayoutSpec]) over the pack's layout. */
     val layout: LayoutSpec? = null,
+    /** Only `soundGains` (2b.5a) and `bgmFile` (2b.5c): sound levels and music while the rule holds. */
+    val audio: ThemeManifest.Audio? = null,
 )
 
 /** Where the launcher is right now, for [ResolvedRule.matches]. Unknown values never match. */
@@ -267,7 +269,7 @@ internal fun resolveRules(
         if (m.time?.isNotBlank() == true && time == null) continue
 
         val a = rule.apply
-        val patch = patchOf(where + ".apply", ThemeOverride(a.palette, a.effects), surfaceIds, problems)
+        val patch = patchOf(where + ".apply", ThemeOverride(a.palette, a.effects, audio = a.audio), surfaceIds, problems)
         val aspect = a.cardAspectRatio?.let { text ->
             parseAspect(text)?.coerceIn(LayoutLimits.MIN_ASPECT, LayoutLimits.MAX_ASPECT)
                 ?: null.also { problems += "$where.apply.cardAspectRatio: $text isn't an aspect ratio like 16:9" }
