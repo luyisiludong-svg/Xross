@@ -32,9 +32,18 @@ sealed interface PackSource {
     data class Folder(val dir: File) : PackSource
 }
 
-/** A discovered pack: its id (folder name), manifest and location. */
+/**
+ * A discovered pack: its id (folder name), manifest and location. [sourceJson] is the manifest as
+ * JSON before decoding: `theme.json` with its `imports` merged under it and `rules` concatenated
+ * (imports first), exactly what [manifest] was decoded from (2b.8-prep; 2b.8b exports it).
+ */
 @Immutable
-data class ThemePackInfo(val id: String, val manifest: ThemeManifest, val source: PackSource) {
+data class ThemePackInfo(
+    val id: String,
+    val manifest: ThemeManifest,
+    val source: PackSource,
+    val sourceJson: JsonObject = JsonObject(emptyMap()),
+) {
     val builtIn: Boolean get() = source is PackSource.Builtin
     val name: String get() = manifest.name
 }
@@ -124,8 +133,20 @@ data class LoadedTheme(
     val problems: List<String> = emptyList(),
     /** Bumped on every load, so a hot reload of the same files still counts as a change. */
     val revision: Long = 0,
+    /**
+     * Every file of this pack the load read and uses (2b.8-prep), as pack-relative paths with `/`
+     * ("icons/games.svg", "sounds/cursor.wav", "wallpaper.png"), resolved against [info]'s
+     * [PackSource]: the APK asset folder for the built-in pack, the pack folder otherwise. Fonts,
+     * icons, logos, sounds, CUSTOM shaders, CUSTOM UI filters, wallpapers, music loops and the boot
+     * video, in any variant, override or rule. Not the JSON files ([sourceJson] holds them), not
+     * what the Default pack lends a folder pack, and not a file that was missing or unusable.
+     */
+    val files: Set<String> = emptySet(),
 ) {
     val id: String get() = info.id
+
+    /** The merged manifest JSON this pack was decoded from ([ThemePackInfo.sourceJson]). */
+    val sourceJson: JsonObject get() = info.sourceJson
 
     /** The sound part of this pack, as [resolvePackSounds] gives it. */
     val packSounds: PackSounds get() = PackSounds(sounds, gains, soundLinks, panAmount, cursorJitter)
@@ -279,7 +300,7 @@ class ThemePackLoader(
             if (!ID.matches(id) || id.equals(DEFAULT_ID, ignoreCase = true)) continue
             if (find(folder, MANIFEST) == null) continue
             when (val r = readFolderManifest(folder)) {
-                is Read.Ok -> packs += ThemePackInfo(id, r.manifest, PackSource.Folder(folder))
+                is Read.Ok -> packs += ThemePackInfo(id, r.manifest, PackSource.Folder(folder), r.json)
                 is Read.Bad -> rejected += RejectedPack(id, r.reason)
             }
         }
@@ -292,7 +313,7 @@ class ThemePackLoader(
     /** The Default pack's manifest; null only if the APK is broken. */
     fun builtIn(): ThemePackInfo? {
         val r = readManifest(MANIFEST) { name -> runCatching { assets.open("$DEFAULT_DIR/$name").bufferedReader().use { it.readText() } }.getOrNull() }
-        return (r as? Read.Ok)?.let { ThemePackInfo(DEFAULT_ID, it.manifest, PackSource.Builtin(DEFAULT_DIR)) }
+        return (r as? Read.Ok)?.let { ThemePackInfo(DEFAULT_ID, it.manifest, PackSource.Builtin(DEFAULT_DIR), it.json) }
     }
 
     /** Loads [id], or the Default pack when [id] is unknown or unreadable. */
@@ -304,7 +325,7 @@ class ThemePackLoader(
         val folder = themesDir().listFiles()?.firstOrNull { it.isDirectory && it.name == id }
             ?: return PackLoad.Failed("$id is no longer in Xross/themes")
         return when (val r = readFolderManifest(folder)) {
-            is Read.Ok -> PackLoad.Ok(resolve(ThemePackInfo(id, r.manifest, PackSource.Folder(folder)), base()))
+            is Read.Ok -> PackLoad.Ok(resolve(ThemePackInfo(id, r.manifest, PackSource.Folder(folder), r.json), base()))
             is Read.Bad -> PackLoad.Failed(r.reason)
         }
     }
@@ -345,18 +366,31 @@ class ThemePackLoader(
     private fun resolve(pack: ThemePackInfo, base: LoadedTheme?): LoadedTheme {
         val m = pack.manifest
         val problems = ArrayList<String>(m.schemaProblems)
+        // Every pack file read and used, pack-relative (LoadedTheme.files).
+        val files = LinkedHashSet<String>()
+        val folder = (pack.source as? PackSource.Folder)?.dir
+        fun keep(file: File?) {
+            if (file != null && folder != null) relativePath(folder, file)?.let(files::add)
+        }
 
-        val audio = resolvePackSounds(m.audio, base?.packSounds, problems) { name -> soundFile(pack, name) }
+        val audio = resolvePackSounds(m.audio, base?.packSounds, problems) { name ->
+            soundFile(pack, name)?.also { src ->
+                when (src) {
+                    is SoundSource.Asset -> assetRelative(pack, src.path)?.let(files::add)
+                    is SoundSource.Disk -> keep(src.file)
+                }
+            }
+        }
 
         val icons = LinkedHashMap<GlyphKey, ThemeIcon>()
         for (key in GlyphKey.entries) {
             val declared = m.icons.entries.firstOrNull { it.key.equals(key.iconId, ignoreCase = true) }?.value
-            val icon = icon(pack, declared, key.iconId)
+            val icon = icon(pack, declared, key.iconId, files)
             if (icon == null && declared != null) problems += "Icon ${key.iconId}: can't read $declared"
             (icon ?: base?.icons?.get(key))?.let { icons[key] = it }
         }
 
-        val fonts = fonts(pack, m.typography, base?.fonts, problems)
+        val fonts = fonts(pack, m.typography, base?.fonts, problems, files)
         val palette = m.palette?.takeIf { it.hasColors }?.let { p ->
             p.toPalette(m.wave).also { if (it == null) problems += "Palette needs a canvas color, and colors must be #RRGGBB" }
         }
@@ -386,34 +420,33 @@ class ThemePackLoader(
             rules.mapNotNull { it.patch?.shader })
             .filter { it.preset == ShaderPreset.CUSTOM }.map { it.path }.distinct()
         val customShaders = LinkedHashMap<String, String>()
-        for (path in customPaths) shaderText(pack, path, problems)?.let { customShaders[path] = it }
+        for (path in customPaths) shaderText(pack, path, problems, files)?.let { customShaders[path] = it }
 
-        val folder = (pack.source as? PackSource.Folder)?.dir
         val wallpaper = WallpaperRef.of("theme", m.effects?.wallpaperPath, problems)
             ?: folder?.let(WallpaperRef::defaultIn)?.let(::WallpaperRef)
             ?: WallpaperRef.NONE
         val wallpaperRefs = listOf(wallpaper) + variants.mapNotNull { it.wallpaper } +
             (categoryPatches.values + systemPatches.values).mapNotNull { it.wallpaper } + rules.mapNotNull { it.patch?.wallpaper }
-        val wallpapers = wallpaperFiles(folder, wallpaperRefs, problems)
+        val wallpapers = wallpaperFiles(folder, wallpaperRefs, problems).also { it.values.forEach(::keep) }
         val bgm = BgmRef.of("theme", m.audio?.bgmFile, problems)
             ?: folder?.let(BgmRef::defaultIn)?.let(::BgmRef)
             ?: BgmRef.NONE
         val bgmRefs = listOf(bgm) + variants.mapNotNull { it.bgm } +
             (categoryPatches.values + systemPatches.values).mapNotNull { it.bgm } + rules.mapNotNull { it.patch?.bgm }
-        val bgmFiles = bgmFiles(folder, bgmRefs, problems)
-        val bootVideo = BootVideoRef.resolve(folder, BootVideoRef.of(m.audio?.bootVideo, problems), problems)
+        val bgmFiles = bgmFiles(folder, bgmRefs, problems).also { it.values.forEach(::keep) }
+        val bootVideo = BootVideoRef.resolve(folder, BootVideoRef.of(m.audio?.bootVideo, problems), problems).also(::keep)
         val cosmetics = (base?.cosmetics ?: Cosmetics.NONE).over(Cosmetics.of("theme", m.effects, problems))
         // 2b.4f: the AGSL of each CUSTOM UI filter the base, a variant, an override or a rule names.
         val uiFilterPaths = (listOf(cosmetics) + variants.mapNotNull { it.cosmetics } +
             (categoryPatches.values + systemPatches.values).mapNotNull { it.cosmetics } + rules.mapNotNull { it.patch?.cosmetics })
             .mapNotNull { it.uiFilter }.filter { it.filter == UiFilter.CUSTOM }.map { it.path }.distinct()
         val customUiFilters = LinkedHashMap<String, String>()
-        for (path in uiFilterPaths) packText(pack, "UI filter", path, problems)?.let { customUiFilters[path] = it }
+        for (path in uiFilterPaths) packText(pack, "UI filter", path, problems, files)?.let { customUiFilters[path] = it }
         // 2b.7a: the components block, over the Default pack's; logos are read like icons.
         val components = (base?.components ?: ComponentsPatch.NONE).over(ComponentsPatch.of("theme", m.components, problems))
         val logos = LinkedHashMap<String, ThemeIcon>()
         for (path in (listOfNotNull(components.logo) + variants.mapNotNull { it.components?.logo }).filter { it.isNotEmpty() }.distinct()) {
-            val logo = logo(pack, path)
+            val logo = logo(pack, path, files)
             if (logo == null) problems += "Logo $path: not found in the pack, or not a readable SVG, PNG or WebP" else logos[path] = logo
         }
 
@@ -450,6 +483,7 @@ class ThemePackLoader(
             logos = logos,
             problems = problems,
             revision = revisions.incrementAndGet(),
+            files = files,
         )
     }
 
@@ -460,11 +494,11 @@ class ThemePackLoader(
      * folder packs carry one; a missing, oversized or binary file is reported and left out (the
      * renderer then shows the wave and says why).
      */
-    private fun shaderText(pack: ThemePackInfo, path: String, problems: MutableList<String>): String? =
-        packText(pack, "Shader", path, problems)
+    private fun shaderText(pack: ThemePackInfo, path: String, problems: MutableList<String>, files: MutableSet<String>): String? =
+        packText(pack, "Shader", path, problems, files)
 
     /** A pack's source file (a CUSTOM shader, or a CUSTOM UI filter's AGSL, 2b.4f) as text; see [shaderText]. */
-    private fun packText(pack: ThemePackInfo, what: String, path: String, problems: MutableList<String>): String? {
+    private fun packText(pack: ThemePackInfo, what: String, path: String, problems: MutableList<String>, files: MutableSet<String>): String? {
         val dir = (pack.source as? PackSource.Folder)?.dir ?: run {
             problems += if (what == "Shader") "Shader $path: only folder packs can bring a CUSTOM shader" else "$what $path: only folder packs can bring their own code"
             return null
@@ -482,6 +516,7 @@ class ThemePackLoader(
             problems += "$what $path can't be read as text"
             return null
         }
+        relativePath(dir, file)?.let(files::add)
         return text
     }
 
@@ -494,7 +529,7 @@ class ThemePackLoader(
         }
     }
 
-    private fun icon(pack: ThemePackInfo, declared: String?, id: String): ThemeIcon? {
+    private fun icon(pack: ThemePackInfo, declared: String?, id: String, files: MutableSet<String>): ThemeIcon? {
         val candidates = if (declared != null) listOf(declared) else ICON_TYPES.map { "$id.$it" }
         for (name in candidates) {
             val ext = name.substringAfterLast('.', "").lowercase(Locale.ROOT)
@@ -502,8 +537,11 @@ class ThemePackLoader(
             val icon = when (val s = pack.source) {
                 is PackSource.Builtin -> "${s.dir}/$ICONS/$name".takeIf { assetExists(it) }?.let { path ->
                     runCatching { assets.open(path).use { stream -> readIcon(ext, id) { stream.readBytes() } } }.getOrNull()
+                        ?.also { files += "$ICONS/$name" }
                 }
-                is PackSource.Folder -> inside(s.dir, "$ICONS/$name")?.let { file -> readIcon(ext, id) { file.readBytes() } }
+                is PackSource.Folder -> inside(s.dir, "$ICONS/$name")?.let { file ->
+                    readIcon(ext, id) { file.readBytes() }?.also { relativePath(s.dir, file)?.let(files::add) }
+                }
             }
             if (icon != null) return icon
         }
@@ -511,14 +549,17 @@ class ThemePackLoader(
     }
 
     /** `components.logo` at [path] from the pack root, through the same checks as icons (type, size, inside the pack). */
-    private fun logo(pack: ThemePackInfo, path: String): ThemeIcon? {
+    private fun logo(pack: ThemePackInfo, path: String, files: MutableSet<String>): ThemeIcon? {
         val ext = path.substringAfterLast('.', "").lowercase(Locale.ROOT)
         if (ext !in ICON_TYPES) return null
         return when (val s = pack.source) {
             is PackSource.Builtin -> "${s.dir}/$path".takeIf { assetExists(it) }?.let { p ->
                 runCatching { assets.open(p).use { stream -> readIcon(ext, "logo") { stream.readBytes() } } }.getOrNull()
+                    ?.also { assetRelative(pack, p)?.let(files::add) }
             }
-            is PackSource.Folder -> inside(s.dir, path)?.takeIf { it.isFile }?.let { file -> readIcon(ext, "logo") { file.readBytes() } }
+            is PackSource.Folder -> inside(s.dir, path)?.takeIf { it.isFile }?.let { file ->
+                readIcon(ext, "logo") { file.readBytes() }?.also { relativePath(s.dir, file)?.let(files::add) }
+            }
         }
     }
 
@@ -548,18 +589,18 @@ class ThemePackLoader(
      * The pack's font roles. `body` is the declared file or the first font in `fonts/`; `display`
      * and `mono` fall back to it. A pack with no fonts at all inherits [base]'s.
      */
-    private fun fonts(pack: ThemePackInfo, t: ThemeManifest.Typography?, base: ThemeFonts?, problems: MutableList<String>): ThemeFonts {
-        val body = font(pack, t?.body.orEmpty(), problems, firstIfBlank = true)
-        val display = t?.display?.takeIf { it.isNotBlank() }?.let { font(pack, it, problems, firstIfBlank = false) }
-        val mono = t?.mono?.takeIf { it.isNotBlank() }?.let { font(pack, it, problems, firstIfBlank = false) }
+    private fun fonts(pack: ThemePackInfo, t: ThemeManifest.Typography?, base: ThemeFonts?, problems: MutableList<String>, files: MutableSet<String>): ThemeFonts {
+        val body = font(pack, t?.body.orEmpty(), problems, firstIfBlank = true, files)
+        val display = t?.display?.takeIf { it.isNotBlank() }?.let { font(pack, it, problems, firstIfBlank = false, files) }
+        val mono = t?.mono?.takeIf { it.isNotBlank() }?.let { font(pack, it, problems, firstIfBlank = false, files) }
         if (body == null && display == null && mono == null) return base ?: ThemeFonts()
         return ThemeFonts(display = display ?: body, body = body ?: display ?: mono, mono = mono ?: body)
     }
 
-    private fun font(pack: ThemePackInfo, declared: String, problems: MutableList<String>, firstIfBlank: Boolean): Typeface? = when (val s = pack.source) {
+    private fun font(pack: ThemePackInfo, declared: String, problems: MutableList<String>, firstIfBlank: Boolean, files: MutableSet<String>): Typeface? = when (val s = pack.source) {
         is PackSource.Builtin -> {
             val path = if (declared.isNotBlank()) "${s.dir}/$declared" else if (firstIfBlank) firstFontAsset(s.dir) else null
-            path?.let { p -> runCatching { Typeface.createFromAsset(assets, p) }.getOrNull() }
+            path?.let { p -> runCatching { Typeface.createFromAsset(assets, p) }.getOrNull()?.also { assetRelative(pack, p)?.let(files::add) } }
         }
         is PackSource.Folder -> {
             val file = when {
@@ -577,7 +618,7 @@ class ThemePackLoader(
                     null
                 }
                 else -> runCatching { Typeface.Builder(file).build() }.getOrNull()
-                    .also { if (it == null) problems += "Font ${file.name} can't be read" }
+                    .also { if (it == null) problems += "Font ${file.name} can't be read" else relativePath(s.dir, file)?.let(files::add) }
             }
         }
     }
@@ -587,6 +628,12 @@ class ThemePackLoader(
             ?.filter { it.substringAfterLast('.').lowercase(Locale.ROOT) in FONT_TYPES }
             ?.minOrNull()
             ?.let { "$dir/$FONTS/$it" }
+
+    /** An asset path of the built-in pack ("themes/default/sounds/ok.wav") relative to the pack ("sounds/ok.wav"); null outside it. */
+    private fun assetRelative(pack: ThemePackInfo, path: String): String? {
+        val dir = (pack.source as? PackSource.Builtin)?.dir ?: return null
+        return path.removePrefix("$dir/").takeIf { it != path && it.isNotEmpty() }
+    }
 
     private fun assetExists(path: String): Boolean = try {
         assets.openFd(path).close()
@@ -599,7 +646,8 @@ class ThemePackLoader(
     // endregion
 
     private sealed interface Read {
-        data class Ok(val manifest: ThemeManifest) : Read
+        /** [json]: the merged object [manifest] was decoded from. */
+        data class Ok(val manifest: ThemeManifest, val json: JsonObject) : Read
         data class Bad(val reason: String) : Read
     }
 
@@ -643,7 +691,7 @@ class ThemePackLoader(
         }
         return try {
             val m = ThemeManifest.JSON.decodeFromJsonElement(ThemeManifest.serializer(), merged)
-            if (m.name.isBlank()) Read.Bad("theme.json needs a \"name\"") else Read.Ok(m.copy(schemaProblems = ThemeManifest.schemaProblems(merged)))
+            if (m.name.isBlank()) Read.Bad("theme.json needs a \"name\"") else Read.Ok(m.copy(schemaProblems = ThemeManifest.schemaProblems(merged)), merged)
         } catch (e: SerializationException) {
             Read.Bad("$manifestName: ${e.message?.lineSequence()?.firstOrNull() ?: "invalid"}")
         } catch (e: IllegalArgumentException) {
@@ -700,6 +748,10 @@ class ThemePackLoader(
             if (!canonical.startsWith(canonicalRoot + File.separator)) return null
             return current.takeIf { it.isFile || it.isDirectory }
         }
+
+        /** [file] under [root] as a `/` path ("icons/games.svg"); null when it isn't below [root]. */
+        fun relativePath(root: File, file: File): String? =
+            file.relativeToOrNull(root)?.invariantSeparatorsPath?.takeIf { it.isNotEmpty() && it != ".." && !it.startsWith("../") }
 
         /** The child of [dir] named [name], exact match first, then ignoring case. */
         fun find(dir: File, name: String): File? {

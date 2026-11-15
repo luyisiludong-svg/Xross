@@ -221,13 +221,8 @@ class MainActivity : ComponentActivity() {
                 system = system,
                 battery = ruleBattery,
                 minuteOfDay = ruleMinute,
-                effects = userEffects,
-                surfaceStyle = st.surfaceStyle,
+                user = dev.xross.launcher.theme.pack.UserLook.of(st),
                 profile = profile,
-                circadian = st.circadianCurve,
-                batteryTint = st.batteryTint,
-                adaptive = st.adaptiveGamePalette,
-                components = st.componentOverrides,
             )
             val resolved = androidx.compose.runtime.remember(lookInputs) { dev.xross.launcher.theme.ThemeLookResolver.resolve(lookInputs) }
             val look = resolved.look

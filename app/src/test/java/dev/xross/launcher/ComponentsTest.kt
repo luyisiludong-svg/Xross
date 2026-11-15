@@ -1,14 +1,10 @@
 package dev.xross.launcher
 
 import android.content.Context
-import android.os.Looper
 import androidx.test.core.app.ApplicationProvider
 import dev.xross.launcher.config.ConfigCodec
 import dev.xross.launcher.data.XrossSettings
-import dev.xross.launcher.input.NavAction
-import dev.xross.launcher.state.Categories
 import dev.xross.launcher.state.Command
-import dev.xross.launcher.state.XmbViewModel
 import dev.xross.launcher.state.ComponentMenus
 import dev.xross.launcher.state.MenuSnapshot
 import dev.xross.launcher.state.MenuTree
@@ -50,7 +46,6 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.Shadows.shadowOf
 import java.io.File
 
 /**
@@ -188,7 +183,7 @@ class ComponentsTest {
         // Unknown variant: the base.
         assertEquals(base, p.components("nope"))
         // ThemeLookResolver resolves the same cascade.
-        assertEquals(mine, ThemeLookResolver.resolve(LookInputs(pack = p, variant = "night", components = user)).components)
+        assertEquals(mine, ThemeLookResolver.resolve(LookInputs(pack = p, variant = "night", user = dev.xross.launcher.theme.pack.UserLook(components = user))).components)
     }
 
     @Test fun overridesAndRulesCantPatchComponents() {
@@ -379,65 +374,6 @@ class ComponentsTest {
         assertEquals(2, reopened.depth)
         assertEquals("Clock", reopened.levels[0].options[reopened.levels[0].index].label)
         assertEquals("Move left", reopened.focused!!.label)
-    }
-
-    @Test fun slotEditsThroughTheViewModelReopenTheListAndTheAvatarSlotGatesTheHud() {
-        val container = AppContainer(context)
-        val vm = XmbViewModel(context, container, storageAccess = { false })
-        fun idle() = shadowOf(Looper.getMainLooper()).idle()
-        fun press(a: NavAction) {
-            vm.onAction(a)
-            idle()
-        }
-        fun focus(id: String) {
-            repeat(40) {
-                if (vm.state.value.focused?.id == id) return
-                press(NavAction.DOWN)
-            }
-            error("no row $id")
-        }
-        idle()
-        while (vm.state.value.let { it.categories[it.categoryIndex].id } != Categories.SETTINGS) press(NavAction.LEFT)
-        focus(MenuTree.DISPLAY)
-        press(NavAction.CONFIRM)
-        focus(MenuTree.DISPLAY_COMPONENTS)
-        press(NavAction.CONFIRM)
-        focus("disp:comp:right")
-        // Confirm opens the slot list; Clock ▸ Move right swaps it with the battery.
-        press(NavAction.CONFIRM)
-        val menu = vm.state.value.optionsMenu!!
-        assertEquals("Status bar right", menu.title)
-        press(NavAction.DOWN)
-        assertEquals("Clock", vm.state.value.optionsMenu!!.focused!!.label)
-        press(NavAction.CONFIRM)
-        assertEquals("Move right", vm.state.value.optionsMenu!!.focused!!.label)
-        press(NavAction.CONFIRM)
-        assertEquals(listOf("BATTERY", "CLOCK", "AVATAR"), container.settings.current.componentOverrides.statusBarRight)
-        assertNull("The left keeps following the pack", container.settings.current.componentOverrides.statusBarLeft)
-        // Reopened on the clock's moves: it can't go further right, so Move left has the cursor.
-        val reopened = vm.state.value.optionsMenu!!
-        assertEquals(2, reopened.depth)
-        assertEquals("Move left", reopened.focused!!.label)
-        press(NavAction.BACK)
-        press(NavAction.BACK)
-        assertNull(vm.state.value.optionsMenu)
-
-        // Without an AVATAR slot, Up at the top of a list doesn't open the HUD.
-        container.settings.update { it.copy(componentOverrides = it.componentOverrides.withSlots(StatusSide.RIGHT, listOf(CLOCK, BATTERY))) }
-        idle()
-        assertFalse(vm.components.value.avatar)
-        press(NavAction.BACK)
-        press(NavAction.BACK)
-        repeat(20) { if (vm.state.value.focusedIndex > 0) press(NavAction.UP) }
-        assertEquals(0, vm.state.value.depth)
-        assertEquals(0, vm.state.value.focusedIndex)
-        press(NavAction.UP)
-        assertFalse(vm.state.value.avatarFocused)
-        container.settings.update { ThemeDefaults.reset(it) }
-        idle()
-        assertTrue(vm.components.value.avatar)
-        press(NavAction.UP)
-        assertTrue(vm.state.value.avatarFocused)
     }
 
     // endregion

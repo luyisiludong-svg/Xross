@@ -9,6 +9,7 @@ import dev.xross.launcher.state.MenuTree
 import dev.xross.launcher.state.ThemeSetup
 import dev.xross.launcher.theme.BatteryLevel
 import dev.xross.launcher.theme.LookInputs
+import dev.xross.launcher.theme.pack.UserLook
 import dev.xross.launcher.theme.PACK_THEME
 import dev.xross.launcher.theme.ProfileField
 import dev.xross.launcher.theme.QuickProfile
@@ -75,18 +76,18 @@ class ThemeLookResolverTest {
         assertEquals(ShaderPreset.BOKEH, shader(base.copy(battery = BatteryLevel(10, charging = false))))
         assertEquals(ShaderPreset.WAVE, shader(base.copy(battery = BatteryLevel(80, charging = false))))
         // The user's picks beat the pack in every context ...
-        assertEquals(ShaderPreset.CRT, shader(base.copy(variant = "bios", effects = EffectOverrides(shaderPreset = "CRT"))))
-        assertEquals(SurfacePreset.EINK_HIGH_CONTRAST.name, surface(base.copy(system = "dreamcast", category = "games", surfaceStyle = "EINK_HIGH_CONTRAST")))
+        assertEquals(ShaderPreset.CRT, shader(base.copy(variant = "bios", user = UserLook(effects = EffectOverrides(shaderPreset = "CRT")))))
+        assertEquals(SurfacePreset.EINK_HIGH_CONTRAST.name, surface(base.copy(system = "dreamcast", category = "games", user = UserLook(surfaceStyle = "EINK_HIGH_CONTRAST"))))
         // ... and the quick profile beats the user's surface.
         assertEquals(
             SurfacePreset.Y2K_GLOSSY_BEZEL.name,
-            surface(base.copy(surfaceStyle = "EINK_HIGH_CONTRAST", profile = QuickProfile.Y2K_CYBER_PASTEL)),
+            surface(base.copy(user = UserLook(surfaceStyle = "EINK_HIGH_CONTRAST"), profile = QuickProfile.Y2K_CYBER_PASTEL)),
         )
     }
 
     @Test fun noProfileIsTheIdentity() {
         val t = load(cyber)
-        val r = ThemeLookResolver.resolve(LookInputs(pack = t, surfaceStyle = "EINK_HIGH_CONTRAST", circadian = true, adaptive = false))
+        val r = ThemeLookResolver.resolve(LookInputs(pack = t, user = UserLook(surfaceStyle = "EINK_HIGH_CONTRAST", circadianCurve = true, adaptiveGamePalette = false)))
         assertEquals(t.look(), r.look)
         assertEquals(t.layout, r.layout)
         assertEquals(SurfacePreset.EINK_HIGH_CONTRAST.name, r.surface.id)
@@ -106,7 +107,7 @@ class ThemeLookResolverTest {
         )
         assertEquals(QuickProfile.entries.toSet(), expected.keys)
         val t = load(cyber)
-        val user = LookInputs(pack = t, surfaceStyle = "EINK_HIGH_CONTRAST", circadian = true, batteryTint = true, adaptive = true)
+        val user = LookInputs(pack = t, user = UserLook(surfaceStyle = "EINK_HIGH_CONTRAST", circadianCurve = true, batteryTint = true, adaptiveGamePalette = true))
         for ((profile, fields) in expected) {
             assertEquals(profile.name, fields, profile.fields)
             val r = ThemeLookResolver.resolve(user.copy(profile = profile))

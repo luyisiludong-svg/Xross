@@ -43,7 +43,7 @@ singletons, imaging, modules) still waits: none of it blocks 2b.8.
 
 | Slice | State |
 |---|---|
-| 2b.8-prep | ⬜ |
+| 2b.8-prep | 🔶 on `refactor/2b8-prep` (2026-11-15): 872 unit tests (852 + 20), `lintDebug` 0 errors, `XmbViewModel` 2,647 → 2,331 lines. **Open:** the theme suite on the API 37 emulator and `palette-perf.sh` before/after. As built: [2b.8-prep notes](#as-built-2b8-prep-2026-11-15) |
 | 2b.8a | ⬜ |
 | 2b.8b | ⬜ |
 | 2b.8c | ⬜ |
@@ -130,6 +130,44 @@ clipping on the 12 display-matrix configurations, and `palette-perf.sh` is uncha
 - Theme suite on the API 37 emulator: same result as `main` (311/312 at 2b.7e).
 - `palette-perf.sh` before and after: janky frames unchanged within noise.
 ```
+
+### As built (2b.8-prep, 2026-11-15)
+
+| Piece | Where |
+|---|---|
+| `UserLook` (`of`, `writeTo`, `changes`, `NONE`, `isNone`) | `theme/pack/UserLook.kt` |
+| `LookInputs.user` replaces `effects`, `surfaceStyle`, `circadian`, `batteryTint`, `adaptive`, `components` | `theme/ThemeLookResolver.kt`; built in `MainActivity` with `UserLook.of(settings)` |
+| `ThemeDefaults.reset` = `UserLook.NONE.writeTo`, `isDefault` = `UserLook.of(s).isNone`; the Reset row's summary is `changes()` | `theme/pack/EffectOverrides.kt`, `MenuTree.resetThemeRow` |
+| `ThemeController` (27 commands, `onWallpaperPicked`, `onThemeArchivePicked`, the pending import) with a `Host` (toast, fail, refuse, emit, showOptions, components, friendsWanted, photoUri) | `state/ThemeController.kt`; `XmbViewModel` keeps `theme` and forwards |
+| `ThemePackInfo.sourceJson` (from `readManifest`), `LoadedTheme.sourceJson` / `files` | `theme/pack/ThemePackLoader.kt` |
+| A shared stress pack (imports, 2 variants, category and system overrides, rules, every file kind, unused files) | `test/.../StressPack.kt` |
+
+Decisions made while building:
+
+- **Forwarding keeps the `when` exhaustive:** `XmbViewModel.run` lists the 27 theme commands in one
+  branch that calls `theme.onCommand(command)` under a `check`, rather than asking the controller
+  first, so a new `Command` still has to be placed somewhere. `ThemeControllerTest` sends one of
+  each and asserts the controller takes them all (and none of four others).
+- **`sourceJson` lives on `ThemePackInfo`** (the loader builds it in `readManifest`, which both
+  discovery and loading go through); `LoadedTheme.sourceJson` reads it from `info`. Discovered and
+  loaded packs carry the same object. It decodes back to the pack's manifest.
+- **`files` is what was read and is used**, pack-relative with `/`, against `info.source` (APK
+  asset folder or pack folder): fonts, icons, logos, sounds, CUSTOM shaders and UI filters,
+  wallpapers, loops, boot video, from every variant, override and rule. Not the JSON files
+  (`sourceJson` has them), not what the Default pack lends a folder pack, not a missing or
+  unusable file. A declared name replaces the convention one (`icons.music: my-music.svg` reads
+  `icons/my-music.svg`, not `icons/music.svg`; `wallpaperPath` and `bgmFile` skip `wallpaper.*` and
+  `bgm.*`). The built-in pack ships `icons/power.svg`, which no glyph reads, so it isn't listed:
+  2b.8b's whole-pack export brings it through the `icons/` convention folder.
+- **The `UserLookTest` table** fails when `UserLook` gains a field without a row. Kotlin can't
+  enumerate a data class's fields without reflection, so it counts them with Java's
+  `declaredFields` (no `kotlin-reflect`); the rows themselves are plain values.
+- **Tests moved:** only two view-model tests sent theme commands (`ComponentsTest`'s slot edits,
+  `ComponentsTwoBTest`'s title badges); both moved unchanged into `ThemeControllerTest`'s "Through
+  the view model" region. Nine new tests drive the controller on its own with a fake host.
+- **Left in `XmbViewModel`:** the `ThemeWatcher` (hot reload), the `components` flow the status bar
+  reads, Wave settings and Profile customization. They aren't theme commands; 2b.8a's Layout panel
+  will follow the Wave settings pattern, which stays there for now.
 
 ---
 

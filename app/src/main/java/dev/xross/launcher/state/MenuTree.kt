@@ -1203,17 +1203,7 @@ class MenuTree(private val s: MenuSnapshot) {
 
     /** Reset to theme defaults: what it would clear, or that nothing is overridden. */
     private fun resetThemeRow(): XmbNode {
-        val st = s.settings
-        val changed = buildList {
-            val fx = dev.xross.launcher.theme.pack.EffectSlot.entries.count { st.effectOverrides[it].isNotEmpty() }
-            if (fx > 0) add(countOf(fx, "effect"))
-            val comps = st.componentOverrides.count
-            if (comps > 0) add(countOf(comps, "component"))
-            if (st.surfaceStyle.isNotEmpty()) add("surface")
-            val layers = listOf(st.adaptiveGamePalette, st.circadianCurve, st.batteryTint).count { it != null }
-            if (layers > 0) add(countOf(layers, "color layer"))
-            if (st.customWallpaper.isNotBlank()) add("wallpaper")
-        }
+        val changed = dev.xross.launcher.theme.pack.UserLook.of(s.settings).changes()
         val summary = if (changed.isEmpty()) "Nothing overrides ${s.themes.activeName}" else "Clears " + changed.joinToString(", ")
         return setting("disp:reset", "Reset to theme defaults", summary, GlyphKey.DISPLAY, Command.ResetThemeDefaults)
     }

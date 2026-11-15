@@ -9,7 +9,6 @@ import dev.xross.launcher.data.GameMetadataEntity
 import dev.xross.launcher.data.XrossSettings
 import dev.xross.launcher.input.ConfirmLayout
 import dev.xross.launcher.input.ControllerFamily
-import dev.xross.launcher.input.NavAction
 import dev.xross.launcher.input.resolve
 import dev.xross.launcher.media.NowPlaying
 import dev.xross.launcher.media.Song
@@ -269,49 +268,6 @@ class ComponentsTwoBTest {
         assertEquals(Command.SetBadgePills(emptyList()), options[1].command)
         assertEquals(listOf("SYSTEM", "YEAR"), ComponentOverrides.NONE.withPills(listOf(SYSTEM, YEAR, SYSTEM)).badgePills)
         assertEquals(1, ComponentOverrides.NONE.withPills(emptyList()).count)
-    }
-
-    @Test fun titleBadgesThroughTheViewModel() {
-        val container = AppContainer(context)
-        val vm = XmbViewModel(context, container, storageAccess = { false })
-        fun idle() = shadowOf(Looper.getMainLooper()).idle()
-        fun press(a: NavAction) {
-            vm.onAction(a)
-            idle()
-        }
-        fun focus(id: String) {
-            repeat(40) {
-                if (vm.state.value.focused?.id == id) return
-                press(NavAction.DOWN)
-            }
-            error("no row $id")
-        }
-        idle()
-        while (vm.state.value.let { it.categories[it.categoryIndex].id } != Categories.SETTINGS) press(NavAction.LEFT)
-        focus(MenuTree.DISPLAY)
-        press(NavAction.CONFIRM)
-        focus(MenuTree.DISPLAY_COMPONENTS)
-        press(NavAction.CONFIRM)
-        focus("disp:comp:pills")
-        assertEquals("None (theme pack) · Beside the focused game's title", vm.state.value.focused!!.subtitle)
-        press(NavAction.CONFIRM)
-        assertEquals("Title badges", vm.state.value.optionsMenu!!.title)
-        // Release year, then System: drawn in the order they were turned on.
-        repeat(3) { press(NavAction.DOWN) }
-        assertEquals("Release year", vm.state.value.optionsMenu!!.focused!!.label)
-        press(NavAction.CONFIRM)
-        assertEquals(listOf("YEAR"), container.settings.current.componentOverrides.badgePills)
-        assertEquals("Reopened on the badge", "Release year", vm.state.value.optionsMenu!!.focused!!.label)
-        assertTrue(vm.state.value.optionsMenu!!.focused!!.selected)
-        press(NavAction.UP)
-        press(NavAction.CONFIRM)
-        assertEquals(listOf(YEAR, SYSTEM), vm.components.value.pills)
-        press(NavAction.CONFIRM)
-        assertEquals("Off again", listOf(YEAR), vm.components.value.pills)
-        container.settings.update { ThemeDefaults.reset(it) }
-        idle()
-        assertEquals(emptyList<BadgePill>(), vm.components.value.pills)
-        assertNull(container.settings.current.componentOverrides.badgePills)
     }
 
     // endregion
