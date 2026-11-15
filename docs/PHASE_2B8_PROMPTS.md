@@ -46,7 +46,7 @@ singletons, imaging, modules) still waits: none of it blocks 2b.8.
 | 2b.8-prep | ✅ on `refactor/2b8-prep` (2026-11-15): 872 unit tests (852 + 20), `lintDebug` 0 errors, `XmbViewModel` 2,647 → 2,331 lines; theme suite **311/312** on the API 37 emulator, the same as `main` (the one fail is 2b.4f's wallpaper toast missed by the screen dump; the wallpaper was saved, drawn and kept across a restart); `palette-perf.sh 3` 0.15–0.71% janky against 0.29–1.50% on `main` (inside the noise and the gate). As built: [2b.8-prep notes](#as-built-2b8-prep-2026-11-15) |
 | 2b.8a | ✅ on `feat/theme-2b8` (2026-11-15): 886 unit tests (872 + 14), `lintDebug` 0 errors; theme suite **348/351** on the API 37 emulator, all 39 new checks passing (new 39-check "Layout mixer (2b.8a)" section); `display-matrix.sh` 12/12 with both extremes; `palette-perf.sh 3` 0.29–0.45% janky with a non-default layout against 0.44–0.75% without. **Open:** the A55 (a held D-pad on UI scale). As built: [2b.8a notes](#as-built-2b8a-2026-11-15) |
 | 2b.8b | ✅ on `feat/theme-2b8` (2026-11-15): 912 unit tests (886 + 26), `lintDebug` 0 errors; theme suite **407/407** on the API 37 emulator (new 56-check "Export (2b.8b)" section: the built-in Default pack whole and as a current look, a pack with variants, overrides and rules in every scope, a picked wallpaper; each the same on screen after Switch to). **Open:** the A55 with a folder pack; the import allowlist vs. paths the loader reads (2b.8c). As built: [2b.8b notes](#as-built-2b8b-2026-11-15) |
-| 2b.8c | ✅ on `feat/theme-2b8` (2026-11-15): 932 unit tests (912 + 20), `lintDebug` 0 errors; the A.13 gate (`ThemeRoundTripTest`) green for every scope of the Default and stress packs in 126 contexts; new 19-check "Share (2b.8c)" section of the theme suite 19/19 on the API 37 emulator (the whole suite, now 426 checks, not rerun). **Open:** the A55 (share to a cloud folder, re-import on the emulator); a full theme-suite run. As built: [2b.8c notes](#as-built-2b8c-2026-11-15) |
+| 2b.8c | ✅ on `feat/theme-2b8` (2026-11-15): 932 unit tests (912 + 20), `lintDebug` 0 errors; the A.13 gate (`ThemeRoundTripTest`) green for every scope of the Default and stress packs in 126 contexts; new 19-check "Share (2b.8c)" section 19/19; the full theme suite **425/426** on the API 37 emulator (the one fail is 2b.4f's wallpaper toast, as on `main`). **Open:** the A55 (share to a cloud folder, re-import on the emulator). As built: [2b.8c notes](#as-built-2b8c-2026-11-15) |
 
 ---
 
@@ -573,8 +573,9 @@ Decisions made while building:
 - **The landscape keyboard can cover the picker's Save** on the emulator; the suite presses its
   Enter in that case.
 
-Open: the A55 (share to a cloud folder, re-import on the emulator); a full theme-suite run with the
-new section in place (only the section itself and the unit tests ran).
+Full theme suite afterwards (2026-11-15): **425/426**; the one fail is 2b.4f's "Xross wallpaper
+set" toast missed by the screen dump, as on `main`. Open: the A55 (share to a cloud folder,
+re-import on the emulator).
 
 ---
 

@@ -1634,6 +1634,42 @@ scale measured 2.9–3.1% (13% cold) against a 1.4–2.3% list, so the UI scale 
 **Not covered:** a real held key (the emulator isn't rooted, and `input` can't hold one); the A55
 at 120 Hz with a gamepad.
 
+### 3.36 Phase 2b.8b: export a theme pack (2026-11-15)
+
+On `feat/theme-2b8`, API 37 emulator (`-gpu host`, 2400×1080). Details in
+[PHASE_2B8_PROMPTS.md](PHASE_2B8_PROMPTS.md#as-built-2b8b-2026-11-15).
+
+**Host:** 912 unit tests pass (4 skipped). New `LookExporterTest` (11) and `ThemeExportTest` (9:
+the writer, each scope loaded back and resolved equal in 84 contexts, no credential bytes);
+`ThemeControllerTest` +6. `lintDebug` 0 errors.
+
+**Theme suite: 407/407**, with a new 56-check "Export (2b.8b)" section: the built-in Default pack
+whole (7 sounds and 29 icons from the APK assets, at most 1.08% of pixels differ after Switch to,
+the breathing halo) and as a current look (0%); a pack with 2 variants, category and system
+overrides and 2 rules, whole, per variant and as a current look (at most 1.41%); a picked wallpaper
+copied in and still shown with the original deleted. Each compared in 8 places by screenshot and
+by the colours, effects and cosmetics the debug build logs.
+
+**Not covered:** the A55 with a folder pack and the user's own picks.
+
+### 3.37 Phase 2b.8c: share as .xtheme and the round-trip gate (2026-11-15)
+
+On `feat/theme-2b8`, API 37 emulator (`-gpu host`, 2400×1080). Details in
+[PHASE_2B8_PROMPTS.md](PHASE_2B8_PROMPTS.md#as-built-2b8c-2026-11-15).
+
+**Host:** 932 unit tests pass (4 skipped). New `ThemeArchiveWriteTest` (6) and `ThemeRoundTripTest`
+(9: the A.13 gate, every scope of the Default and stress packs through export → `.xtheme` → stage →
+install → load, resolved equal in 126 contexts, no credential bytes in the archive);
+`ThemeControllerTest` +4, `ThemeArchiveTest` +1. `lintDebug` 0 errors.
+
+**Theme suite: 425/426**, with a new 19-check "Share (2b.8c)" section: Share as .xtheme… for every
+installed pack, the built-in Default pack shared whole to `Download/default-pack.xtheme` with no
+folder written, imported back and the same look (at most 1.18% of pixels differ); a current-look
+export shared, its folder deleted, imported back (0%). The one fail is 2b.4f's "Xross wallpaper set"
+toast missed by the screen dump, as on `main`.
+
+**Not covered:** the A55 (share to a cloud folder, re-import on the emulator).
+
 ## 4. Display matrix & performance
 
 All numbers are from the Android emulator on an Apple M5 with the host GPU, using an
