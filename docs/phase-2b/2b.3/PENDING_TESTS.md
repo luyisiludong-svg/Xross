@@ -2,8 +2,8 @@
 
 Branch `feat/theme-2b3` (from `feat/theme-2b2`), updated 2026-11-12 after an emulator pass and a
 hardware pass on the Galaxy A55. This file lists what has **not** been verified yet, why, and how
-to verify it. What *was* verified is in [`STATUS.md` §3.19](STATUS.md) (emulator) and
-[§3.21](STATUS.md) (Galaxy A55).
+to verify it. What *was* verified is in [`STATUS.md` §3.19](STATUS.md#s3.19) (emulator) and
+[§3.21](STATUS.md#s3.21) (Galaxy A55).
 
 **Done on the emulator:** frame pacing of game navigation (target met, once a GPU cost in the
 glow-text bloom was fixed), the full device regression (171 of 171), the colors by eye, context
@@ -29,7 +29,7 @@ tint from a real charger.
   rest (for example with `simpleperf` or a Perfetto trace) before the next phase.
 - **Watch the morphs by eye** between games whose art differs a lot in hue: the wave crossfade, and
   the focus halo, avatar glow and battery outline morphing over ~300 ms. A recording of two
-  similar games showed no jitter and no bloom flash (§3.21), but that change was small.
+  similar games showed no jitter and no bloom flash ([§3.21](STATUS.md#s3.21)), but that change was small.
 - **A real E-Ink panel** (or a 60 Hz panel with the profile on for a while): no ghosting, nothing
   animating (pulse, avatar glow, busy dots, caret, marquee), and the wave as one still frame. On
   the A55 the E-Ink profile drew no wave frames at rest (0% CPU).

@@ -66,7 +66,7 @@ sealed interface AccountCheck {
 
 /**
  * ScreenScraper API v2 (`https://api.screenscraper.fr/api2/`), per the API page (translated in
- * `docs/SCREENSCRAPER_API.md`):
+ * `docs/reference/SCREENSCRAPER_API.md`):
  *
  * - Every call carries the application's developer credentials (`devid`, `devpassword`,
  *   `softname`); the user's own account (`ssid` = user name, `sspassword`) is optional and

@@ -9,7 +9,7 @@ prep slice, merged first; then `feat/theme-2b5` from `main` for 2b.5a–d.
 in 2b.5 depends on 2b.7, and 2b.7 doesn't touch audio, so starting 2b.5 first is safe; only the
 Settings ▸ Sound rows here and 2b.7's status-bar `VOLUME` slot touch neighbouring UI.
 
-**Why a prep slice.** Of the refactors in [`ARCHITECTURE_ASSESSMENT.md`](ARCHITECTURE_ASSESSMENT.md)
+**Why a prep slice.** Of the refactors in [`ARCHITECTURE_ASSESSMENT.md`](../../design/ARCHITECTURE_ASSESSMENT.md) (the 2026-11-13 version, in git history)
 §8, three sit directly under 2b.5: the lint gate (#1; 2b.5c adds a Media3 player and the open lint
 errors include Media3 opt-ins), `ThemeLookResolver` (#4; 2b.5c's per-category BGM and 2b.5d's
 effects rows resolve through the cascade now in `MainActivity.setContent`, which is also why quick
@@ -101,7 +101,7 @@ Findings:
   (encoder noise stays under 1).
 - **Xross's window redraws at 120 Hz during the boot video** although nothing on it changes (the
   menu and black are covered). Not 2b.5-specific; it belongs with the idle-CPU item in
-  `PHASE_2B3_PENDING_TESTS.md`.
+  [`2b.3/PENDING_TESTS.md`](../2b.3/PENDING_TESTS.md).
 - **Folder packs show ≈ 0.3–0.7 s of black on a cold start.** Since 2b.5d the screen stays black
   until the intro is decided, and for a folder pack that waits for the pack to load (0.9–1.1 s
   after process start, against ≈ 0.2 s for the built-in Default pack). It happens with or without
@@ -604,6 +604,6 @@ Differences from the prompt below:
 
 ## Carry-overs from 2b.4 (not part of 2b.5)
 
-- The particle slowdown on the A55 during navigation (STATUS §3.28, Known limitation 10): profile
+- The particle slowdown on the A55 during navigation (STATUS [§3.28](../2b.4/STATUS.md#s3.28), Known limitation 10): profile
   with a Perfetto GPU-queue trace before 2b.6 adds more per-frame work.
-- `PHASE_2B3_PENDING_TESTS.md` items still open (idle CPU at rest 16–21% vs < 10%).
+- [`2b.3/PENDING_TESTS.md`](../2b.3/PENDING_TESTS.md) items still open (idle CPU at rest 16–21% vs < 10%).

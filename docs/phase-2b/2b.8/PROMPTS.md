@@ -34,7 +34,7 @@ Reset row's summary (`MenuTree.resetThemeRow`) and the `LookInputs` that `ThemeL
 prep item is the next piece of Assessment #6 (the `XmbViewModel` split): the 28 theme commands in
 `XmbViewModel.onCommand` (2,647 lines) move into a `ThemeController`, the way 2b.7-prep moved the
 RetroAchievements logic into `RaController`, before 2b.8 adds more. The rest of
-[`ARCHITECTURE_ASSESSMENT.md`](ARCHITECTURE_ASSESSMENT.md) §8 (package moves, the `XmbEvent` sink,
+[`ARCHITECTURE_ASSESSMENT.md`](../../design/ARCHITECTURE_ASSESSMENT.md) (the 2026-11-13 version, in git history) §8 (package moves, the `XmbEvent` sink,
 singletons, imaging, modules) still waits: none of it blocks 2b.8.
 
 ---
@@ -608,7 +608,7 @@ Settled with the owner (2026-11-15):
 - 2b.7e on the A55 with the user's account (real systems, an actual followed user).
 - 2b.7a on the A55: Wi-Fi bars walking away from the router; an Android 9 image for the
   `WifiManager` path.
-- The particle slowdown on the A55 during navigation (STATUS §3.28), still unexplained.
+- The particle slowdown on the A55 during navigation (STATUS [§3.28](../2b.4/STATUS.md#s3.28)), still unexplained.
 - `profile.avatarStyle` from a pack (A.12 lists it; the loader doesn't read it). Once it does, it
   joins `UserLook` and the export.
 - The Default pack rework (Roadmap §4.2), after Theme 2.0 is finished: an original Default pack

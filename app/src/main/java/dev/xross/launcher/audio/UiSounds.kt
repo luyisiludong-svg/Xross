@@ -19,7 +19,7 @@ import kotlin.math.sqrt
 import kotlin.random.Random
 
 /**
- * Short UI effects and the [SoundRole] each one plays (Phase 2b.5a audit in docs/PHASE_2B5_PROMPTS.md):
+ * Short UI effects and the [SoundRole] each one plays (Phase 2b.5a audit in docs/phase-2b/2b.5/PROMPTS.md):
  *  - [MOVE] is a step through a list or an overlay (`cursor`); [CATEGORY] is Left / Right
  *    between categories (`category_switch`, falling back to `cursor`).
  *  - [ENTER] runs an item or confirms a choice (`confirm`); [DRILL_IN] / [DRILL_OUT] enter and

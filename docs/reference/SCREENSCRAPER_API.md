@@ -2,7 +2,7 @@
 
 A working summary of ScreenScraper's API page (`https://www.screenscraper.fr/webapi2.php`, French,
 "v2 beta"), translated and narrowed to what Xross uses. The saved page itself
-(`docs/SCREENSCRAPER_api_docs.pdf`) is git-ignored because it was saved while signed in and
+(`docs/reference/SCREENSCRAPER_api_docs.pdf`) is git-ignored because it was saved while signed in and
 contains account credentials. Xross's client is `scrape/providers/ScreenScraperProvider.kt`.
 
 ## Who may use it

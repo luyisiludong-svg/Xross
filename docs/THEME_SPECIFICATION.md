@@ -9,7 +9,7 @@ Related documents: the [user and storage guide](USER_GUIDE.md) (where `Xross/the
 the rest of the `Xross/` folder), [`Roadmap.md`](../Roadmap.md) §4.3 and Appendix A (the design
 spec and milestones for upcoming Theme 2.0 work), [`STATUS.md`](STATUS.md) (how each feature was
 verified, with frame timings) and
-[`THEME_RICING_AND_WEB_STUDIO.md`](THEME_RICING_AND_WEB_STUDIO.md) (the plain-text ricing and web
+[`design/THEME_RICING_AND_WEB_STUDIO.md`](design/THEME_RICING_AND_WEB_STUDIO.md) (the plain-text ricing and web
 studio proposal).
 
 ## Contents
@@ -235,7 +235,7 @@ live behind the panel and saved in `settings.json` under `display`:
 **Reset to theme defaults** restores the active pack's `wave` values.
 
 A pack's `shader.frag` can react to music played by Xross's own player through the `uAudioBass` and
-`uAudioBeat` uniforms (no microphone permission); see [`STATUS.md`](STATUS.md) §3.23 for how it
+`uAudioBeat` uniforms (no microphone permission); see STATUS [§3.23](phase-2b/2b.4/STATUS.md#s3.23) for how it
 was measured.
 
 ## 7. `settings.json` display keys
@@ -527,7 +527,7 @@ The wave stops rendering while art or video covers it. Scraping itself is descri
 ## 14. The Default pack and icon tooling
 
 The bundled icons and sounds live in
-[`app/src/main/assets/themes/default/`](../app/src/main/assets/themes/default/) (`theme.json`,
+[`app/src/main/assets/themes/default/`](../app/src/main/assets/themes/default) (`theme.json`,
 `surfaces.json`, `icons/*.svg`, `sounds/*.wav`), kept apart from the app code so they can be
 swapped as a whole. It is a working example of a v2 pack.
 
@@ -627,7 +627,7 @@ The Default pack: left `[]`, right `[CLOCK, BATTERY, AVATAR]`, `BOTH`, empty clo
   saved, or when the account follows nobody. Offline with a saved list, it shows that list.
 * Friend data is fetched only on a refresh (Games ▸ RetroAchievements' Refresh, the profile's own
   refresh, opening the stack when it is stale, turning it on), never on focus or a timer; see
-  [RETROACHIEVEMENTS_API.md](RETROACHIEVEMENTS_API.md).
+  [reference/RETROACHIEVEMENTS_API.md](reference/RETROACHIEVEMENTS_API.md).
 
 ### Achievement badge
 

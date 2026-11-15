@@ -132,7 +132,7 @@ revision and serial.
 * **SteamGridDB** (capsules, hero banners, logos) needs a free API key.
 * **ScreenScraper** (descriptions, box art, video snaps) needs developer credentials issued to the
   app, plus optionally your own account. An English guide to ScreenScraper's API rules is in
-  [`SCREENSCRAPER_API.md`](SCREENSCRAPER_API.md).
+  [`reference/SCREENSCRAPER_API.md`](reference/SCREENSCRAPER_API.md).
 
 Scraping runs only while Xross is in front; automatic scraping is off until you turn it on, and
 Wi-Fi only by default.

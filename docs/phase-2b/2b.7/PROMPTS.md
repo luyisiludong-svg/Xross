@@ -7,13 +7,13 @@ shippable. Branches: `refactor/2b7-prep` from `main` once 2b.5 is merged, merged
 `feat/theme-2b7` from `main` for 2b.7a–e.
 
 **Order note.** The Roadmap recommended 2b.7 before 2b.5; 2b.5 went first (see
-[`PHASE_2B5_PROMPTS.md`](PHASE_2B5_PROMPTS.md)). Nothing here touches audio. The one neighbour is
+[`2b.5/PROMPTS.md`](../2b.5/PROMPTS.md)). Nothing here touches audio. The one neighbour is
 the status-bar `VOLUME` slot (2b.7a), which shows the system media volume (not the 2b.5b mixer,
 see Decisions) and never writes it. Merge 2b.5
 into `main` before cutting either 2b.7 branch: the prep slice moves code out of `XmbViewModel` and
 `XmbScreen`, which 2b.5 also changed.
 
-**Why a prep slice.** Of the refactors in [`ARCHITECTURE_ASSESSMENT.md`](ARCHITECTURE_ASSESSMENT.md)
+**Why a prep slice.** Of the refactors in [`ARCHITECTURE_ASSESSMENT.md`](../../design/ARCHITECTURE_ASSESSMENT.md) (the 2026-11-13 version, in git history)
 §8 that 2b.5 left for later, three sit directly under 2b.7: the RetroAchievements part of the
 `XmbViewModel` split (#6; 2b.7c adds friend data, 2b.7d and 2b.7e consume it, and the view model is
 2,823 lines), a state slice for the status bar (#9; 2b.7a turns one text run into up to six slots
@@ -29,11 +29,11 @@ it doesn't block 2b.7.
 | Slice | State |
 |---|---|
 | 2b.7-prep | ✅ merged into `main` (`f67f532`): `RaController`, `StatusBarState` / `StatusBarSource`, `model/GlyphKey` and `GlyphSet` |
-| 2b.7a | ✅ on `feat/theme-2b7` (2026-11-14): 793 unit tests, `lintDebug` 0 errors, theme suite **197/197** on the API 37 emulator (new 48-check "Components (2b.7a)" section), `display-matrix.sh` 12/12 default and stress, `palette-perf.sh` 0.15–0.75% janky ([STATUS §3.29](STATUS.md)). **A55** (2026-11-14): 48/48, volume keys and mute, a real "25 m to full", display matrix 24/24 ([STATUS §3.33](STATUS.md)). **Open:** Wi-Fi bars walking away from the router, an Android 9 image. As built: [2b.7a notes](#as-built-2b7a-2026-11-14) |
-| 2b.7b | ✅ on `feat/theme-2b7` (2026-11-14): 805 unit tests, `lintDebug` 0 errors, theme suite **235/235** on the API 37 emulator (new 38-check "Components (2b.7b)" section), `palette-perf.sh` 0.15–0.74% janky with badges ([STATUS §3.30](STATUS.md)). **A55** (2026-11-14): 33/38, the 5 mini-player fails are the suite expecting its seeded songs (re-done by hand with the user's music), badges 0.12–0.13% janky ([STATUS §3.33](STATUS.md)). **Open:** a real pad, touch on the ticker, `RA_PROGRESS` with an account, `display-matrix.sh` with the ticker and badges. As built: [2b.7b notes](#as-built-2b7b-2026-11-14) |
-| 2b.7c | ✅ on `feat/theme-2b7` (2026-11-14): friend API verified live ([RETROACHIEVEMENTS_API.md](RETROACHIEVEMENTS_API.md)), 825 unit tests, `lintDebug` 0 errors, theme suite **259/259** on the API 37 emulator (new 24-check "Components (2b.7c)" section) ([STATUS §3.31](STATUS.md)). **A55** (2026-11-14): 24/24, no refresh in 10 minutes at rest ([STATUS §3.33](STATUS.md)). **Open:** real followed users (the test account follows nobody). As built: [2b.7c notes](#as-built-2b7c-2026-11-14) |
-| 2b.7d | ✅ on `feat/theme-2b7` (2026-11-14): 836 unit tests, `lintDebug` 0 errors, theme suite **281/281** on the API 37 emulator (new 22-check "Components (2b.7d)" section, the friend strip live with the `.env` account), `palette-perf.sh` card median 0.45% vs pill 0.30% janky over 11 pairs ([STATUS §3.32](STATUS.md)). **A55** (2026-11-14): 22/22, card median 0.31% vs pill 0.38% janky over 5 interleaved pairs at 120 Hz ([STATUS §3.33](STATUS.md)). **Open:** portrait, real followed users. As built: [2b.7d notes](#as-built-2b7d-2026-11-14) |
-| 2b.7e | ✅ on `feat/theme-2b7` (2026-11-15): 852 unit tests, `lintDebug` 0 errors, theme suite **311/312** on the API 37 emulator (new 31-check "RetroAchievements hub (2b.7e)" section: three rows of badges on all 12 display-matrix configurations, the filter, the sidebar, Confirm on a friend; the one fail is 2b.4f's wallpaper toast missed, the wallpaper itself was set), integration 9/9, library 41/41 ([STATUS §3.34](STATUS.md)). **Open:** the A55 with the user's account (real systems, an actual followed user). As built: [2b.7e notes](#as-built-2b7e-2026-11-15) |
+| 2b.7a | ✅ on `feat/theme-2b7` (2026-11-14): 793 unit tests, `lintDebug` 0 errors, theme suite **197/197** on the API 37 emulator (new 48-check "Components (2b.7a)" section), `display-matrix.sh` 12/12 default and stress, `palette-perf.sh` 0.15–0.75% janky ([STATUS §3.29](STATUS.md#s3.29)). **A55** (2026-11-14): 48/48, volume keys and mute, a real "25 m to full", display matrix 24/24 ([STATUS §3.33](STATUS.md#s3.33)). **Open:** Wi-Fi bars walking away from the router, an Android 9 image. As built: [2b.7a notes](#as-built-2b7a-2026-11-14) |
+| 2b.7b | ✅ on `feat/theme-2b7` (2026-11-14): 805 unit tests, `lintDebug` 0 errors, theme suite **235/235** on the API 37 emulator (new 38-check "Components (2b.7b)" section), `palette-perf.sh` 0.15–0.74% janky with badges ([STATUS §3.30](STATUS.md#s3.30)). **A55** (2026-11-14): 33/38, the 5 mini-player fails are the suite expecting its seeded songs (re-done by hand with the user's music), badges 0.12–0.13% janky ([STATUS §3.33](STATUS.md#s3.33)). **Open:** a real pad, touch on the ticker, `RA_PROGRESS` with an account, `display-matrix.sh` with the ticker and badges. As built: [2b.7b notes](#as-built-2b7b-2026-11-14) |
+| 2b.7c | ✅ on `feat/theme-2b7` (2026-11-14): friend API verified live ([../../reference/RETROACHIEVEMENTS_API.md](../../reference/RETROACHIEVEMENTS_API.md)), 825 unit tests, `lintDebug` 0 errors, theme suite **259/259** on the API 37 emulator (new 24-check "Components (2b.7c)" section) ([STATUS §3.31](STATUS.md#s3.31)). **A55** (2026-11-14): 24/24, no refresh in 10 minutes at rest ([STATUS §3.33](STATUS.md#s3.33)). **Open:** real followed users (the test account follows nobody). As built: [2b.7c notes](#as-built-2b7c-2026-11-14) |
+| 2b.7d | ✅ on `feat/theme-2b7` (2026-11-14): 836 unit tests, `lintDebug` 0 errors, theme suite **281/281** on the API 37 emulator (new 22-check "Components (2b.7d)" section, the friend strip live with the `.env` account), `palette-perf.sh` card median 0.45% vs pill 0.30% janky over 11 pairs ([STATUS §3.32](STATUS.md#s3.32)). **A55** (2026-11-14): 22/22, card median 0.31% vs pill 0.38% janky over 5 interleaved pairs at 120 Hz ([STATUS §3.33](STATUS.md#s3.33)). **Open:** portrait, real followed users. As built: [2b.7d notes](#as-built-2b7d-2026-11-14) |
+| 2b.7e | ✅ on `feat/theme-2b7` (2026-11-15): 852 unit tests, `lintDebug` 0 errors, theme suite **311/312** on the API 37 emulator (new 31-check "RetroAchievements hub (2b.7e)" section: three rows of badges on all 12 display-matrix configurations, the filter, the sidebar, Confirm on a friend; the one fail is 2b.4f's wallpaper toast missed, the wallpaper itself was set), integration 9/9, library 41/41 ([STATUS §3.34](STATUS.md#s3.34)). **Open:** the A55 with the user's account (real systems, an actual followed user). As built: [2b.7e notes](#as-built-2b7e-2026-11-15) |
 
 ---
 
@@ -223,7 +223,7 @@ Decisions made while building (the spec above is unchanged otherwise):
   `calculateSignalLevel` formula. `ACCESS_WIFI_STATE` comes with `uses-feature
   android.hardware.wifi required=false`, so Ethernet-only TVs aren't filtered out.
 - **Aliases** (case, `-` and spaces ignored): see the `components` reference in
-  [THEME_SPECIFICATION.md §15](THEME_SPECIFICATION.md#15-components).
+  [THEME_SPECIFICATION.md §15](../../THEME_SPECIFICATION.md#15-components).
 - **Logos:** SVG logos are read like icons (white, black fills dropped) and now keep their
   `viewBox` aspect (`SvgIcon` used to make every vector 48 × 48 dp; the Default icons are all
   square, so they are unchanged). PNG and WebP logos keep their colors.
@@ -339,7 +339,7 @@ Decisions made while building:
 ## Slice 2b.7c: Friend data and the social stack
 
 **Verify first (decided 2026-11-14).** Before writing UI, confirm against the live Web API with
-the user's key, and record the answers in a new `docs/RETROACHIEVEMENTS_API.md`: the
+the user's key, and record the answers in a new `docs/reference/RETROACHIEVEMENTS_API.md`: the
 `API_GetUsersIFollow.php` payload (paging, and what each entry carries: avatar, points, whether
 it follows back), what gives a friend's latest game and when (`API_GetUserSummary` /
 `API_GetUserProfile`: last game id, rich presence, last activity), and any documented or observed
@@ -389,7 +389,7 @@ locally either way (requirement 3).
 
 ### As built (2b.7c, 2026-11-14)
 
-The verify step's answers are in [RETROACHIEVEMENTS_API.md](RETROACHIEVEMENTS_API.md): the
+The verify step's answers are in [../../reference/RETROACHIEVEMENTS_API.md](../../reference/RETROACHIEVEMENTS_API.md): the
 following list carries name, ULID, points and follow-back but **no avatar or activity**; a friend's
 latest game and when come from `API_GetUserSummary` with `g=1&a=1` (`RecentlyPlayed[0].LastPlayed`
 and `RichPresenceMsgDate`; `LastActivity` is dead); the limit is a burst of about 7 calls that
@@ -663,13 +663,13 @@ Defaults chosen in this doc (change before the slice starts if needed):
 
 - 2b.5d on the A55: cold-start time with and without a boot video, and the video at 120 Hz.
 - 2b.6 (haptics) is iced (Roadmap §4.8, 2026-11-15).
-- The particle slowdown on the A55 during navigation (STATUS §3.28): 2b.7d's `RICH_CARD` adds
+- The particle slowdown on the A55 during navigation (STATUS [§3.28](../2b.4/STATUS.md#s3.28)): 2b.7d's `RICH_CARD` adds
   per-focus work (about one janky frame a pass on the emulator). Measured on the A55 on
   2026-11-14 (5 interleaved pairs): card median 0.31% vs pill 0.38%; one card pass in the slow
-  GPU mode, no missed deadlines (STATUS §3.33). The slow mode itself is still unexplained.
-- `PHASE_2B3_PENDING_TESTS.md` items still open (idle CPU at rest 16–21% vs < 10%); the status
+  GPU mode, no missed deadlines (STATUS [§3.33](STATUS.md#s3.33)). The slow mode itself is still unexplained.
+- [`2b.3/PENDING_TESTS.md`](../2b.3/PENDING_TESTS.md) items still open (idle CPU at rest 16–21% vs < 10%); the status
   bar's new slots must not add wakeups at rest beyond the minute tick and real changes. Measured
   in 2b.7a on the emulator: 3-second windows at rest draw 0 frames, a minute tick 1; idle CPU on
   the A55 not re-measured.
 - 2b.7a on the A55: Wi-Fi bars walking away from the router and an Android 9 image for the
-  `WifiManager` path (volume keys, mute and a real `TIME_REMAINING` passed on 2026-11-14, §3.33).
+  `WifiManager` path (volume keys, mute and a real `TIME_REMAINING` passed on 2026-11-14, [§3.33](STATUS.md#s3.33)).

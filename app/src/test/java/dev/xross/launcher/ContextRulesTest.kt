@@ -22,7 +22,7 @@ import org.robolectric.RobolectricTestRunner
 import java.io.File
 
 /**
- * Theme 2.0, 2b.3: the `rules` context engine (Roadmap §4.3, docs/THEME_RICING_AND_WEB_STUDIO.md
+ * Theme 2.0, 2b.3: the `rules` context engine (Roadmap §4.3, docs/design/THEME_RICING_AND_WEB_STUDIO.md
  * §3.4): selectors for category, system (with folder aliases), battery level and time of day;
  * `rules.json` through `imports`; file order with the last matching rule winning; tile shapes and
  * layout patches.
@@ -259,7 +259,7 @@ class ContextRulesTest {
     }
 
     @Test fun batterySelectorAcceptsTheDottedAndCamelCaseNames() {
-        // docs/THEME_RICING_AND_WEB_STUDIO.md §3.4 writes "battery.level"; "batteryLevel" is also read.
+        // docs/design/THEME_RICING_AND_WEB_STUDIO.md §3.4 writes "battery.level"; "batteryLevel" is also read.
         pack(
             "aliases", palette + """,
             "rules": [

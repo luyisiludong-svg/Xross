@@ -396,7 +396,7 @@ class FriendsRepository(
         /**
          * Between the starts of two Web API calls of one refresh. RetroAchievements lets about 7
          * calls through back to back, then answers 429 (no Retry-After) until its bucket refills;
-         * calls ~330 ms apart passed 30 in a row (docs/RETROACHIEVEMENTS_API.md).
+         * calls ~330 ms apart passed 30 in a row (docs/reference/RETROACHIEVEMENTS_API.md).
          */
         const val CALL_SPACING_MS = 350L
 

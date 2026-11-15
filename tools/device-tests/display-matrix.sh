@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The 12-configuration display matrix (docs/STATUS.md §4.1) on a connected emulator: for each
+# The 12-configuration display matrix (docs/status/PERFORMANCE.md §4.1) on a connected emulator: for each
 # resolution and density it drives the home menu (an unmeasured warm-up pass, then 4 down, 4 up,
 # L1, R1 measured, then into Settings ▸ Theme),
 # records the UI frame stats, counts on-screen text cut off by a screen edge, and saves a

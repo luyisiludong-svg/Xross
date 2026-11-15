@@ -9,7 +9,7 @@ import kotlinx.serialization.json.JsonNames
 import java.util.Locale
 
 /**
- * One entry of `rules` (Roadmap §4.3 "Context rules", docs/THEME_RICING_AND_WEB_STUDIO.md §3.4):
+ * One entry of `rules` (Roadmap §4.3 "Context rules", docs/design/THEME_RICING_AND_WEB_STUDIO.md §3.4):
  * while every selector in [match] holds, [apply] patches the look. A pack ships them inline in
  * `theme.json` or in a `rules.json` it lists in `imports`; imported rules come first, then the
  * manifest's own, and later rules win over earlier ones.

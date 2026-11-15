@@ -52,7 +52,7 @@ class ThemeLayoutTest {
     private fun layout(json: String, problems: MutableList<String> = ArrayList()) =
         resolveLayout(spec(json), emptyMap(), ThemeLayout.DEFAULT, problems)
 
-    /** Display matrix configurations (docs/STATUS.md §4.1): width × height in pixels. */
+    /** Display matrix configurations (docs/status/PERFORMANCE.md §4.1): width × height in pixels. */
     private val displays = listOf(
         "4:3 retro" to (640f to 480f),
         "4:3" to (1024f to 768f),
