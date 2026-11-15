@@ -529,6 +529,7 @@ class FriendsTest {
         override fun moveCategory(delta: Int) { moves += delta }
         override fun dismissMenus() = Unit
         override fun components() = components
+        override fun revealGame(gameId: Long) = Unit
     }
 
     private fun await(what: String, condition: () -> Boolean) {

@@ -30,6 +30,7 @@ Legend: ✅ done and verified · ◐ partial · ❌ not started · 🧪 verified
 | Phase 2b.7b (mini player, glyphs, badge pills): `miniPlayerMode` (`FLOATING_CARD`, `STATUS_TICKER` in the status bar before the avatar, `OFF`), `glyphOverride` (`AUTO`, `PLAYSTATION`, colored `XBOX`, `NINTENDO`, `MONOCHROME_MINIMAL`; labels only), `badgePills` beside the focused title; Settings ▸ Theme ▸ Components rows | ✅ 🧪 on `feat/theme-2b7` (2026-11-14): 805 unit tests, `lintDebug` 0 errors; theme suite **235/235** on the API 37 emulator, `palette-perf.sh` 0.15–0.74% janky with badges (§3.30). **Galaxy A55** (2026-11-14): 33/38, the 5 mini-player checks re-done by hand with the user's music; badges 0.12–0.13% janky (§3.33) |
 | Phase 2b.7c (friend data and the social stack): followed users (`API_GetUsersIFollow`) and their latest game (`API_GetUserSummary`), cached in `Xross/data/ra/friends.json`, fetched on refresh only, ≤ 20 activity calls 350 ms apart; `topLeftCluster: SOCIAL_STACK` with a `9+` badge and a FOLLOWING panel; Settings ▸ Theme ▸ Components ▸ Top-left | ✅ 🧪 on `feat/theme-2b7` (2026-11-14): API verified live ([RETROACHIEVEMENTS_API.md](RETROACHIEVEMENTS_API.md)); 825 unit tests, `lintDebug` 0 errors; theme suite **259/259** on the API 37 emulator (§3.31). **Galaxy A55** (2026-11-14): 24/24, no refresh in 10 min at rest (§3.33); the test account follows nobody |
 | Phase 2b.7d (telemetry tiers): `telemetryMode` `OFF`, `COMPACT_PILL` (today's pill) and `RICH_CARD`: box art, platform pill, the six newest unlocks (locked ones greyed), progress with "18/42 · 120/400 pts" and a `RECENTLY PLAYED` strip of followed users on that game; offline without the strip; never fetches; Settings ▸ Theme ▸ Components ▸ Achievement badge | ✅ 🧪 on `feat/theme-2b7` (2026-11-14): 836 unit tests, `lintDebug` 0 errors; theme suite **281/281** on the API 37 emulator, the strip shown live with the `.env` account; `palette-perf.sh` card 0.30–1.37% janky (one 4.22% outlier in 11 passes) vs pill 0.15–1.16% (§3.32). **Galaxy A55** (2026-11-14): 22/22, card median 0.31% vs pill 0.38% janky over 5 interleaved pairs (§3.33) |
+| Phase 2b.7e (RetroAchievements hub upgrade): Achievements with a "30 / 120" header and points, exactly three rows of badges (columns from the width, scrolling a row at a time) and a glossy detail banner; Games ▸ RetroAchievements with L1/R1 platform filter pills (per-system completion, mastery and activity from cached progress) and a `FOLLOWING` sidebar by points with the user's own row, Confirm opening a friend's latest game in the library | ✅ 🧪 on `feat/theme-2b7` (2026-11-15): 852 unit tests, `lintDebug` 0 errors; theme suite **311/312** on the API 37 emulator (the fail: 2b.4f's wallpaper toast missed), integration 9/9, library 41/41 (§3.34). A55 not yet |
 | Phase 3 (dual screen, hot-swap, RetroAchievements, Web Portal, FTPS) | ◐ RetroAchievements account linking, status bar avatar and User Card (§3.12), per-game achievement lists and unlock toasts (§3.13), live on the emulator and the Galaxy A55 (§3.14); hot-swap and live resolution change done; dual screen, docking, Portal and FTPS not started |
 | Phase 4 (onboarding, triage, profiling, plugin API) | ◐ app triage and performance work started |
 
@@ -1559,6 +1560,42 @@ phone (the app is `sensorLandscape`). The phone's size and density were reset af
 **Not covered:** real followed users (the `.env` account follows nobody, so the stack and strip
 used seeded friends), Wi-Fi bars walking away from the router, an Android 9 image for the
 `WifiManager` path, a physical controller for the glyph sets.
+
+### 3.34 Phase 2b.7e: RetroAchievements hub upgrade (2026-11-15)
+
+On `feat/theme-2b7`, API 37 emulator (`-gpu host`, 2400×1080).
+
+**Host:** 852 unit tests pass (4 skipped). New `HubUpgradeTest`: grid columns from the width with
+cells fitting exactly three rows (landscape, wide, portrait at the 4-column floor, the 16-column
+cap); scrolling by row at the top, bottom and last rows, L1/R1 pages, a tap, new columns keeping
+the focused badge in view; the banner's status; the per-system summary from fixture progress (All
+equals today's summary, untracked games still counted as supported, two dumps of one set once, the
+newest dump owning the set); L1/R1 clamped at All and the last system and never scrolling; activity
+per system; the filter kept across a re-read; the sidebar's order with the user in place, its
+collapse (unlinked, offline without a cache, following nobody), Right/Left between dashboard and
+sidebar, Confirm; a friend's game by matched set and by title (not a covered system, not a title
+matched to another set); `MenuTree.pathToGame` with and without the All Games folder. In
+`RaControllerTest`: the sidebar collapsed while unlinked, the grid's columns carried to the next
+game. `lintDebug` 0 errors.
+
+**Theme suite: 311/312** (the 281 before plus a new 31-check "RetroAchievements hub (2b.7e)"
+section), offline with the fake account, Chrono Trigger (SNES) with 120 saved achievements (30
+unlocked), Golden Sun (GBA) 6 of 6, and three saved friends: the header "30 / 120" with "150/600
+pts"; three full rows of 16 badges; the banner "Hub 228-27, Smoke achievement 27, 5 points,
+HARDCORE, Nov 28, 2026"; no scroll within the three rows, one row when crossing the bottom; "Locked"
+on a locked badge; Golden Sun's six badges in one row; **three rows, none clipped, on all 12
+display-matrix configurations** (7 to 16 across). The hub: FOLLOWING listing Alice, Erin, SmokeUser
+(the user), Bob by points; All "180 of 630 points", L1 clamped, R1 to SNES (150 of 600) and GBA (30
+of 30, Golden Sun in the showcase), R1 clamped; Right into the sidebar; Confirm on Erin's game
+"Sonic Spinball isn't in your library"; Left back; Confirm on Alice closed the hub on Chrono
+Trigger in the SNES list; no friend call; with the cache deleted the sidebar and its hint left. The
+one failure was in 2b.4f: "a picked picture becomes the Xross wallpaper" missed the "Xross wallpaper
+set" toast, while the row under it already read "A picture you chose" (a timing miss, not this
+slice). Integration 9/9 and library 41/41 (the dashboard and the Achievements screen unlinked).
+
+**Not covered:** the A55 with the user's account (real systems and badges, a followed user: the
+test account follows nobody); real portrait (Xross is `sensorLandscape`, so the matrix's portrait
+size draws landscape).
 
 ## 4. Display matrix & performance
 

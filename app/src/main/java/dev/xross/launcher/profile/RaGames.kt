@@ -98,6 +98,66 @@ data class RaLibrarySummary(
     }
 }
 
+/**
+ * One system's share of the library's progress (2b.7e's platform filter): [summary] counts only
+ * this system's games; [titles] are its sets' RetroAchievements titles in lower case, which tie
+ * recent unlocks (that only name their game) to the system.
+ */
+data class RaSystemSummary(
+    val platformId: String,
+    /** The library's short tag ("SNES"), as the filter pill shows it. */
+    val tag: String,
+    val summary: RaLibrarySummary,
+    val titles: Set<String> = emptySet(),
+)
+
+/**
+ * What Games ▸ RetroAchievements reads from the cached progress (no network): the library-wide
+ * [all] (the same as [RaLibrarySummary.of] over everything), one [RaSystemSummary] per system with
+ * tracked games in the registry's order, and which library game holds each RetroAchievements set
+ * ([libraryGames], for opening a friend's latest game).
+ */
+data class RaHubSummary(
+    val all: RaLibrarySummary = RaLibrarySummary(),
+    val systems: List<RaSystemSummary> = emptyList(),
+    /** RetroAchievements game id → the library game with that set (the most recently played dump). */
+    val libraryGames: Map<Int, Long> = emptyMap(),
+) {
+    /** The summary for filter pill [filter]: 0 is All, then [systems] in order. */
+    fun summaryFor(filter: Int): RaLibrarySummary = systems.getOrNull(filter - 1)?.summary ?: all
+
+    companion object {
+        /**
+         * [supported]: library games on systems RetroAchievements covers; [known]: those with
+         * cached progress. [order] ranks a platform id (the registry's order); [tag] names it.
+         */
+        fun of(
+            supported: List<dev.xross.launcher.data.GameEntity>,
+            known: List<Pair<dev.xross.launcher.data.GameEntity, RaGameProgress>>,
+            order: (String) -> Int = { 0 },
+            tag: (String) -> String = { it.uppercase() },
+        ): RaHubSummary {
+            val supportedBy = supported.groupingBy { it.platformId }.eachCount()
+            val systems = known.groupBy { it.first.platformId }
+                .map { (platform, games) ->
+                    val summary = RaLibrarySummary.of(supportedBy[platform] ?: games.size, games)
+                    RaSystemSummary(
+                        platformId = platform,
+                        tag = tag(platform),
+                        summary = summary,
+                        titles = games.filter { it.second.total > 0 }.mapTo(HashSet()) { it.second.title.lowercase() },
+                    )
+                }
+                .filter { it.summary.trackedGames > 0 }
+                .sortedWith(compareBy<RaSystemSummary> { order(it.platformId) }.thenBy { it.tag })
+            val libraryGames = known.filter { it.second.gameId > 0 }
+                .groupBy { it.second.gameId }
+                .mapValues { (_, dumps) -> dumps.maxByOrNull { it.first.lastPlayed ?: 0L }!!.first.id }
+            return RaHubSummary(RaLibrarySummary.of(supported.size, known), systems, libraryGames)
+        }
+    }
+}
+
 /** A row of a console's game list: the RetroAchievements game and the ROM hashes it accepts. */
 @Serializable
 data class RaGameEntry(

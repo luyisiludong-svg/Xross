@@ -33,7 +33,7 @@ it doesn't block 2b.7.
 | 2b.7b | ✅ on `feat/theme-2b7` (2026-11-14): 805 unit tests, `lintDebug` 0 errors, theme suite **235/235** on the API 37 emulator (new 38-check "Components (2b.7b)" section), `palette-perf.sh` 0.15–0.74% janky with badges ([STATUS §3.30](STATUS.md)). **A55** (2026-11-14): 33/38, the 5 mini-player fails are the suite expecting its seeded songs (re-done by hand with the user's music), badges 0.12–0.13% janky ([STATUS §3.33](STATUS.md)). **Open:** a real pad, touch on the ticker, `RA_PROGRESS` with an account, `display-matrix.sh` with the ticker and badges. As built: [2b.7b notes](#as-built-2b7b-2026-11-14) |
 | 2b.7c | ✅ on `feat/theme-2b7` (2026-11-14): friend API verified live ([RETROACHIEVEMENTS_API.md](RETROACHIEVEMENTS_API.md)), 825 unit tests, `lintDebug` 0 errors, theme suite **259/259** on the API 37 emulator (new 24-check "Components (2b.7c)" section) ([STATUS §3.31](STATUS.md)). **A55** (2026-11-14): 24/24, no refresh in 10 minutes at rest ([STATUS §3.33](STATUS.md)). **Open:** real followed users (the test account follows nobody). As built: [2b.7c notes](#as-built-2b7c-2026-11-14) |
 | 2b.7d | ✅ on `feat/theme-2b7` (2026-11-14): 836 unit tests, `lintDebug` 0 errors, theme suite **281/281** on the API 37 emulator (new 22-check "Components (2b.7d)" section, the friend strip live with the `.env` account), `palette-perf.sh` card median 0.45% vs pill 0.30% janky over 11 pairs ([STATUS §3.32](STATUS.md)). **A55** (2026-11-14): 22/22, card median 0.31% vs pill 0.38% janky over 5 interleaved pairs at 120 Hz ([STATUS §3.33](STATUS.md)). **Open:** portrait, real followed users. As built: [2b.7d notes](#as-built-2b7d-2026-11-14) |
-| 2b.7e | ⬜ next |
+| 2b.7e | ✅ on `feat/theme-2b7` (2026-11-15): 852 unit tests, `lintDebug` 0 errors, theme suite **311/312** on the API 37 emulator (new 31-check "RetroAchievements hub (2b.7e)" section: three rows of badges on all 12 display-matrix configurations, the filter, the sidebar, Confirm on a friend; the one fail is 2b.4f's wallpaper toast missed, the wallpaper itself was set), integration 9/9, library 41/41 ([STATUS §3.34](STATUS.md)). **Open:** the A55 with the user's account (real systems, an actual followed user). As built: [2b.7e notes](#as-built-2b7e-2026-11-15) |
 
 ---
 
@@ -581,6 +581,59 @@ Device-test lessons (in `test-theme.sh` and `palette-perf.sh` now):
   landscape and in the display matrix.
 - Hub with the user's account: filter each system, the sidebar's order, offline collapse.
 ```
+
+### As built (2b.7e, 2026-11-15)
+
+| Piece | Where |
+|---|---|
+| Three rows, columns from the width, scroll by row (`columns`, `top`, `settled`, `withColumns`), `AchievementsLayout.fit`, the banner's status | `state/AchievementsView.kt` |
+| Header count, the grid, the glossy `Banner` | `ui/AchievementsScreen.kt` |
+| Per-system summary (`RaSystemSummary`, `RaHubSummary` with `libraryGames`) | `profile/RaGames.kt`; read by `AchievementsRepository.hubSummary` (`librarySummary` is its `all`) |
+| Filter, focus and sidebar input (`HubFocus`, `RaHubState.filter` / `row`, `RaHubEffect.OpenFriend`, `RaHub.withSummary`) | `state/RaHub.kt` |
+| Sidebar rows, collapse, friend → library game | `state/HubSidebar.kt` (`SidebarRow`, `HubSidebar.rows` / `shows` / `libraryGame`) |
+| Opening a friend's game | `RaController.openFriendGame` → `Host.revealGame` → `MenuTree.pathToGame` (the Games stack ending on the game) |
+| Drawing the pills and the sidebar | `ui/RaHubScreen.kt` (`FilterPills`, `FollowingSidebar`) |
+
+Decisions made while building:
+
+- **Grid:** cells as tall as fit exactly three rows; as many columns as the width takes, 4 to 16
+  (`AchievementsLayout`). Below 4 across the cells shrink and the three rows take less height; above
+  16 the grid is centred. The grid is three rows tall (plus 10 dp for the focused badge's lift), so
+  a fourth row never peeks. The screen reports its columns to the controller, which keeps them for
+  the next game. `top` moves the least that keeps the focused row in view; L1/R1 page by three rows.
+- **Header:** "30 / 120" (today's `TrophyCount`) at 1.25× the title size with the trophy, the points
+  ("150/600 pts") beside it; the points left the subtitle.
+- **Banner:** the pack's surface with a white sheen fading over its top half and a rim line, drawn
+  under the text; "HARDCORE" or "SOFTCORE" with the date, or "Locked". Read as one node: "Title,
+  description, 5 points, SOFTCORE, Nov 28, 2026".
+- **Filter:** the pills sit above the dashboard column (they don't scroll); a new filter starts at
+  the top, and a re-read summary keeps the filter on its system (or All if it left). Recent activity
+  under a system shows the unlocks whose game title is one of that system's tracked sets
+  (`RaBadge` names only its game); unlocks of games Xross hasn't matched show under All only.
+- **Sidebar:** collapses whenever there is no one to list (unlinked, offline without a cache, or
+  following nobody: the user's row alone isn't a sidebar). Sorted by hardcore points, the user's row
+  (from the profile; lilac) among them. Entering it keeps the last row; Back closes the hub from
+  either side; L1/R1 still filter from the sidebar; a tap focuses a row, a second tap opens it.
+- **Confirm on a friend:** the library game matched to their latest RetroAchievements game id
+  (`libraryGames`, from the saved matches; the most recently played dump), else a game on a covered
+  system with the same normalized title that isn't matched to another set. The hub closes and the
+  menu jumps to the game in its system's list (inside All Games when that folder is on). Toasts for
+  a game the library hasn't, a friend with no game, or one whose activity wasn't fetched.
+- **Friends wanted:** the hub counts as showing friends while it is open (`friendsWanted()`).
+  Opening it fetches a stale profile (and the friends with it), or only stale friends, as opening a
+  stale social stack does; nothing while it stays open, except its Primary action.
+- **Layout:** the identity card keeps 30% (32% in portrait), the sidebar takes 24% (30% in
+  portrait). The completion line now reads "6 / 6  unlocked" on one line (the gauge says what is
+  counted), since the narrower column wrapped "achievements unlocked".
+
+Device-test lessons (in `test-theme.sh` now):
+
+- The focused badge is scaled 12% about its centre, so group badge rows by their centres, and
+  cluster by gaps rather than rounding (two centres half a pixel apart fall in different buckets).
+- `adb shell` inside a `while read` loop eats the loop's input: give it `</dev/null`.
+- Xross is `sensorLandscape`: the display matrix's "portrait-phone" (`wm size 1080x2400`) still
+  draws 2400 × 1080. Read the screen size from the dump's root bounds, not from `wm size`.
+- `descs` sorts its output; read `xml` for anything whose order matters.
 
 ---
 

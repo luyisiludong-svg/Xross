@@ -128,8 +128,8 @@ class RaControllerTest {
         // No account is linked: the screen opens anyway and reports an empty, network-free summary.
         assertFalse(vm.state.value.profile.linked)
         vm.await("the library summary") { it.raHub?.summary != null }
-        assertEquals(1, vm.state.value.raHub!!.summary!!.supportedGames)
-        assertEquals(0, vm.state.value.raHub!!.summary!!.trackedGames)
+        assertEquals(1, vm.state.value.raHub!!.summary!!.all.supportedGames)
+        assertEquals(0, vm.state.value.raHub!!.summary!!.all.trackedGames)
         vm.press(NavAction.DOWN)
         assertEquals(1, vm.state.value.raHub!!.scroll)
         vm.press(NavAction.BACK)
@@ -152,6 +152,8 @@ class RaControllerTest {
         override fun promptLink(user: String, linked: Boolean) { prompts += user to linked }
         override fun moveCategory(delta: Int) { moves += delta }
         override fun dismissMenus() { dismissed++ }
+        val revealed = mutableListOf<Long>()
+        override fun revealGame(gameId: Long) { revealed += gameId }
     }
 
     private val scope = MainScope()
@@ -214,6 +216,37 @@ class RaControllerTest {
         assertNull(s.raHub)
         assertNull(s.achievements)
         assertFalse(s.avatarFocused)
+    }
+
+    @Test fun hubSidebarCollapsesWhileUnlinkedAndLOneROneNeverScroll() {
+        val host = FakeHost()
+        val ra = controller(host)
+        ra.openRaHub()
+        idle()
+        assertTrue("Unlinked: no sidebar", ra.hubSidebarRows().isEmpty())
+        ra.onScreenAction(NavAction.RIGHT)
+        assertEquals(dev.xross.launcher.state.HubFocus.DASHBOARD, ra.state.value.raHub!!.focus)
+        ra.onScreenAction(NavAction.NEXT_CATEGORY)
+        assertEquals(0, ra.state.value.raHub!!.scroll)
+        ra.onScreenAction(NavAction.DOWN)
+        assertEquals(1, ra.state.value.raHub!!.scroll)
+        ra.onRaHubRowTapped(0)
+        assertEquals(dev.xross.launcher.state.HubFocus.DASHBOARD, ra.state.value.raHub!!.focus)
+        assertTrue(host.revealed.isEmpty())
+    }
+
+    @Test fun achievementsColumnsCarryToTheNextGame() {
+        val container = AppContainer(context)
+        runBlocking { container.database.games().insertAll(listOf(snes("Alpha"))) }
+        val ra2 = controller(FakeHost(), container)
+        ra2.onAchievementsColumns(6)
+        ra2.showAchievements(runBlocking { container.database.games().getAll().first().id })
+        val deadline = System.currentTimeMillis() + 5_000
+        while (ra2.state.value.achievements == null && System.currentTimeMillis() < deadline) {
+            idle()
+            Thread.sleep(10)
+        }
+        assertEquals(6, ra2.state.value.achievements?.columns)
     }
 
     @Test fun linkDialogNeedsAKeyForANewUserAndAnEmptyNameOnUnlinkedDoesNothing() {

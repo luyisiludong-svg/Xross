@@ -186,16 +186,28 @@ class AchievementsRepository(
     }
 
     /** Progress across [games] from the session and the Xross folder. No network; blocking I/O on [io]. */
-    suspend fun librarySummary(games: List<GameEntity>): RaLibrarySummary = withContext(io) {
+    suspend fun librarySummary(games: List<GameEntity>): RaLibrarySummary = hubSummary(games).all
+
+    /**
+     * [librarySummary] with its per-system split and which library game holds each set (2b.7e).
+     * No network; blocking I/O on [io].
+     */
+    suspend fun hubSummary(games: List<GameEntity>): RaHubSummary = withContext(io) {
         val supported = games.filter { RaConsoles.of(it.platformId) != null }
-        if (!credentials.current.retroAchievementsLinked) return@withContext RaLibrarySummary(supportedGames = supported.size)
+        if (!credentials.current.retroAchievementsLinked) return@withContext RaHubSummary(RaLibrarySummary(supportedGames = supported.size))
         val matches = readMatches()
         val known = supported.mapNotNull { game ->
             val progress = memory[game.uuid]?.progress
                 ?: matches[game.uuid]?.takeIf { it.raId > 0 }?.let { readProgress(it.raId) }
             progress?.let { game to it }
         }
-        RaLibrarySummary.of(supported.size, known)
+        val order = dev.xross.launcher.storage.PlatformRegistry.all.withIndex().associate { (i, p) -> p.id to i }
+        RaHubSummary.of(
+            supported,
+            known,
+            order = { order[it] ?: Int.MAX_VALUE },
+            tag = { id -> dev.xross.launcher.storage.PlatformRegistry.byId(id)?.shortName ?: id.uppercase() },
+        )
     }
 
     private fun readProgress(raId: Int): RaGameProgress? =

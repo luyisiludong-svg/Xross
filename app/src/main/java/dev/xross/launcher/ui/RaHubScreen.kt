@@ -25,6 +25,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -49,6 +53,8 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -62,7 +68,13 @@ import dev.xross.launcher.profile.RaLibrarySummary
 import dev.xross.launcher.profile.RaMasteredGame
 import dev.xross.launcher.scrape.ArtKind
 import dev.xross.launcher.model.GlyphKey
+import dev.xross.launcher.profile.FriendsState
+import dev.xross.launcher.state.HubFocus
+import dev.xross.launcher.state.HubSidebar
+import dev.xross.launcher.state.RaController
 import dev.xross.launcher.state.RaHubState
+import dev.xross.launcher.state.SidebarRow
+import dev.xross.launcher.state.SocialStack
 import dev.xross.launcher.theme.AvatarStyleConfig
 import java.text.NumberFormat
 import java.util.Locale
@@ -88,6 +100,10 @@ internal fun RaHubScreen(
     loadArt: suspend (String, List<ArtKind>, Int) -> ImageBitmap?,
     loadBadge: suspend (String, Int) -> ImageBitmap?,
     onDismiss: () -> Unit,
+    /** Followed users (2b.7c), for the `FOLLOWING` sidebar (2b.7e). */
+    friends: FriendsState = FriendsState.Unlinked,
+    onPillTap: (Int) -> Unit = {},
+    onRowTap: (Int) -> Unit = {},
 ) {
     var shown by remember { mutableStateOf(hub) }
     if (hub != null) shown = hub
@@ -117,14 +133,25 @@ internal fun RaHubScreen(
                 .padding(horizontal = (m.width * 0.045f).dp(), vertical = (m.height * 0.055f).dp())
                 .clickable(remember { MutableInteractionSource() }, indication = null) {},
         ) {
+            val rows = remember(friends, profile) { HubSidebar.rows(friends, RaController.selfRow(profile)) }
+            val portrait = m.height > m.width
+            val pills = state.pills
             Row(Modifier.weight(1f)) {
-                IdentityCard(profile, style, m, Modifier.width((m.width * 0.3f).coerceAtLeast(m.s * 0.5f).dp()).fillMaxHeight())
+                val identity = if (portrait) m.width * 0.32f else (m.width * 0.3f).coerceAtLeast(m.s * 0.5f)
+                IdentityCard(profile, style, m, Modifier.width(identity.dp()).fillMaxHeight())
                 Spacer(Modifier.width(gap))
-                val scroll = rememberScrollState()
-                val step = (m.s * 0.14f).toInt()
-                LaunchedEffect(state.scroll) { scroll.animateScrollTo(state.scroll * step) }
-                Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(scroll), verticalArrangement = Arrangement.spacedBy(gap)) {
+                Column(Modifier.weight(1f).fillMaxHeight()) {
+                    // L1/R1 platform filter (2b.7e): All, then each system with tracked games.
+                    if (profile.linked && pills.size > 1) {
+                        FilterPills(pills, state.filter, m, onPillTap)
+                        Spacer(Modifier.height((m.s * 0.02f).dp()))
+                    }
+                    val scroll = rememberScrollState()
+                    val step = (m.s * 0.14f).toInt()
+                    LaunchedEffect(state.scroll, state.filter) { scroll.animateScrollTo(state.scroll * step) }
+                    Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(scroll), verticalArrangement = Arrangement.spacedBy(gap)) {
                     val p = profile.profile
+                    val filtered = state.shown
                     when {
                         !profile.linked -> Placeholder(
                             "No RetroAchievements account linked",
@@ -139,17 +166,41 @@ internal fun RaHubScreen(
                                     m,
                                 )
                             }
-                            Completion(state.summary, m)
-                            Mastery(state.summary?.mastered.orEmpty(), state.summary != null, state.artVersion, m, loadArt)
-                            Activity(p?.recentBadges.orEmpty(), p != null, m, loadBadge)
+                            Completion(filtered, m)
+                            Mastery(filtered?.mastered.orEmpty(), state.summary != null, state.artVersion, m, loadArt)
+                            Activity(state.activity(p?.recentBadges.orEmpty()), p != null, m, loadBadge)
                         }
                     }
+                    }
+                }
+                if (rows.isNotEmpty()) {
+                    Spacer(Modifier.width(gap))
+                    FollowingSidebar(
+                        rows = rows,
+                        friends = friends,
+                        focused = if (state.focus == HubFocus.SIDEBAR) state.row.coerceIn(0, rows.size - 1) else -1,
+                        m = m,
+                        onRowTap = onRowTap,
+                        modifier = Modifier.width((m.width * if (portrait) 0.3f else 0.24f).dp()).fillMaxHeight(),
+                    )
                 }
             }
             Spacer(Modifier.height((m.s * 0.015f).dp()))
             Row(horizontalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.align(Alignment.End)) {
-                if (profile.linked) Hint("↕", "Scroll", text)
-                Hint(confirmGlyph, if (profile.linked) "Refresh" else "Link account", text)
+                val inSidebar = state.focus == HubFocus.SIDEBAR && rows.isNotEmpty()
+                if (profile.linked && pills.size > 1) Hint("L1 R1", "Platform", text)
+                when {
+                    inSidebar -> {
+                        Hint("↕", "Browse", text)
+                        Hint("←", "Dashboard", text)
+                        Hint(confirmGlyph, "Open game", text)
+                    }
+                    else -> {
+                        if (profile.linked) Hint("↕", "Scroll", text)
+                        if (rows.isNotEmpty()) Hint("→", "Following", text)
+                        Hint(confirmGlyph, if (profile.linked) "Refresh" else "Link account", text)
+                    }
+                }
                 Hint(backGlyph, "Back", text)
             }
         }
@@ -307,7 +358,8 @@ private fun Completion(summary: RaLibrarySummary?, m: XmbMetrics) {
                 Column(Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.Bottom) {
                         TrophyCount(summary.unlocked, summary.achievements, text * 1.25f)
-                        Text("  achievements unlocked", style = shadowed(text, color = TextDim))
+                        // One line, also beside the sidebar (2b.7e): the gauge already says what is counted.
+                        Text("  unlocked", style = shadowed(text, color = TextDim), maxLines = 1, softWrap = false)
                     }
                     Spacer(Modifier.height(6.dp))
                     ProgressBar(summary.completion, height = 9.dp)
@@ -462,6 +514,148 @@ private fun Activity(badges: List<RaBadge>, fetched: Boolean, m: XmbMetrics, loa
                     Column(horizontalAlignment = Alignment.End) {
                         Text("${badge.points} pts", style = shadowed(text * 1.05f, color = Pastel.Amber, weight = FontWeight.Bold))
                         if (badge.hardcore) Pill("HARDCORE", text * 0.65f, color = Pastel.Rose)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** The platform filter's pills; the selected one in amber, kept in view as L1/R1 move it. */
+@Composable
+private fun FilterPills(pills: List<String>, selected: Int, m: XmbMetrics, onTap: (Int) -> Unit) {
+    val density = LocalDensity.current
+    val text = with(density) { (m.subtitleSize * 0.85f).toSp() }
+    val list = rememberLazyListState()
+    LaunchedEffect(selected) {
+        val visible = list.layoutInfo.visibleItemsInfo
+        if (visible.none { it.index == selected && it.offset >= 0 && it.offset + it.size <= list.layoutInfo.viewportEndOffset }) {
+            list.animateScrollToItem((selected - 1).coerceAtLeast(0))
+        }
+    }
+    LazyRow(state = list, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+        itemsIndexed(pills) { i, label ->
+            val on = i == selected
+            val shape = RoundedCornerShape(50)
+            Box(
+                Modifier
+                    .clip(shape)
+                    .background(if (on) Pastel.Amber.copy(alpha = 0.9f) else Color(0x26FFFFFF))
+                    .border(1.dp, if (on) Pastel.Amber else Color(0x40FFFFFF), shape)
+                    .semantics { contentDescription = "Platform filter: $label" + if (on) ", selected" else "" }
+                    .clickable(remember { MutableInteractionSource() }, indication = null) { onTap(i) }
+                    .padding(horizontal = 14.dp, vertical = 5.dp),
+            ) {
+                Text(
+                    label,
+                    style = shadowed(text, color = if (on) Color(0xFF1C1408) else Color.White, weight = FontWeight.Bold).let { if (on) it.copy(shadow = null) else it },
+                    maxLines = 1,
+                    softWrap = false,
+                )
+            }
+        }
+    }
+}
+
+/**
+ * `FOLLOWING` (2b.7e): followed users by points with the user's own row in its place, each with
+ * the avatar, name, points and latest game. [focused] is the focused row, -1 while the focus is
+ * on the dashboard; the list scrolls to keep it in view.
+ */
+@Composable
+private fun FollowingSidebar(
+    rows: List<SidebarRow>,
+    friends: FriendsState,
+    focused: Int,
+    m: XmbMetrics,
+    onRowTap: (Int) -> Unit,
+    modifier: Modifier,
+) {
+    val density = LocalDensity.current
+    val text = with(density) { m.subtitleSize.toSp() }
+    val number = remember { NumberFormat.getIntegerInstance() }
+    val list = rememberLazyListState()
+    val nowMs = remember(rows) { System.currentTimeMillis() }
+    LaunchedEffect(focused) {
+        if (focused < 0) return@LaunchedEffect
+        val visible = list.layoutInfo.visibleItemsInfo
+        val first = visible.firstOrNull()?.index ?: 0
+        val last = visible.lastOrNull()?.index ?: 0
+        if (focused <= first || focused >= last) list.animateScrollToItem((focused - 2).coerceAtLeast(0))
+    }
+    val avatar = (m.subtitleSize * 2.2f).let { with(density) { it.toDp() } }
+    Column(
+        modifier
+            .xrossSurface(CardShape, borderAlpha = 0.45f, borderScale = 2f / 3f)
+            .padding(horizontal = with(density) { (m.s * 0.022f).toDp() }, vertical = with(density) { (m.s * 0.028f).toDp() }),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 6.dp)) {
+            Text("FOLLOWING", style = shadowed(text * 0.8f, color = Pastel.Lilac, weight = FontWeight.Bold).copy(letterSpacing = text * 0.12f))
+            Spacer(Modifier.weight(1f))
+            val note = when (friends) {
+                is FriendsState.Offline -> "Offline"
+                is FriendsState.Loading -> "Refreshing…"
+                else -> number.format(friends.friends.size)
+            }
+            Text(note, style = shadowed(text * 0.75f, color = TextDim), maxLines = 1)
+        }
+        Spacer(Modifier.height(with(density) { (m.s * 0.014f).toDp() }))
+        LazyColumn(state = list, verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.weight(1f).fillMaxWidth()) {
+            itemsIndexed(rows, key = { _, r -> (if (r.self) "self:" else "") + r.user.lowercase() }) { i, r ->
+                val on = i == focused
+                val shape = RoundedCornerShape(12.dp)
+                val a = r.activity
+                val ago = a?.let { if (it.online) "online" else SocialStack.ago(it.lastActive, nowMs) }.orEmpty()
+                val game = when {
+                    r.self -> "You"
+                    a == null -> "Not fetched yet"
+                    a.gameTitle.isNotEmpty() -> a.gameTitle
+                    else -> "No games played yet"
+                }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(shape)
+                        .background(
+                            when {
+                                on -> Color(0x40FFFFFF)
+                                r.self -> Pastel.Lilac.copy(alpha = 0.18f)
+                                else -> Color.Transparent
+                            },
+                        )
+                        .border(if (on) 2.dp else 0.dp, if (on) Pastel.Amber else Color.Transparent, shape)
+                        .semantics(mergeDescendants = true) {
+                            contentDescription = listOf(
+                                if (r.self) "${r.user} (you)" else r.user,
+                                "${number.format(r.points)} points",
+                                game.takeIf { !r.self }.orEmpty(),
+                                ago,
+                            ).filter { it.isNotEmpty() }.joinToString(", ")
+                        }
+                        .clickable(remember { MutableInteractionSource() }, indication = null) { onRowTap(i) }
+                        .padding(horizontal = 6.dp, vertical = 5.dp),
+                ) {
+                    ProfileAvatar(r.avatar, r.avatarVersion, avatar, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Column(Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                r.user,
+                                style = shadowed(text * 0.92f, color = if (r.self) Pastel.Lilac else Color.White, weight = FontWeight.Bold),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f, fill = false),
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(number.format(r.points), style = shadowed(text * 0.8f, color = Pastel.Amber, weight = FontWeight.Bold), maxLines = 1, softWrap = false)
+                        }
+                        Text(
+                            listOf(game, ago).filter { it.isNotEmpty() }.joinToString(" · "),
+                            style = shadowed(text * 0.76f, color = if (a?.online == true) Pastel.Mint else TextDim),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
                     }
                 }
             }
