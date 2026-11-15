@@ -159,8 +159,8 @@ class WaveSettingsTest {
         val pack = rows[0]
         assertEquals("Sakura by me · 2 packs", pack.subtitle)
         assertEquals(NodeAction.Run(Command.CycleThemePack), pack.action)
-        assertEquals(listOf(Command.SetThemePack("default"), Command.SetThemePack("sakura"), Command.ReloadThemePacks, null), pack.menu.map { it.command })
-        assertEquals("Export a pack…", pack.menu.last().label)
+        assertEquals(listOf(Command.SetThemePack("default"), Command.SetThemePack("sakura"), Command.ReloadThemePacks, null, null), pack.menu.map { it.command })
+        assertEquals(listOf("Export a pack…", "Share as .xtheme…"), pack.menu.takeLast(2).map { it.label })
         assertTrue(pack.menu[1].selected)
         val color = tree.list(MenuTree.DISPLAY_COLORS).single { it.id == "disp:theme" }
         assertEquals("Theme pack · Sakura", color.subtitle)

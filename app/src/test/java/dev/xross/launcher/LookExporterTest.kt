@@ -90,12 +90,13 @@ class LookExporterTest {
             e.manifest.text("description"),
         )
         // Everything the loader read (a non-selected variant's and a rule's files too), and the
-        // convention files the import allowlist knows; not what it can't place, nor dot-files.
+        // every other data file the pack ships (2b.8c: the import takes any file a manifest could
+        // name, so art/orphan.png too); never dot-files or the JSON merged into theme.json.
         val paths = e.paths()
         assertTrue(paths.containsAll(StressPack.USED))
         assertTrue("art/night.webp" in paths && "art/late.jpg" in paths)
-        for (p in listOf("wallpaper.png", "bgm.ogg", "sounds/cursor.wav", "icons/music.svg", "icons/not_a_glyph.svg", "notes.txt")) assertTrue(p, p in paths)
-        for (p in listOf("art/orphan.png", ".git/config", ".nomedia", "theme.json", "surfaces.json", "rules.json")) assertFalse(p, p in paths)
+        for (p in listOf("wallpaper.png", "bgm.ogg", "sounds/cursor.wav", "icons/music.svg", "icons/not_a_glyph.svg", "notes.txt", "art/orphan.png")) assertTrue(p, p in paths)
+        for (p in listOf(".git/config", ".nomedia", "theme.json", "surfaces.json", "rules.json")) assertFalse(p, p in paths)
         assertTrue(e.files.all { it.source == ExportSource.Pack(it.path) })
     }
 

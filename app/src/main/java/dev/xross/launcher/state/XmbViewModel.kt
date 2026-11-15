@@ -57,6 +57,8 @@ sealed interface UiEffect {
     data object PickDatFolder : UiEffect
     /** Pick a `.xtheme` file; answers [XmbViewModel.onThemeArchivePicked]. */
     data object PickThemeArchive : UiEffect
+    /** Create a document named [fileName] for a shared theme (2b.8c); answers [XmbViewModel.onThemeArchiveCreated]. */
+    data class CreateThemeArchive(val fileName: String) : UiEffect
     data object PickBaseRomsFolder : UiEffect
     data class PickMediaFolder(val kind: MediaFolderKind) : UiEffect
     /** Ask for text (account, key, title, search); the answer goes to [XmbViewModel.onTextEntered]. */
@@ -648,6 +650,9 @@ class XmbViewModel(
 
     /** The picked `.xtheme`: see [ThemeController.onThemeArchivePicked]. */
     fun onThemeArchivePicked(uri: Uri?) = theme.onThemeArchivePicked(uri)
+
+    /** The document created for a shared theme: see [ThemeController.onThemeArchiveCreated]. */
+    fun onThemeArchiveCreated(uri: Uri?) = theme.onThemeArchiveCreated(uri)
 
     // Settings ▸ Theme ▸ Layout (2b.8a): forwarded to [ThemeController].
 
@@ -1967,6 +1972,7 @@ class XmbViewModel(
             is Command.SetComponent, is Command.SetBadgePills, is Command.ToggleBadgePill, is Command.CycleEffect,
             is Command.SetEffect, Command.ResetThemeDefaults, Command.OpenLayoutSettings, Command.ExportTheme,
             is Command.ExportThemePack, is Command.ChooseExportScope, Command.ConfirmThemeExport, Command.SwitchToExportedTheme,
+            is Command.ShareThemePack, Command.ShareExportedTheme,
             -> check(theme.onCommand(command)) { "ThemeController didn't take $command" }
             Command.RequestStorageAccess ->
                 if (env.value.storageGranted) toast("Already granted") else emit(UiEffect.RequestStorageAccess)

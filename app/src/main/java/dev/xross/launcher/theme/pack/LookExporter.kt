@@ -185,8 +185,8 @@ object LookExporter {
         val convention = available.filter { path ->
             val parts = path.split('/').filter { it.isNotEmpty() }
             parts.isNotEmpty() && parts.none { it.startsWith(".") } &&
-                // The JSON is merged into the one theme.json; notes (.md, .txt) are kept.
-                !(parts.size == 1 && parts[0].lowercase(Locale.ROOT).endsWith(".json")) &&
+                // The JSON (imports included) is merged into the one theme.json; notes (.md, .txt) are kept.
+                !parts.last().lowercase(Locale.ROOT).endsWith(".json") &&
                 ThemeArchive.disallowed(parts) == null
         }
         return (pack.files + convention.sorted()).distinct()

@@ -46,7 +46,7 @@ singletons, imaging, modules) still waits: none of it blocks 2b.8.
 | 2b.8-prep | ✅ on `refactor/2b8-prep` (2026-11-15): 872 unit tests (852 + 20), `lintDebug` 0 errors, `XmbViewModel` 2,647 → 2,331 lines; theme suite **311/312** on the API 37 emulator, the same as `main` (the one fail is 2b.4f's wallpaper toast missed by the screen dump; the wallpaper was saved, drawn and kept across a restart); `palette-perf.sh 3` 0.15–0.71% janky against 0.29–1.50% on `main` (inside the noise and the gate). As built: [2b.8-prep notes](#as-built-2b8-prep-2026-11-15) |
 | 2b.8a | ✅ on `feat/theme-2b8` (2026-11-15): 886 unit tests (872 + 14), `lintDebug` 0 errors; theme suite **348/351** on the API 37 emulator, all 39 new checks passing (new 39-check "Layout mixer (2b.8a)" section); `display-matrix.sh` 12/12 with both extremes; `palette-perf.sh 3` 0.29–0.45% janky with a non-default layout against 0.44–0.75% without. **Open:** the A55 (a held D-pad on UI scale). As built: [2b.8a notes](#as-built-2b8a-2026-11-15) |
 | 2b.8b | ✅ on `feat/theme-2b8` (2026-11-15): 912 unit tests (886 + 26), `lintDebug` 0 errors; theme suite **407/407** on the API 37 emulator (new 56-check "Export (2b.8b)" section: the built-in Default pack whole and as a current look, a pack with variants, overrides and rules in every scope, a picked wallpaper; each the same on screen after Switch to). **Open:** the A55 with a folder pack; the import allowlist vs. paths the loader reads (2b.8c). As built: [2b.8b notes](#as-built-2b8b-2026-11-15) |
-| 2b.8c | ⬜ |
+| 2b.8c | ✅ on `feat/theme-2b8` (2026-11-15): 932 unit tests (912 + 20), `lintDebug` 0 errors; the A.13 gate (`ThemeRoundTripTest`) green for every scope of the Default and stress packs in 126 contexts; new 19-check "Share (2b.8c)" section of the theme suite 19/19 on the API 37 emulator (the whole suite, now 426 checks, not rerun). **Open:** the A55 (share to a cloud folder, re-import on the emulator); a full theme-suite run. As built: [2b.8c notes](#as-built-2b8c-2026-11-15) |
 
 ---
 
@@ -473,7 +473,7 @@ Decisions made while building:
   battery rule is `<= 30` and the shot is taken at 28%. Each comparison also checks the colours,
   effects and cosmetics the debug build logs.
 
-Open for 2b.8c: the import allowlist (`ThemeArchive.disallowed`) refuses some paths the loader reads
+Open for 2b.8c (done there: the allowlist was widened): the import allowlist (`ThemeArchive.disallowed`) refuses some paths the loader reads
 and an export copies, such as a root `logo.svg` or an `art/` folder (the stress pack has both); the
 share has to either widen the allowlist to what the loader reads or refuse those packs with a reason.
 Open: the A55 with a folder pack and the user's own picks.
@@ -524,6 +524,57 @@ Open: the A55 with a folder pack and the user's own picks.
   the export.
 - On the A55: share to a cloud folder and re-import on the emulator (another device's paths).
 ```
+
+### As built (2b.8c, 2026-11-15)
+
+| Piece | Where |
+|---|---|
+| `ThemeArchive.write(export, reader, out)` (a `LookExport` streamed into a zip: the Default pack from its APK assets, no folder first), `writeFolder(dir, out)` (a pack folder as it is, `imports` and all), `write(entries, out)` underneath; `ArchiveEntry`, `ArchiveWrite` | `theme/pack/ThemeArchive.kt` |
+| The import allowlist widened to what the loader reads (`NAMED_TYPES`) | `ThemeArchive.disallowed` |
+| Flow: `Command.ShareThemePack(id)`, `ShareExportedTheme`, `ChooseExportScope(…, share)`, `NamePurpose.ExportTheme(…, share)`, `UiEffect.CreateThemeArchive(fileName)`, `ThemeController.onThemeArchiveCreated` | `state/ThemeController.kt`, `state/XmbModel.kt`, `state/NameEntry.kt`, `state/XmbViewModel.kt`, `MainActivity.kt` |
+| The Theme pack row's Options ▸ **Share as .xtheme…** (every installed pack); **Share as .xtheme…** in the "<name> saved" menu after an export | `state/MenuTree.kt`, `state/ThemeController.kt` |
+| Tests: `ThemeArchiveWriteTest` (6), `ThemeRoundTripTest` (9: the A.13 gate, A.1 over the inflated entries), `ThemeControllerTest` (+4), `ThemeArchiveTest` (+1, one rewritten); `SameLook` shared with `ThemeExportTest` | `app/src/test` |
+| Device: "Share (2b.8c)" (19 checks) in the theme suite; the "Theme packs" section steps past the new last row | `tools/device-tests/test-theme.sh` |
+
+Device checks (2026-11-15, API 37 emulator with `-gpu host`, 2400×1080):
+
+| Check | Result |
+|---|---|
+| "Share (2b.8c)" section run on its own | **19/19** |
+| Whole pack of the built-in Default pack, shared to `Download/` from the Theme pack row | `default-pack.xtheme`, 37 entries (`theme.json` first, 7 sounds and 29 icons from the APK assets), no folder written; imported back as `default-pack`: at most 1.38% of pixels differ in the 8 places (the breathing halo), logs equal |
+| Current look of Default (Crimson, 3 effects, 2 components, 3 layout values, a surface), exported, shared from the saved menu, its folder deleted, imported back | 0.06% of pixels differ, logs equal |
+
+Decisions made while building:
+
+- **The allowlist was widened, not the share refused.** The root and any folder of the pack's own
+  (`art/`, `music/`, `parts/`) take every file type a manifest can name: images, audio, fonts,
+  shaders (`.fs` too, which `shaders/` refused), `.agsl`, boot videos, `.json`, `.md` / `.txt`.
+  The convention folders keep their own types, programs and hidden files are still refused, and the
+  root `bgm.*` / `boot.mp4` caps stay. So `logo.svg`, `art/` and an imported `parts/rules.json` now
+  import. Two side effects: a whole-pack export also copies data files nothing reads
+  (`art/orphan.png`; the pack as it ships), and every `.json` is left out of it (merged).
+- **Two writers:** the scope list from the Theme pack row exports straight into the zip; Share
+  after an export zips the folder just written as it is. Both go through one entry check that uses
+  the reader's own rules, so a written archive always stages. A file an import would refuse (a
+  `.gif`, a `LICENSE`, a root music loop over 20 MB) is left out and named in the toast, not a
+  refusal: the loader can't use any of them. Over 50 MB or 2,000 entries is refused, the largest
+  files named; a refused document is deleted.
+- **The document is typed `application/octet-stream`, not `application/zip`:** with the zip type
+  the emulator's storage provider saved `default-pack.xtheme.zip`. The import picker already
+  accepts octet-stream.
+- **"Includes your wallpaper photo"** opens the Share row's detail on the confirm panel, and is the
+  detail of Share as .xtheme… after a current-look export that copied one.
+- **Archives are reproducible:** entries carry a fixed time, so the same pack zips to the same bytes.
+- **Contexts of the gate:** each category and none × no system / `dreamcast` × battery 15%, 50%,
+  charging × 08:00, 20:00 and 22:00 (inside the stress pack's 21:00..06:00 rule): 126. "Equal" is
+  `ThemeLookResolver.resolve` and the wave palette (`paletteFor` + `wavePalette`); there is no class
+  named `ColorPipeline`. A whole-pack export keeps the colour theme as a setting, so it is compared
+  under the same colours on both sides.
+- **The landscape keyboard can cover the picker's Save** on the emulator; the suite presses its
+  Enter in that case.
+
+Open: the A55 (share to a cloud folder, re-import on the emulator); a full theme-suite run with the
+new section in place (only the section itself and the unit tests ran).
 
 ---
 

@@ -8,8 +8,8 @@ sealed interface NamePurpose {
     /** A new Apps folder for [packageName]. */
     data class NewAppFolder(val packageName: String) : NamePurpose
 
-    /** The name of a theme exported from pack [packId] in [scope] (2b.8b). */
-    data class ExportTheme(val packId: String, val scope: dev.xross.launcher.theme.pack.ExportScope) : NamePurpose
+    /** The name of a theme exported from pack [packId] in [scope] (2b.8b), into an `.xtheme` file when [share] (2b.8c). */
+    data class ExportTheme(val packId: String, val scope: dev.xross.launcher.theme.pack.ExportScope, val share: Boolean = false) : NamePurpose
 }
 
 sealed interface NameEntryEffect {

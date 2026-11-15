@@ -15,6 +15,7 @@ import dev.xross.launcher.theme.PACK_THEME
 import dev.xross.launcher.theme.QuickProfile
 import dev.xross.launcher.theme.XrossTheme
 import dev.xross.launcher.theme.pack.ArchiveResult
+import dev.xross.launcher.theme.pack.ArchiveWrite
 import dev.xross.launcher.theme.pack.BadgePill
 import dev.xross.launcher.theme.pack.ComponentRow
 import dev.xross.launcher.theme.pack.EffectSlot
@@ -201,9 +202,11 @@ class ThemeController(
             Command.OpenLayoutSettings -> openLayoutSettings()
             Command.ExportTheme -> openExport(themes.active.value.id)
             is Command.ExportThemePack -> openExport(command.id)
-            is Command.ChooseExportScope -> chooseExportScope(command.packId, command.scope)
+            is Command.ChooseExportScope -> chooseExportScope(command.packId, command.scope, command.share)
             Command.ConfirmThemeExport -> confirmExport()
             Command.SwitchToExportedTheme -> switchToExport()
+            is Command.ShareThemePack -> openExport(command.id, share = true)
+            Command.ShareExportedTheme -> shareExported()
             else -> return false
         }
         return true
@@ -450,11 +453,20 @@ class ThemeController(
 
     // region Export (2b.8b)
 
-    /** A built export waiting for the confirm panel's Export. */
-    private data class ExportDraft(val pack: LoadedTheme, val export: LookExport, val wallpaper: String, val plan: ExportPlan? = null)
+    /** A built export waiting for the confirm panel's Export (or Share, into an `.xtheme`, 2b.8c). */
+    private data class ExportDraft(
+        val pack: LoadedTheme,
+        val export: LookExport,
+        val wallpaper: String,
+        val plan: ExportPlan? = null,
+        val share: Boolean = false,
+    ) {
+        /** It carries a picture the user picked from their photos. */
+        val photo: Boolean get() = export.files.any { it.source == ExportSource.UserWallpaper }
+    }
 
-    /** What was last written, for Switch to. */
-    private data class Exported(val id: String, val name: String, val scope: ExportScope)
+    /** What was last written, for Switch to and Share as .xtheme…. */
+    private data class Exported(val id: String, val name: String, val scope: ExportScope, val photo: Boolean = false)
 
     /** The pack whose scope list is open (a non-active one is loaded for it). */
     private var exportPack: LoadedTheme? = null
@@ -463,36 +475,36 @@ class ThemeController(
 
     private val themeExport by lazy { ThemeExport(themesDir = { environment.current.themes }) }
 
-    /** Opens the scope list for pack [id]: the active one at once, another after it loads. */
-    private fun openExport(id: String) {
+    /** Opens the scope list for pack [id] (to share as an `.xtheme` when [share]): the active one at once, another after it loads. */
+    private fun openExport(id: String, share: Boolean = false) {
         exportDraft = null
         val active = themes.active.value
-        if (id == active.id) return showExportScopes(active)
+        if (id == active.id) return showExportScopes(active, share)
         scope.launch {
             val pack = withContext(Dispatchers.IO) { (packs.loadStrict(id) as? PackLoad.Ok)?.theme }
-                ?: return@launch host.fail("Couldn't load $id to export it")
-            showExportScopes(pack)
+                ?: return@launch host.fail("Couldn't load $id to ${if (share) "share" else "export"} it")
+            showExportScopes(pack, share)
         }
     }
 
-    private fun showExportScopes(pack: LoadedTheme) {
+    private fun showExportScopes(pack: LoadedTheme, share: Boolean) {
         exportPack = pack
         sounds.play(UiSound.OPTION)
-        host.showOptions(OptionsMenuState.open("Export ${pack.info.name}", exportOptions(pack)))
+        host.showOptions(OptionsMenuState.open("${if (share) "Share" else "Export"} ${pack.info.name}", exportOptions(pack, share)))
     }
 
     /**
      * The scope list for [pack]: Whole pack, one row per variant when it has them (the base look
      * included), and Current look for the active pack only.
      */
-    fun exportOptions(pack: LoadedTheme): List<MenuOption> = buildList {
+    fun exportOptions(pack: LoadedTheme, share: Boolean = false): List<MenuOption> = buildList {
         val name = pack.info.name
         val n = pack.variants.size
         add(
             MenuOption(
                 "Whole pack",
                 detail = if (n == 0) "$name, as it ships" else "$name, $n variant" + (if (n == 1) "" else "s"),
-                command = Command.ChooseExportScope(pack.id, ExportScope.WholePack),
+                command = Command.ChooseExportScope(pack.id, ExportScope.WholePack, share),
             ),
         )
         if (n > 0) {
@@ -501,7 +513,7 @@ class ThemeController(
                     MenuOption(
                         "${LookExporter.variantName(pack, id)} only",
                         detail = "One look, without your picks",
-                        command = Command.ChooseExportScope(pack.id, ExportScope.Variant(id)),
+                        command = Command.ChooseExportScope(pack.id, ExportScope.Variant(id), share),
                     ),
                 )
             }
@@ -512,7 +524,7 @@ class ThemeController(
                 MenuOption(
                     "Current look",
                     detail = if (picks.isEmpty()) "What is on screen" else "With your picks: " + picks.joinToString(", "),
-                    command = Command.ChooseExportScope(pack.id, ExportScope.CurrentLook),
+                    command = Command.ChooseExportScope(pack.id, ExportScope.CurrentLook, share),
                 ),
             )
         }
@@ -521,12 +533,17 @@ class ThemeController(
     private fun exportPackFor(id: String): LoadedTheme? =
         exportPack?.takeIf { it.id == id } ?: themes.active.value.takeIf { it.id == id }
 
-    private fun chooseExportScope(packId: String, exportScope: ExportScope) {
+    private fun chooseExportScope(packId: String, exportScope: ExportScope, share: Boolean) {
         val pack = exportPackFor(packId) ?: return host.toast("Pick the pack to export again")
         if (exportScope == ExportScope.CurrentLook && pack.id != themes.active.value.id) return host.refuse()
         val name = LookExporter.defaultName(pack, exportScope).take(MAX_EXPORT_NAME)
         host.openNameEntry(
-            NameEntry("Name the exported theme", NamePurpose.ExportTheme(packId, exportScope), SearchState(query = name), maxLength = MAX_EXPORT_NAME),
+            NameEntry(
+                if (share) "Name the shared theme" else "Name the exported theme",
+                NamePurpose.ExportTheme(packId, exportScope, share),
+                SearchState(query = name),
+                maxLength = MAX_EXPORT_NAME,
+            ),
         )
     }
 
@@ -539,13 +556,13 @@ class ThemeController(
         scope.launch {
             host.busy(true)
             val draft = try {
-                withContext(Dispatchers.IO) { buildExport(pack, purpose.scope, name, s) }
+                withContext(Dispatchers.IO) { buildExport(pack, purpose.scope, name, s).copy(share = purpose.share) }
             } finally {
                 host.busy(false)
             }
             exportDraft = draft
             sounds.play(UiSound.OPTION)
-            host.showOptions(OptionsMenuState.open("Export as $name", confirmOptions(draft, s)))
+            host.showOptions(OptionsMenuState.open("${if (draft.share) "Share" else "Export"} as $name", confirmOptions(draft, s)))
         }
     }
 
@@ -582,6 +599,14 @@ class ThemeController(
                 }
             }
         }
+        if (draft.share) {
+            // The file leaves the device: say first that a picture from the user's photos is in it.
+            val detail = if (draft.photo) "Includes your wallpaper photo · $what" else what
+            return listOf(
+                MenuOption("Share", detail = "$detail · pick where to save ${archiveName(e.name)}", command = Command.ConfirmThemeExport),
+                MenuOption("Licences", detail = LookExporter.LICENCE_NOTE),
+            )
+        }
         return listOf(
             MenuOption("Export", detail = what, command = Command.ConfirmThemeExport),
             MenuOption("Licences", detail = LookExporter.LICENCE_NOTE),
@@ -592,6 +617,7 @@ class ThemeController(
         val draft = exportDraft ?: return host.toast("Start the export again from Settings ▸ Theme")
         exportDraft = null
         host.dismissOptions()
+        if (draft.share) return askForArchive(PendingShare.Export(draft))
         scope.launch {
             host.busy(true)
             val result = try {
@@ -604,7 +630,7 @@ class ThemeController(
                 is ExportResult.Saved -> {
                     themes.rediscover()
                     val name = draft.export.name
-                    exported = Exported(result.id, name, draft.export.scope)
+                    exported = Exported(result.id, name, draft.export.scope, draft.photo)
                     sounds.play(UiSound.OK)
                     host.toast("Saved as $name in Xross/themes")
                     host.showOptions(
@@ -613,6 +639,11 @@ class ThemeController(
                             listOf(
                                 MenuOption("Switch to $name", detail = switchDetail(draft.export.scope), command = Command.SwitchToExportedTheme),
                                 MenuOption("Saved in", detail = "Xross/themes/${result.id}"),
+                                MenuOption(
+                                    "Share as .xtheme…",
+                                    detail = if (draft.photo) "Includes your wallpaper photo" else "Save it as one theme file to send or keep",
+                                    command = Command.ShareExportedTheme,
+                                ),
                             ),
                         ),
                     )
@@ -705,6 +736,92 @@ class ThemeController(
             else -> null
         }
     }
+
+    // endregion
+
+    // region Share as .xtheme (2b.8c)
+
+    /** What the next created document gets: an export built for the file, or a pack folder already written. */
+    private sealed interface PendingShare {
+        val name: String
+
+        data class Export(val draft: ExportDraft) : PendingShare {
+            override val name get() = draft.export.name
+        }
+
+        data class Folder(val dir: File, override val name: String) : PendingShare
+    }
+
+    private var pendingShare: PendingShare? = null
+
+    /** `<id>.xtheme` for a theme named [name]. */
+    private fun archiveName(name: String) = ThemeArchive.idFor(name, "theme", null) + ".xtheme"
+
+    /** Share as .xtheme… after an export: zips the folder just written. */
+    private fun shareExported() {
+        val done = exported ?: return host.toast("Nothing exported yet")
+        val dir = File(environment.current.themes, done.id)
+        if (!dir.isDirectory) return host.fail("${done.name} is no longer in Xross/themes")
+        host.dismissOptions()
+        askForArchive(PendingShare.Folder(dir, done.name), fileName = "${done.id}.xtheme")
+    }
+
+    /** Opens the create-document picker; [onThemeArchiveCreated] writes the file. */
+    private fun askForArchive(share: PendingShare, fileName: String = archiveName(share.name)) {
+        pendingShare = share
+        host.emit(UiEffect.CreateThemeArchive(fileName))
+    }
+
+    /** The document picked for a shared theme (null: the picker was cancelled): the archive is written into it. */
+    fun onThemeArchiveCreated(uri: Uri?) {
+        val share = pendingShare ?: return
+        pendingShare = null
+        uri ?: return
+        scope.launch {
+            host.busy(true)
+            val result = try {
+                withContext(Dispatchers.IO) { writeArchive(share, uri) }
+            } finally {
+                host.busy(false)
+            }
+            when (result) {
+                is ArchiveWrite.Refused -> host.fail("Theme not shared: ${result.reason}")
+                is ArchiveWrite.Written -> {
+                    sounds.play(UiSound.OK)
+                    val file = displayName(uri) ?: archiveName(share.name)
+                    val left = result.leftOut.takeIf { it.isNotEmpty() }
+                        ?.let { " · left out ${it.size} file" + (if (it.size == 1) "" else "s") + " a theme can't use (${it.first()})" }.orEmpty()
+                    host.toast("Saved ${share.name} as $file$left")
+                }
+            }
+        }
+    }
+
+    private fun writeArchive(share: PendingShare, uri: Uri): ArchiveWrite {
+        val resolver = context.contentResolver
+        val result = try {
+            val out = resolver.openOutputStream(uri, "wt") ?: return ArchiveWrite.Refused("Couldn't open the file to write")
+            out.use { stream ->
+                when (share) {
+                    is PendingShare.Export -> ThemeArchive.write(share.draft.export, reader(share.draft), stream)
+                    is PendingShare.Folder -> ThemeArchive.writeFolder(share.dir, stream)
+                }
+            }
+        } catch (e: java.io.IOException) {
+            ArchiveWrite.Refused("Couldn't write the file (${e.message ?: "write error"})")
+        } catch (e: SecurityException) {
+            ArchiveWrite.Refused("No permission to write the file")
+        }
+        // Don't leave a broken theme file where the user put it.
+        if (result is ArchiveWrite.Refused) runCatching { android.provider.DocumentsContract.deleteDocument(resolver, uri) }
+        return result
+    }
+
+    private fun displayName(uri: Uri): String? = runCatching {
+        context.contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+            if (c.moveToFirst()) c.getString(0) else null
+        }
+    }.getOrNull()
 
     // endregion
 

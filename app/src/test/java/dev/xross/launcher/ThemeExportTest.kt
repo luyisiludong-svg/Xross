@@ -3,14 +3,9 @@ package dev.xross.launcher
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import dev.xross.launcher.data.CredentialStore
-import dev.xross.launcher.state.Categories
-import dev.xross.launcher.theme.BatteryLevel
-import dev.xross.launcher.theme.LookInputs
 import dev.xross.launcher.theme.PACK_THEME
-import dev.xross.launcher.theme.ThemeLookResolver
 import dev.xross.launcher.theme.WaveTint
 import dev.xross.launcher.theme.XrossTheme
-import dev.xross.launcher.theme.paletteFor
 import dev.xross.launcher.theme.pack.ComponentOverrides
 import dev.xross.launcher.theme.pack.EffectOverrides
 import dev.xross.launcher.theme.pack.ExportReader
@@ -27,7 +22,6 @@ import dev.xross.launcher.theme.pack.ThemeExport
 import dev.xross.launcher.theme.pack.ThemePackLoader
 import dev.xross.launcher.theme.pack.UserLook
 import dev.xross.launcher.theme.pack.WaveValues
-import dev.xross.launcher.theme.wavePalette
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -151,21 +145,6 @@ class ThemeExportTest {
 
     // region Each scope loads to the same look
 
-    private val contexts: List<Triple<String?, String?, Pair<BatteryLevel?, Int?>>> = buildList {
-        for (cat in Categories.all.map { it.id } + listOf<String?>(null)) {
-            for (system in listOf(null, "dreamcast")) {
-                for (battery in listOf(BatteryLevel(15, false), BatteryLevel(50, false), BatteryLevel(50, true))) {
-                    for (minute in listOf(8 * 60, 22 * 60)) add(Triple(cat, system, battery to minute))
-                }
-            }
-        }
-    }
-
-    /**
-     * [original] with [variant], [user], [colorTheme] and [wave] resolves like [exported] with
-     * nothing over it (its base, no user layer, its own colours) in every context. A mismatch
-     * names the context and the field.
-     */
     private fun assertSameLook(
         original: LoadedTheme,
         exported: LoadedTheme,
@@ -174,28 +153,7 @@ class ThemeExportTest {
         colorTheme: String = PACK_THEME,
         wave: WaveValues = WaveValues(),
         exportedVariant: String = "",
-    ) {
-        for ((cat, system, rest) in contexts) {
-            val (battery, minute) = rest
-            val a = ThemeLookResolver.resolve(LookInputs(original, variant, cat, system, battery, minute, user))
-            val b = ThemeLookResolver.resolve(LookInputs(exported, exportedVariant, cat, system, battery, minute, UserLook.NONE))
-            val where = "category=$cat system=$system battery=$battery minute=$minute"
-            fun same(field: String, x: Any?, y: Any?) = assertEquals("$where: $field", x, y)
-            same("layout", a.layout, b.layout)
-            same("surface", a.surface, b.surface)
-            same("switches", a.switches, b.switches)
-            same("components", a.components, b.components)
-            same("shader", a.look.shader, b.look.shader)
-            same("cosmetics", a.look.cosmetics, b.look.cosmetics)
-            same("focusGold", a.look.focusGold, b.look.focusGold)
-            same("bgm", a.look.bgm, b.look.bgm)
-            same("gains", a.look.gains.ifEmpty { original.gains }, b.look.gains.ifEmpty { exported.gains })
-            if (user.customWallpaper.isBlank()) same("wallpaper", a.look.wallpaper, b.look.wallpaper)
-            val pa = wavePalette(paletteFor(colorTheme, a.look.palette, date), WaveTint.byName(wave.tint), wave.colors)
-            val pb = wavePalette(paletteFor(PACK_THEME, b.look.palette, date), WaveTint.THEME, wave.colors)
-            same("palette", pa, pb)
-        }
-    }
+    ) = SameLook.assertSame(original, exported, variant, user, colorTheme, wave, exportedVariant, date)
 
     @Test fun eachScopeOfTheStressPackLoadsToTheSameLook() {
         val pack = stress()
@@ -264,8 +222,8 @@ class ThemeExportTest {
         val mine = write(pack, e, wallpaper = photo)
         photo.delete()
         // Every context shows the copied picture.
-        for ((cat, system, rest) in contexts) {
-            val look = mine.look("", cat, system, rest.first, rest.second)
+        for (w in SameLook.CONTEXTS) {
+            val look = mine.look("", w.category, w.system, w.battery, w.minute)
             assertEquals("wallpaper.png", look.wallpaper.path)
             assertTrue(mine.wallpaperFile(look.wallpaper)!!.isFile)
         }

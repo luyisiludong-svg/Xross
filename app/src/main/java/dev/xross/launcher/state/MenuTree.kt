@@ -943,6 +943,14 @@ class MenuTree(private val s: MenuSnapshot) {
                         submenu = s.themes.packs.map { (id, name) -> MenuOption(name, command = Command.ExportThemePack(id)) },
                     ),
                 )
+                // 2b.8c: the same scopes, written into one .xtheme file.
+                add(
+                    MenuOption(
+                        "Share as .xtheme…",
+                        detail = "Save a pack as one theme file to send or keep",
+                        submenu = s.themes.packs.map { (id, name) -> MenuOption(name, command = Command.ShareThemePack(id)) },
+                    ),
+                )
             },
         ),
     ) + themeVariantRow() + listOf(

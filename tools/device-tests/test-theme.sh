@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Theme suite (407 checks): Settings ▸ Theme and its folders (theme color, wave and avatar panels,
+# Theme suite (426 checks): Settings ▸ Theme and its folders (theme color, wave and avatar panels,
 # platform folders, surface style, the 2b.4f effect rows, Pick custom wallpaper, Reset to theme
 # defaults), quick profiles (OLED, Y2K, E-Ink), color layers (adaptive colors,
 # circadian curve, battery tint and charging pulse through `dumpsys battery`), the Sound section,
@@ -22,7 +22,9 @@
 # the menu while the panel is open, the ends held, a restart, Reset layout and Reset to theme defaults),
 # and Export theme (2b.8b: the built-in Default pack whole and as a current look, a pack with variants,
 # overrides and rules whole, per variant and as a current look, and a picked wallpaper copied in; each
-# compared before and after Switch to by screenshots and logged colours in 8 places).
+# compared before and after Switch to by screenshots and logged colours in 8 places), and Share as
+# .xtheme (2b.8c: the built-in Default pack whole and a current-look export, each saved through the
+# create-document picker, imported back and compared the same way).
 #
 #   tools/device-tests/test-theme.sh
 #
@@ -32,7 +34,7 @@
 # The battery override is always reset at exit, even after Ctrl-C.
 set -u
 . "$(dirname "$0")/lib/harness.sh"
-suite_begin theme 407
+suite_begin theme 426
 
 setup_base_env
 setup_theme_fixtures
@@ -187,8 +189,8 @@ press DPAD_DOWN 3 KEYCODE_DPAD_CENTER
 top_list
 key KEYCODE_BUTTON_Y
 expect "Look for new packs" "Theme pack Options offer a rescan"
-# Look for new packs is the second to last row (Export a pack… is last, 2b.8b).
-press DPAD_DOWN 6 KEYCODE_DPAD_UP KEYCODE_DPAD_CENTER
+# Look for new packs is the third from the last row (Export a pack… and Share as .xtheme… follow, 2b.8b/c).
+press DPAD_DOWN 8 KEYCODE_DPAD_UP KEYCODE_DPAD_UP KEYCODE_DPAD_CENTER
 pause 1
 key KEYCODE_DPAD_CENTER
 pause 1.5
@@ -1959,6 +1961,84 @@ adb logcat -d -s XrossWallpaper:I | tail -1 | grep -q "wallpaper=pack .*opaque=t
 adb shell rm -rf /sdcard/Xross/themes/default-pack /sdcard/Xross/themes/default-my-look /sdcard/Xross/themes/default-my-look-2 \
   /sdcard/Xross/themes/export_stress /sdcard/Xross/themes/export-stress "'/sdcard/Xross/themes/export-stress-base-look'" \
   /sdcard/Xross/themes/export-stress-ember /sdcard/Xross/themes/export-stress-mono /sdcard/Xross/themes/export-stress-my-look
+display_set 'd["themePack"] = "default"; d["wave"] = True'
+
+section "Share (2b.8c)"
+# Share as .xtheme… writes a pack into one file through the system's create-document picker: the
+# built-in Default pack whole from the Theme pack row, and a current-look export from its saved menu.
+# Each file is imported back (Import theme (.xtheme)…) and compared with what was on screen before,
+# by screenshots and logged colours in the same 8 places as the Export section.
+# save_doc <file name>: Save in the create-document picker (it opens on Downloads), then wait for the
+# file. The landscape keyboard can cover the picker; its Enter saves too.
+save_doc() {
+  local i
+  for i in $(seq 10); do adb shell dumpsys activity activities | grep -m1 topResumedActivity | grep -q documentsui && break; pause 0.5; done
+  ok "Share opens the system's create-document picker"
+  pause 1
+  for i in 1 2 3 4; do
+    adb shell dumpsys activity activities | grep -m1 topResumedActivity | grep -q documentsui || break
+    if adb shell dumpsys input_method | grep -q 'mInputShown=true'; then key KEYCODE_ENTER; else dump; tap_attr 'resource-id="android:id/button1"'; fi
+    pause 2
+  done
+  for i in $(seq 20); do adb shell ls "/sdcard/Download/$1" >/dev/null 2>&1 && break; pause 0.5; done
+  adb shell ls "/sdcard/Download/$1" >/dev/null 2>&1 && ok "…saved as Download/$1" || bad "no Download/$1 ($(adb shell ls /sdcard/Download | tr '\n' ' '))"
+}
+# import_doc <file name>: Settings ▸ Theme ▸ Import theme (.xtheme)… (the last row), that file.
+import_doc() {
+  category 0; press DPAD_DOWN 3 KEYCODE_DPAD_CENTER; press DPAD_DOWN 25
+  key KEYCODE_DPAD_CENTER; pause 2
+  pick "$1"
+}
+adb shell rm -rf /sdcard/Download/default-pack.xtheme /sdcard/Download/default-my-look.xtheme /sdcard/Xross/themes/default-pack /sdcard/Xross/themes/default-my-look
+display_set 'd.update({"wave": False, "themePack": "default", "themeVariant": "", "theme": "LAVENDER", "effects": {}, "components": {}, "layout": {}, "surfaceStyle": "", "customWallpaper": "", "adaptiveGamePalette": None, "circadianCurve": None, "batteryTint": None, "quickProfile": "NONE", "waveTint": "THEME"})'
+xshots shdef
+# The Theme pack row's Options ▸ Share as .xtheme… (the last row) ▸ Default ▸ Whole pack.
+category 0; press DPAD_DOWN 3 KEYCODE_DPAD_CENTER; top_list
+key KEYCODE_BUTTON_Y
+press DPAD_DOWN 25
+expect "Share as .xtheme" "the Theme pack row's Options offer Share as .xtheme…"
+key KEYCODE_DPAD_CENTER; pause 0.8
+expect "Default" "…for every installed pack, the built-in Default pack included"
+key KEYCODE_DPAD_CENTER; pause 1
+expect "Share Default" "…then the scope list"
+key KEYCODE_DPAD_CENTER; pause 0.8
+expect "Name the shared theme" "…then the name entry"
+key KEYCODE_ENTER; pause 2
+expect "pick where to save default-pack.xtheme" "the confirm panel names the file"
+expect_not "Includes your wallpaper photo" "…and no photo warning without a picked wallpaper"
+key KEYCODE_DPAD_CENTER
+save_doc default-pack.xtheme
+adb shell ls /sdcard/Xross/themes | grep -q '^default-pack$' && bad "sharing wrote a folder" || ok "sharing the whole pack writes no folder in Xross/themes"
+adb pull /sdcard/Download/default-pack.xtheme "$XT_TMP/default-pack.xtheme" >/dev/null 2>&1
+n=$(unzip -Z1 "$XT_TMP/default-pack.xtheme" 2>/dev/null | grep -cE '^(sounds/.*\.wav|icons/.*\.svg)$')
+unzip -Z1 "$XT_TMP/default-pack.xtheme" 2>/dev/null | head -1 | grep -qx theme.json && [ "$n" -eq 36 ] \
+  && ok "…theme.json first, with the 7 sounds and 29 icons from the APK assets" || bad "the archive has $n sounds and icons"
+media_scan
+import_doc default-pack.xtheme
+for _ in $(seq 16); do settings_has '"themePack": "default-pack"' && break; pause 0.5; done
+settings_has '"themePack": "default-pack"' && ok "the shared file imports back as default-pack and is applied" || bad "default-pack isn't active"
+xshots shdefcopy
+same_look shdef shdefcopy "the re-imported Default pack looks the same as the built-in one"
+
+# A current look, exported, shared from the saved menu, its folder deleted, imported back.
+display_set 'd["themePack"] = "default"; d["theme"] = "CRIMSON"; d["effects"] = {"focusFrameStyle": "GOLD_BEZEL", "iconMask": "CIRCLE", "backgroundFilter": "SCANLINES"}; d["components"] = {"batteryMode": "PERCENTAGE", "statusBarRight": ["BATTERY", "CLOCK", "AVATAR"]}; d["layout"] = {"preset": "PSP_CENTER", "uiScale": 1.1, "itemSpacingDp": 20}; d["surfaceStyle"] = "Y2K_GLOSSY_BEZEL"'
+xshots shmine
+open_export
+export_as 1 "Default (my look)"
+press DPAD_DOWN 2
+expect "Share as .xtheme" "after an export: Share as .xtheme…"
+key KEYCODE_DPAD_CENTER
+save_doc default-my-look.xtheme
+adb shell rm -rf /sdcard/Xross/themes/default-my-look; pause 1
+media_scan
+import_doc default-my-look.xtheme
+for _ in $(seq 16); do adb shell ls /sdcard/Xross/themes/default-my-look/theme.json >/dev/null 2>&1 && break; pause 0.5; done
+adb shell ls /sdcard/Xross/themes/default-my-look/theme.json >/dev/null 2>&1 && ok "the deleted export comes back from its file" || bad "default-my-look not re-imported"
+# As Switch to does: the picks are in the pack, so the user layer is cleared.
+display_set 'd.update({"themePack": "default-my-look", "themeVariant": "", "theme": "PACK", "effects": {}, "components": {}, "layout": {}, "surfaceStyle": "", "waveTint": "THEME"})'
+xshots shminecopy
+same_look shmine shminecopy "the re-imported current look looks the same as before the export"
+adb shell rm -rf /sdcard/Download/default-pack.xtheme /sdcard/Download/default-my-look.xtheme /sdcard/Xross/themes/default-pack /sdcard/Xross/themes/default-my-look
 display_set 'd["themePack"] = "default"; d["wave"] = True'
 
 suite_end

@@ -230,6 +230,7 @@ class ThemeControllerTest {
             Command.ToggleBadgePill(YEAR), Command.CycleEffect(EffectSlot.SHADER), Command.SetEffect(EffectSlot.SHADER, ""),
             Command.ResetThemeDefaults, Command.OpenLayoutSettings, Command.ExportTheme, Command.ExportThemePack("default"),
             Command.ChooseExportScope("default", ExportScope.WholePack), Command.ConfirmThemeExport, Command.SwitchToExportedTheme,
+            Command.ShareThemePack("default"), Command.ShareExportedTheme,
         )
         theirs.forEach { assertTrue("$it", c.onCommand(it)) }
         idle()
@@ -508,6 +509,118 @@ class ThemeControllerTest {
         assertEquals("Start the export again from Settings ▸ Theme", host.toasts.last())
         idle()
         assertEquals(before, dir.list()!!.toSet())
+    }
+
+    // endregion
+
+    // region Share as .xtheme (2b.8c)
+
+    private fun archives(container: AppContainer) =
+        dev.xross.launcher.theme.pack.ThemeArchive({ container.environment.current.themes }, container.themePacks::inspect)
+
+    /** [file] stages as an import would: the archive is a valid `.xtheme`. */
+    private fun stages(container: AppContainer, file: File): dev.xross.launcher.theme.pack.StagedTheme {
+        val r = archives(container).stage(file, file.name)
+        return (r as? dev.xross.launcher.theme.pack.ArchiveResult.Staged)?.theme ?: throw AssertionError("rejected: $r")
+    }
+
+    private fun shareFile(name: String) = File(context.cacheDir, "shared/$name").apply { parentFile!!.mkdirs(); delete() }
+
+    @Test fun thePackRowSharesAnyPack() {
+        val setup = dev.xross.launcher.state.ThemeSetup(packs = listOf("default" to "Default", "stress" to "Stress"))
+        val rows = MenuTree(dev.xross.launcher.state.MenuSnapshot(themes = setup)).list(MenuTree.DISPLAY)
+        val share = rows.single { it.id == "disp:pack" }.menu.single { it.label == "Share as .xtheme…" }
+        assertEquals(listOf(Command.ShareThemePack("default"), Command.ShareThemePack("stress")), share.submenu.map { it.command })
+    }
+
+    @Test fun sharingThePackWritesAnArchiveThatImportsAndNoFolder() {
+        val container = AppContainer(context)
+        val host = FakeHost()
+        val c = controller(host, container)
+        val dir = container.environment.current.themes.apply { mkdirs() }
+        val before = dir.list()!!.toSet()
+        c.onCommand(Command.ShareThemePack("default"))
+        val scopes = host.menus.last()
+        assertEquals("Share Default", scopes.title)
+        assertEquals(listOf("Whole pack", "Current look"), labels(scopes))
+        assertEquals(Command.ChooseExportScope("default", ExportScope.WholePack, share = true), scopes.current.options[0].command)
+        c.onCommand(Command.ChooseExportScope("default", ExportScope.WholePack, share = true))
+        val entry = host.nameEntry!!
+        assertEquals("Name the shared theme", entry.title)
+        assertEquals(NamePurpose.ExportTheme("default", ExportScope.WholePack, share = true), entry.purpose)
+        c.onExportNamed(entry.purpose as NamePurpose.ExportTheme, entry.text)
+        await("the confirm panel") { host.menus.last().title == "Share as Default" }
+        val confirm = host.menus.last()
+        assertEquals(listOf("Share", "Licences"), labels(confirm))
+        assertTrue(confirm.current.options[0].detail!!, confirm.current.options[0].detail!!.endsWith("pick where to save default-pack.xtheme"))
+        assertFalse("Includes your wallpaper photo" in confirm.current.options[0].detail!!)
+        c.onCommand(Command.ConfirmThemeExport)
+        assertEquals(UiEffect.CreateThemeArchive("default-pack.xtheme"), host.effects.last())
+        // The picker answers with the new document.
+        val file = shareFile("default-pack.xtheme")
+        c.onThemeArchiveCreated(android.net.Uri.fromFile(file))
+        await("the archive") { host.toasts.lastOrNull()?.startsWith("Saved Default as ") == true }
+        assertEquals(listOf(true, false, true, false), host.busy)
+        assertEquals("No folder in Xross/themes", before, dir.list()!!.toSet())
+        val staged = stages(container, file)
+        assertEquals("default-pack", staged.id)
+        assertTrue(File(staged.dir, "sounds/gameboot.wav").isFile)
+        // Answered once: a second answer does nothing.
+        c.onThemeArchiveCreated(android.net.Uri.fromFile(shareFile("again.xtheme")))
+        idle()
+        assertFalse(File(context.cacheDir, "shared/again.xtheme").exists())
+    }
+
+    @Test fun aCurrentLookWithAPhotoSaysSoBeforeSharing() {
+        val container = AppContainer(context)
+        val host = FakeHost()
+        val c = controller(host, container)
+        val photo = File(context.cacheDir, "photo.png").apply { writeBytes(byteArrayOf(0x89.toByte(), 'P'.code.toByte(), 'N'.code.toByte(), 'G'.code.toByte()) + ByteArray(64)) }
+        container.settings.update { it.copy(customWallpaper = photo.absolutePath, effectOverrides = EffectOverrides(foregroundParticles = "SNOW")) }
+        c.onCommand(Command.ShareThemePack("default"))
+        c.onCommand(Command.ChooseExportScope("default", ExportScope.CurrentLook, share = true))
+        c.onExportNamed(host.nameEntry!!.purpose as NamePurpose.ExportTheme, "Mine")
+        await("the confirm panel") { host.menus.last().title == "Share as Mine" }
+        val detail = host.menus.last().current.options[0].detail!!
+        assertTrue(detail, detail.startsWith("Includes your wallpaper photo · Default + "))
+        c.onCommand(Command.ConfirmThemeExport)
+        assertEquals(UiEffect.CreateThemeArchive("mine.xtheme"), host.effects.last())
+        val file = shareFile("mine.xtheme")
+        c.onThemeArchiveCreated(android.net.Uri.fromFile(file))
+        await("the archive") { host.toasts.lastOrNull()?.startsWith("Saved Mine as ") == true }
+        assertTrue(File(stages(container, file).dir, "wallpaper.png").isFile)
+    }
+
+    @Test fun anExportedFolderCanBeSharedAfterwards() {
+        val container = AppContainer(context)
+        val host = FakeHost()
+        val c = controller(host, container)
+        c.onCommand(Command.ShareExportedTheme)
+        assertEquals("Nothing exported yet", host.toasts.last())
+        c.onCommand(Command.ExportTheme)
+        val id = export(c, host, "default", ExportScope.WholePack)
+        val saved = host.menus.last().current.options
+        assertEquals("Share as .xtheme…", saved[2].label)
+        assertEquals(Command.ShareExportedTheme, saved[2].command)
+        c.onCommand(Command.ShareExportedTheme)
+        assertEquals(UiEffect.CreateThemeArchive("$id.xtheme"), host.effects.last())
+        // Cancelling the picker writes nothing and forgets the share.
+        c.onThemeArchiveCreated(null)
+        idle()
+        c.onThemeArchiveCreated(android.net.Uri.fromFile(shareFile("late.xtheme")))
+        idle()
+        assertFalse(File(context.cacheDir, "shared/late.xtheme").exists())
+        // Again, to the end: the folder as it is.
+        c.onCommand(Command.ShareExportedTheme)
+        val file = shareFile("$id.xtheme")
+        c.onThemeArchiveCreated(android.net.Uri.fromFile(file))
+        await("the archive") { host.toasts.lastOrNull()?.startsWith("Saved Default as ") == true }
+        val folder = File(container.environment.current.themes, id)
+        val staged = stages(container, file)
+        assertEquals(
+            folder.walkTopDown().filter { it.isFile }.map { it.relativeTo(folder).invariantSeparatorsPath }.toSet(),
+            staged.dir.walkTopDown().filter { it.isFile }.map { it.relativeTo(staged.dir).invariantSeparatorsPath }.toSet(),
+        )
     }
 
     // endregion

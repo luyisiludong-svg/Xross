@@ -1,11 +1,15 @@
 package dev.xross.launcher.theme.pack
 
+import dev.xross.launcher.theme.shader.ShaderRef
 import java.io.File
 import java.io.IOException
+import java.io.InputStream
+import java.io.OutputStream
 import java.util.Locale
 import java.util.zip.ZipEntry
 import java.util.zip.ZipException
 import java.util.zip.ZipFile
+import java.util.zip.ZipOutputStream
 
 /** An unpacked, checked `.xtheme` waiting in a hidden staging folder to be installed. */
 data class StagedTheme(
@@ -23,6 +27,21 @@ sealed interface ArchiveResult {
     data class Rejected(val reason: String) : ArchiveResult
 }
 
+/** One file going into an `.xtheme`: its pack-relative [path], its size when known, and its bytes. */
+class ArchiveEntry(val path: String, val size: Long?, val open: () -> InputStream)
+
+sealed interface ArchiveWrite {
+    /**
+     * The archive is complete: [files] entries (`theme.json` included), [bytes] uncompressed.
+     * [leftOut] names the files that were skipped because an import would refuse them and the
+     * loader can't use them (a `.gif`, a `LICENSE` without a type, an oversized music loop).
+     */
+    data class Written(val files: Int, val bytes: Long, val leftOut: List<String> = emptyList()) : ArchiveWrite
+
+    /** Nothing usable was written (the caller drops the half-written document); [reason] says why. */
+    data class Refused(val reason: String) : ArchiveWrite
+}
+
 sealed interface InstallResult {
     data class Installed(val id: String) : InstallResult
     data class Failed(val reason: String) : InstallResult
@@ -35,10 +54,13 @@ sealed interface InstallResult {
  *
  * - **Zip slip:** an entry whose path contains `..`, starts with `/` or `\`, has a drive letter
  *   or a NUL is rejected, and every written file is checked to stay inside the staging folder.
- * - **Known folders only:** `.json` (and `.md` / `.txt` notes), `wallpaper.png` / `.jpg` /
- *   `.webp`, `bgm.ogg` / `bgm.mp3` (at most [BgmRef.MAX_BYTES]), `boot.mp4` (at most [BootVideoRef.MAX_BYTES]), `shader.frag` and `postprocess.agsl` at the root; fonts, sounds (also `audio/`, as in the spec's manifest
- *   example), icons, shaders and wallpapers in their folders, with their own file types. Programs (`.apk`, `.dex`, `.so`, `.sh`, …) and anything else abort the import.
- *   macOS `__MACOSX/` and `.DS_Store` litter is skipped.
+ * - **Data files only:** the convention folders (`fonts/`, `sounds/`, `audio/`, `icons/`,
+ *   `shaders/`, `wallpapers/`) hold their own file types; the root and any other folder hold the
+ *   types a manifest can name ([NAMED_TYPES]: images, audio, fonts, shaders, video, `.json`,
+ *   `.md` / `.txt` notes), so every file the loader can read imports (2b.8c). A root `bgm.*` is
+ *   capped at [BgmRef.MAX_BYTES] and `boot.mp4` at [BootVideoRef.MAX_BYTES]. Programs (`.apk`,
+ *   `.dex`, `.so`, `.sh`, …), hidden files and anything else abort the import. macOS `__MACOSX/`
+ *   and `.DS_Store` litter is skipped.
  * - **Size cap:** at most [maxBytes] (50 MB) uncompressed, checked against the declared sizes and
  *   again while unpacking (a header can lie), and at most [MAX_ENTRIES] files.
  * - **A valid pack:** `theme.json` at the root (or inside one top-level folder, as zipping a
@@ -192,20 +214,30 @@ class ThemeArchive(
         const val MAX_ENTRIES = 2000
         const val STAGING_PREFIX = ".import-"
 
-        /** File types per pack folder; root files are manifests and notes. */
+        /** File types per convention folder (the loader looks in these by name); root files are manifests and notes. */
         private val FOLDERS = mapOf(
-            "fonts" to setOf("ttf", "otf"),
+            "fonts" to ThemePackLoader.FONT_TYPES,
             "sounds" to setOf("wav", "ogg", "mp3", "flac", "m4a", "aac", "opus"),
             "audio" to setOf("wav", "ogg", "mp3", "flac", "m4a", "aac", "opus"),
-            "icons" to setOf("svg", "png", "webp"),
-            "shaders" to setOf("frag", "glsl", "agsl"),
+            "icons" to ThemePackLoader.ICON_TYPES.toSet(),
+            "shaders" to ShaderRef.FILE_TYPES + "agsl",
             "wallpapers" to WallpaperRef.TYPES.toSet(),
         )
         private val ROOT_TYPES = setOf("json", "md", "txt")
 
+        /**
+         * Every file type the loader reads from a path a manifest names (2b.8c): a logo, wallpaper,
+         * music loop, sound, font, CUSTOM shader or UI filter, boot video, or an imported JSON file.
+         * A file of one of these types may sit at the pack root or in any folder of the pack's own
+         * (`art/`, `music/`), since `theme.json` can point at it there; the convention folders above
+         * keep their own types.
+         */
+        internal val NAMED_TYPES: Set<String> = ROOT_TYPES + ThemePackLoader.ICON_TYPES + WallpaperRef.TYPES + BgmRef.TYPES +
+            FOLDERS.getValue("sounds") + ThemePackLoader.FONT_TYPES + ShaderRef.FILE_TYPES + "agsl" + BootVideoRef.TYPES
+
         /** Files the loader looks for at the pack root by name: the wallpaper, the music loop, the boot video and the CUSTOM shader. */
         private val ROOT_FILES = WallpaperRef.DEFAULT_NAMES.toSet() + BgmRef.DEFAULT_NAMES + BootVideoRef.DEFAULT_NAMES +
-            "shader.frag" + UiFilterRef.DEFAULT_FILE
+            ShaderRef.DEFAULT_FILE + UiFilterRef.DEFAULT_FILE
 
         /** The pack's root music loop (`bgm.ogg` / `bgm.mp3`), capped at [BgmRef.MAX_BYTES]. */
         private fun rootBgm(parts: List<String>) = parts.size == 1 && parts[0].lowercase(Locale.ROOT) in BgmRef.DEFAULT_NAMES
@@ -223,6 +255,124 @@ class ThemeArchive(
             "sh", "bash", "zsh", "bat", "cmd", "ps1", "exe", "dll", "msi", "py", "js", "lua", "pl", "rb",
         )
 
+        // region Writing (2b.8c)
+
+        /** Entry times of written archives, so the same pack zips to the same bytes. */
+        private const val ENTRY_TIME = 1_767_225_600_000L // 2026-01-01
+
+        /**
+         * Zips [export] (2b.8b's `theme.json` and files) into [out] as an `.xtheme` that [stage]
+         * accepts, reading the files through [reader]: the built-in Default pack's whole-pack
+         * export goes from the APK assets straight into the zip, with no folder written first.
+         */
+        fun write(export: LookExport, reader: ExportReader, out: OutputStream, maxBytes: Long = MAX_BYTES): ArchiveWrite {
+            val json = ThemeExport.manifestBytes(export.manifest)
+            val entries = listOf(ArchiveEntry(ThemePackLoader.MANIFEST, json.size.toLong()) { json.inputStream() }) +
+                export.files.map { f -> ArchiveEntry(f.path, reader.size(f.source)) { reader.open(f.source) } }
+            return write(entries, out, maxBytes)
+        }
+
+        /**
+         * Zips the pack folder [dir] (an installed pack, or one just exported) into [out], its files
+         * at the archive root as they are (`imports` and all). Dot-files and dot-folders (`.git`,
+         * `.nomedia`) and OS litter are left out; so is anything [stage] would refuse.
+         */
+        fun writeFolder(dir: File, out: OutputStream, maxBytes: Long = MAX_BYTES): ArchiveWrite {
+            val manifest = ThemePackLoader.find(dir, ThemePackLoader.MANIFEST)?.takeIf { it.isFile }
+                ?: return ArchiveWrite.Refused("${dir.name} has no theme.json")
+            val entries = ArrayList<ArchiveEntry>()
+            entries += ArchiveEntry(ThemePackLoader.MANIFEST, manifest.length()) { manifest.inputStream() }
+            fun walk(folder: File, depth: Int) {
+                for (f in folder.listFiles().orEmpty().sortedBy { it.name }) {
+                    if (f.name.startsWith(".") || f == manifest) continue
+                    if (f.isDirectory) {
+                        // Deeper than an import takes: walked, so the file is named in leftOut.
+                        if (depth < 8) walk(f, depth + 1)
+                    } else if (f.isFile) {
+                        val path = ThemePackLoader.relativePath(dir, f) ?: continue
+                        entries += ArchiveEntry(path, f.length()) { f.inputStream() }
+                    }
+                }
+            }
+            walk(dir, 1)
+            return write(entries, out, maxBytes)
+        }
+
+        /**
+         * Zips [entries] into [out] (the first must be `theme.json`). Every name is checked with
+         * the reader's rules ([unsafe], [disallowed], the music and boot video caps, the entry
+         * count, [maxBytes]), so a written archive always stages. [out] is finished, not closed.
+         */
+        fun write(entries: List<ArchiveEntry>, out: OutputStream, maxBytes: Long = MAX_BYTES): ArchiveWrite {
+            if (entries.firstOrNull()?.path != ThemePackLoader.MANIFEST) return ArchiveWrite.Refused("The pack has no theme.json")
+            val leftOut = ArrayList<String>()
+            val seen = HashSet<String>()
+            val kept = ArrayList<ArchiveEntry>()
+            for (e in entries) {
+                val parts = e.path.replace('\\', '/').split('/').filter { it.isNotEmpty() && it != "." }
+                if (parts.isEmpty() || junk(parts)) continue
+                if (unsafe(e.path) != null) return ArchiveWrite.Refused("${e.path} leaves the pack")
+                val tooBig = (rootBgm(parts) && (e.size ?: 0) > BgmRef.MAX_BYTES) || (rootBootVideo(parts) && (e.size ?: 0) > BootVideoRef.MAX_BYTES)
+                if (disallowed(parts) != null || tooBig) {
+                    leftOut += e.path
+                    continue
+                }
+                if (!seen.add(parts.joinToString("/").lowercase(Locale.ROOT))) continue
+                kept += e
+            }
+            if (kept.size > MAX_ENTRIES) return ArchiveWrite.Refused("The pack has more than $MAX_ENTRIES files")
+            val declared = kept.sumOf { it.size ?: 0L }
+            if (declared > maxBytes) return ArchiveWrite.Refused(tooLarge(declared, maxBytes, kept))
+
+            val zip = ZipOutputStream(out)
+            val result = stream(zip, kept, maxBytes, leftOut)
+            // A refused archive is dropped by the caller; let go of the deflater now.
+            if (result is ArchiveWrite.Refused) runCatching { zip.close() }
+            return result
+        }
+
+        private fun stream(zip: ZipOutputStream, kept: List<ArchiveEntry>, maxBytes: Long, leftOut: List<String>): ArchiveWrite {
+            var written = 0L
+            var current = ThemePackLoader.MANIFEST
+            try {
+                val buf = ByteArray(64 * 1024)
+                for (e in kept) {
+                    current = e.path
+                    val parts = e.path.replace('\\', '/').split('/').filter { it.isNotEmpty() && it != "." }
+                    val bgm = rootBgm(parts)
+                    val boot = rootBootVideo(parts)
+                    zip.putNextEntry(ZipEntry(parts.joinToString("/")).apply { time = ENTRY_TIME })
+                    var fileBytes = 0L
+                    e.open().use { input ->
+                        while (true) {
+                            val n = input.read(buf)
+                            if (n < 0) break
+                            written += n
+                            fileBytes += n
+                            if (written > maxBytes) return ArchiveWrite.Refused(tooLarge(written, maxBytes, kept))
+                            if (bgm && fileBytes > BgmRef.MAX_BYTES) return ArchiveWrite.Refused("${e.path} is larger than ${BgmRef.MAX_BYTES / MB} MB (theme music)")
+                            if (boot && fileBytes > BootVideoRef.MAX_BYTES) return ArchiveWrite.Refused("${e.path} is larger than ${BootVideoRef.MAX_BYTES / MB} MB (boot video)")
+                            zip.write(buf, 0, n)
+                        }
+                    }
+                    zip.closeEntry()
+                }
+                zip.finish()
+            } catch (e: IOException) {
+                return ArchiveWrite.Refused("Couldn't write $current (${e.message ?: "write error"})")
+            } catch (e: SecurityException) {
+                return ArchiveWrite.Refused("No permission to read $current")
+            }
+            return ArchiveWrite.Written(kept.size, written, leftOut)
+        }
+
+        private fun tooLarge(bytes: Long, maxBytes: Long, entries: List<ArchiveEntry>): String =
+            "The pack would be ${ThemeExport.megabytes(bytes)}, over the ${if (maxBytes % MB == 0L) "${maxBytes / MB} MB" else ThemeExport.megabytes(maxBytes)} a theme file can be" +
+                entries.filter { (it.size ?: 0) > 0 }.sortedByDescending { it.size }.take(3).takeIf { it.isNotEmpty() }
+                    ?.joinToString(prefix = " (largest: ", postfix = ")") { "${it.path} ${ThemeExport.megabytes(it.size ?: 0)}" }.orEmpty()
+
+        // endregion
+
         /** Why an entry name is unsafe to unpack anywhere (zip slip), or null. */
         internal fun unsafe(name: String): String? = when {
             name.startsWith("/") || name.startsWith("\\") -> "absolute path"
@@ -232,19 +382,21 @@ class ThemeArchive(
             else -> null
         }
 
-        /** Why a file at [parts] (inside the pack) isn't allowed, or null. */
+        /**
+         * Why a file at [parts] (inside the pack) isn't allowed, or null. Convention folders
+         * (`icons/`, `sounds/`, …) hold their own types; the root and any other folder hold the
+         * types a manifest can name ([NAMED_TYPES]), so every file the loader can read imports.
+         */
         internal fun disallowed(parts: List<String>): String? {
             val path = parts.joinToString("/")
             val ext = parts.last().substringAfterLast('.', "").lowercase(Locale.ROOT)
             if (ext in PROGRAMS) return "$path is a program; theme packs hold data only"
-            if (parts.size == 1) {
-                val ok = ext in ROOT_TYPES || parts[0].lowercase(Locale.ROOT) in ROOT_FILES
-                return if (ok) null else "unexpected file $path (only .json, wallpaper.png, bgm.ogg, boot.mp4, shader.frag and postprocess.agsl at the top level)"
-            }
-            val types = FOLDERS[parts[0].lowercase(Locale.ROOT)]
-                ?: return "unexpected folder ${parts[0]}/ (use fonts/, sounds/, audio/, icons/, shaders/ or wallpapers/)"
             if (parts.size > 4) return "$path is nested too deep"
-            return if (ext in types) null else "unexpected file $path (${parts[0]}/ holds ${types.sorted().joinToString()})"
+            if (parts.any { it.startsWith(".") }) return "$path is a hidden file"
+            val types = FOLDERS[parts[0].lowercase(Locale.ROOT)]?.takeIf { parts.size > 1 }
+            if (types != null) return if (ext in types) null else "unexpected file $path (${parts[0]}/ holds ${types.sorted().joinToString()})"
+            if (ext in NAMED_TYPES || (parts.size == 1 && parts[0].lowercase(Locale.ROOT) in ROOT_FILES)) return null
+            return "unexpected file $path (a pack holds images, sounds, music, fonts, shaders, a boot video, .json and notes)"
         }
 
         /** OS litter zip tools add (macOS resource forks, Finder and Explorer metadata). */
