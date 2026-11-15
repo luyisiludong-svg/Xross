@@ -27,6 +27,7 @@ material and link back here rather than keeping their own to-do lists.
 | [`docs/PHASE_2B3_PENDING_TESTS.md`](docs/PHASE_2B3_PENDING_TESTS.md) | What Phase 2b.3 still needs verified (frame pacing, hardware, by-eye checks, smoke flakes) and how |
 | [`docs/PHASE_2B4_PROMPTS.md`](docs/PHASE_2B4_PROMPTS.md) | Phase 2b.4 (shaders, effects, materials) split into slices 2b.4a–2b.4f, each with its scope and checks |
 | [`docs/PHASE_2B7_PROMPTS.md`](docs/PHASE_2B7_PROMPTS.md) | Phase 2b.7 (modular components) split into 2b.7-prep and slices 2b.7a–2b.7e, each with its scope, tests and device checks |
+| [`docs/PHASE_2B8_PROMPTS.md`](docs/PHASE_2B8_PROMPTS.md) | Phase 2b.8 (Live Theme Mixer) split into 2b.8-prep and slices 2b.8a–2b.8c, each with its scope, tests and device checks, plus the defaults to confirm |
 | [`docs/HARDWARE_TESTING.md`](docs/HARDWARE_TESTING.md) | Checklist for testing on a real handheld, and what to send back |
 | [`docs/XMB_FIDELITY.md`](docs/XMB_FIDELITY.md) | How close Xross is to the real XMB, checked against the PS3 and PSP manuals |
 | [`docs/FEASIBILITY.md`](docs/FEASIBILITY.md) | The 2026-11-09 feasibility review that led to the scope changes in §5 |
@@ -274,7 +275,7 @@ Bugs or gaps in features that are already built, separate from the new work in �
 | Language priority list | Scrapers ✅ | One region and one language today; a list such as `es-ES, es, en-US, en` |
 | Game backgrounds setting | Focused-game background ✅ | Settings ▸ Theme ▸ Game backgrounds: Video and art / Art only / Off; plus an audio ramp down on leaving a game |
 | Custom Music folders | Custom Photo/Video folders ✅ | The same folder list for Music, for consistency |
-| An original or open-licensed Default pack | Theme packs ✅ | Required before a public release; offer today's look as an optional download |
+| An original or open-licensed Default pack | Theme packs ✅, Theme 2.0 (2b.8) | Required before a public release. Planned as a full rework once Theme 2.0 is finished (owner, 2026-11-15); today's Sony-like look becomes a community pack, made with 2b.8's whole-pack export and `.xtheme` share |
 | XMB-style rounded typeface | Theme packs ✅ | Bundle an open-licensed font as the default; the font roles of Theme 2.0 (§4.3, 2b.2) build on it |
 | Aspect-ratio overrides (letterbox / pillarbox) | | |
 | Per-game button remapping | | |
@@ -309,7 +310,7 @@ and a browser Theme Studio as 2b.9.
 | **2b.5** | Ambient BGM loop from theme packs with ducking; independent volume sliders (UI effects, boot and game cues, music/BGM, video snaps); three new sound roles (`category_switch`, `drill_in`, `drill_out`) with per-sound gains; stereo panning by crosshair X; optional cursor pitch jitter; custom boot sequence (`boot.mp4` or shader intro) and a game-launch curtain. A prep slice and four slices, 2b.5-prep and 2b.5a–2b.5d (docs/PHASE_2B5_PROMPTS.md) | Media hub ✅, `SnapPlayer` ✅ | ✅ **2b.5 complete** (2026-11-14, docs/PHASE_2B5_PROMPTS.md): prep (`ThemeLookResolver` with quick profiles as one layer, Settings ▸ Theme in folders, `AudioDirector`); 2b.5a sound roles with fallbacks and aliases, crosshair panning, cursor pitch jitter, re-levelled Default pack; 2b.5b independent volumes for effects, cues, theme music, music and snaps, music paused (or lowered) under a heard snap; 2b.5c pack BGM without audio focus, silent under songs, other apps, games and full-screen video; 2b.5d boot video or shader intro on a cold start, launch curtains `BLOOM` / `FADE_BLACK` / `IRIS` / `FLASH`. 757 unit tests, lint 0 errors; theme suite 149/149 and media suite 56/56 on the emulator; Galaxy A55 pass over the user's data, where the boot video and video snaps moved from a `TextureView` to a `SurfaceView` for even frame pacing at 120 Hz (snaps from API 34). **Open:** by-ear checks on the A55 (theme music loop point, option click against a snap, `system_ng` recovery), Xross's music player under snaps on the A55, ≈ 0.3–0.7 s of black on a cold start with a folder pack |
 | **2b.6** | Haptic profiles (Off, Subtle Click, Crisp Snap, Deep Thud) on category switch, list moves, errors and unlock toasts, with controller rumble where supported | Gamepad layer ✅ | 🧊 Iced (2026-11-15, §4.8) |
 | **2b.7** | Modular components: status-bar cluster slots (`left` / `right` arrays of `LOGO`, `WIFI`, `CLOCK` with a format, `BATTERY`, `AVATAR`) and battery display modes; mini-player modes (card, status ticker, off); glyph style override; metadata badge pills beside the focused title; telemetry tiers (`OFF`, `COMPACT_PILL` = today's 2b.1 widget, `RICH_CARD`); top-left `SOCIAL_STACK`; RetroAchievements hub upgrade (3-row badge grid modal with a detail banner, `FOLLOWING` sidebar, L1/R1 platform filter). A prep slice and five slices, 2b.7-prep and 2b.7a–2b.7e (docs/PHASE_2B7_PROMPTS.md) | 2b.2, 2b.4 (surfaces) | ◐ 2b.7-prep and 2b.7a–d merged into `main` (A55 pass 2026-11-14); **2b.7e** (Achievements header, three-row grid and banner; hub filter pills and `FOLLOWING` sidebar) done on `feat/theme-2b7` (2026-11-15, docs/PHASE_2B7_PROMPTS.md): 852 unit tests, theme suite 311/312 on the emulator; the 2b.7e A55 pass open |
-| **2b.8** | Live Theme Mixer: Settings ▸ Theme rows for the user's own layout overrides (crosshair preset, UI scale, list spacing, focus scale; moved here from 2b.2), and Settings ▸ Theme ▸ Export current look as theme pack, writing the active overrides and assets to a new `Xross/themes/<id>/` | 2b.2–2b.5, 2b.7 | ⬜ |
+| **2b.8** | Live Theme Mixer: Settings ▸ Theme rows for the user's own layout overrides (crosshair preset, UI scale, list spacing, focus scale; moved here from 2b.2), and Settings ▸ Theme ▸ Export theme: the whole pack, one variant, or the current look (the active overrides and assets) to a new `Xross/themes/<id>/`, for any pack including the built-in Default pack. A prep slice and three slices, 2b.8-prep and 2b.8a–2b.8c (docs/PHASE_2B8_PROMPTS.md), the last adding Share as `.xtheme` for every pack | 2b.2–2b.5, 2b.7 | ⬜ Planned (2026-11-15) |
 | **2b.9** | Web Theme Studio (§4.7): a browser editor for `theme.json`, `surfaces.json`, `rules.json` and `shader.frag` with a live WebGL 2 shader preview, an approximate HTML preview of the menu, Gamepad API navigation, device-frame presets and `.xtheme` export. Separate repository and site | 2b.2 (format), 2b.4 (shaders), a published schema | ⬜ |
 
 Recommended order (from v2.1): 2b.2, then 2b.3 and 2b.4 together, then 2b.7, then 2b.5,
@@ -637,9 +638,12 @@ data class AvatarStyleConfig(
   category override → system override → the user's `settings.json` → contextual game-art palette
   (only when `adaptiveGamePalette` is on, and only for the colors it drives). Reset to theme
   defaults clears the user layer.
-- **Live Theme Mixer (2b.8):** Settings ▸ Theme ▸ Export current look as theme pack writes
-  `theme.json` v2 with the merged values above (minus the runtime game-art palette) and copies
-  the fonts, sounds, icons, shader and wallpaper in use into a new `Xross/themes/<id>/`.
+- **Live Theme Mixer (2b.8):** Settings ▸ Theme ▸ Export theme writes a single `theme.json` v2
+  and copies the pack's files into a new `Xross/themes/<id>/`, in one of three scopes: the
+  **whole pack** as it ships (variants, overrides and rules kept), **one variant** flattened into
+  the base, or the **current look**: the merged values above (minus the runtime game-art palette)
+  with the fonts, sounds, icons, shader and wallpaper in use. Any pack can be exported and shared
+  as an `.xtheme`, the built-in Default pack included.
 
 ### A.5 Layout (2b.2)
 
