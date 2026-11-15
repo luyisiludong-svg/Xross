@@ -163,8 +163,11 @@ expect "Off · Amber to red below 20%" "Battery alert tint turns off"
 # Out of Colors and Theme; Sound is the folder below Theme.
 key KEYCODE_BACK KEYCODE_BACK KEYCODE_DPAD_DOWN KEYCODE_DPAD_CENTER
 expect "Effects volume" "Sound section opens"
+# Effects volume starts at 75% and steps to 80%. Read settings.json, not the screen: a "100%"
+# check used to pass on the battery percentage of a full emulator.
 key KEYCODE_DPAD_DOWN KEYCODE_DPAD_CENTER
-expect "100%" "Effects volume cycles"
+for _ in $(seq 6); do settings_has '"effectsVolume": 0.8,' && break; pause 0.5; done
+settings_has '"effectsVolume": 0.8,' && ok "Effects volume cycles (75% → 80%)" || bad "Effects volume cycles: $(adb shell cat /sdcard/Xross/config/settings.json | grep -o '"effectsVolume": [0-9.]*')"
 key KEYCODE_BACK
 
 section "Theme packs"
