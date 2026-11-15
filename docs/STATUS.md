@@ -20,10 +20,13 @@ Legend: ✅ done and verified · ◐ partial · ❌ not started · 🧊 iced · 
 | Phase 1b — alpha hardening | ◐ features done; real-handheld testing and a Baseline Profile remain | [Phase 1](phase-1/README.md) |
 | Phase 2 — Beta: metadata, media hub, portable folder, library organization | ◐ done apart from the iced on-screen controller; scrapers and RetroAchievements live-verified on the Galaxy A55 | [Phase 2](phase-2/README.md) |
 | Phase 2b — customization engine (Theme 2.0) | ✅ Theme 2.0 complete: 2b.1–2b.5, 2b.7, 2b.8 in `main`; 2b.6 🧊; 2b.9 (Web Theme Studio) not started; A55 passes open for 2b.7e and 2b.8 | [Phase 2b](phase-2b/README.md) |
+| Phase 3-prep — module boundaries | ✅ 🧪 steps 1–5 of the architecture assessment on `refactor/phase3-prep`: `:core:model`, `:theme:engine` (Kotlin/JVM), build-logic, the look resolved in `ThemeController` | [Phase 3-prep](phase-3-prep/STATUS.md) |
 | Phase 3 — release candidate | ◐ RetroAchievements linking, User Card, achievement lists and unlock toasts done and live; hot-swap and live resolution change done; dual screen, docking, Portal and FTPS not started | [Phase 2 evidence §3.12–§3.14](phase-2/STATUS.md#s3.12) |
 | Phase 4 — v1.0 | ◐ app triage and performance work started | [Performance](status/PERFORMANCE.md) |
 
-**Verification (2026-11-15):** 932 JVM/Robolectric unit tests pass (4 opt-in tests that call the
+**Verification (2026-11-15, Phase 3-prep):** 943 unit tests pass (862 JVM/Robolectric in `:app`,
+81 plain JUnit in `:theme:engine`); the theme suite passes 426 of 426 on `refactor/phase3-prep`
+([§3.38](phase-3-prep/STATUS.md#s3.38)). **After Phase 2b.8:** 932 JVM/Robolectric unit tests pass (4 opt-in tests that call the
 real services skip by default), `lintDebug` 0 errors. On the API 37 emulator the theme suite
 passes 425 of 426 (the one fail is 2b.4f's wallpaper toast missed by the screen dump), behind a
 12-check quick `smoke.sh` and a `run-all.sh` runner over the five suites
@@ -54,10 +57,11 @@ commits and older notes still resolve here.
 | — | Phase 2b.5 (as-built notes) | [`phase-2b/2b.5/PROMPTS.md`](phase-2b/2b.5/PROMPTS.md) |
 | 3.29–3.34 | Phase 2b.7a–e and the A55 pass | [`phase-2b/2b.7/STATUS.md`](phase-2b/2b.7/STATUS.md) |
 | 3.35–3.37 | Phase 2b.8a–c | [`phase-2b/2b.8/STATUS.md`](phase-2b/2b.8/STATUS.md) |
+| 3.38 | Phase 3-prep: layering, modules, the look in `ThemeController` | [`phase-3-prep/STATUS.md`](phase-3-prep/STATUS.md) |
 | 4.1–4.3 | Display matrix, animation and stutter, scope targets | [`status/PERFORMANCE.md`](status/PERFORMANCE.md) |
 
 New evidence goes into the phase's own `STATUS.md` (a new phase gets a new folder), numbered on
-from §3.37; this dashboard only gets its summary row and index entry updated.
+from §3.38; this dashboard only gets its summary row and index entry updated.
 
 ---
 

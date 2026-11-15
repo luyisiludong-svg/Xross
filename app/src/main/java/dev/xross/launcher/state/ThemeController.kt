@@ -55,6 +55,15 @@ import dev.xross.launcher.data.of
 import dev.xross.launcher.data.writeTo
 import dev.xross.launcher.platform.AgslSupport
 import dev.xross.launcher.theme.WaveTint
+import dev.xross.launcher.theme.BatteryLevel
+import dev.xross.launcher.theme.ResolvedLook
+import dev.xross.launcher.theme.ThemeLookResolver
+import dev.xross.launcher.theme.minuteOfDay
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
+import java.time.LocalTime
 
 /**
  * Settings ▸ Theme, split out of [XmbViewModel] (Architecture Assessment #6, Phase 2b.8-prep):
@@ -102,6 +111,25 @@ class ThemeController(
 
     /** Settings ▸ Theme ▸ Layout while it is open (2b.8a). */
     val layoutEditor: StateFlow<LayoutEditorState?> = _layoutEditor.asStateFlow()
+
+    /**
+     * The look the menu draws with (Architecture Assessment §7.4): the whole cascade
+     * ([ThemeLookResolver]) over the active pack, the settings, the menu's [focus] and the
+     * [battery], settled by [LookFlow] (the focused system after its rest delay, battery and clock
+     * only when the pack's rules read them). The Activity collects this one value. Call it once:
+     * each call starts its own collection in [scope].
+     */
+    fun resolvedLook(
+        focus: StateFlow<LookFocus>,
+        battery: StateFlow<BatteryLevel?>,
+        clock: () -> LocalTime = LocalTime::now,
+    ): StateFlow<ResolvedLook> {
+        val first = LookFlow.of(themes.active.value, settings.current, focus.value, battery.value, minuteOfDay(clock()))
+        return LookFlow.inputs(themes.active, settings.settings, focus, battery, clock)
+            .map(ThemeLookResolver::resolve)
+            .distinctUntilChanged()
+            .stateIn(scope, SharingStarted.Eagerly, ThemeLookResolver.resolve(first))
+    }
 
     /** Runs [command] when it is a theme command; false hands it back to the view model. */
     fun onCommand(command: Command): Boolean {

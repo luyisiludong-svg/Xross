@@ -55,7 +55,9 @@ import dev.xross.launcher.theme.BatteryLevel
 import dev.xross.launcher.theme.pack.BatteryDisplayMode
 import dev.xross.launcher.theme.pack.ResolvedComponents
 import dev.xross.launcher.theme.pack.StatusSlot
+import dev.xross.launcher.theme.pack.BitmapIcon
 import dev.xross.launcher.theme.pack.ThemeIcon
+import dev.xross.launcher.theme.pack.VectorIcon
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
 import kotlin.math.max
@@ -368,15 +370,16 @@ private fun DrawScope.drawVolume(volume: VolumeStatus, stroke: Float, lit: Color
 @Composable
 private fun LogoSlot(icon: ThemeIcon, capHeight: Dp) {
     when (icon) {
-        is ThemeIcon.Vector -> {
+        is VectorIcon -> {
             val v = icon.image
             val aspect = if (v.defaultHeight.value > 0f) v.defaultWidth.value / v.defaultHeight.value else 1f
             Image(rememberVectorPainter(v), "Theme logo", Modifier.size(width = capHeight * aspect, height = capHeight), contentScale = ContentScale.Fit)
         }
-        is ThemeIcon.Bitmap -> {
+        is BitmapIcon -> {
             val b = icon.image
             val aspect = if (b.height > 0) b.width.toFloat() / b.height else 1f
             Image(remember(b) { BitmapPainter(b) }, "Theme logo", Modifier.size(width = capHeight * aspect, height = capHeight), contentScale = ContentScale.Fit)
         }
+        else -> Unit
     }
 }

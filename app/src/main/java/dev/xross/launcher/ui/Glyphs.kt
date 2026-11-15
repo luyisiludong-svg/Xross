@@ -14,7 +14,8 @@ import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.text.font.FontFamily
 import dev.xross.launcher.model.GlyphKey
 import dev.xross.launcher.theme.pack.LoadedTheme
-import dev.xross.launcher.theme.pack.ThemeIcon
+import dev.xross.launcher.theme.pack.BitmapIcon
+import dev.xross.launcher.theme.pack.VectorIcon
 import dev.xross.launcher.model.GlyphSet
 import dev.xross.launcher.theme.pack.ResolvedComponents
 import dev.xross.launcher.theme.pack.Surface
@@ -82,8 +83,8 @@ private val Blank = ColorPainter(Color.Transparent)
 @Composable
 fun glyphPainter(key: GlyphKey): Painter {
     return when (val icon = LocalThemePack.current?.icons?.get(key)) {
-        is ThemeIcon.Vector -> rememberVectorPainter(icon.image)
-        is ThemeIcon.Bitmap -> remember(icon) { BitmapPainter(icon.image) }
-        null -> Blank
+        is VectorIcon -> rememberVectorPainter(icon.image)
+        is BitmapIcon -> remember(icon) { BitmapPainter(icon.image) }
+        else -> Blank
     }
 }

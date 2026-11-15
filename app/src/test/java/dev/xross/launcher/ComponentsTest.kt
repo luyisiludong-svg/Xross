@@ -1,5 +1,6 @@
 package dev.xross.launcher
 
+import dev.xross.launcher.theme.pack.VectorIcon
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import dev.xross.launcher.config.ConfigCodec
@@ -263,7 +264,7 @@ class ComponentsTest {
     @Test fun logoIsReadThroughTheIconChecks() {
         val svg = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 16"><path d="M0 0h48v16H0z" fill="#fff"/></svg>"""
         val p = pack("logo", """"components": {"logo": "art/Logo.svg", "statusBarLeft": ["LOGO"]}""", mapOf("art/logo.svg" to svg))
-        val logo = (p.logos["art/Logo.svg"] as ThemeIcon.Vector).image
+        val logo = (p.logos["art/Logo.svg"] as VectorIcon).image
         // A wide SVG keeps its aspect (48 × 16 dp from a 48 × 16 viewBox).
         assertEquals(3f, logo.defaultWidth.value / logo.defaultHeight.value, 0.01f)
         assertEquals("art/Logo.svg", p.components().logo)

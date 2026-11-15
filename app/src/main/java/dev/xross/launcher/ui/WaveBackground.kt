@@ -26,6 +26,8 @@ import kotlin.math.roundToInt
 import dev.xross.launcher.media.energy.AudioLevels
 import dev.xross.launcher.theme.shader.ShaderHealth
 import dev.xross.launcher.theme.shader.ShaderLibrary
+import dev.xross.launcher.theme.topColor
+import dev.xross.launcher.theme.bottomColor
 
 /**
  * GL wave background. The render loop stops whenever the activity is paused (screen off,

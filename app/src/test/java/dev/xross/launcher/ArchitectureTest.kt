@@ -8,8 +8,10 @@ import org.junit.Test
 import java.io.File
 
 /**
- * The package layering of `app/src/main` (docs/design/ARCHITECTURE_ASSESSMENT.md §4–§6), kept while
- * everything still lives in `:app` so the later module split is a move, not a untangling.
+ * The package layering of every module's main sources (docs/design/ARCHITECTURE_ASSESSMENT.md
+ * §4–§6). Gradle already keeps `:core:model` and `:theme:engine` from seeing `:app`; this keeps
+ * the packages still inside `:app` in the same order, so each later module split is a move, not
+ * an untangling.
  *
  * Every reference to another `dev.xross.launcher` package counts: imports and fully qualified
  * names in code alike. Comments (KDoc links included) do not.
@@ -28,7 +30,7 @@ class ArchitectureTest {
         mapOf(
             // :core:model: depends on nothing.
             "model" to emptySet(),
-            // :theme:engine (and its Android adapters until :theme:android exists): model only.
+            // :theme:engine, and its Android adapters in :app's theme/ until :theme:android exists: model only.
             "theme" to model,
             // Android SDK checks and other thin platform helpers.
             "platform" to model,
@@ -52,15 +54,10 @@ class ArchitectureTest {
         )
     }
 
-    /** Files of the engine allowed to touch Android or Compose UI: the future `:theme:android`. */
-    private val engineAndroidFiles = setOf(
-        "theme/ArtSwatches.kt",
-        "theme/RememberThemePalette.kt",
-        "theme/XrossTheme.kt",
-        "theme/pack/Layout.kt",
-        "theme/pack/SvgIcon.kt",
-        "theme/pack/ThemePackLoader.kt",
-        "theme/pack/ThemeWatcher.kt",
+    /** Which packages each module's main sources hold. */
+    private val modulePackages = mapOf(
+        ":core:model" to setOf("model"),
+        ":theme:engine" to setOf("theme"),
     )
 
     /** The one Android import every engine file may have: `@Immutable` (annotation only). */
@@ -82,8 +79,17 @@ class ArchitectureTest {
         assertEquals(emptySet<String>(), allowed.values.flatten().toSet() - present)
     }
 
+    @Test fun modulesHoldOnlyTheirPackages() {
+        val violations = sources().filter { it.module in modulePackages && it.group !in modulePackages.getValue(it.module) }
+            .map { "${it.module} ${it.path}: package '${it.group}' belongs elsewhere" }
+        assertTrue(violations.joinToString("\n"), violations.isEmpty())
+        // What the modules hold has moved out of :app for good.
+        val leftBehind = sources().filter { it.module == ":app" && it.group == "model" }.map { it.path }
+        assertTrue("Still in :app: $leftBehind", leftBehind.isEmpty())
+    }
+
     @Test fun theEngineStaysOffAndroid() {
-        val violations = sources().filter { it.group == "theme" && it.path !in engineAndroidFiles }.flatMap { src ->
+        val violations = sources().filter { it.module == ":theme:engine" }.flatMap { src ->
             src.code.lineSequence().withIndex()
                 .mapNotNull { (i, l) -> ANDROID.find(l)?.let { i + 1 to it.value } }
                 .filter { (_, name) -> name !in engineAndroidAllowed }
@@ -91,8 +97,6 @@ class ArchitectureTest {
                 .toList()
         }
         assertTrue("Android or Compose UI in the theme engine:\n" + violations.joinToString("\n"), violations.isEmpty())
-        val stale = engineAndroidFiles.filterNot { File(root, it).isFile }
-        assertTrue("Listed but missing: $stale", stale.isEmpty())
     }
 
     @Test fun categoryIdsMirrorTheMenuCategories() {
@@ -101,22 +105,38 @@ class ArchitectureTest {
 
     private data class Reference(val group: String, val name: String, val line: Int)
 
-    private class Source(val path: String, val group: String, val code: String) {
+    private class Source(val module: String, val path: String, val group: String, val code: String) {
         fun references(): List<Reference> = code.lineSequence().withIndex().flatMap { (i, l) ->
             REF.findAll(l).map { Reference(it.groupValues[1], it.value, i + 1) }
         }.toList()
     }
 
-    private val root: File by lazy {
-        listOf("src/main/java/dev/xross/launcher", "app/src/main/java/dev/xross/launcher")
-            .map(::File).first { it.isDirectory }
+    /** The repository root: the test runs in `app/` under Gradle, at the root from an IDE. */
+    private val repo: File by lazy {
+        listOf(File(".."), File(".")).first { File(it, "settings.gradle.kts").isFile && File(it, "app").isDirectory }
     }
 
-    private fun sources(): List<Source> = root.walkTopDown().filter { it.isFile && it.extension == "kt" }.map { f ->
-        val path = f.relativeTo(root).invariantSeparatorsPath
-        val group = if ('/' in path) path.substringBefore('/') else ROOT
-        Source(path, group, stripComments(f.readText()))
-    }.toList()
+    /** Each module's main source root. */
+    private val roots: Map<String, File> by lazy {
+        mapOf(
+            ":app" to "app/src/main/java",
+            ":core:model" to "core/model/src/main/kotlin",
+            ":theme:engine" to "theme/engine/src/main/kotlin",
+        ).mapValues { (_, dir) -> File(repo, "$dir/dev/xross/launcher") }
+            .onEach { (module, dir) -> check(dir.isDirectory) { "No sources for $module at $dir" } }
+    }
+
+    private val cached: List<Source> by lazy {
+        roots.flatMap { (module, root) ->
+            root.walkTopDown().filter { it.isFile && it.extension == "kt" }.map { f ->
+                val path = f.relativeTo(root).invariantSeparatorsPath
+                val group = if ('/' in path) path.substringBefore('/') else ROOT
+                Source(module, path, group, stripComments(f.readText()))
+            }.toList()
+        }
+    }
+
+    private fun sources(): List<Source> = cached
 
     private companion object {
         const val ROOT = "(root)"

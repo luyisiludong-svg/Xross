@@ -32,6 +32,7 @@ docs/
       PROMPTS.md            the implementation plan in slices, with as-built notes
       STATUS.md             evidence: tests, device runs, frame timing, what is not verified
       PENDING_TESTS.md      (2b.3 only) what is still to verify
+  phase-3-prep/             module boundaries before Phase 3: STATUS.md (evidence, §3.38)
   design/                   reviews and proposals
   reference/                third-party API notes
 ```

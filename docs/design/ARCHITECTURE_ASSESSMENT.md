@@ -5,6 +5,12 @@ after Phase 2b.8): what changed since the first review, whether it is time to re
 best way to modularize. It replaces the 2026-11-13 review written after Phase 2b.4 (in git
 history). It is a proposal; decisions and scheduling belong in [`Roadmap.md`](../../Roadmap.md).
 
+**Progress (2026-11-15, `refactor/phase3-prep`):** steps 1–5 of the [action plan](#9-action-plan),
+the "Phase 3-prep" slot, are done: the layering test, the nine edges cut, convention plugins and
+the configuration cache, `:core:model` and `:theme:engine` as Kotlin/JVM modules, and the look
+inputs in `ThemeController`. How it was built, where it differs from this proposal and what it did
+not verify: [§10](#10-as-built-phase-3-prep-steps-15). Next is step 6, the ViewModel split.
+
 Related documents: the [developer guide](../DEVELOPMENT.md) (source layout, build and tests), the
 [status dashboard](../STATUS.md) (test and frame-timing evidence) and
 [`THEME_RICING_AND_WEB_STUDIO.md`](THEME_RICING_AND_WEB_STUDIO.md) (the browser and desktop
@@ -21,6 +27,7 @@ targets that a shared theme engine would serve).
 7. [State management](#7-state-management)
 8. [Other findings](#8-other-findings)
 9. [Action plan](#9-action-plan)
+10. [As built: Phase 3-prep, steps 1–5](#10-as-built-phase-3-prep-steps-15)
 
 ## 1. Verdict
 
@@ -111,6 +118,9 @@ These are worth keeping through any refactor:
 
 ## 4. Package dependencies today
 
+> **Done (step 2, `fa3cb79`):** all nine edges below are cut, and `ArchitectureTest` keeps them
+> cut. The table is kept as the record of what crossed and how it was fixed.
+
 Counting real references between top-level packages (imports and fully qualified names in code,
 KDoc links excluded), these edges go the wrong way or form a cycle:
 
@@ -133,6 +143,10 @@ the engine. The rule becomes **the engine depends on nothing but `model`**, whic
 change than moving every override type into a model module.
 
 ## 5. The target module graph
+
+> **Built so far:** `:core:model` and `:theme:engine` (step 4). The engine took the pack loader
+> with it behind a `PackPlatform` interface, so `:theme:android` is down to seven small adapter
+> files that stay in `:app` until a second module needs them (§10).
 
 ```
                          :app  (MainActivity, AppContainer, XmbViewModel, screens)
@@ -196,13 +210,13 @@ Each step is shippable on its own and verified the same way as a feature slice: 
 `lintDebug`, `smoke.sh` and the theme suite on the emulator, `palette-perf.sh` on the profiling
 build.
 
-**Step 1: enforce the layering before moving anything (1 day).** Add a JVM unit test that reads
+**Step 1: enforce the layering before moving anything (1 day).** ✅ Done (`fa3cb79`). Add a JVM unit test that reads
 the `import` lines under `app/src/main` and fails on any package edge outside the target graph in
 §5. It needs no library (a few dozen lines of Kotlin, or Konsist if a library is acceptable) and
 it keeps the rules while everything still lives in `:app`. Then cut the nine edges in §4 until it
 passes (1–2 days, move-only apart from the `UserLook` and `BootSequence` splits).
 
-**Step 2: extract `:core:model` and `:theme:engine` (3–4 days).** Add a `build-logic/` included
+**Step 2: extract `:core:model` and `:theme:engine` (3–4 days).** ✅ Done (§10). Add a `build-logic/` included
 build with two convention plugins (`xross.jvm.library`, `xross.android.library`), so every later
 module is a five-line build file. Move the engine's tests with it as plain JUnit, and move the
 engine-specific Robolectric tests over as they lose their Android dependency. Turn on the Gradle
@@ -243,7 +257,7 @@ strains it:
 3. **Per-region state.** `StatusBarState` showed the way in 2b.7-prep. Do the same for the item
    column and the overlays, so a toast or a Now Playing change doesn't run the item column's code.
    Measure with `palette-perf.sh` before and after.
-4. **Move the look inputs out of `setContent`.** `ThemeLookResolver.resolve` is pure, but the
+4. ✅ **Move the look inputs out of `setContent`** (done, §10). `ThemeLookResolver.resolve` is pure, but the
    settled system, the battery and minute rule filters and `UserLook.of(settings)` are still
    assembled with `remember` in `MainActivity`. Moving them into `ThemeController` as a
    `StateFlow<ResolvedLook>` makes the whole cascade testable without Compose and leaves the
@@ -273,22 +287,119 @@ strains it:
 
 ## 9. Action plan
 
-| # | Change | Why | Effort | Depends on |
-| --- | --- | --- | --- | --- |
-| 1 | Import-based layering test; replace inline fully qualified names | Locks the target graph in before files move | 1 day | — |
-| 2 | Cut the nine edges in §4 (`UserLook` and `BootSequence` splits, ids and constants to `model/`, `MusicUnderSnaps` to `data/`) | Prerequisite for every module | 1–2 days | 1 |
-| 3 | `build-logic/` convention plugins, configuration cache, parallel builds | Cheap modules from here on | ½ day | — |
-| 4 | Extract `:core:model` and `:theme:engine` (Kotlin/JVM), with their tests as plain JUnit | Stable engine behind a boundary; faster theme tests; ready for 2b.9 | 3–4 days | 2, 3 |
-| 5 | Look inputs into `ThemeController` as a `StateFlow<ResolvedLook>` | The cascade testable end to end without Compose | 1 day | 4 |
-| 6 | Finish the ViewModel split (search, editors, folder pickers, library jobs, boot) | Stops every feature landing in one class; precondition for feature modules | 1–1.5 weeks | — |
-| 7 | `XmbEvent` sink, controller by controller | Smaller signatures; new panels don't touch `MainActivity` | 2 days | 6 |
-| 8 | `CompositionLocal` holders in place of the six singletons | Previews, tests and a second composition stop sharing state | 2 days | — |
-| 9 | Per-region state slices (item column, overlays), checked with `palette-perf.sh` | Flat recomposition as `XmbUiState` grows | 2–3 days | 6 |
-| 10 | `:core:data` and `:render:gl` | KSP isolation, migration tests alone; shader work out of Compose | 3 days each | 4 |
-| 11 | Phase 3 features as `:feature:*` modules from the start; `:feature:ra` as the first extraction | New code born modular | With Phase 3 | 6, 10 |
-| 12 | `ui/` subpackages, `imaging/` with one cache budget, mirrored test packages | Findability; predictable memory on 3–4 GB handhelds | 2 days | Alongside 4–10 |
-| 13 | Decide KMP for `:theme:engine` (or a generated JSON Schema) | Only needed if the Web Studio runs the engine in the browser | 1 week if KMP | When 2b.9 starts |
+| # | Change | Why | Effort | Depends on | State |
+| --- | --- | --- | --- | --- | --- |
+| 1 | Import-based layering test; replace inline fully qualified names | Locks the target graph in before files move | 1 day | — | ✅ `fa3cb79` |
+| 2 | Cut the nine edges in §4 (`UserLook` and `BootSequence` splits, ids and constants to `model/`, `MusicUnderSnaps` to `data/`) | Prerequisite for every module | 1–2 days | 1 | ✅ `fa3cb79` |
+| 3 | `build-logic/` convention plugins, configuration cache, parallel builds | Cheap modules from here on | ½ day | — | ✅ §10.1 |
+| 4 | Extract `:core:model` and `:theme:engine` (Kotlin/JVM), with their tests as plain JUnit | Stable engine behind a boundary; faster theme tests; ready for 2b.9 | 3–4 days | 2, 3 | ✅ §10.2 |
+| 5 | Look inputs into `ThemeController` as a `StateFlow<ResolvedLook>` | The cascade testable end to end without Compose | 1 day | 4 | ✅ §10.3 |
+| 6 | Finish the ViewModel split (search, editors, folder pickers, library jobs, boot) | Stops every feature landing in one class; precondition for feature modules | 1–1.5 weeks | — | Next |
+| 7 | `XmbEvent` sink, controller by controller | Smaller signatures; new panels don't touch `MainActivity` | 2 days | 6 | ❌ |
+| 8 | `CompositionLocal` holders in place of the six singletons | Previews, tests and a second composition stop sharing state | 2 days | — | ❌ |
+| 9 | Per-region state slices (item column, overlays), checked with `palette-perf.sh` | Flat recomposition as `XmbUiState` grows | 2–3 days | 6 | ❌ |
+| 10 | `:core:data` and `:render:gl` | KSP isolation, migration tests alone; shader work out of Compose | 3 days each | 4 | ❌ (`xross.android.library` is ready for them) |
+| 11 | Phase 3 features as `:feature:*` modules from the start; `:feature:ra` as the first extraction | New code born modular | With Phase 3 | 6, 10 | ❌ |
+| 12 | `ui/` subpackages, `imaging/` with one cache budget, mirrored test packages | Findability; predictable memory on 3–4 GB handhelds | 2 days | Alongside 4–10 | ◐ the engine's tests mirror its packages |
+| 13 | Decide KMP for `:theme:engine` (or a generated JSON Schema) | Only needed if the Web Studio runs the engine in the browser | 1 week if KMP | When 2b.9 starts | ❌ |
 
 **Suggested slot:** steps 1–5 as a "2b.10-prep" or "Phase 3-prep" slice (about 1.5 weeks)
 before any Phase 3 feature branch, then 6–9 interleaved one controller at a time with the
 hardware pass, which doesn't touch the same code. Steps 10–13 follow the work that needs them.
+
+## 10. As built: Phase 3-prep, steps 1–5
+
+On `refactor/phase3-prep`, 2026-11-15. Steps 1 and 2 are `fa3cb79` (the layering test, the nine
+edges, 421 inline qualified names replaced); this section covers steps 3–5 and where they differ
+from the proposal above.
+
+### 10.1 Build logic (step 3)
+
+* `build-logic/` is an included build with two convention plugins: `xross.jvm.library` (Kotlin/JVM,
+  Java 17 bytecode, JUnit) and `xross.android.library` (`com.android.library`, `:app`'s SDK
+  levels, Java 17, AGP's built-in Kotlin). They compile against AGP and KGP `compileOnly`, so the
+  root build's own plugin versions (the `apply false` aliases) are the only ones on the classpath.
+  `xross.android.library` has no user yet; it is there for `:core:data` and `:render:gl`.
+* `gradle.properties` turns on `org.gradle.parallel` and `org.gradle.configuration-cache`. Every
+  task in `check`, `assembleDebug` and `assembleProfiling` is compatible, and a repeated build
+  reuses the cached configuration.
+
+### 10.2 `:core:model` and `:theme:engine` (step 4)
+
+| Module | Holds | Size |
+| --- | --- | --- |
+| `:core:model` (`core/model`) | `model/`: `GlyphKey`, `GlyphSet`, `CategoryIds`, `FolderNames`, `ArtKind`, `Platform` | 6 files, 364 lines |
+| `:theme:engine` (`theme/engine`) | `theme/`, `theme/pack/`, `theme/shader/`: everything in §5's box, **plus the pack loader** | 32 files, 6,765 lines |
+| `:app` | the rest, and the engine's Android adapters in `theme/` | 165 files, ~33,800 lines |
+
+Both modules keep their package names, so the move needed no import changes outside the files that
+were split. Gradle now enforces what `ArchitectureTest` enforced by reading imports; the test
+still guards the packages inside `:app`, and checks that each module holds only its own packages
+and that the engine imports nothing from Android or Compose UI apart from `@Immutable`.
+
+**Where it differs from §5:**
+
+1. **`ThemePackLoader` is in the engine, not in `:theme:android`.** Its 800 lines are almost all
+   pack resolution (manifest, imports, cascade inputs, the files a pack reads), which a desktop
+   preview or the Web Studio would need as much as the cascade itself. What was Android in it
+   (`AssetManager`, `BitmapFactory`, `Typeface`, `SvgIcon`) is behind a seven-method
+   `PackPlatform` interface. `:app` implements it in `AndroidPackPlatform`, and a top-level
+   `ThemePackLoader(assets, themesDir)` factory keeps every existing call site unchanged.
+2. **Icons and fonts are opaque handles.** `ThemeIcon` and `ThemeFont` are plain interfaces in the
+   engine; `:app`'s `VectorIcon`, `BitmapIcon` and `TypefaceFont` implement them, and
+   `ThemeFont?.typeface` reads the Android typeface. A `when` over an icon now needs an `else`.
+3. **`:theme:android` is not a module yet.** What is left is seven files in `:app`'s `theme/`
+   (`AndroidPackPlatform`, `SvgIcon`, `ThemeWatcher`, `ArtSwatches`, `RememberThemePalette`, and
+   two small adapters: `ComposeColors` for `ThemePalette.topColor`/`bottomColor`/`glowColor`,
+   `MotionSpecs` for `Motion.nav()`/`tween()`). A module for them pays off only when a second
+   Android module needs them.
+4. **`theme/shader/` went into the engine.** It is the shader *sources* and their bookkeeping
+   (presets, the library, the canary, the frame-budget watchdog), all pure, and `LoadedTheme`
+   refers to it. The GL renderer stays in `:app`'s `ui/` until `:render:gl`.
+5. **`@Immutable` comes from `androidx.compose.runtime:runtime-annotation`** (the annotation-only
+   artifact, through the Compose BOM), the first option in §5.
+6. **Three `internal` declarations became public** because `:app` uses them: `LruCache` (the
+   backdrop caches), `withOpacity` (surfaces) and `ThemeArchive.idFor` (import). The clock helpers
+   (`minuteOfDay`, `millisUntilNextMinute`, `millisUntilNextDay`) moved from
+   `RememberThemePalette.kt` to the engine's `Clock.kt`.
+
+**Tests.** Eight suites moved to `theme/engine/src/test` as plain JUnit, in the engine's own
+packages: `ContextRulesTest`, `LookExporterTest`, `SoundRolesTest`, `ThemeArchiveTest`,
+`ThemeArchiveWriteTest`, `ThemeMusicPackTest`, `ThemePackLoaderTest` (all Robolectric before) and
+`SeasonalPaletteTest`. Their 81 tests run in about a second. They load the real Default pack from
+`app/src/main/assets` through `FilePackPlatform`, a file-backed `PackPlatform` in the engine's
+`testFixtures` (with `StressPack` and `TestAssets`), which `:app`'s tests share
+(`testFixtures(project(":theme:engine"))`). The platform's fake decoders fail the way real ones do
+(an SVG without `<svg`, a PNG or WebP without its signature, an empty font). Tests that check real
+Android decoding (`ThemePackTest`, `ComponentsTest`) stay in `:app` on Robolectric. `:app` now has
+83 test files, 57 on Robolectric (90 and 64 before).
+
+### 10.3 The look inputs in `ThemeController` (step 5)
+
+`MainActivity.setContent` no longer assembles the cascade. `LookFlow` (`state/`, pure flows)
+builds the `LookInputs` from the active pack, the settings, the menu's focus and the battery:
+
+* `settle` holds a new system inside the same category back 250 ms and lets a new category through
+  at once (it replaces the `rememberSettledSystem` composable);
+* `ruleBattery` and `ruleMinute` read the battery and a once-a-minute clock only when the pack has
+  rules on them, and pass a value on only when the set of rules that hold changes;
+* `inputs` combines them and drops equal moments.
+
+`ThemeController.resolvedLook(focus, battery)` maps that through `ThemeLookResolver` into a
+`StateFlow<ResolvedLook>`; `XmbViewModel.look` starts it once, and the Activity collects that one
+value. The whole path from settings and focus to the resolved look is tested without Compose
+(`LookFlowTest`, 5 tests on virtual time, plain JUnit) and through the real view model
+(`ThemeControllerTest`, one test). `MainActivity` went from 691 to 654 lines.
+
+Two behaviour notes. The look now reaches the screen through its own `StateFlow`, so after a
+category switch it can trail the category index by a frame; category moves animate over ~200 ms,
+so this is not visible. And the battery and clock filters run while the view model lives (the clock
+only for packs with time rules, one wake-up a minute), where the composables stopped when the
+Activity did.
+
+### 10.4 Verification
+
+943 unit tests (862 in `:app`, 81 in `:theme:engine`), `lintDebug` 0 errors, debug and profiling
+builds; on the API 37 emulator `smoke.sh` 12/12 and the theme suite 426/426; `palette-perf.sh`
+0.30–0.59% janky on the second run, which matches 2b.8. Not run: the A55 and the other four device
+suites. Details: [Phase 3-prep evidence §3.38](../phase-3-prep/STATUS.md#s3.38).

@@ -135,6 +135,9 @@ import dev.xross.launcher.theme.pack.Cosmetics
 import dev.xross.launcher.theme.pack.ParticlePreset
 import dev.xross.launcher.theme.pack.UiFilter
 import dev.xross.launcher.theme.pack.UiFilterRef
+import dev.xross.launcher.theme.pack.nav
+import dev.xross.launcher.theme.pack.tween
+import dev.xross.launcher.theme.glowColor
 
 internal val TextBright = Color(0xFFFFFFFF)
 internal val TextDim = Color(0xD9FFFFFF)

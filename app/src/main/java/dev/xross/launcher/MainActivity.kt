@@ -46,11 +46,8 @@ import dev.xross.launcher.state.XmbViewModel
 import dev.xross.launcher.theme.XrossTheme
 import dev.xross.launcher.theme.rememberActivePalette
 import dev.xross.launcher.ui.XmbScreen
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
-import dev.xross.launcher.data.of
-import dev.xross.launcher.theme.pack.UserLook
+import dev.xross.launcher.theme.pack.typeface
 import dev.xross.launcher.data.IconStyle
 import dev.xross.launcher.model.ArtKind
 import dev.xross.launcher.profile.BadgeImages
@@ -58,13 +55,8 @@ import dev.xross.launcher.state.BootMode
 import dev.xross.launcher.state.BootSequence
 import dev.xross.launcher.state.MediaFolderKind
 import dev.xross.launcher.state.TextPrompt
-import dev.xross.launcher.theme.BatteryLevel
-import dev.xross.launcher.theme.LookInputs
-import dev.xross.launcher.theme.QuickProfile
-import dev.xross.launcher.theme.ThemeLookResolver
 import dev.xross.launcher.theme.WallpaperSource
 import dev.xross.launcher.theme.WaveTint
-import dev.xross.launcher.theme.pack.LoadedTheme
 import dev.xross.launcher.ui.AdaptiveWave
 import dev.xross.launcher.ui.BootOverlay
 import dev.xross.launcher.ui.LocalComponents
@@ -79,17 +71,12 @@ import dev.xross.launcher.ui.ParticleRest
 import dev.xross.launcher.ui.ThemeSurfaces
 import dev.xross.launcher.ui.ThemeTypography
 import dev.xross.launcher.ui.WaveIntro
-import dev.xross.launcher.theme.rememberMinuteOfDay
-import dev.xross.launcher.theme.rememberSettledSystem
 import dev.xross.launcher.theme.wavePalette
 import dev.xross.launcher.ui.adaptiveArtKey
 import dev.xross.launcher.ui.focusFrameOf
 import dev.xross.launcher.ui.rememberBootReveal
 
 /** Indices of [pack]'s battery rules that hold at [b]; equal sets mean the same look. */
-private fun batteryRulesHeld(pack: LoadedTheme, b: BatteryLevel?): List<Int> =
-    if (b == null) emptyList() else pack.rules.filter { r -> r.battery?.holds(b) == true }.map { it.index }
-
 class MainActivity : ComponentActivity() {
 
     private val container get() = (application as XrossApplication).container
@@ -235,42 +222,18 @@ class MainActivity : ComponentActivity() {
             // The theme pack's font for every launcher text style.
             androidx.compose.runtime.LaunchedEffect(pack) {
                 fun family(t: android.graphics.Typeface?) = t?.let { androidx.compose.ui.text.font.FontFamily(it) }
-                ThemeTypography.family = family(pack.fonts.body)
-                ThemeTypography.display = family(pack.fonts.display)
-                ThemeTypography.mono = family(pack.fonts.mono)
+                ThemeTypography.family = family(pack.fonts.body.typeface)
+                ThemeTypography.display = family(pack.fonts.display.typeface)
+                ThemeTypography.mono = family(pack.fonts.mono.typeface)
             }
-            // The pack's look here (Appendix A.4): its variant, then the open category's override,
-            // then the focused game's system override (once the cursor rests, so scrolling a mixed
-            // list doesn't flicker). The user's settings (theme color, surface style) win over it.
+            // The pack's look here (Appendix A.4): its variant, the open category's and the settled
+            // system's overrides, the context rules, then the user's picks and the quick profile.
+            // Resolved off Compose by ThemeController (Assessment §7.4); the Activity collects it.
             val categoryId = state.categoryId
-            val system = rememberSettledSystem(state.focusedSystem, categoryId)
-            // Battery and clock for the pack's context rules: read only when it has such rules, and
-            // passed on only when the set of rules that hold changes (not on every percent or minute).
-            val ruleBattery by androidx.compose.runtime.remember(pack) {
-                viewModel.battery
-                    .map { b -> b.takeIf { pack.usesBattery } }
-                    .distinctUntilChanged { a, b -> batteryRulesHeld(pack, a) == batteryRulesHeld(pack, b) }
-            }.collectAsStateWithLifecycle(initialValue = null)
-            val ruleMinute by rememberMinuteOfDay(active = pack.usesClock, key = pack) { m ->
-                pack.rules.filter { r -> r.time?.contains(m) == true }.map { it.index }
-            }
-            // The whole cascade (pack, variant, overrides, rules, the user's picks, the quick
-            // profile) in one pure step: see ThemeLookResolver.
-            val st = state.settings
-            val userEffects = st.effectOverrides
-            val profile = QuickProfile.byName(st.quickProfile)
-            val lookInputs = LookInputs(
-                pack = pack,
-                variant = st.themeVariant,
-                category = categoryId,
-                system = system,
-                battery = ruleBattery,
-                minuteOfDay = ruleMinute,
-                user = UserLook.of(st),
-                profile = profile,
-            )
-            val resolved = androidx.compose.runtime.remember(lookInputs) { ThemeLookResolver.resolve(lookInputs) }
+            val resolved by viewModel.look.collectAsStateWithLifecycle()
             val look = resolved.look
+            val userEffects = state.settings.effectOverrides
+            val profile = resolved.profile
             // The pack's programs plus the user's background shader, all compiled ahead of time.
             val shaderLibrary = androidx.compose.runtime.remember(pack, userEffects.shader) { pack.shaderLibrary(userEffects.shader) }
             if (BuildConfig.PERF_LOG) {

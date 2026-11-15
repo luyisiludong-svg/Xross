@@ -96,6 +96,8 @@ ksp {
 }
 
 dependencies {
+    implementation(project(":core:model"))
+    implementation(project(":theme:engine"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
@@ -127,6 +129,8 @@ dependencies {
     ksp(libs.room.compiler)
 
     testImplementation(libs.junit)
+    // StressPack and the file-backed PackPlatform, shared with :theme:engine's tests.
+    testImplementation(testFixtures(project(":theme:engine")))
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.robolectric)
     testImplementation(libs.androidx.test.core)

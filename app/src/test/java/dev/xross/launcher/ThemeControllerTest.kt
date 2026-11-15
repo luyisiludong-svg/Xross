@@ -1,5 +1,6 @@
 package dev.xross.launcher
 
+import dev.xross.launcher.theme.pack.StressPack
 import android.content.Context
 import android.net.Uri
 import android.os.Looper
@@ -65,6 +66,24 @@ class ThemeControllerTest {
     private val context: Context = ApplicationProvider.getApplicationContext()
 
     // region Through the view model (moved from ComponentsTest and ComponentsTwoBTest)
+
+    @Test fun theResolvedLookFollowsTheSettingsAndMatchesTheStatusBarsComponents() {
+        val container = AppContainer(context)
+        val vm = XmbViewModel(context, container, storageAccess = { false })
+        fun idle() = shadowOf(Looper.getMainLooper()).idle()
+        idle()
+        assertEquals(QuickProfile.byName(container.settings.current.quickProfile), vm.look.value.profile)
+        assertEquals(vm.components.value, vm.look.value.components)
+
+        container.settings.update { it.copy(quickProfile = QuickProfile.MONOCHROME_EINK.name) }
+        idle()
+        assertEquals(QuickProfile.MONOCHROME_EINK, vm.look.value.profile)
+        assertTrue(vm.look.value.stillMotion)
+
+        container.settings.update { it.copy(quickProfile = QuickProfile.NONE.name, surfaceStyle = "OLED_TRUE_BLACK") }
+        idle()
+        assertEquals("OLED_TRUE_BLACK", vm.look.value.surface.id)
+    }
 
     @Test fun slotEditsThroughTheViewModelReopenTheListAndTheAvatarSlotGatesTheHud() {
         val container = AppContainer(context)

@@ -1,5 +1,7 @@
 package dev.xross.launcher
 
+import dev.xross.launcher.theme.pack.BitmapIcon
+import dev.xross.launcher.theme.pack.VectorIcon
 import android.content.Context
 import android.graphics.Bitmap
 import androidx.compose.ui.graphics.vector.VectorGroup
@@ -61,7 +63,7 @@ class ThemePackTest {
         val theme = loader.load(ThemePackLoader.DEFAULT_ID)
         assertEquals("Default", theme.info.name)
         assertTrue(theme.info.builtIn)
-        for (key in GlyphKey.entries) assertTrue("icon for $key", theme.icons[key] is ThemeIcon.Vector)
+        for (key in GlyphKey.entries) assertTrue("icon for $key", theme.icons[key] is VectorIcon)
         for (role in SoundRole.entries) assertTrue("sound for $role", theme.sounds[role] is SoundSource.Asset)
         assertNull("no palette of its own", theme.palette)
         assertEquals(5, theme.wave?.lineCount)
@@ -141,7 +143,7 @@ class ThemePackTest {
         // What it lacks comes from Default, gains included.
         assertEquals(SoundSource.Asset("themes/default/sounds/system_ng.wav"), theme.sounds[SoundRole.SYSTEM_NG])
         assertEquals(0.6f, theme.gains[SoundRole.SYSTEM_NG]!!, 1e-6f)
-        assertTrue(theme.icons[GlyphKey.SETTINGS] is ThemeIcon.Vector)
+        assertTrue(theme.icons[GlyphKey.SETTINGS] is VectorIcon)
         assertEquals(GlyphKey.entries.size, theme.icons.size)
         assertEquals(9, theme.wave?.lineCount)
         assertEquals(1.5f, theme.wave?.turbulence)
@@ -157,7 +159,7 @@ class ThemePackTest {
             mapOf("icons/pad.png" to png),
         )
         val theme = loader.load("pastel")
-        val icon = theme.icons[GlyphKey.GAMES] as ThemeIcon.Bitmap
+        val icon = theme.icons[GlyphKey.GAMES] as BitmapIcon
         assertTrue("downsampled", icon.image.width <= ThemePackLoader.ICON_PX)
         // canvas → top, the wave gradient's last stop → bottom, accentSecondary → wave, accent → glow.
         assertEquals(0xFF3B3560.toInt(), theme.palette!!.top)

@@ -1,5 +1,6 @@
 package dev.xross.launcher.state
 
+import dev.xross.launcher.theme.ResolvedLook
 import dev.xross.launcher.model.GlyphKey
 import dev.xross.launcher.data.MusicUnderSnaps
 import dev.xross.launcher.audio.VolumeChannel
@@ -464,6 +465,17 @@ class XmbViewModel(
     }.stateIn(
         viewModelScope, SharingStarted.Eagerly,
         XmbUiState(coldBoot = coldBoot, bootPending = coldBoot, glyphs = components.value.glyphs.glyphsFor(ControllerFamily.KEYBOARD)),
+    )
+
+    /**
+     * The theme look the menu draws with (Assessment §7.4): pack, variant, the open category's and
+     * the settled system's overrides, the context rules, the user's picks and the quick profile,
+     * resolved by [ThemeController.resolvedLook]. The Activity collects it as one value.
+     */
+    val look: StateFlow<ResolvedLook> = theme.resolvedLook(
+        focus = state.map { LookFocus(it.categoryId, it.focusedSystem) }
+            .stateIn(viewModelScope, SharingStarted.Eagerly, LookFocus(state.value.categoryId, state.value.focusedSystem)),
+        battery = battery,
     )
 
     private data class ListView(

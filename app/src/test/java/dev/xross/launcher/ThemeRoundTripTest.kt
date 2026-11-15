@@ -1,5 +1,6 @@
 package dev.xross.launcher
 
+import dev.xross.launcher.theme.pack.StressPack
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import dev.xross.launcher.theme.PACK_THEME
