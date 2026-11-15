@@ -54,6 +54,8 @@ sealed interface Command {
     data class CycleEmulator(val platformId: String) : Command
     data object ToggleWave : Command
     data object OpenWaveSettings : Command
+    /** Settings ▸ Theme ▸ Layout (2b.8a): the crosshair, UI scale, spacing and focus panel. */
+    data object OpenLayoutSettings : Command
     /** Settings ▸ Theme ▸ Profile customization: the avatar's ring and glow. */
     data object OpenAvatarStyle : Command
     /** Games ▸ RetroAchievements: the profile dashboard. */
@@ -122,6 +124,20 @@ sealed interface Command {
      * theme color, quick profile and wave settings.
      */
     data object ResetThemeDefaults : Command
+    /** Settings ▸ Theme ▸ Export theme… (2b.8b): the scopes the active pack can be exported in. */
+    data object ExportTheme : Command
+    /** The Theme pack row's Options ▸ Export a pack…: the scopes pack [id] can be exported in. */
+    data class ExportThemePack(val id: String) : Command
+    /** Export pack [packId] in [scope] (to an `.xtheme` file when [share], 2b.8c): the name entry opens next. */
+    data class ChooseExportScope(val packId: String, val scope: dev.xross.launcher.theme.pack.ExportScope, val share: Boolean = false) : Command
+    /** The confirm panel's Export: writes the pending export into Xross/themes. */
+    data object ConfirmThemeExport : Command
+    /** After an export: switch to the new pack, so the screen doesn't change. */
+    data object SwitchToExportedTheme : Command
+    /** The Theme pack row's Options ▸ Share as .xtheme… (2b.8c): the scopes pack [id] can be shared in. */
+    data class ShareThemePack(val id: String) : Command
+    /** After an export (2b.8c): zip the folder just written into an `.xtheme` file the user picks. */
+    data object ShareExportedTheme : Command
     /** Settings ▸ Theme ▸ Components (2b.7a): sets status bar [side]'s slots; null hands it back to the pack. */
     data class SetStatusSlots(val side: dev.xross.launcher.theme.pack.StatusSide, val slots: List<dev.xross.launcher.theme.pack.StatusSlot>?) : Command
     /** One move, removal or addition of [slot] in status bar [side]; the slot list reopens on it. */

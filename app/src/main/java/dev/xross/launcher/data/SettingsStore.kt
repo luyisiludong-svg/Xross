@@ -75,6 +75,11 @@ data class XrossSettings(
      * battery display, clock format. Null values follow the pack.
      */
     val componentOverrides: dev.xross.launcher.theme.pack.ComponentOverrides = dev.xross.launcher.theme.pack.ComponentOverrides.NONE,
+    /**
+     * Settings ▸ Theme ▸ Layout picks over the pack's layout (2b.8a): crosshair preset, UI scale,
+     * list spacing, focused scale. Null values follow the pack.
+     */
+    val layoutOverrides: dev.xross.launcher.theme.pack.LayoutOverrides = dev.xross.launcher.theme.pack.LayoutOverrides.NONE,
     /** [dev.xross.launcher.theme.QuickProfile] name (Settings ▸ Theme ▸ Quick profile); NONE = the theme's own look. */
     val quickProfile: String = dev.xross.launcher.theme.QuickProfile.NONE.name,
     /** Colors from the focused game's art; null follows the pack's `effects.adaptiveGamePalette` (on by default). */

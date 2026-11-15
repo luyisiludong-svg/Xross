@@ -105,6 +105,15 @@ class MainActivity : ComponentActivity() {
         viewModel.onThemeArchivePicked(it)
     }
 
+    /**
+     * Share as .xtheme… (2b.8c): a new document the theme file is written into. Typed as
+     * octet-stream: with `application/zip` the storage provider appends `.zip` to the name
+     * (`default-pack.xtheme.zip`), since `.xtheme` isn't a registered extension.
+     */
+    private val createThemeArchive = registerForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) {
+        viewModel.onThemeArchiveCreated(it)
+    }
+
     /** Settings ▸ Theme ▸ Xross wallpaper ▸ Pick a picture (2b.4f): a document, so its read grant can persist. */
     private val pickWallpaperImage = registerForActivityResult(ActivityResultContracts.OpenDocument()) {
         viewModel.onWallpaperPicked(it)
@@ -221,13 +230,8 @@ class MainActivity : ComponentActivity() {
                 system = system,
                 battery = ruleBattery,
                 minuteOfDay = ruleMinute,
-                effects = userEffects,
-                surfaceStyle = st.surfaceStyle,
+                user = dev.xross.launcher.theme.pack.UserLook.of(st),
                 profile = profile,
-                circadian = st.circadianCurve,
-                batteryTint = st.batteryTint,
-                adaptive = st.adaptiveGamePalette,
-                components = st.componentOverrides,
             )
             val resolved = androidx.compose.runtime.remember(lookInputs) { dev.xross.launcher.theme.ThemeLookResolver.resolve(lookInputs) }
             val look = resolved.look
@@ -372,6 +376,9 @@ class MainActivity : ComponentActivity() {
                     },
                     loadWallpaper = { source, px -> container.wallpapers.load(source, px) },
                     onWaveRowTap = viewModel::onWaveRowTapped,
+                    onLayoutRowTap = viewModel::onLayoutRowTapped,
+                    onLayoutSlider = viewModel::onLayoutSliderChanged,
+                    onCloseLayoutSettings = viewModel::closeLayoutSettings,
                     onWaveSlider = viewModel::onWaveSliderChanged,
                     onCloseWaveSettings = viewModel::closeWaveSettings,
                     onAchievementTap = viewModel::onAchievementTapped,
@@ -482,6 +489,8 @@ class MainActivity : ComponentActivity() {
             UiEffect.PickThemeArchive -> runCatching {
                 pickThemeArchive.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream", "application/x-xtheme"))
             }
+            is UiEffect.CreateThemeArchive -> runCatching { createThemeArchive.launch(effect.fileName) }
+                .onFailure { viewModel.onThemeArchiveCreated(null) }
             UiEffect.PickBaseRomsFolder -> runCatching { pickBaseRomsFolder.launch(null) }
             UiEffect.PickWallpaperImage -> runCatching { pickWallpaperImage.launch(arrayOf("image/png", "image/jpeg", "image/webp")) }
             is UiEffect.PickMediaFolder -> {

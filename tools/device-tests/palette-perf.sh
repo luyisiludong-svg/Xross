@@ -8,6 +8,8 @@
 #                                                  # the same with Settings ▸ Theme effects on
 #   PERF_COMPONENTS='{"badgePills": ["SYSTEM", "YEAR", "DEVELOPER", "PLAYTIME"]}' tools/device-tests/palette-perf.sh
 #                                                  # the same with Settings ▸ Theme ▸ Components picks
+#   PERF_LAYOUT='{"preset": "PSP_CENTER", "uiScale": 1.3, "itemSpacingDp": 20}' tools/device-tests/palette-perf.sh
+#                                                  # the same with Settings ▸ Theme ▸ Layout values (2b.8a)
 #   PERF_TELEMETRY=1 tools/device-tests/palette-perf.sh
 #                                                  # passes alternate the rich telemetry card and the
 #                                                  # compact pill (2b.7d) instead of adaptive on and off
@@ -28,7 +30,7 @@
 # `-gpu host` first: the default may pick software rendering and report ~100% jank.
 #
 # WARNING: replaces /sdcard/ROMs with the 12 test games and resets display settings (theme,
-# pack, quick profile, color layers, effects) in /sdcard/Xross/config/settings.json.
+# pack, quick profile, color layers, effects, components, layout) in /sdcard/Xross/config/settings.json.
 set -u
 PKG=dev.xross.launcher
 PAIRS=${1:-3}
@@ -57,6 +59,8 @@ p = sys.argv[1]; s = json.load(open(p)); d = s["display"]
 d["effects"] = json.loads(os.environ.get("PERF_EFFECTS") or "{}")
 # The pack's own components unless PERF_COMPONENTS names some (2b.7, display.components).
 d["components"] = json.loads(os.environ.get("PERF_COMPONENTS") or "{}")
+# The pack's own layout unless PERF_LAYOUT names some (2b.8a, display.layout).
+d["layout"] = json.loads(os.environ.get("PERF_LAYOUT") or "{}")
 d.update(theme="LAVENDER", themePack="default", themeVariant="", surfaceStyle="", quickProfile="NONE",
          adaptiveGamePalette=sys.argv[2] == "true")
 for k in ("circadianCurve", "batteryTint"): d.pop(k, None)

@@ -334,3 +334,92 @@ object Crosshair {
         return if (lo >= hi) lo else y.coerceIn(lo, hi)
     }
 }
+
+/**
+ * The user's own layout values over the theme pack (Phase 2b.8a, Settings ▸ Theme ▸ Layout),
+ * saved as `display.layout` in `settings.json`. Every field is null to follow the pack (its base,
+ * variant, category and system overrides and `rules.json` layout patches); a value set here wins
+ * in every context, like `display.effects`. The quick profile still applies after it, and only
+ * to motion.
+ *
+ * ```json
+ * "layout": { "preset": "PSP_CENTER", "uiScale": 1.1, "itemSpacingDp": 6, "focusedScale": null }
+ * ```
+ * Decoded leniently ([LenientLayoutOverrides]): a value of the wrong type drops on its own, an
+ * unknown preset follows the pack and numbers clamp to [LayoutLimits] ([normalized]).
+ */
+@Immutable
+@Serializable
+data class LayoutOverrides(
+    /** A [CrosshairPreset] name; it replaces the pack's `crosshairX` / `crosshairY`. */
+    val preset: String? = null,
+    val uiScale: Float? = null,
+    val itemSpacingDp: Float? = null,
+    val focusedScale: Float? = null,
+) {
+    val crosshair: CrosshairPreset? get() = CrosshairPreset.byName(preset)
+
+    /** True when nothing is overridden: the pack's layout as it is. */
+    val empty: Boolean get() = this == NONE
+
+    /** How many values the user set (for Reset to theme defaults). */
+    val count: Int get() = listOf(preset, uiScale, itemSpacingDp, focusedScale).count { it != null }
+
+    /** The preset's canonical name (or null when unknown), numbers finite and clamped to [LayoutLimits]. */
+    fun normalized(): LayoutOverrides = LayoutOverrides(
+        preset = crosshair?.name,
+        uiScale = uiScale.clampOrNull(LayoutLimits.MIN_SCALE, LayoutLimits.MAX_SCALE),
+        itemSpacingDp = itemSpacingDp.clampOrNull(0f, LayoutLimits.MAX_SPACING_DP),
+        focusedScale = focusedScale.clampOrNull(LayoutLimits.MIN_FOCUS_SCALE, LayoutLimits.MAX_FOCUS_SCALE),
+    )
+
+    /**
+     * [base] (the pack's layout in this context, its rules already applied) with these values on
+     * top. The crosshair preset replaces both fractions; the screen still clamps them per display.
+     */
+    fun applyTo(base: ThemeLayout): ThemeLayout {
+        if (empty) return base
+        val n = normalized()
+        val p = n.crosshair
+        val out = base.copy(
+            crosshairX = p?.x ?: base.crosshairX,
+            crosshairY = p?.y ?: base.crosshairY,
+            uiScale = n.uiScale ?: base.uiScale,
+            itemSpacingDp = n.itemSpacingDp ?: base.itemSpacingDp,
+            focusedScale = n.focusedScale ?: base.focusedScale,
+        )
+        return if (out == base) base else out
+    }
+
+    companion object {
+        val NONE = LayoutOverrides()
+
+        private fun Float?.clampOrNull(lo: Float, hi: Float): Float? = this?.takeIf { it.isFinite() }?.coerceIn(lo, hi)
+    }
+}
+
+/**
+ * `display.layout` as written by hand: keys whose value isn't of the right type (a word for a
+ * number, an object for the preset) are dropped one by one before decoding, so one typo never
+ * costs the rest of `settings.json`. Numbers may be quoted.
+ */
+object LenientLayoutOverrides :
+    kotlinx.serialization.json.JsonTransformingSerializer<LayoutOverrides>(LayoutOverrides.serializer()) {
+    private val NUMBERS = setOf("uiScale", "itemSpacingDp", "focusedScale")
+
+    override fun transformDeserialize(element: kotlinx.serialization.json.JsonElement): kotlinx.serialization.json.JsonElement {
+        val obj = element as? kotlinx.serialization.json.JsonObject ?: return kotlinx.serialization.json.JsonObject(emptyMap())
+        val kept = buildMap {
+            for ((key, value) in obj) {
+                val p = value as? kotlinx.serialization.json.JsonPrimitive ?: continue
+                if (p is kotlinx.serialization.json.JsonNull) continue
+                when (key) {
+                    "preset" -> if (p.isString) put(key, p)
+                    in NUMBERS -> p.content.trim().toFloatOrNull()?.takeIf { it.isFinite() }
+                        ?.let { put(key, kotlinx.serialization.json.JsonPrimitive(it)) }
+                }
+            }
+        }
+        return kotlinx.serialization.json.JsonObject(kept)
+    }
+}

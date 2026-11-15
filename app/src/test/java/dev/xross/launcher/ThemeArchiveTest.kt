@@ -93,18 +93,45 @@ class ThemeArchiveTest {
         assertOnly()
     }
 
-    @Test fun onlyKnownFoldersAndTypesAreAccepted() {
+    @Test fun onlyDataFilesAreAccepted() {
         for ((path, why) in listOf(
-            "scripts/setup.json" to "unexpected folder scripts/",
-            "cover.png" to "only .json, wallpaper.png, bgm.ogg, boot.mp4, shader.frag and postprocess.agsl at the top level",
+            "scripts/setup.pdf" to "unexpected file scripts/setup.pdf (a pack holds images",
+            "cover.gif" to "unexpected file cover.gif",
+            "LICENSE" to "unexpected file LICENSE",
             "wallpapers/night.gif" to "wallpapers/ holds jpeg, jpg, png, webp",
             "fonts/readme.pdf" to "fonts/ holds otf, ttf",
             "icons/a/b/c/deep.svg" to "nested too deep",
+            ".git/config" to "is a hidden file",
         )) {
             val reason = rejected(archive().stage(zip("odd.xtheme", "theme.json" to text(manifest), path to text("x")), "odd.xtheme"))
             assertTrue("$path: $reason", why in reason)
         }
         assertOnly()
+    }
+
+    /** 2b.8c: every path a manifest can name imports, so a shared pack comes back whole (a root logo, an art/ folder, an imported JSON). */
+    @Test fun pathsTheLoaderReadsAreAccepted() {
+        val s = staged(
+            archive().stage(
+                zip(
+                    "named.xtheme",
+                    "theme.json" to text(manifest),
+                    "logo.svg" to text("<svg/>"),
+                    "art/night.webp" to text("webp"),
+                    "art/late.jpg" to text("jpg"),
+                    "music/loop.ogg" to text("ogg"),
+                    "parts/rules.json" to text("{}"),
+                    "fonts/Body.otf" to text("otf"),
+                    "shaders/bg.fs" to text("void main(){}"),
+                    "fx/glow.agsl" to text("half4 main(float2 p){return half4(1);}"),
+                    "video/intro.webm" to text("webm"),
+                ),
+                "named.xtheme",
+            ),
+        )
+        for (p in listOf("logo.svg", "art/night.webp", "music/loop.ogg", "parts/rules.json", "shaders/bg.fs", "fx/glow.agsl", "video/intro.webm")) {
+            assertTrue(p, File(s.dir, p).isFile)
+        }
     }
 
     @Test fun aWellFormedPackIsStagedHidden() {
@@ -184,8 +211,9 @@ class ThemeArchiveTest {
         val reason = rejected(archive().stage(big, "loud.xtheme"))
         assertTrue(reason, "bgm.ogg is larger than 20 MB" in reason)
         assertOnly()
-        // Other names stay unexpected at the root.
-        assertTrue("only .json" in rejected(archive().stage(zip("odd.xtheme", "theme.json" to text(manifest), "bgm.wav" to text("x")), "odd.xtheme")))
+        // Other music at the root is what audio.bgmFile can name (2b.8c), so it imports; an unknown type doesn't.
+        archive().discard(staged(archive().stage(zip("wav.xtheme", "theme.json" to text(manifest), "bgm.wav" to text("x")), "wav.xtheme")))
+        assertTrue("unexpected file bgm.mid" in rejected(archive().stage(zip("odd.xtheme", "theme.json" to text(manifest), "bgm.mid" to text("x")), "odd.xtheme")))
     }
 
     @Test fun manyFilesAddUpToTheCap() {

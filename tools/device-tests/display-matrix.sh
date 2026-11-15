@@ -11,6 +11,8 @@
 # With "stress", a pack is installed and activated first that pushes the layout clamps the hardest:
 # the PSP centre crosshair at 150% UI scale, 3:4 game tiles and 20 dp spacing, and both status-bar
 # clusters full (2b.7a: a wide logo, network, volume always shown; a long clock, battery, avatar).
+# With "layout-min" or "layout-max" (2b.8a), the user's Settings ▸ Theme ▸ Layout values over the
+# Default pack instead: Modern widescreen at 50% UI scale, or PSP centre at 150% (display.layout).
 # The "status" column counts left-cluster glyphs that run into the right cluster (should be 0). Restores the
 # display size and density, and the previous theme pack, at the end. Doesn't clear app data.
 set -u
@@ -61,6 +63,23 @@ SVG
   adb shell am force-stop $PKG
   adb shell "sed -i 's/\"themePack\": \"[^\"]*\"/\"themePack\": \"matrix_stress\"/' $settings"
 fi
+
+set_layout() { # set_layout <display.layout JSON>: written into settings.json with Xross stopped
+  local f; f=$(mktemp)
+  adb shell am force-stop $PKG
+  adb shell cat $settings > "$f"
+  python3 -I - "$f" "$1" <<'PY'
+import json, sys
+s = json.load(open(sys.argv[1])); s.setdefault("display", {})["layout"] = json.loads(sys.argv[2])
+json.dump(s, open(sys.argv[1], "w"), indent=2)
+PY
+  adb push "$f" $settings >/dev/null
+  rm -f "$f"
+}
+case "$MODE" in
+  layout-min) set_layout '{"preset": "MODERN_WIDESCREEN", "uiScale": 0.5}' ;;
+  layout-max) set_layout '{"preset": "PSP_CENTER", "uiScale": 1.5}' ;;
+esac
 
 printf '%-15s %-11s %-11s %-9s %-7s %-7s %-14s %s\n' config asked app-gets janky p90 p99 clipped-texts status
 for line in $(echo "$CONFIGS" | tr ' ' ','); do
@@ -117,4 +136,5 @@ if [ "$MODE" = stress ]; then
   adb shell rm -rf /sdcard/Xross/themes/matrix_stress
   adb shell am start -n $PKG/.MainActivity >/dev/null
 fi
+case "$MODE" in layout-*) set_layout '{}'; adb shell am start -n $PKG/.MainActivity >/dev/null ;; esac
 echo "Screenshots in $OUT/"

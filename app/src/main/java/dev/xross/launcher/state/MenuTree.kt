@@ -935,6 +935,22 @@ class MenuTree(private val s: MenuSnapshot) {
                     add(MenuOption(name, command = Command.SetThemePack(id), selected = id == s.themes.activeId))
                 }
                 add(MenuOption("Look for new packs", detail = "Rescan Xross/themes", command = Command.ReloadThemePacks))
+                // 2b.8b: any installed pack, the built-in Default pack included.
+                add(
+                    MenuOption(
+                        "Export a pack…",
+                        detail = "Save a copy in Xross/themes",
+                        submenu = s.themes.packs.map { (id, name) -> MenuOption(name, command = Command.ExportThemePack(id)) },
+                    ),
+                )
+                // 2b.8c: the same scopes, written into one .xtheme file.
+                add(
+                    MenuOption(
+                        "Share as .xtheme…",
+                        detail = "Save a pack as one theme file to send or keep",
+                        submenu = s.themes.packs.map { (id, name) -> MenuOption(name, command = Command.ShareThemePack(id)) },
+                    ),
+                )
             },
         ),
     ) + themeVariantRow() + listOf(
@@ -944,8 +960,14 @@ class MenuTree(private val s: MenuSnapshot) {
         folder(DISPLAY_EFFECTS, "Effects", GlyphKey.DISPLAY, profiled(ProfileField.SURFACE, surfaceSummary())),
         folder(DISPLAY_INTRO, "Intro and transitions", GlyphKey.DISPLAY, introSummary()),
         folder(DISPLAY_COMPONENTS, "Components", GlyphKey.DISPLAY, componentsSummary()),
+        layoutRow(),
         folder(DISPLAY_MENU, "Menu and profile", GlyphKey.USERS, "Profile customization, button hints, platform folders"),
         resetThemeRow(),
+        setting(
+            "disp:export", "Export theme…",
+            "Save ${s.themes.activeName} or your look as a new pack in Xross/themes",
+            GlyphKey.STORAGE, Command.ExportTheme,
+        ),
         setting(
             "disp:import", "Import theme (.xtheme)…",
             "Pick a theme file; it is checked, then unpacked into Xross/themes",
@@ -1201,19 +1223,16 @@ class MenuTree(private val s: MenuSnapshot) {
         return if (own.isEmpty()) slot.packLabel(s.themes.packLook(s.settings.themeVariant), s.themes.packBootVideo) else slot.label(own)
     }
 
+    /** Settings ▸ Theme ▸ Layout (2b.8a): opens the panel; the subtitle lists what the user set over the pack. */
+    private fun layoutRow(): XmbNode {
+        val own = LayoutEditor.summary(s.settings.layoutOverrides)
+        val summary = own.ifEmpty { "From ${s.themes.activeName} · Crosshair, UI scale, list spacing, focused scale" }
+        return setting("disp:layout", "Layout", summary, GlyphKey.DISPLAY, Command.OpenLayoutSettings)
+    }
+
     /** Reset to theme defaults: what it would clear, or that nothing is overridden. */
     private fun resetThemeRow(): XmbNode {
-        val st = s.settings
-        val changed = buildList {
-            val fx = dev.xross.launcher.theme.pack.EffectSlot.entries.count { st.effectOverrides[it].isNotEmpty() }
-            if (fx > 0) add(countOf(fx, "effect"))
-            val comps = st.componentOverrides.count
-            if (comps > 0) add(countOf(comps, "component"))
-            if (st.surfaceStyle.isNotEmpty()) add("surface")
-            val layers = listOf(st.adaptiveGamePalette, st.circadianCurve, st.batteryTint).count { it != null }
-            if (layers > 0) add(countOf(layers, "color layer"))
-            if (st.customWallpaper.isNotBlank()) add("wallpaper")
-        }
+        val changed = dev.xross.launcher.theme.pack.UserLook.of(s.settings).changes()
         val summary = if (changed.isEmpty()) "Nothing overrides ${s.themes.activeName}" else "Clears " + changed.joinToString(", ")
         return setting("disp:reset", "Reset to theme defaults", summary, GlyphKey.DISPLAY, Command.ResetThemeDefaults)
     }

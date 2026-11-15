@@ -7,6 +7,9 @@ import dev.xross.launcher.input.NavAction
 sealed interface NamePurpose {
     /** A new Apps folder for [packageName]. */
     data class NewAppFolder(val packageName: String) : NamePurpose
+
+    /** The name of a theme exported from pack [packId] in [scope] (2b.8b), into an `.xtheme` file when [share] (2b.8c). */
+    data class ExportTheme(val packId: String, val scope: dev.xross.launcher.theme.pack.ExportScope, val share: Boolean = false) : NamePurpose
 }
 
 sealed interface NameEntryEffect {
@@ -28,6 +31,8 @@ data class NameEntry(
     val title: String,
     val purpose: NamePurpose,
     val keys: SearchState = SearchState(),
+    /** The longest name this entry takes (Apps folder names are short; an exported theme's may be longer). */
+    val maxLength: Int = AppFolders.MAX_NAME,
 ) {
     val text: String get() = keys.query
 
@@ -39,7 +44,7 @@ data class NameEntry(
         else -> typed(keys.onAction(action).state)
     }
 
-    fun type(c: Char): NameEntry = if (text.length >= AppFolders.MAX_NAME) this else copy(keys = keys.type(c))
+    fun type(c: Char): NameEntry = if (text.length >= maxLength) this else copy(keys = keys.type(c))
 
     fun backspace(): NameEntry = copy(keys = keys.backspace())
 
@@ -52,7 +57,7 @@ data class NameEntry(
 
     /** Keys only: this keyboard has no results pane, and names stay short. */
     private fun typed(next: SearchState): NameEntryOutcome {
-        val clamped = if (next.query.length > AppFolders.MAX_NAME) keys else next
+        val clamped = if (next.query.length > maxLength) keys else next
         return NameEntryOutcome(copy(keys = clamped.copy(focus = SearchFocus.KEYS, results = emptyList())))
     }
 }

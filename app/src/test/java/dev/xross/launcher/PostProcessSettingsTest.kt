@@ -336,7 +336,7 @@ class PostProcessSettingsTest {
             listOf("disp:surface", "disp:fx:ui_filter", "disp:fx:focus_frame", "disp:fx:particles", "disp:fx:icon_mask"),
             tree.list(MenuTree.DISPLAY_EFFECTS).map { it.id },
         )
-        assertEquals(listOf("disp:reset", "disp:import"), tree.list(MenuTree.DISPLAY).map { it.id }.takeLast(2))
+        assertEquals(listOf("disp:reset", "disp:export", "disp:import"), tree.list(MenuTree.DISPLAY).map { it.id }.takeLast(3))
         val byId = rows.associateBy { it.id }
         assertTrue(byId["disp:fx:shader"]!!.subtitle!!.startsWith("Theme pack (Bokeh)"))
         assertTrue(byId["disp:fx:particles"]!!.subtitle!!.startsWith("Theme pack (Snow)"))

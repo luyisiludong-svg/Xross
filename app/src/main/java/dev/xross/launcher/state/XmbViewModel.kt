@@ -3,7 +3,6 @@ package dev.xross.launcher.state
 import dev.xross.launcher.model.GlyphKey
 import dev.xross.launcher.audio.MusicUnderSnaps
 import dev.xross.launcher.audio.VolumeChannel
-import androidx.core.net.toUri
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -58,6 +57,8 @@ sealed interface UiEffect {
     data object PickDatFolder : UiEffect
     /** Pick a `.xtheme` file; answers [XmbViewModel.onThemeArchivePicked]. */
     data object PickThemeArchive : UiEffect
+    /** Create a document named [fileName] for a shared theme (2b.8c); answers [XmbViewModel.onThemeArchiveCreated]. */
+    data class CreateThemeArchive(val fileName: String) : UiEffect
     data object PickBaseRomsFolder : UiEffect
     data class PickMediaFolder(val kind: MediaFolderKind) : UiEffect
     /** Ask for text (account, key, title, search); the answer goes to [XmbViewModel.onTextEntered]. */
@@ -135,6 +136,8 @@ data class XmbUiState(
     val settings: dev.xross.launcher.data.XrossSettings = dev.xross.launcher.data.XrossSettings(),
     /** Settings ▸ Theme ▸ Wave settings while it is open. */
     val waveEditor: WaveEditorState? = null,
+    /** Settings ▸ Theme ▸ Layout while it is open (2b.8a); the menu stays in full view behind it. */
+    val layoutEditor: LayoutEditorState? = null,
     /** A game's Achievements screen while it is open. */
     val achievements: AchievementsViewState? = null,
     /** The unlock toast on screen (it never takes input). */
@@ -178,6 +181,8 @@ private data class Transient(
     val scanning: Boolean = false,
     /** DATs are being imported or matched. */
     val datWork: Boolean = false,
+    /** A theme is being exported (2b.8b). */
+    val themeWork: Boolean = false,
     val waveEditor: WaveEditorState? = null,
     val avatarEditor: AvatarEditorState? = null,
 )
@@ -252,6 +257,31 @@ class XmbViewModel(
             override fun dismissMenus() = transient.update { it.copy(optionsMenu = null, details = null) }
             override fun components() = this@XmbViewModel.components.value
             override fun revealGame(gameId: Long) = this@XmbViewModel.revealGame(gameId)
+        },
+    )
+
+    /** Settings ▸ Theme: packs, variants, colours, effects, components, wallpaper, import, reset (Assessment #6, 2b.8-prep). */
+    private val theme = ThemeController(
+        context = context,
+        scope = viewModelScope,
+        themes = container.themes,
+        packs = container.themePacks,
+        settings = container.settings,
+        environment = container.environment,
+        credentials = container.credentials,
+        sounds = container.sounds,
+        host = object : ThemeController.Host {
+            override fun toast(message: String) = this@XmbViewModel.toast(message)
+            override fun fail(message: String) = this@XmbViewModel.fail(message)
+            override fun refuse() = this@XmbViewModel.refuse()
+            override fun emit(effect: UiEffect) = this@XmbViewModel.emit(effect)
+            override fun showOptions(menu: OptionsMenuState) = transient.update { it.copy(optionsMenu = menu) }
+            override fun components() = this@XmbViewModel.components.value
+            override fun friendsWanted(components: dev.xross.launcher.theme.pack.ResolvedComponents) = ra.onFriendsWanted(components = components)
+            override fun photoUri(photoId: Long) = container.media.library.value.photos.firstOrNull { it.id == photoId }?.uri
+            override fun dismissOptions() = transient.update { it.copy(optionsMenu = null) }
+            override fun openNameEntry(entry: NameEntry) = transient.update { it.copy(optionsMenu = null, nameEntry = entry) }
+            override fun busy(on: Boolean) = transient.update { it.copy(themeWork = on) }
         },
     )
 
@@ -345,14 +375,17 @@ class XmbViewModel(
 
     private data class Settled(
         val transient: Transient,
+        val layoutEditor: LayoutEditorState?,
         val settings: dev.xross.launcher.data.XrossSettings,
         val overlay: MediaOverlay?,
         val profile: dev.xross.launcher.profile.ProfileState,
         val ra: RaState,
     )
 
-    private val settled = combine(transient, settingsStore.settings, media.overlay, container.profiles.state, ra.state) { tr, st, ov, pr, r ->
-        Settled(tr, st, ov, pr, r)
+    private val settled = combine(
+        combine(transient, theme.layoutEditor, ::Pair), settingsStore.settings, media.overlay, container.profiles.state, ra.state,
+    ) { (tr, le), st, ov, pr, r ->
+        Settled(tr, le, st, ov, pr, r)
     }
 
     /** The components' `glyphOverride` (2b.7b): which labels the hints draw. */
@@ -389,7 +422,7 @@ class XmbViewModel(
             nameEntry = tr.nameEntry,
             info = tr.info,
             details = tr.details,
-            busy = tr.scanning || tr.datWork || lv.fingerprints.current != null || lv.scrape.running,
+            busy = tr.scanning || tr.datWork || tr.themeWork || lv.fingerprints.current != null || lv.scrape.running,
             showButtonHints = settings.showButtonHints,
             profile = sd.profile,
             profileCard = sd.ra.profileCard,
@@ -398,6 +431,7 @@ class XmbViewModel(
             socialPanel = sd.ra.socialPanel,
             settings = settings,
             waveEditor = tr.waveEditor,
+            layoutEditor = sd.layoutEditor,
             achievements = sd.ra.achievements,
             unlockToast = sd.ra.unlockToast,
             avatarEditor = tr.avatarEditor,
@@ -494,6 +528,7 @@ class XmbViewModel(
         transient.value.nameEntry?.let { return nameEntryAction(it, action) }
         if (action == NavAction.MEDIA) return toggleMediaControls()
         transient.value.waveEditor?.let { return waveEditorAction(it, action) }
+        if (theme.onLayoutAction(action)) return
         transient.value.avatarEditor?.let { return avatarEditorAction(it, action) }
         if (ra.onScreenAction(action)) return
         transient.value.info?.let { return infoAction(it, action) }
@@ -543,6 +578,7 @@ class XmbViewModel(
                 infoJob?.cancel()
                 detailsJob?.cancel()
                 ra.dismissAll()
+                theme.dismissLayoutSettings()
                 transient.update {
                     it.copy(optionsMenu = null, info = null, details = null, waveEditor = null, avatarEditor = null)
                 }
@@ -609,250 +645,22 @@ class XmbViewModel(
 
     // region Theme packs and Wave settings
 
-    private fun setQuickProfile(profile: dev.xross.launcher.theme.QuickProfile) {
-        settingsStore.update { it.copy(quickProfile = profile.name) }
-        toast("Quick profile: ${profile.label}")
-    }
+    /** Settings ▸ Theme ▸ Xross wallpaper ▸ Pick a picture: see [ThemeController.onWallpaperPicked]. */
+    fun onWallpaperPicked(uri: Uri?) = theme.onWallpaperPicked(uri)
 
-    /** Why a color switch has no effect right now (the quick profile turns it off), if it doesn't. */
-    private fun colorSwitchBlockedNote(which: ColorSwitch): String? {
-        val profile = dev.xross.launcher.theme.QuickProfile.byName(settingsStore.current.quickProfile)
-        val blocked = if (which == ColorSwitch.ADAPTIVE) !profile.allowsArt else !profile.allowsAmbient
-        return if (blocked) "Saved; ${profile.label} keeps it off" else null
-    }
+    /** The picked `.xtheme`: see [ThemeController.onThemeArchivePicked]. */
+    fun onThemeArchivePicked(uri: Uri?) = theme.onThemeArchivePicked(uri)
 
-    private fun applyThemePack(id: String) {
-        viewModelScope.launch {
-            val loaded = container.themes.select(id)
-            settingsStore.update { s ->
-                // Another pack starts on its base look; the same pack keeps its variant.
-                var next = s.copy(themePack = loaded.id, themeVariant = if (loaded.id == s.themePack) s.themeVariant else "")
-                next = withPackColors(next, loaded.look(next.themeVariant).palette != null)
-                // Its wave defaults, keeping the user's color tint.
-                loaded.wave?.let { w -> next = WaveEditor.reset(next, w).copy(waveTint = s.waveTint, waveEnabled = s.waveEnabled) }
-                next
-            }
-            sounds.useTheme(loaded)
-            if (loaded.id != id) {
-                fail("Couldn't load that theme pack; using Default")
-            } else {
-                sounds.play(UiSound.OK)
-                toast("Theme pack: ${loaded.info.name}" + (loaded.problems.firstOrNull()?.let { " · $it" } ?: ""))
-            }
-        }
-    }
+    /** The document created for a shared theme: see [ThemeController.onThemeArchiveCreated]. */
+    fun onThemeArchiveCreated(uri: Uri?) = theme.onThemeArchiveCreated(uri)
 
-    /** A pack look with its own colors switches to them; one without falls back to a fixed theme. */
-    private fun withPackColors(s: dev.xross.launcher.data.XrossSettings, hasPalette: Boolean) = when {
-        hasPalette -> s.copy(theme = dev.xross.launcher.theme.PACK_THEME)
-        s.theme == dev.xross.launcher.theme.PACK_THEME -> s.copy(theme = XrossTheme.LAVENDER.name)
-        else -> s
-    }
+    // Settings ▸ Theme ▸ Layout (2b.8a): forwarded to [ThemeController].
 
-    private fun setThemeVariant(id: String) {
-        val pack = container.themes.active.value
-        val variant = pack.variant(id)
-        settingsStore.update { withPackColors(it.copy(themeVariant = variant?.id.orEmpty()), pack.look(variant?.id.orEmpty()).palette != null) }
-        sounds.play(UiSound.OK)
-        toast("Theme variant: ${variant?.name ?: "Standard"}")
-    }
+    fun closeLayoutSettings() = theme.closeLayoutSettings()
 
-    // region .xtheme import
+    fun onLayoutRowTapped(index: Int) = theme.onLayoutRowTapped(index)
 
-    private val themeArchive by lazy {
-        dev.xross.launcher.theme.pack.ThemeArchive(
-            themesDir = { container.environment.current.themes },
-            check = { dir -> container.themePacks.inspect(dir) },
-        )
-    }
-
-    /** A checked import waiting for "Replace" / "Keep both" because its id is installed. */
-    private var pendingImport: dev.xross.launcher.theme.pack.StagedTheme? = null
-
-    /** The picked `.xtheme`: copied to the cache, checked, unpacked, and installed or held for a prompt. */
-    /**
-     * Settings ▸ Theme ▸ Xross wallpaper ▸ Pick a picture: keeps read access to [uri] across
-     * restarts (a document the picker granted), saves it as the Xross wallpaper and lets go of the
-     * last picked one.
-     */
-    fun onWallpaperPicked(uri: Uri?) {
-        uri ?: return
-        val resolver = context.contentResolver
-        val kept = runCatching { resolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }.isSuccess
-        val old = settingsStore.current.customWallpaper
-        settingsStore.update { it.copy(customWallpaper = uri.toString()) }
-        if (old != uri.toString()) releaseWallpaperGrant(old)
-        toast(if (kept) "Xross wallpaper set" else "Xross wallpaper set (until Xross restarts: the picker gave no lasting access)")
-    }
-
-    /** Lets go of a picked wallpaper's lasting read grant once nothing uses it (Photo's MediaStore URIs hold none). */
-    private fun releaseWallpaperGrant(location: String) {
-        if (!location.startsWith("content://")) return
-        val resolver = context.contentResolver
-        val uri = location.toUri()
-        if (resolver.persistedUriPermissions.none { it.uri == uri }) return
-        runCatching { resolver.releasePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
-    }
-
-    /** Settings ▸ Theme (2b.4f): [slot] set to [value] over the pack, with a note where it can't show. */
-    /**
-     * Settings ▸ Theme ▸ Components (2b.7a): one move of a status-bar slot. The sides it changes
-     * are written as the user's (the other keeps following the pack), and the slot list reopens
-     * on the slot so it can be moved again.
-     */
-    private fun editStatusSlot(command: Command.EditStatusSlot) {
-        val pack = container.themes.active.value
-        val before = settingsStore.current
-        val shown = pack.components(before.themeVariant, before.componentOverrides)
-        val (left, right) = ComponentMenus.edit(shown, command.side, command.slot, command.edit) ?: return refuse()
-        settingsStore.update { st ->
-            var o = st.componentOverrides
-            if (left != shown.left) o = o.withSlots(dev.xross.launcher.theme.pack.StatusSide.LEFT, left)
-            if (right != shown.right) o = o.withSlots(dev.xross.launcher.theme.pack.StatusSide.RIGHT, right)
-            st.copy(componentOverrides = o)
-        }
-        val after = settingsStore.current
-        val now = pack.components(after.themeVariant, after.componentOverrides)
-        val userSet = (if (command.side == dev.xross.launcher.theme.pack.StatusSide.LEFT) after.componentOverrides.statusBarLeft else after.componentOverrides.statusBarRight) != null
-        val options = ComponentMenus.options(command.side, now, pack.components(after.themeVariant), userSet, now.logo in pack.logos)
-        val title = if (command.side == dev.xross.launcher.theme.pack.StatusSide.LEFT) "Status bar left" else "Status bar right"
-        transient.update { it.copy(optionsMenu = ComponentMenus.reopen(title, options, command.slot, command.edit)) }
-        if (command.edit == SlotEdit.REMOVE && command.slot == dev.xross.launcher.theme.pack.StatusSlot.AVATAR) {
-            toast("Avatar removed from the status bar · the User Card stays in Settings ▸ Accounts")
-        }
-    }
-
-    /**
-     * Settings ▸ Theme ▸ Components ▸ Title badges (2b.7b): the user's badges set to [pills] (null:
-     * the pack's), and the list reopened on the badge just turned on or off ([toggled]).
-     */
-    private fun editBadgePills(pills: List<dev.xross.launcher.theme.pack.BadgePill>?, toggled: dev.xross.launcher.theme.pack.BadgePill?) {
-        settingsStore.update { it.copy(componentOverrides = it.componentOverrides.withPills(pills)) }
-        val after = settingsStore.current
-        val pack = container.themes.active.value
-        val now = pack.components(after.themeVariant, after.componentOverrides)
-        val options = ComponentMenus.pillOptions(now.pills, pack.components(after.themeVariant).pills, after.componentOverrides.badgePills != null)
-        transient.update { it.copy(optionsMenu = ComponentMenus.reopenPills("Title badges", options, toggled, pills?.isEmpty() == true)) }
-    }
-
-    private fun setComponent(row: dev.xross.launcher.theme.pack.ComponentRow, value: String?) {
-        settingsStore.update { it.copy(componentOverrides = it.componentOverrides.with(row, value)) }
-        // Settled from what was just saved: [components] catches up a moment later.
-        val c = settingsStore.current.let { st -> container.themes.active.value.components(st.themeVariant, st.componentOverrides) }
-        val note = when (row) {
-            dev.xross.launcher.theme.pack.ComponentRow.BATTERY -> "Battery isn't in the status bar".takeIf { !c.shows(dev.xross.launcher.theme.pack.StatusSlot.BATTERY) }
-            dev.xross.launcher.theme.pack.ComponentRow.CLOCK -> "Clock isn't in the status bar".takeIf { !c.shows(dev.xross.launcher.theme.pack.StatusSlot.CLOCK) }
-            dev.xross.launcher.theme.pack.ComponentRow.TOP_LEFT ->
-                "Link a RetroAchievements account to see who you follow".takeIf {
-                    c.topLeft == dev.xross.launcher.theme.pack.TopLeftClusterMode.SOCIAL_STACK && !container.credentials.current.retroAchievementsLinked
-                }
-            dev.xross.launcher.theme.pack.ComponentRow.TELEMETRY ->
-                "Link a RetroAchievements account to see your progress".takeIf {
-                    c.telemetry != dev.xross.launcher.theme.pack.TelemetryMode.OFF && !container.credentials.current.retroAchievementsLinked
-                }
-            dev.xross.launcher.theme.pack.ComponentRow.MINI_PLAYER, dev.xross.launcher.theme.pack.ComponentRow.GLYPHS -> null
-        }
-        note?.let { toast(it) }
-        if (row == dev.xross.launcher.theme.pack.ComponentRow.TOP_LEFT || row == dev.xross.launcher.theme.pack.ComponentRow.TELEMETRY) {
-            ra.onFriendsWanted(components = c)
-        }
-    }
-
-    private fun setEffect(slot: dev.xross.launcher.theme.pack.EffectSlot, value: String) {
-        settingsStore.update { it.copy(effectOverrides = it.effectOverrides.with(slot, value)) }
-        val v = settingsStore.current.effectOverrides[slot]
-        val note = when {
-            slot == dev.xross.launcher.theme.pack.EffectSlot.UI_FILTER && v.isNotEmpty() && v != "NONE" &&
-                !dev.xross.launcher.ui.UiFilterSupport.supported() -> "UI filters need Android 13 or later"
-            slot == dev.xross.launcher.theme.pack.EffectSlot.SHADER && !settingsStore.current.waveEnabled -> "Turn Wave background on to see it"
-            slot == dev.xross.launcher.theme.pack.EffectSlot.BOOT_INTRO -> "Shown on the next cold start"
-            else -> null
-        }
-        note?.let { toast(it) }
-    }
-
-    fun onThemeArchivePicked(uri: Uri?) {
-        uri ?: return
-        viewModelScope.launch {
-            pendingImport?.let { old -> withContext(Dispatchers.IO) { themeArchive.discard(old) } }
-            pendingImport = null
-            toast("Checking theme file…")
-            val result = withContext(Dispatchers.IO) { stageThemeArchive(uri) }
-            when (result) {
-                is dev.xross.launcher.theme.pack.ArchiveResult.Rejected -> fail("Theme not imported: ${result.reason}")
-                is dev.xross.launcher.theme.pack.ArchiveResult.Staged -> {
-                    val staged = result.theme
-                    if (!staged.exists) return@launch installTheme(staged, replace = false)
-                    pendingImport = staged
-                    sounds.play(UiSound.OPTION)
-                    val options = listOf(
-                        MenuOption("Replace ${staged.id}", detail = "Overwrites the installed pack's files", command = Command.ReplaceImportedTheme),
-                        MenuOption("Keep both", detail = "Installs it as ${themeArchive.asCopy(staged).id}", command = Command.KeepBothImportedThemes),
-                    )
-                    transient.update { it.copy(optionsMenu = OptionsMenuState.open("${staged.name} is already installed", options)) }
-                }
-            }
-        }
-    }
-
-    private fun stageThemeArchive(uri: Uri): dev.xross.launcher.theme.pack.ArchiveResult {
-        val name = runCatching {
-            context.contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
-                if (c.moveToFirst()) c.getString(0) else null
-            }
-        }.getOrNull() ?: uri.lastPathSegment?.substringAfterLast('/') ?: "theme.xtheme"
-        val copy = File(context.cacheDir, "import.xtheme")
-        try {
-            val input = context.contentResolver.openInputStream(uri)
-                ?: return dev.xross.launcher.theme.pack.ArchiveResult.Rejected("Couldn't open $name")
-            // The compressed file can't be meaningfully bigger than the 50 MB it may unpack to.
-            val cap = dev.xross.launcher.theme.pack.ThemeArchive.MAX_BYTES + dev.xross.launcher.theme.pack.ThemeArchive.MB
-            var total = 0L
-            input.use { inp ->
-                copy.outputStream().use { out ->
-                    val buf = ByteArray(64 * 1024)
-                    while (true) {
-                        val n = inp.read(buf)
-                        if (n < 0) break
-                        total += n
-                        if (total > cap) return dev.xross.launcher.theme.pack.ArchiveResult.Rejected("$name is larger than 50 MB")
-                        out.write(buf, 0, n)
-                    }
-                }
-            }
-            return themeArchive.stage(copy, name)
-        } catch (e: java.io.IOException) {
-            return dev.xross.launcher.theme.pack.ArchiveResult.Rejected("Couldn't read $name")
-        } catch (e: SecurityException) {
-            return dev.xross.launcher.theme.pack.ArchiveResult.Rejected("No permission to read $name")
-        } finally {
-            copy.delete()
-        }
-    }
-
-    private fun resolvePendingImport(keepBoth: Boolean) {
-        val staged = pendingImport ?: return toast("Pick the theme file again")
-        pendingImport = null
-        viewModelScope.launch { installTheme(if (keepBoth) themeArchive.asCopy(staged) else staged, replace = !keepBoth) }
-    }
-
-    /** Installs [staged], rescans the packs and switches to it. */
-    private suspend fun installTheme(staged: dev.xross.launcher.theme.pack.StagedTheme, replace: Boolean) {
-        when (val r = withContext(Dispatchers.IO) { themeArchive.install(staged, replace) }) {
-            is dev.xross.launcher.theme.pack.InstallResult.Failed -> {
-                withContext(Dispatchers.IO) { themeArchive.discard(staged) }
-                fail("Theme not imported: ${r.reason}")
-            }
-            is dev.xross.launcher.theme.pack.InstallResult.Installed -> {
-                container.themes.rediscover()
-                // Replacing the pack in use: read its new files even though the id is the same.
-                if (container.themes.active.value.id == r.id) container.themes.reload()
-                applyThemePack(r.id)
-            }
-        }
-    }
-
-    // endregion
+    fun onLayoutSliderChanged(index: Int, fraction: Float) = theme.onLayoutSliderChanged(index, fraction)
 
     private fun openWaveSettings() {
         transient.update { it.copy(waveEditor = WaveEditorState(), optionsMenu = null) }
@@ -1675,6 +1483,7 @@ class XmbViewModel(
                         val name = AppFolders.normalizeName(effect.text)
                         if (name == null) toast("Type a name first") else moveAppToFolder(purpose.packageName, name)
                     }
+                    is NamePurpose.ExportTheme -> theme.onExportNamed(purpose, effect.text)
                 }
             }
         }
@@ -2154,6 +1963,17 @@ class XmbViewModel(
 
     private fun run(command: Command) {
         when (command) {
+            // Settings ▸ Theme (2b.8-prep): every theme command is the ThemeController's.
+            Command.CycleTheme, is Command.SetTheme, Command.CycleThemePack, is Command.SetThemePack, Command.ReloadThemePacks,
+            Command.CycleThemeVariant, is Command.SetThemeVariant, Command.ImportThemeArchive, Command.ReplaceImportedTheme,
+            Command.KeepBothImportedThemes, Command.CycleQuickProfile, is Command.SetQuickProfile, is Command.ToggleColorSwitch,
+            is Command.SetColorSwitch, Command.CycleSurfaceStyle, is Command.SetXrossWallpaper, Command.ResetXrossWallpaper,
+            Command.PickXrossWallpaper, is Command.SetStatusSlots, is Command.EditStatusSlot, is Command.CycleComponent,
+            is Command.SetComponent, is Command.SetBadgePills, is Command.ToggleBadgePill, is Command.CycleEffect,
+            is Command.SetEffect, Command.ResetThemeDefaults, Command.OpenLayoutSettings, Command.ExportTheme,
+            is Command.ExportThemePack, is Command.ChooseExportScope, Command.ConfirmThemeExport, Command.SwitchToExportedTheme,
+            is Command.ShareThemePack, Command.ShareExportedTheme,
+            -> check(theme.onCommand(command)) { "ThemeController didn't take $command" }
             Command.RequestStorageAccess ->
                 if (env.value.storageGranted) toast("Already granted") else emit(UiEffect.RequestStorageAccess)
             Command.AddFolder -> emit(UiEffect.PickFolder)
@@ -2261,84 +2081,6 @@ class XmbViewModel(
             Command.OpenWaveSettings -> openWaveSettings()
             Command.OpenAvatarStyle -> openAvatarStyle()
             Command.OpenRaHub -> ra.openRaHub()
-            Command.CycleTheme -> settingsStore.update {
-                // The theme pack's own colors join the cycle when the active pack has them.
-                val names = XrossTheme.entries.map { t -> t.name } +
-                    listOfNotNull(dev.xross.launcher.theme.PACK_THEME.takeIf { _ -> container.themes.active.value.look(it.themeVariant).palette != null })
-                val i = names.indexOf(it.theme).coerceAtLeast(-1)
-                it.copy(theme = names[(i + 1) % names.size])
-            }
-            is Command.SetTheme -> {
-                val known = command.name == dev.xross.launcher.theme.PACK_THEME || XrossTheme.entries.any { it.name == command.name }
-                if (known) settingsStore.update { it.copy(theme = command.name) }
-            }
-            Command.CycleThemePack -> {
-                val packs = container.themes.packs.value
-                if (packs.size <= 1) {
-                    viewModelScope.launch {
-                        val found = container.themes.rediscover()
-                        if (found.size <= 1) fail("No theme packs in ${container.environment.current.themes.absolutePath}")
-                        else applyThemePack(found[(found.indexOfFirst { it.id == settingsStore.current.themePack } + 1) % found.size].id)
-                    }
-                } else {
-                    val i = packs.indexOfFirst { it.id == settingsStore.current.themePack }
-                    applyThemePack(packs[(i + 1) % packs.size].id)
-                }
-            }
-            is Command.SetThemePack -> applyThemePack(command.id)
-            Command.ReloadThemePacks -> viewModelScope.launch {
-                val found = container.themes.rediscover()
-                container.themes.reload()
-                val skipped = container.themes.rejected.value
-                toast(
-                    buildString {
-                        append(if (found.size == 1) "No theme packs in Xross/themes" else "${found.size} theme packs")
-                        if (skipped.isNotEmpty()) append(" · skipped ${skipped.size}: ${skipped.first().id} (${skipped.first().reason})")
-                    },
-                )
-            }
-            Command.CycleThemeVariant -> {
-                val ids = listOf("") + container.themes.active.value.variants.map { it.id }
-                val i = ids.indexOf(container.themes.active.value.variant(settingsStore.current.themeVariant)?.id.orEmpty())
-                setThemeVariant(ids[(i + 1) % ids.size])
-            }
-            is Command.SetThemeVariant -> setThemeVariant(command.id)
-            Command.ImportThemeArchive -> emit(UiEffect.PickThemeArchive)
-            Command.ReplaceImportedTheme -> resolvePendingImport(keepBoth = false)
-            Command.KeepBothImportedThemes -> resolvePendingImport(keepBoth = true)
-            Command.CycleQuickProfile -> {
-                val all = dev.xross.launcher.theme.QuickProfile.entries
-                val next = all[(dev.xross.launcher.theme.QuickProfile.byName(settingsStore.current.quickProfile).ordinal + 1) % all.size]
-                setQuickProfile(next)
-            }
-            is Command.SetQuickProfile -> setQuickProfile(dev.xross.launcher.theme.QuickProfile.byName(command.name))
-            is Command.ToggleColorSwitch -> {
-                val pack = container.themes.active.value.flags
-                settingsStore.update {
-                    when (command.which) {
-                        ColorSwitch.ADAPTIVE -> it.copy(adaptiveGamePalette = !(it.adaptiveGamePalette ?: pack.adaptiveGamePalette ?: true))
-                        ColorSwitch.CIRCADIAN -> it.copy(circadianCurve = !(it.circadianCurve ?: pack.circadianCurve ?: false))
-                        ColorSwitch.BATTERY -> it.copy(batteryTint = !(it.batteryTint ?: pack.batteryTint ?: false))
-                    }
-                }
-                colorSwitchBlockedNote(command.which)?.let { toast(it) }
-            }
-            is Command.SetColorSwitch -> {
-                settingsStore.update {
-                    when (command.which) {
-                        ColorSwitch.ADAPTIVE -> it.copy(adaptiveGamePalette = command.on)
-                        ColorSwitch.CIRCADIAN -> it.copy(circadianCurve = command.on)
-                        ColorSwitch.BATTERY -> it.copy(batteryTint = command.on)
-                    }
-                }
-                colorSwitchBlockedNote(command.which)?.let { toast(it) }
-            }
-            Command.CycleSurfaceStyle -> settingsStore.update {
-                // "" (the pack's own) first, then every surface the active pack offers.
-                val ids = listOf("") + container.themes.active.value.surfaces.keys
-                val i = ids.indexOf(it.surfaceStyle).coerceAtLeast(0)
-                it.copy(surfaceStyle = ids[(i + 1) % ids.size])
-            }
             Command.ToggleSoundEffects -> settingsStore.update { it.copy(soundEffects = !it.soundEffects) }
             is Command.CycleVolume -> setVolume(command.channel, VolumeChannel.next(command.channel.of(settingsStore.current)))
             is Command.SetVolume -> setVolume(command.channel, command.value)
@@ -2377,37 +2119,7 @@ class XmbViewModel(
             }
             is Command.SetWallpaper -> container.media.library.value.photos.firstOrNull { it.id == command.photoId }
                 ?.let { emit(UiEffect.SetWallpaper(it.uri)) }
-            is Command.SetXrossWallpaper -> container.media.library.value.photos.firstOrNull { it.id == command.photoId }?.let { photo ->
-                settingsStore.update { it.copy(customWallpaper = photo.uri.toString()) }
-                toast("Xross wallpaper set")
-            }
-            Command.ResetXrossWallpaper -> {
-                val old = settingsStore.current.customWallpaper
-                settingsStore.update { it.copy(customWallpaper = "") }
-                releaseWallpaperGrant(old)
-                toast(if (container.themes.active.value.hasWallpaper) "Using the theme's wallpaper" else "Xross wallpaper removed")
-            }
-            Command.PickXrossWallpaper -> emit(UiEffect.PickWallpaperImage)
-            is Command.SetStatusSlots -> settingsStore.update { it.copy(componentOverrides = it.componentOverrides.withSlots(command.side, command.slots)) }
-            is Command.EditStatusSlot -> editStatusSlot(command)
-            is Command.CycleComponent -> setComponent(command.row, command.row.next(settingsStore.current.componentOverrides[command.row]))
-            is Command.SetComponent -> setComponent(command.row, command.value)
-            is Command.SetBadgePills -> editBadgePills(command.pills, null)
-            is Command.ToggleBadgePill -> editBadgePills(ComponentMenus.togglePill(components.value.pills, command.pill), command.pill)
             Command.ShowOptions -> current().focused?.let(::openOptions) ?: refuse()
-            is Command.CycleEffect -> setEffect(command.slot, command.slot.next(settingsStore.current.effectOverrides[command.slot]))
-            is Command.SetEffect -> setEffect(command.slot, command.value)
-            Command.ResetThemeDefaults -> {
-                val before = settingsStore.current
-                val after = dev.xross.launcher.theme.pack.ThemeDefaults.reset(before)
-                if (after == before) {
-                    toast("Already the theme's own look")
-                } else {
-                    settingsStore.update { dev.xross.launcher.theme.pack.ThemeDefaults.reset(it) }
-                    releaseWallpaperGrant(before.customWallpaper)
-                    toast("Back to ${container.themes.active.value.info.name}'s own look")
-                }
-            }
             Command.CycleSlideshowInterval -> settingsStore.update {
                 it.copy(slideshowSeconds = SLIDESHOW_SECONDS[(SLIDESHOW_SECONDS.indexOf(it.slideshowSeconds) + 1) % SLIDESHOW_SECONDS.size])
             }
