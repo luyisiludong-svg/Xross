@@ -662,7 +662,7 @@ Defaults chosen in this doc (change before the slice starts if needed):
 ## Carry-overs (not part of 2b.7)
 
 - 2b.5d on the A55: cold-start time with and without a boot video, and the video at 120 Hz.
-- 2b.6 (haptics) can run before or after 2b.7; it touches input, not components.
+- 2b.6 (haptics) is iced (Roadmap §4.8, 2026-11-15).
 - The particle slowdown on the A55 during navigation (STATUS §3.28): 2b.7d's `RICH_CARD` adds
   per-focus work (about one janky frame a pass on the emulator). Measured on the A55 on
   2026-11-14 (5 interleaved pairs): card median 0.31% vs pill 0.38%; one card pass in the slow
