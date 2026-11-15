@@ -18,7 +18,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -45,15 +47,19 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.xross.launcher.media.NowPlaying
 import dev.xross.launcher.media.Song
 import dev.xross.launcher.media.ThumbKind
 import dev.xross.launcher.state.MiniPlayerLine
+import dev.xross.launcher.state.MiniPlayerSpot
 import dev.xross.launcher.state.MiniPlayerVisibility
+import dev.xross.launcher.theme.pack.MiniPlayerMode
 
 private val CardShape = RoundedCornerShape(14.dp)
 private val ArtShape = RoundedCornerShape(8.dp)
@@ -73,11 +79,13 @@ fun MiniPlayerCard(
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     modifier: Modifier = Modifier,
+    /** `miniPlayerMode` (2b.7b): the card is drawn for [MiniPlayerMode.FLOATING_CARD] only. */
+    mode: MiniPlayerMode = MiniPlayerMode.FLOATING_CARD,
 ) {
     val scope = rememberCoroutineScope()
     val visibility = remember(scope) { MiniPlayerVisibility(scope) }
     LaunchedEffect(nowPlaying, covered) { visibility.update(nowPlaying, covered) }
-    val visible by visibility.visible.collectAsState()
+    val visible = MiniPlayerLine.shows(mode, MiniPlayerSpot.CARD, visibility.visible.collectAsState().value)
 
     // Keep the last track so the fade-out still has something to draw after the queue clears.
     var shown by remember { mutableStateOf<Pair<Song, Boolean>?>(null) }
@@ -163,9 +171,66 @@ private fun CardBody(
     }
 }
 
+/**
+ * The mini player as one status-bar line (2b.7b `STATUS_TICKER`): the play/pause glyph, then
+ * "Title — Artist" scrolling in a fixed [width]. Same visibility as the card ([MiniPlayerVisibility]:
+ * hidden while [covered] and after a long pause); hidden, it takes no room. [leading] is the gap to
+ * the slot before it, collapsed with the ticker. Tap opens the audio controls, long press plays or pauses.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+internal fun MiniPlayerTicker(
+    nowPlaying: NowPlaying,
+    covered: Boolean,
+    style: TextStyle,
+    height: Dp,
+    width: Dp,
+    leading: Dp,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    val visibility = remember(scope) { MiniPlayerVisibility(scope) }
+    LaunchedEffect(nowPlaying, covered) { visibility.update(nowPlaying, covered) }
+    val visible = MiniPlayerLine.shows(MiniPlayerMode.STATUS_TICKER, MiniPlayerSpot.TICKER, visibility.visible.collectAsState().value)
+    var shown by remember { mutableStateOf<NowPlaying?>(null) }
+    if (nowPlaying.song != null) shown = nowPlaying
+
+    AnimatedVisibility(
+        visible = visible,
+        enter = fadeIn(tween(MiniPlayerLine.FADE_IN_MS)),
+        exit = fadeOut(tween(MiniPlayerLine.FADE_OUT_MS)),
+    ) {
+        val now = shown ?: return@AnimatedVisibility
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .padding(start = leading)
+                .combinedClickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onLongClick = onLongClick,
+                    onClick = onClick,
+                )
+                .semantics { contentDescription = MiniPlayerLine.text(now).orEmpty() },
+        ) {
+            PlayStateGlyph(now.isPlaying, Modifier.size(height * 0.55f))
+            Spacer(Modifier.width(height * 0.35f))
+            Text(
+                MiniPlayerLine.tickerText(now).orEmpty(),
+                style = style,
+                maxLines = 1,
+                softWrap = false,
+                // Scrolls only when the line overflows the ticker's width.
+                modifier = Modifier.width(width).basicMarquee(iterations = Int.MAX_VALUE, initialDelayMillis = 1500),
+            )
+        }
+    }
+}
+
 /** Play triangle while playing, pause bars while paused: subtle, like a status LED. */
 @Composable
-private fun PlayStateGlyph(playing: Boolean, modifier: Modifier) {
+internal fun PlayStateGlyph(playing: Boolean, modifier: Modifier) {
     val tint = Color.White.copy(alpha = 0.7f)
     Canvas(modifier) {
         val w = size.width

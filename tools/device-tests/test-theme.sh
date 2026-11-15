@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Theme suite (149 checks): Settings ▸ Theme and its folders (theme color, wave and avatar panels,
+# Theme suite (281 checks): Settings ▸ Theme and its folders (theme color, wave and avatar panels,
 # platform folders, surface style, the 2b.4f effect rows, Pick custom wallpaper, Reset to theme
 # defaults), quick profiles (OLED, Y2K, E-Ink), color layers (adaptive colors,
 # circadian curve, battery tint and charging pulse through `dumpsys battery`), the Sound section,
@@ -9,7 +9,13 @@
 # filter and custom postprocess.agsl, resting and failing safely), .xtheme import (zip-slip, variants, overrides, Keep both), and the
 # game-art palette (hero PNGs, scraped flags patched into the database, extraction cache, debounce),
 # and the cold-start intro and launch curtains (2b.5d: a generated boot.mp4, the shader ramp, E-Ink,
-# each curtain on a stub launch).
+# each curtain on a stub launch), and Settings ▸ Theme ▸ Components (2b.7a: battery modes on and off
+# the charger, clock formats, three slot orders with the avatar HUD, network in airplane mode,
+# the system volume, the avatar left out, a minute tick at rest; 2b.7b: the mini player as a card,
+# a status-bar ticker and off, each button-glyph set in the hints, Search and the HUD, and title
+# badges on a scraped game, an unscraped one and an app; 2b.7c: the social stack's collapse cases,
+# its cached friends and badge offline, the panel by keys and touch; 2b.7d: the achievement badge
+# off, compact and as the rich card, offline without its friend strip, online with it).
 #
 #   tools/device-tests/test-theme.sh
 #
@@ -19,7 +25,7 @@
 # The battery override is always reset at exit, even after Ctrl-C.
 set -u
 . "$(dirname "$0")/lib/harness.sh"
-suite_begin theme 149
+suite_begin theme 281
 
 setup_base_env
 setup_theme_fixtures
@@ -28,7 +34,7 @@ start_app
 category 0
 
 # Settings ▸ Theme (the fourth Settings folder) with the Default pack: Theme pack, Quick profile,
-# then the folders Colors, Background, Effects, Intro and transitions, Menu and profile, then
+# then the folders Colors, Background, Effects, Intro and transitions, Components, Menu and profile, then
 # Reset to theme defaults and Import theme (.xtheme)…. A pack with variants adds Theme variant
 # below Theme pack. Back out of a folder lands on that folder's row.
 section "Settings"
@@ -56,10 +62,10 @@ expect "6" "Ribbon lines slider moves"
 key KEYCODE_BACK
 expect "1.1× · 6 lines" "Wave settings row summarizes the new values"
 settings_has '"waveSpeed": 1.1' && ok "wave uniforms are saved to settings.json" || bad "waveSpeed not in settings.json"
-# Menu and profile (three folders below Background): Profile customization, Button hints,
+# Menu and profile (four folders below Background): Profile customization, Button hints,
 # Platform folders.
 key KEYCODE_BACK
-press DPAD_DOWN 3 KEYCODE_DPAD_CENTER
+press DPAD_DOWN 4 KEYCODE_DPAD_CENTER
 expect "glow on" "Profile customization row summarizes the avatar style"
 # Panel rows: Border color, Custom color…, Border width, Glow, Glow speed, Glow intensity, Reset.
 key KEYCODE_DPAD_CENTER
@@ -78,10 +84,10 @@ key KEYCODE_DPAD_CENTER
 expect "At the top of Games (classic)" "Platform folders toggles to the classic layout"
 key KEYCODE_DPAD_CENTER
 expect "Inside All Games" "Platform folders toggles back"
-# Effects (two folders above Menu and profile): Surface style, UI filter (experimental), Focus
+# Effects (three folders above Menu and profile): Surface style, UI filter (experimental), Focus
 # frame style, Ambient particles, App icon mask.
 key KEYCODE_BACK
-press DPAD_UP 2 KEYCODE_DPAD_CENTER
+press DPAD_UP 3 KEYCODE_DPAD_CENTER
 expect "Theme pack (Flat glass)" "Surface style follows the theme pack (Flat glass)"
 key KEYCODE_DPAD_CENTER KEYCODE_DPAD_CENTER
 expect "Y2K glossy bezel" "Surface style cycles through the presets"
@@ -157,8 +163,11 @@ expect "Off · Amber to red below 20%" "Battery alert tint turns off"
 # Out of Colors and Theme; Sound is the folder below Theme.
 key KEYCODE_BACK KEYCODE_BACK KEYCODE_DPAD_DOWN KEYCODE_DPAD_CENTER
 expect "Effects volume" "Sound section opens"
+# Effects volume starts at 75% and steps to 80%. Read settings.json, not the screen: a "100%"
+# check used to pass on the battery percentage of a full emulator.
 key KEYCODE_DPAD_DOWN KEYCODE_DPAD_CENTER
-expect "100%" "Effects volume cycles"
+for _ in $(seq 6); do settings_has '"effectsVolume": 0.8,' && break; pause 0.5; done
+settings_has '"effectsVolume": 0.8,' && ok "Effects volume cycles (75% → 80%)" || bad "Effects volume cycles: $(adb shell cat /sdcard/Xross/config/settings.json | grep -o '"effectsVolume": [0-9.]*')"
 key KEYCODE_BACK
 
 section "Theme packs"
@@ -268,7 +277,15 @@ adb logcat -d -s XrossParticles:I | grep -q "rest preset=SNOW n=40 settleFrames=
   && ok "10 s without input: the particles ease to a stop" \
   || bad "the particles didn't rest ($(adb logcat -d -s XrossParticles:I | tail -1))"
 frames() { adb shell dumpsys gfxinfo "$PKG" | grep -m1 "Total frames rendered" | grep -o "[0-9]*"; }
-f0=$(frames); pause 3; f1=$(frames)
+# rest_frames: f0 and f1 around 3 s at rest that don't cross a minute boundary, where the status
+# bar's clock draws its one frame.
+rest_frames() {
+  local s
+  s=$(adb shell date +%S | tr -d '\r'); s=${s#0}
+  [ "$s" -ge 52 ] && adb shell sleep $((62 - s))
+  f0=$(frames); pause 3; f1=$(frames)
+}
+rest_frames
 [ "$f0" = "$f1" ] && ok "resting particles draw no frames" || bad "$((f1 - f0)) frames drawn while resting"
 adb logcat -c
 key KEYCODE_DPAD_DOWN
@@ -309,7 +326,7 @@ if [ "$sdk" -ge 33 ]; then
   pause 4
   adb logcat -d -s XrossUiFilter:I | tail -1 | grep -q "filter=CUSTOM state=RESTING" \
     && ok "3 s without input: the UI filter rests" || bad "the UI filter didn't rest ($(adb logcat -d -s XrossUiFilter:I | tail -1))"
-  f0=$(frames); pause 3; f1=$(frames)
+  rest_frames
   [ "$f0" = "$f1" ] && ok "a resting UI filter draws no frames" || bad "$((f1 - f0)) frames drawn under a resting UI filter"
   adb logcat -c
   adb shell "echo 'uniform shader content; half4 main(float2 p) { return content.eval(p) * nope; }' > /sdcard/Xross/themes/smoke_pack/postprocess.agsl"
@@ -461,7 +478,7 @@ else
     && ok "Bloom stays off below Android 13" || bad "Bloom state ($(adb logcat -d -s XrossUiFilter:I | tail -1))"
 fi
 pause 4
-f0=$(frames); pause 3; f1=$(frames)
+rest_frames
 [ "$f0" = "$f1" ] && ok "with Bloom on, a resting menu draws no frames" || bad "$((f1 - f0)) frames drawn at rest under Bloom"
 key KEYCODE_DPAD_DOWN
 press DPAD_CENTER 2
@@ -506,7 +523,7 @@ adb logcat -d -s XrossWallpaper:I | grep -q "wallpaper=custom .*opaque=true" \
 category 0
 press DPAD_DOWN 3 KEYCODE_DPAD_CENTER
 top_list
-press DPAD_DOWN 7
+press DPAD_DOWN 8
 expect "Clears 6 effects" "Reset to theme defaults says what it would clear"
 adb logcat -c
 key KEYCODE_DPAD_CENTER
@@ -681,5 +698,717 @@ set_json bootIntro ""
 set_json themePack default
 adb shell rm -rf /sdcard/Xross/themes/smoke_boot
 start_app
+
+
+section "Components (2b.7a)"
+# Settings ▸ Theme ▸ Components (the folder after Intro and transitions): Status bar left and
+# right (Confirm opens the slot list: Theme pack, each slot with its moves, then Add), Battery
+# display and Clock format, saved as display.components. The bar's glyphs are described
+# ("Battery gauge, 2 of 3 bars", "Wi-Fi, 3 of 3 bars", "Volume 2 of 3", "Offline"), and debug
+# builds log one XrossStatus line per change. XROSS_SHOTS=<dir> keeps a screenshot of each state.
+shot() { if [ -n "${XROSS_SHOTS:-}" ]; then mkdir -p "$XROSS_SHOTS"; adb exec-out screencap -p > "$XROSS_SHOTS/components-$1.png"; fi; }
+flat_settings() { adb shell cat /sdcard/Xross/config/settings.json | tr -d ' \n\r'; }
+await_flat() { # await_flat <text in settings.json without spaces>
+  for _ in $(seq 10); do flat_settings | grep -qF -- "$1" && return 0; pause 0.5; done
+  return 1
+}
+xml() { dump; adb shell cat /sdcard/xross-ui.xml; }
+has_desc() { xml | grep -qF "content-desc=\"$1"; }
+descs() { xml | grep -o 'content-desc="[^"]\{1,\}"' | sort; }
+# The clock's and the gauge's bounds: the HUD's expansion must never move them.
+bar_bounds() {
+  xml | grep -oE '(text="[0-9]{1,2}/[0-9]{1,2}  [^"]*"|text="[0-9]{1,3}%"|content-desc="Battery gauge[^"]*")[^>]*bounds="[^"]*"' \
+    | grep -o 'bounds="[^"]*"' | tr '\n' ' '
+}
+# Left edge of the first text matching <ERE>.
+x_of() { xml | grep -oE "text=\"$1\"[^>]*bounds=\"\[[0-9]+" | grep -oE '\[[0-9]+$' | tr -d '[' | head -1; }
+clock_is() { screen | grep -qE "$1"; }
+open_components() {
+  category 0
+  press DPAD_DOWN 3 KEYCODE_DPAD_CENTER
+  top_list
+  press DPAD_DOWN 6 KEYCODE_DPAD_CENTER
+}
+# While the HUD is open the right cluster is fully faded, and Compose leaves transparent nodes out
+# of the accessibility tree: an empty reading then is the fade, not a missing bar.
+hud_cycle() { # hud_cycle <order>: the HUD fades the right cluster and hands it back in place
+  category 0
+  pause 1
+  local before during after
+  before=$(bar_bounds)
+  key KEYCODE_DPAD_UP
+  pause 0.8
+  during=$(bar_bounds)
+  shot "hud-$2"
+  key KEYCODE_DPAD_DOWN
+  pause 0.8
+  after=$(bar_bounds)
+  shot "bar-$2"
+  if [ -n "$before" ] && [ -z "$during" ] && [ "$before" = "$after" ]; then
+    ok "$1: the HUD fades the clock and battery and gives them back without moving them"
+  else
+    bad "$1: before | under the HUD | after: $before | $during | $after"
+  fi
+}
+adb shell dumpsys battery unplug
+adb shell dumpsys battery set level 64
+adb shell dumpsys battery set status 3
+open_components
+expect "Status bar left" "Settings ▸ Theme ▸ Components lists the status-bar rows"
+expect "Empty (theme pack) · Top-left" "the left cluster follows the Default pack (empty)"
+# Only the focused row shows its subtitle.
+key KEYCODE_DPAD_DOWN
+expect "Clock · Battery · Avatar (theme pack)" "the right cluster follows the Default pack"
+key KEYCODE_DPAD_DOWN
+expect "Theme pack (Icon and percentage)" "Battery display follows the pack (BOTH)"
+expect "64%" "the bar draws the battery percentage"
+expect_desc "Battery gauge, 2 of 3 bars" "the bar draws the battery gauge beside it"
+shot both
+hud_cycle "Default order" default
+
+# Battery display (third row): Theme pack → Icon → Percentage → Icon and percentage → Time to full.
+open_components
+press DPAD_DOWN 2 KEYCODE_DPAD_CENTER
+expect "Icon · Time to full" "Battery display cycles to Icon"
+await_flat '"batteryMode":"CAPSULE_ICON"' && ok "it is saved as display.components.batteryMode" || bad "batteryMode not in settings.json"
+expect_not "64%" "Icon draws no percentage"
+expect_desc "Battery gauge, 2 of 3 bars" "Icon draws the gauge"
+shot icon
+key KEYCODE_DPAD_CENTER
+expect "64%" "Percentage draws the percentage"
+has_desc "Battery gauge" && bad "Percentage still draws the gauge" || ok "Percentage draws no gauge"
+shot percentage
+key KEYCODE_DPAD_CENTER KEYCODE_DPAD_CENTER
+expect "Time to full · " "Battery display cycles to Time to full"
+expect "64%" "Time to full off the charger draws the percentage"
+adb logcat -c
+adb shell dumpsys battery set ac 1
+adb shell dumpsys battery set status 2
+pause 2
+s=$(screen)
+full=$(grep -m1 -E '^[0-9]+ [hm]( [0-9]+ m)? to full$' <<<"$s")
+if [ -n "$full" ]; then
+  ok "on the charger, Time to full draws '$full'"
+elif grep -qxF "64%" <<<"$s" && adb logcat -d -s XrossStatus:I | grep -q "battery=64+ toFull=-"; then
+  ok "on the charger with no estimate from Android (−1), Time to full draws the percentage"
+else
+  bad "Time to full on the charger ($(adb logcat -d -s XrossStatus:I | tail -1))"; show "$s"
+fi
+shot time-remaining
+adb shell dumpsys battery set ac 0
+adb shell dumpsys battery set status 3
+key KEYCODE_DPAD_CENTER
+await_flat '"batteryMode":null' && ok "Theme pack hands the battery back (null)" || bad "batteryMode not reset to null"
+
+# Clock format (fourth row): Theme pack → 24 h → 12 h → Date and time → Time only.
+key KEYCODE_DPAD_DOWN KEYCODE_DPAD_CENTER
+expect "24 h · " "Clock format cycles to 24 h"
+clock_is '^[0-9]{1,2}/[0-9]{1,2}  ([01][0-9]|2[0-3]):[0-5][0-9]$' && ok "24 h: date and a 24-hour time" || { bad "24 h clock"; show "$(screen)"; }
+key KEYCODE_DPAD_CENTER
+clock_is '^[0-9]{1,2}/[0-9]{1,2}  [0-9]{1,2}:[0-5][0-9][^0-9]*[AP]M$' && ok "12 h: date and a 12-hour time" || { bad "12 h clock"; show "$(screen)"; }
+key KEYCODE_DPAD_CENTER
+clock_is '^[A-Z][a-z]{2}, [A-Z][a-z]{2} [0-9]{1,2}  [0-9]{1,2}:[0-5][0-9]' && ok "Date and time: weekday, month and day, then the time" || { bad "Date and time clock"; show "$(screen)"; }
+key KEYCODE_DPAD_CENTER
+await_flat '"clockFormat":"m"' && ok "Time only is saved as the skeleton m" || bad "clockFormat m not in settings.json"
+clock_is '^[0-9]{1,2}:[0-5][0-9]([^0-9]*[AP]M)?$' && ! clock_is '^[0-9]{1,2}/[0-9]{1,2}  ' \
+  && ok "Time only: the time without a date" || { bad "Time only clock"; show "$(screen)"; }
+key KEYCODE_DPAD_CENTER
+clock_is '^[0-9]{1,2}/[0-9]{1,2}  [0-9]{1,2}:[0-5][0-9]' && ok "Theme pack: back to the default clock" || { bad "default clock"; show "$(screen)"; }
+
+# Second order: Status bar right ▸ Clock ▸ Move right gives Battery, Clock, Avatar.
+top_list
+press DPAD_DOWN 1 KEYCODE_DPAD_CENTER
+expect "Add" "Status bar right opens its slot list (Theme pack, the slots, Add)"
+press DPAD_DOWN 1 KEYCODE_DPAD_CENTER
+key KEYCODE_DPAD_CENTER
+await_flat '"statusBarRight":["BATTERY","CLOCK","AVATAR"]' && ok "Clock ▸ Move right saves Battery, Clock, Avatar" || bad "statusBarRight not saved ($(flat_settings | grep -o '"statusBarRight":[^]]*]'))"
+expect "Move left" "the list reopens on the clock's moves"
+key KEYCODE_BACK KEYCODE_BACK
+bx=$(x_of '[0-9]{1,3}%'); cx=$(x_of '[0-9]{1,2}/[0-9]{1,2}  [^"]*')
+[ -n "$bx" ] && [ -n "$cx" ] && [ "$bx" -lt "$cx" ] && ok "the battery now draws left of the clock" || bad "slot order on screen (battery x=$bx, clock x=$cx)"
+hud_cycle "Battery first" battery-first
+
+# Third order: Status bar left ▸ Add ▸ Network, then Add ▸ Volume.
+open_components
+key KEYCODE_DPAD_CENTER
+press DPAD_DOWN 1 KEYCODE_DPAD_CENTER
+press DPAD_DOWN 1 KEYCODE_DPAD_CENTER
+press DPAD_DOWN 1 KEYCODE_DPAD_CENTER
+press DPAD_DOWN 1 KEYCODE_DPAD_CENTER
+key KEYCODE_BACK
+await_flat '"statusBarLeft":["WIFI","VOLUME"]' && ok "Add ▸ Network and Add ▸ Volume save the left cluster" || bad "statusBarLeft not saved ($(flat_settings | grep -o '"statusBarLeft":[^]]*]'))"
+expect "Network · Volume · Top-left" "Status bar left shows its slots"
+if has_desc "Wi-Fi," || has_desc "Mobile data" || has_desc "Ethernet"; then
+  ok "Network shows the default network ($(descs | grep -oE 'Wi-Fi[^"]*|Mobile data|Ethernet' | head -1))"
+else
+  bad "no network glyph ($(descs | tr '\n' ' '))"
+fi
+has_desc "Volume" && bad "Volume shows before the volume changed" || ok "Volume stays hidden until the volume changes"
+# The volume keys, as a user would (`cmd media_session volume --set` doesn't move the emulator's
+# speaker volume). A press while Android's volume panel is hidden only raises the panel, so the
+# first press shows it and the next one steps. One step down usually keeps the same level: it
+# still counts as a change.
+music_volume() { adb shell cmd media_session volume --stream 3 --get 2>/dev/null | grep -o 'volume is [0-9]*' | grep -o '[0-9]*$'; }
+# While Android's panel has the focus, uiautomator doesn't list the slot that just appeared, so
+# its state is read from XrossStatus ("volume=<level>#<changes>"); the screenshots show the glyph.
+vol=$(music_volume)
+adb logcat -c
+key KEYCODE_VOLUME_DOWN
+key KEYCODE_VOLUME_DOWN
+pause 0.3
+step=$(adb logcat -d -s XrossStatus:I | grep -oE 'volume=[0-9]#[1-9][0-9]*' | tail -1)
+[ -n "$step" ] && ok "a volume step shows Volume ($step)" || bad "Volume didn't show after a change ($(adb logcat -d -s XrossStatus:I | tail -1))"
+shot volume
+pause 4
+has_desc "Volume" && bad "Volume still shown 4 s after the change" || ok "Volume hides again after 3 s"
+key KEYCODE_VOLUME_DOWN
+for _ in $(seq 16); do [ "$(music_volume)" = 0 ] && break; key KEYCODE_VOLUME_DOWN; done
+pause 0.3
+shot volume-muted
+adb logcat -d -s XrossStatus:I | grep -qE 'volume=0#[1-9]' && ok "volume 0 shows the muted glyph" || bad "no muted volume ($(adb logcat -d -s XrossStatus:I | tail -1))"
+key KEYCODE_VOLUME_UP
+for _ in $(seq 16); do [ "$(music_volume)" -ge "${vol:-8}" ] && break; key KEYCODE_VOLUME_UP; done
+pause 4
+hud_cycle "With a left cluster" left-cluster
+
+# Airplane mode: the network slot follows within 2 s, and comes back after.
+category 0
+pause 1
+adb logcat -c
+t0=$(adb shell date +%s.%N | tr -d '\r')
+adb shell cmd connectivity airplane-mode enable
+pause 3
+t1=$(adb logcat -d -v epoch -s XrossStatus:I | grep -m1 "network=OFFLINE" | awk '{print $1}')
+if [ -n "$t1" ] && python3 -c "import sys; sys.exit(0 if float('$t1') - float('$t0') <= 2.0 else 1)"; then
+  ok "airplane mode on: the network slot goes offline in $(python3 -c "print(round(float('$t1') - float('$t0'), 2))") s"
+else
+  bad "airplane mode on: no offline within 2 s ($(adb logcat -d -s XrossStatus:I | tail -1))"
+fi
+expect_desc "Offline" "the offline glyph is drawn"
+shot offline
+adb logcat -c
+adb shell cmd connectivity airplane-mode disable
+back=
+for _ in $(seq 20); do
+  if adb logcat -d -s XrossStatus:I | grep -qE "network=(WIFI|CELLULAR|ETHERNET)"; then back=1; break; fi
+  pause 1
+done
+[ -n "$back" ] && ok "airplane mode off: the network slot comes back ($(adb logcat -d -s XrossStatus:I | grep -oE 'network=[A-Z]+/[0-9]' | tail -1))" \
+  || bad "airplane mode off: the network slot stayed offline"
+
+# The avatar left out: no avatar, and Up at the top of a list stays in the list.
+open_components
+with=$(descs)
+press DPAD_DOWN 1 KEYCODE_DPAD_CENTER
+press DPAD_DOWN 3 KEYCODE_DPAD_CENTER
+key KEYCODE_DPAD_CENTER
+expect "Avatar removed from the status bar" "Avatar ▸ Remove says where the User Card is"
+key KEYCODE_BACK
+await_flat '"statusBarRight":["BATTERY","CLOCK"]' && ok "the right cluster is saved without the avatar" || bad "statusBarRight still has the avatar"
+without=$(descs)
+[ -n "$(comm -23 <(echo "$with") <(echo "$without"))" ] && ok "the avatar is gone from the bar" || bad "the avatar is still drawn"
+shot no-avatar
+# category's own top() climbs onto the avatar, so go to the top by hand here.
+key KEYCODE_BACK KEYCODE_BACK KEYCODE_BACK
+press BUTTON_L1 6
+press DPAD_UP 25
+key KEYCODE_DPAD_UP
+pause 0.8
+expect "Theme" "Up at the top of Settings stays in the list without an avatar"
+
+# Reset to theme defaults hands the components back to the pack.
+press DPAD_DOWN 3 KEYCODE_DPAD_CENTER
+top_list
+press DPAD_DOWN 8
+expect "2 components" "Reset to theme defaults counts the components"
+key KEYCODE_DPAD_CENTER
+await_flat '"statusBarLeft":null,"statusBarRight":null' && ok "Reset clears display.components" || bad "components left in settings.json"
+[ "$(descs)" != "$without" ] && ok "the avatar is back after Reset" || bad "no avatar after Reset"
+
+# At rest the bar's minute tick draws a frame or two, nothing more.
+category 0
+pause 12
+adb shell dumpsys gfxinfo "$PKG" reset >/dev/null
+s=$(adb shell date +%S | tr -d '\r'); s=${s#0}
+adb shell sleep $((60 - s + 3))
+frames=$(adb shell dumpsys gfxinfo "$PKG" | grep -m1 'Total frames rendered' | grep -o '[0-9]*$')
+[ -n "$frames" ] && [ "$frames" -le 3 ] && ok "a minute tick at rest draws $frames frame(s)" || bad "a minute at rest drew ${frames:-?} frames"
+adb shell dumpsys battery reset
+
+section "Components (2b.7b)"
+# Mini player (Theme pack → Floating card → Status bar ticker → Off), Button glyphs (Theme pack →
+# Controller's own → Shapes → Colored letters → Letters, A on the right → Minimal outlines) and
+# Title badges (an Options list: Theme pack, None, then each badge, on in the order turned on).
+# The suite's keys come from the virtual keyboard, so the controller's own glyphs are Enter, Esc, Tab.
+comp_row() { open_components; [ "$1" -gt 0 ] && press DPAD_DOWN "$1"; }
+playing() { for _ in $(seq 12); do [ "$(music_state)" = "PLAYING" ] && return 0; pause 0.5; done; return 1; }
+ticker_bounds() { xml | grep -oE 'text="Smoke Song [12] — Smoke Artist"[^>]*bounds="[^"]*"' | grep -o 'bounds="[^"]*"'; }
+# The glyph drawn just before a hint's label ("✕" before "Select"); the hints come last on screen
+# (Search's keyboard has a "Space" key of its own).
+glyph_before() { screen | grep -B1 -xF "$1" | tail -2 | head -1; }
+
+if setup_media_fixtures; then
+  adb shell am force-stop "$PKG"
+  start_app
+  category 2
+  expect "Shuffle all" "Music lists Shuffle all for the mini-player checks"
+  key KEYCODE_DPAD_CENTER
+  playing && ok "a song plays" || bad "no song playing (state $(music_state))"
+  category 0
+  pause 0.5
+  s=$(screen)
+  grep -qxF "Smoke Artist" <<<"$s" && grep -qxE "Smoke Song [12]" <<<"$s" \
+    && ok "Floating card (the default) draws the title and the artist on their own lines" || { bad "no floating card"; show "$s"; }
+  shot mini-card
+  comp_row 4
+  expect "Theme pack (Floating card)" "Mini player follows the pack (Floating card)"
+  key KEYCODE_DPAD_CENTER KEYCODE_DPAD_CENTER
+  await_flat '"miniPlayerMode":"STATUS_TICKER"' && ok "Status bar ticker is saved as display.components.miniPlayerMode" || bad "miniPlayerMode not saved"
+  pause 0.5
+  s=$(screen)
+  grep -qxE "Smoke Song [12] — Smoke Artist" <<<"$s" && ok "the ticker draws 'Title — Artist' in the status bar" || { bad "no ticker"; show "$s"; }
+  grep -qxF "Smoke Artist" <<<"$s" && bad "the floating card is still drawn with the ticker" || ok "no floating card with the ticker"
+  shot mini-ticker
+  tx=$(x_of 'Smoke Song [12] — Smoke Artist'); bx=$(x_of '[0-9]{1,3}%')
+  [ -n "$tx" ] && [ -n "$bx" ] && [ "$tx" -gt "$bx" ] && ok "the ticker sits after the battery, before the avatar" || bad "ticker x=$tx, battery x=$bx"
+  category 0
+  pause 1
+  before=$(ticker_bounds); key KEYCODE_DPAD_UP; pause 0.8; during=$(ticker_bounds); shot mini-ticker-hud
+  key KEYCODE_DPAD_DOWN; pause 0.8; after=$(ticker_bounds)
+  [ -n "$before" ] && [ -z "$during" ] && [ "$before" = "$after" ] \
+    && ok "the HUD fades the ticker and gives it back in place" || bad "ticker before | under the HUD | after: $before | $during | $after"
+  adb shell cmd media_session dispatch pause
+  pause 1
+  has_desc "❚❚  Smoke Song" && ok "paused, the ticker stays with the pause glyph" || bad "no paused ticker ($(descs | grep -i smoke | tr '\n' ' '))"
+  shot mini-ticker-paused
+  adb shell cmd media_session dispatch play
+  playing
+  comp_row 4
+  key KEYCODE_DPAD_CENTER
+  await_flat '"miniPlayerMode":"OFF"' && ok "Off is saved" || bad "miniPlayerMode OFF not saved"
+  expect "Off · Music still plays" "Mini player Off says the music carries on"
+  category 0
+  pause 0.5
+  screen | grep -qE "^Smoke Song [12]" && bad "Off still draws a card or a ticker" || ok "Off draws neither the card nor the ticker"
+  [ "$(music_state)" = "PLAYING" ] && ok "playback carries on with the mini player off" || bad "music state $(music_state) with the mini player off"
+  shot mini-off
+  comp_row 4
+  key KEYCODE_DPAD_CENTER
+  await_flat '"miniPlayerMode":null' && ok "Theme pack hands the mini player back (null)" || bad "miniPlayerMode not reset"
+  adb shell cmd media_session dispatch pause
+else
+  skip 15 "the mini-player checks need ffmpeg on the host for the song fixtures"
+fi
+
+# Button glyphs: the labels change, the confirm side doesn't (DPAD_CENTER confirms throughout).
+comp_row 5
+expect "Theme pack (Controller's own) · Labels only" "Button glyphs follows the pack (the controller's own)"
+[ "$(glyph_before Select)" = "Enter" ] && ok "the keyboard's own glyphs: Enter selects" || bad "Select is labelled '$(glyph_before Select)'"
+key KEYCODE_DPAD_CENTER KEYCODE_DPAD_CENTER
+await_flat '"glyphOverride":"PLAYSTATION"' && ok "Shapes is saved as display.components.glyphOverride" || bad "glyphOverride not saved"
+[ "$(glyph_before Select)" = "✕" ] && [ "$(glyph_before Back)" = "○" ] && [ "$(glyph_before Options)" = "△" ] \
+  && ok "Shapes: ✕ selects, ○ goes back, △ opens Options" || bad "Shapes: $(glyph_before Select) $(glyph_before Back) $(glyph_before Options)"
+shot glyphs-shapes
+key KEYCODE_DPAD_CENTER
+[ "$(glyph_before Select)" = "A" ] && [ "$(glyph_before Back)" = "B" ] && [ "$(glyph_before Options)" = "Y" ] \
+  && ok "Colored letters: A selects, B goes back, Y opens Options" || bad "Colored letters: $(glyph_before Select) $(glyph_before Back) $(glyph_before Options)"
+shot glyphs-xbox
+key KEYCODE_DPAD_CENTER
+[ "$(glyph_before Select)" = "B" ] && [ "$(glyph_before Back)" = "A" ] \
+  && ok "Nintendo letters on a south-confirm controller: Select is the south button, labelled B" || bad "Nintendo: $(glyph_before Select) $(glyph_before Back)"
+key KEYCODE_DPAD_CENTER
+await_flat '"glyphOverride":"MONOCHROME_MINIMAL"' && ok "Minimal outlines is saved" || bad "MONOCHROME_MINIMAL not saved"
+[ "$(glyph_before Select)" = "▽" ] && [ "$(glyph_before Back)" = "▷" ] && [ "$(glyph_before Options)" = "△" ] \
+  && ok "Minimal outlines: ▽ selects, ▷ goes back, △ opens Options" || bad "Minimal: $(glyph_before Select) $(glyph_before Back) $(glyph_before Options)"
+shot glyphs-minimal
+home
+key KEYCODE_DPAD_UP KEYCODE_DPAD_CENTER
+expect "Space" "Search opens"
+[ "$(glyph_before Space)" = "△" ] && ok "Search's hints draw the minimal set (△ Space)" || bad "Search: '$(glyph_before Space)' before Space"
+shot glyphs-search
+key KEYCODE_BACK
+category 0
+key KEYCODE_DPAD_UP
+pause 0.8
+s=$(screen)
+grep -qxF "▽" <<<"$s" && ok "the avatar HUD's hints draw the minimal set" || { bad "HUD hints"; show "$s"; }
+shot glyphs-hud
+key KEYCODE_DPAD_DOWN
+comp_row 5
+key KEYCODE_DPAD_CENTER
+await_flat '"glyphOverride":null' && ok "Theme pack hands the glyphs back (null)" || bad "glyphOverride not reset"
+[ "$(glyph_before Select)" = "Enter" ] && ok "the keyboard's own glyphs are back" || bad "Select is labelled '$(glyph_before Select)'"
+
+# Title badges: System, Release year, Developer and Playtime, on in that order. Chrono Trigger gets
+# a release date, a developer and 75 minutes of playtime in the library database (as in the
+# game-art block); EarthBound has none of them, Super Metroid isn't scraped.
+comp_row 6
+expect "None (theme pack) · Beside the focused game's title" "Title badges follows the pack (none)"
+key KEYCODE_DPAD_CENTER
+expect "Achievements" "Title badges opens the list of badges"
+press DPAD_DOWN 2 KEYCODE_DPAD_CENTER
+press DPAD_DOWN 1 KEYCODE_DPAD_CENTER
+press DPAD_DOWN 1 KEYCODE_DPAD_CENTER
+press DPAD_DOWN 1 KEYCODE_DPAD_CENTER
+expect "On · 4 of 4" "the list stays open, the last badge 4th of 4"
+key KEYCODE_BACK
+await_flat '"badgePills":["SYSTEM","YEAR","DEVELOPER","PLAYTIME"]' && ok "the badges are saved in the order turned on" \
+  || bad "badgePills not saved ($(flat_settings | grep -o '"badgePills":[^]]*]'))"
+if command -v sqlite3 >/dev/null && adb shell run-as "$PKG" true 2>/dev/null; then
+  db=$(tmpdir db-pills)
+  adb shell am force-stop "$PKG"
+  for f in xross.db xross.db-wal xross.db-shm; do adb exec-out run-as "$PKG" cat "databases/$f" > "$db/$f" 2>/dev/null; done
+  [ -s "$db/xross.db-wal" ] || rm -f "$db/xross.db-wal" "$db/xross.db-shm"
+  sqlite3 "$db/xross.db" "INSERT OR IGNORE INTO game_metadata (gameId, locked) SELECT id, 0 FROM games WHERE fileName LIKE 'Chrono Trigger%';
+    UPDATE game_metadata SET releaseDate = '1995-03-11', developer = 'Square' WHERE gameId IN (SELECT id FROM games WHERE fileName LIKE 'Chrono Trigger%');
+    UPDATE games SET playTimeMs = 4500000 WHERE fileName LIKE 'Chrono Trigger%';
+    PRAGMA journal_mode = DELETE;" >/dev/null
+  adb push "$db/xross.db" /data/local/tmp/xross-smoke.db >/dev/null
+  adb shell chmod 644 /data/local/tmp/xross-smoke.db
+  adb shell run-as "$PKG" sh -c "'cp /data/local/tmp/xross-smoke.db databases/xross.db && rm -f databases/xross.db-wal databases/xross.db-shm'"
+  adb shell rm -f /data/local/tmp/xross-smoke.db
+  start_app
+  home
+  all_games "$(collections_above)"
+  key KEYCODE_DPAD_CENTER
+  pause 1
+  s=$(screen)
+  if grep -qxF "SNES" <<<"$s" && grep -qxF "1995" <<<"$s" && grep -qxF "Square" <<<"$s" && grep -qxF "1h 15m" <<<"$s"; then
+    ok "a scraped game shows System, Release year, Developer and Playtime"
+  else
+    bad "Chrono Trigger's badges"; show "$s"
+  fi
+  grep -q "Playtime:" <<<"$s" && bad "the playtime is still in the subtitle" || ok "the Playtime badge takes the playtime out of the subtitle"
+  shot pills-scraped
+  key KEYCODE_DPAD_DOWN
+  pause 0.8
+  s=$(screen)
+  ! grep -qxF "1995" <<<"$s" && ! grep -qxF "Square" <<<"$s" && grep -qxF "SNES" <<<"$s" \
+    && ok "badges are drawn on the focused game only, and a game without the data skips them" || { bad "EarthBound's badges"; show "$s"; }
+  key KEYCODE_DPAD_DOWN
+  pause 0.8
+  expect_line "SNES" "an unscraped game keeps its System badge"
+  shot pills-unscraped
+  category 5
+  pause 0.8
+  s=$(screen)
+  grep -qxE "SNES|1995|Square" <<<"$s" && bad "an app shows title badges" || ok "apps get no title badges"
+else
+  skip 5 "the title-badge data needs sqlite3 on the host and a debuggable build"
+fi
+comp_row 6
+key KEYCODE_DPAD_CENTER KEYCODE_DPAD_CENTER
+await_flat '"badgePills":null' && ok "Theme pack hands the badges back (null)" || bad "badgePills not reset"
+
+section "Components (2b.7c)"
+# Top-left (the last Components row): Theme pack → Social stack → Empty. The stack is described
+# "Friends: N" (", K with new activity" while the badge shows); its panel lists FOLLOWING. The
+# linked account here is fake (no key reaches RetroAchievements: the checks run in airplane mode),
+# its profile and friends come from caches written into the Xross folder. Debug builds log one
+# XrossRa line per friends refresh.
+topleft_row() { comp_row 7; }
+stack_desc() { xml | grep -o 'content-desc="Friends: [^"]*"' | head -1 | sed 's/content-desc="//; s/"$//'; }
+now_ms() { echo "$(adb shell date +%s | tr -d '\r')000"; }
+ra_log() { adb logcat -d -s XrossRa:I | grep -o 'friends=.*' ; }
+link_fake_account() { # credentials in the app's own preferences (debug build), plus a fresh profile cache
+  local d; d=$(tmpdir ra-link)
+  printf '%s\n' "<?xml version='1.0' encoding='utf-8' standalone='yes' ?>" \
+    '<map><string name="retroachievements_user">SmokeUser</string><string name="retroachievements_web_api_key">NotARealKey000</string></map>' > "$d/creds.xml"
+  adb push "$d/creds.xml" /data/local/tmp/xross-creds.xml >/dev/null
+  adb shell chmod 644 /data/local/tmp/xross-creds.xml
+  adb shell run-as "$PKG" sh -c "'mkdir -p shared_prefs && cp /data/local/tmp/xross-creds.xml shared_prefs/xross_credentials.xml'"
+  adb shell rm -f /data/local/tmp/xross-creds.xml
+  printf '{"version":1,"username":"SmokeUser","profile":{"username":"SmokeUser","totalPoints":100,"fetchedAtMs":%s}}' "$(now_ms)" > "$d/profile.json"
+  adb push "$d/profile.json" /sdcard/Xross/data/retroachievements.json >/dev/null
+}
+# Debug builds link the developer's .env account at every start (AppContainer,
+# DEBUG_RETROACHIEVEMENTS_*): then nothing on the device is ever unlinked.
+seeded_account() { adb shell run-as "$PKG" cat shared_prefs/xross_credentials.xml 2>/dev/null | grep -qE 'name="retroachievements_user">[^<]+'; }
+unlink_fake_account() { adb shell run-as "$PKG" rm -f shared_prefs/xross_credentials.xml; adb shell rm -f /sdcard/Xross/data/retroachievements.json; }
+write_friends() { # write_friends <following JSON array> <activity JSON object> <seen JSON object>
+  local d now; d=$(tmpdir ra-friends); now=$(now_ms)
+  printf '{"version":1,"owner":"SmokeUser","followingFetchedAtMs":%s,"following":%s,"total":3,"activity":%s,"seen":%s,"stackOpenedAtMs":%s}' \
+    "$((now - 3600000))" "$1" "$2" "$3" "$((now - 7200000))" > "$d/friends.json"
+  adb shell mkdir -p /sdcard/Xross/data/ra
+  adb push "$d/friends.json" /sdcard/Xross/data/ra/friends.json >/dev/null
+}
+# Three followed users, each fetched an hour ago (stale: opening the stack refreshes): Alice and
+# Carol moved on since the stack was last opened, Bob didn't.
+FOLLOWING='[{"user":"Alice","ulid":"01ALICE"},{"user":"Bob","ulid":"01BOB"},{"user":"Carol","ulid":"01CAROL"}]'
+activity() { # activity <user> <ulid> <game id> <title> <date>
+  printf '"%s":{"user":"%s","ulid":"%s","gameId":%s,"gameTitle":"%s","consoleName":"Dreamcast","lastPlayed":"%s","lastSeen":"%s","fetchedAtMs":%s}' \
+    "$2" "$1" "$2" "$3" "$4" "$5" "$5" "$(( $(now_ms) - 3600000 ))"
+}
+ACTIVITY="{$(activity Alice 01ALICE 3750 'Elemental Gimmick Gear' '2026-11-14 10:00:00'),$(activity Bob 01BOB 12 'Twelve' '2026-11-13 09:00:00'),$(activity Carol 01CAROL 77 'Seventy-seven' '2026-11-12 08:00:00')}"
+SEEN='{"01ALICE":"1@2026-11-01 10:00:00","01BOB":"12@2026-11-13 09:00:00","01CAROL":"5@2026-11-01 10:00:00"}'
+
+if adb shell run-as "$PKG" true 2>/dev/null; then
+  topleft_row
+  expect "Theme pack (Empty) · Friends you follow on RetroAchievements" "Top-left follows the pack (Empty), last in Components"
+  key KEYCODE_DPAD_CENTER
+  await_flat '"topLeftCluster":"SOCIAL_STACK"' && ok "Social stack is saved as display.components.topLeftCluster" || bad "topLeftCluster not saved"
+  if seeded_account; then
+    # Linked to the .env account, online: turning the stack on refreshed it against the live API.
+    expect "Social stack · Friends you follow" "linked (the debug build's .env account), the row says what it shows"
+    for _ in $(seq 20); do [ -n "$(ra_log)" ] && break; pause 0.5; done
+    ra_log | grep -qE '^friends=[0-9]+ activity=[0-9]+ calls=[0-9]+$' && ok "turning the stack on refreshed it live ($(ra_log | tail -1))" || bad "no live refresh: $(ra_log)"
+  else
+    expect "Social stack · Needs a RetroAchievements account" "without an account the row says what it needs"
+    category 0
+    pause 0.5
+    [ -z "$(stack_desc)" ] && ok "unlinked: the stack collapses" || bad "unlinked, the stack shows: $(stack_desc)"
+  fi
+  shot social-turned-on
+
+  # Linked, offline, with a cache: the cached friends, newest activity first, and the badge.
+  adb shell am force-stop "$PKG"
+  adb shell cmd connectivity airplane-mode enable
+  link_fake_account
+  write_friends "$FOLLOWING" "$ACTIVITY" "$SEEN"
+  adb logcat -c
+  start_app
+  category 0
+  pause 0.5
+  d=$(stack_desc)
+  [ "$d" = "Friends: 3, 2 with new activity" ] && ok "offline with a cache: the stack shows the cached friends and a 2 badge" || bad "stack: '$d'"
+  [ -z "$(ra_log)" ] && ok "a fresh profile and a friends cache at startup: no friends refresh" || bad "refreshed at startup: $(ra_log)"
+  sx=$(xml | grep -oE 'content-desc="Friends: [^"]*"[^>]*bounds="\[[0-9]+' | grep -oE '\[[0-9]+$' | tr -d '[')
+  cx=$(x_of '[0-9]{1,2}/[0-9]{1,2}  .*')
+  [ -n "$sx" ] && [ -n "$cx" ] && [ "$sx" -lt "$cx" ] && ok "the stack sits top-left, left of the clock" || bad "stack x=$sx, clock x=$cx"
+  shot social-stack
+
+  # Up opens the avatar HUD; Left crosses to the stack's panel, which refreshes the stale list and,
+  # offline, keeps the saved one.
+  key KEYCODE_DPAD_UP KEYCODE_DPAD_LEFT
+  expect "FOLLOWING" "Left from the avatar HUD opens the stack's panel"
+  s=$(screen)
+  a=$(grep -nxF "Alice" <<<"$s" | cut -d: -f1); b=$(grep -nxF "Bob" <<<"$s" | cut -d: -f1); c=$(grep -nxF "Carol" <<<"$s" | cut -d: -f1)
+  [ -n "$a" ] && [ -n "$b" ] && [ -n "$c" ] && [ "$a" -lt "$b" ] && [ "$b" -lt "$c" ] \
+    && ok "the panel lists the friends, most recent activity first" || { bad "panel order: Alice=$a Bob=$b Carol=$c"; show "$s"; }
+  expect "Elemental Gimmick Gear · Dreamcast" "each friend shows their latest game"
+  for _ in $(seq 10); do ra_log | grep -q "failed" && break; pause 0.5; done
+  ra_log | grep -qE '^friends=3 activity=0 calls=1 failed' && ok "opening the stale stack refreshed once and stopped at the first failure ($(ra_log | tail -1))" || bad "XrossRa: $(ra_log | tr '\n' ' ')"
+  expect "Offline · saved list" "offline, the panel keeps the saved list"
+  shot social-panel
+  key KEYCODE_BACK
+  pause 0.5
+  screen | grep -qxF "FOLLOWING" && bad "Back left the panel open" || ok "Back closes the panel"
+  d=$(stack_desc)
+  [ "$d" = "Friends: 3" ] && ok "opening the stack cleared its badge" || bad "after opening: '$d'"
+  adb shell am force-stop "$PKG"
+  start_app
+  category 0
+  pause 0.5
+  [ "$(stack_desc)" = "Friends: 3" ] && ok "the cleared badge is kept in friends.json" || bad "after a restart: '$(stack_desc)'"
+  adb shell cat /sdcard/Xross/data/ra/friends.json | grep -q "NotARealKey000" && bad "the key is in friends.json" || ok "friends.json holds no key"
+
+  # Touch: a tap on the stack opens the panel, a tap outside closes it.
+  b=$(xml | grep -oE 'content-desc="Friends: [^"]*"[^>]*bounds="\[[0-9]+,[0-9]+\]\[[0-9]+,[0-9]+\]' | grep -oE '\[[0-9]+,[0-9]+\]\[[0-9]+,[0-9]+\]$')
+  if [ -n "$b" ]; then
+    read -r x1 y1 x2 y2 <<<"$(tr '[],' '   ' <<<"$b")"
+    adb shell input tap $(( (x1 + x2) / 2 )) $(( (y1 + y2) / 2 )); pause 0.8
+    screen | grep -qxF "FOLLOWING" && ok "a tap on the stack opens the panel" || bad "tap on the stack: no panel"
+    # Anywhere off the panel: three quarters across and down the screen as drawn now (the UI
+    # dump's root bounds follow the rotation; `wm size` doesn't).
+    read -r sw sh <<<"$(xml | grep -oE 'bounds="\[0,0\]\[[0-9]+,[0-9]+\]"' | head -1 | grep -oE '\[[0-9]+,[0-9]+\]"$' | tr -d '[]"' | tr ',' ' ')"
+    adb shell input tap $(( ${sw:-1000} * 3 / 4 )) $(( ${sh:-1000} * 3 / 4 )); pause 0.8
+    screen | grep -qxF "FOLLOWING" && bad "a tap outside left the panel open" || ok "a tap outside closes the panel"
+  else
+    bad "no stack bounds to tap"; bad "no stack to close"
+  fi
+
+  # Offline without a cache: collapsed (the refresh at startup fails).
+  adb shell am force-stop "$PKG"
+  adb shell rm -f /sdcard/Xross/data/ra/friends.json
+  adb logcat -c
+  start_app
+  category 0
+  pause 1
+  [ -z "$(stack_desc)" ] && ok "offline without a cache: the stack collapses" || bad "no cache, the stack shows: $(stack_desc)"
+  ra_log | grep -q failed && ok "with nothing cached, startup tried one refresh ($(ra_log | tail -1))" || bad "no startup refresh logged: $(ra_log)"
+
+  # Following nobody: collapsed; at rest, no further calls.
+  adb shell am force-stop "$PKG"
+  write_friends '[]' '{}' '{}'
+  adb shell "sed -i 's/\"followingFetchedAtMs\":[0-9]*/\"followingFetchedAtMs\":$(now_ms)/' /sdcard/Xross/data/ra/friends.json"
+  adb logcat -c
+  start_app
+  category 0
+  pause 0.5
+  [ -z "$(stack_desc)" ] && ok "following nobody: the stack collapses" || bad "following nobody, the stack shows: $(stack_desc)"
+  pause 15
+  [ -z "$(ra_log)" ] && ok "at rest for 15 s: no friends refresh" || bad "refreshed at rest: $(ra_log)"
+
+  # Unlinked with a cache on disk: collapsed. (A debug build with .env secrets links its own
+  # account again at start: SmokeUser's cache then belongs to another account, also collapsed.)
+  adb shell am force-stop "$PKG"
+  write_friends "$FOLLOWING" "$ACTIVITY" "$SEEN"
+  unlink_fake_account
+  start_app
+  category 0
+  pause 0.5
+  what=$(seeded_account && echo "another account's cache is ignored" || echo "unlinked, even with a cache")
+  [ -z "$(stack_desc)" ] && ok "$what: the stack collapses" || bad "$what: $(stack_desc)"
+
+  adb shell cmd connectivity airplane-mode disable
+  adb shell rm -f /sdcard/Xross/data/ra/friends.json
+  topleft_row
+  key KEYCODE_DPAD_CENTER KEYCODE_DPAD_CENTER
+  await_flat '"topLeftCluster":null' && ok "Theme pack hands the top-left back (null)" || bad "topLeftCluster not reset"
+else
+  skip 24 "the social-stack checks need a debuggable build (credentials are written with run-as)"
+fi
+
+section "Components (2b.7d)"
+# Achievement badge (the last Components row): Theme pack → Off → Compact → Rich card. The rich
+# card is described "RetroAchievements: 2/8 · 10/40 pts" and its friend strip "Recently played by
+# …". Chrono Trigger's progress comes from a saved copy (matches.json and game-228.json in
+# Xross/data/ra, badges in Xross/media/ra/badges) read with the fake account in airplane mode, so
+# its fetch fails: the card from the saved copy, without the strip. With the debug build's .env
+# account online the fetch works, and the saved friends on that game make the strip.
+telemetry_row() { comp_row 8; }
+card_desc() { descs | grep -o 'content-desc="RetroAchievements: [^"]*"' | head -1 | sed 's/content-desc="//; s/"$//'; }
+strip_desc() { descs | grep -o 'content-desc="Recently played by [^"]*"' | head -1 | sed 's/content-desc="//; s/"$//'; }
+pill_shown() { screen | grep -qxF " unlocked"; }
+await_card() { for _ in $(seq 12); do [ -n "$(card_desc)" ] && return 0; pause 0.5; done; return 1; }
+ra_user() { adb shell run-as "$PKG" cat shared_prefs/xross_credentials.xml 2>/dev/null | grep -oE 'name="retroachievements_user">[^<]+' | sed 's/.*>//'; }
+seed_progress() { # Chrono Trigger matched to RetroAchievements game 228: 8 achievements, 2 unlocked, badges on disk
+  local db d row uuid size mod
+  db=$(tmpdir db-telemetry); d=$(tmpdir ra-telemetry)
+  for f in xross.db xross.db-wal xross.db-shm; do adb exec-out run-as "$PKG" cat "databases/$f" > "$db/$f" 2>/dev/null; done
+  [ -s "$db/xross.db-wal" ] || rm -f "$db/xross.db-wal" "$db/xross.db-shm"
+  row=$(sqlite3 -separator ' ' "$db/xross.db" "SELECT uuid, sizeBytes, lastModified FROM games WHERE fileName LIKE 'Chrono Trigger%' LIMIT 1")
+  read -r uuid size mod <<<"$row"
+  [ -n "$uuid" ] || return 1
+  printf '{"%s":{"raId":228,"kind":"HASH","size":%s,"modified":%s,"listVersion":2}}' "$uuid" "$size" "$mod" > "$d/matches.json"
+  python3 - "$d" <<'PY'
+import json, struct, sys, zlib, os
+d = sys.argv[1]
+ach = []
+for i in range(1, 9):
+    a = {"id": 9000 + i, "title": "Smoke %d" % i, "points": 5, "badgeName": "9%04d" % i, "displayOrder": i}
+    if i <= 2: a["unlockedAt"] = "2026-11-0%d 10:00:00" % i
+    ach.append(a)
+json.dump({"gameId": 228, "title": "Chrono Trigger", "consoleName": "SNES", "achievements": ach}, open(os.path.join(d, "game-228.json"), "w"))
+def png(path, rgb):  # a 64 × 64 solid square
+    raw = b"".join(b"\0" + bytes(rgb) * 64 for _ in range(64))
+    chunk = lambda t, b: struct.pack(">I", len(b)) + t + b + struct.pack(">I", zlib.crc32(t + b) & 0xFFFFFFFF)
+    open(path, "wb").write(b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", 64, 64, 8, 2, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b""))
+os.makedirs(os.path.join(d, "badges"), exist_ok=True)
+for i in range(1, 9): png(os.path.join(d, "badges", "9%04d.png" % i), (30 * i, 200 - 20 * i, 120))
+PY
+  adb shell mkdir -p /sdcard/Xross/data/ra /sdcard/Xross/media/ra/badges
+  adb push "$d/matches.json" /sdcard/Xross/data/ra/matches.json >/dev/null
+  adb push "$d/game-228.json" /sdcard/Xross/data/ra/game-228.json >/dev/null
+  for f in "$d"/badges/*.png; do adb push "$f" /sdcard/Xross/media/ra/badges/ >/dev/null; done
+}
+# Four followed users, fetched just now (nothing is stale): Alice, Bob, Carol and Dave last played
+# game 228, Erin another one.
+seed_card_friends() { # seed_card_friends <owner>
+  local d now act=""; d=$(tmpdir ra-card-friends); now=$(now_ms)
+  for f in "Alice 01ALICE 228 2026-11-14 10:00:00" "Bob 01BOB 228 2026-11-13 10:00:00" "Carol 01CAROL 228 2026-11-12 10:00:00" \
+    "Dave 01DAVE 228 2026-11-11 10:00:00" "Erin 01ERIN 77 2026-11-14 12:00:00"; do
+    read -r u id g day time <<<"$f"
+    act="$act${act:+,}\"$id\":{\"user\":\"$u\",\"ulid\":\"$id\",\"gameId\":$g,\"gameTitle\":\"Game $g\",\"lastPlayed\":\"$day $time\",\"lastSeen\":\"$day $time\",\"fetchedAtMs\":$now}"
+  done
+  printf '{"version":1,"owner":"%s","followingFetchedAtMs":%s,"following":[%s],"total":5,"activity":{%s},"seen":{},"stackOpenedAtMs":%s}' \
+    "$1" "$now" '{"user":"Alice","ulid":"01ALICE"},{"user":"Bob","ulid":"01BOB"},{"user":"Carol","ulid":"01CAROL"},{"user":"Dave","ulid":"01DAVE"},{"user":"Erin","ulid":"01ERIN"}' \
+    "$act" "$now" > "$d/friends.json"
+  adb shell mkdir -p /sdcard/Xross/data/ra
+  adb push "$d/friends.json" /sdcard/Xross/data/ra/friends.json >/dev/null
+}
+chrono() { home; all_games "$(collections_above)"; key KEYCODE_DPAD_CENTER; pause 1; }
+
+if command -v sqlite3 >/dev/null && adb shell run-as "$PKG" true 2>/dev/null; then
+  telemetry_row
+  expect "Theme pack (Compact) · The focused game's unlocks and points" "Achievement badge follows the pack (Compact), last in Components"
+  key KEYCODE_DPAD_CENTER
+  await_flat '"telemetryMode":"OFF"' && ok "Off is saved as display.components.telemetryMode" || bad "telemetryMode OFF not saved"
+  expect "Off · No RetroAchievements badge on games" "Off says what it does"
+
+  # Offline, the fake account, Chrono Trigger's saved progress and friends on it.
+  adb shell am force-stop "$PKG"
+  adb shell cmd connectivity airplane-mode enable
+  link_fake_account
+  seed_progress || bad "no Chrono Trigger in the library to seed"
+  seed_card_friends SmokeUser
+  adb logcat -c
+  start_app
+  chrono
+  [ -z "$(card_desc)" ] && ! pill_shown && ok "Off: a recognized game shows neither the pill nor the card" || bad "Off draws: '$(card_desc)'"
+  shot telemetry-off
+  telemetry_row
+  key KEYCODE_DPAD_CENTER
+  await_flat '"telemetryMode":"COMPACT_PILL"' && ok "Compact is saved" || bad "telemetryMode COMPACT_PILL not saved"
+  chrono
+  for _ in $(seq 10); do pill_shown && break; pause 0.5; done
+  pill_shown && [ -z "$(card_desc)" ] && ok "Compact: today's pill, from the saved progress" || { bad "no compact pill"; show "$(screen)"; }
+  shot telemetry-compact
+  telemetry_row
+  key KEYCODE_DPAD_CENTER
+  await_flat '"telemetryMode":"RICH_CARD"' && ok "Rich card is saved" || bad "telemetryMode RICH_CARD not saved"
+  expect "Rich card · Newest unlocks and friends who played it" "Rich card says what it shows"
+  chrono
+  await_card
+  [ "$(card_desc)" = "RetroAchievements: 2/8 · 10/40 pts" ] && ok "the rich card draws the saved progress" || { bad "card: '$(card_desc)'"; show "$(screen)"; }
+  expect_line "SNES" "the card carries the platform pill"
+  pause 1.5
+  [ -z "$(strip_desc)" ] && ok "offline (the game's fetch failed): the card has no friend strip" || bad "offline strip: '$(strip_desc)'"
+  [ -z "$(ra_log)" ] && ok "focusing the game fetched no friends" || bad "friends fetched on focus: $(ra_log)"
+  shot telemetry-rich-offline
+  key KEYCODE_DPAD_DOWN
+  pause 2
+  [ -z "$(card_desc)" ] && ok "an unrecognized game (EarthBound) lets the card go" || bad "EarthBound shows: '$(card_desc)'"
+  key KEYCODE_DPAD_UP
+  await_card && ok "back on Chrono Trigger, the card returns" || bad "no card back on Chrono Trigger"
+  # Inside a folder Up doesn't reach the avatar: a tap on it opens the HUD, Back closes it.
+  ab=$(xml | grep -oE 'content-desc="SmokeUser"[^>]*bounds="\[[0-9]+,[0-9]+\]\[[0-9]+,[0-9]+\]' | grep -oE '\[[0-9]+,[0-9]+\]\[[0-9]+,[0-9]+\]$' | head -1)
+  read -r x1 y1 x2 y2 <<<"$(tr '[],' '   ' <<<"${ab:-[0,0][0,0]}")"
+  adb shell input tap $(( (x1 + x2) / 2 )) $(( (y1 + y2) / 2 )); pause 1
+  [ -n "$ab" ] && [ -z "$(card_desc)" ] && ok "the avatar's HUD covers the card" || bad "card under the HUD (avatar at '$ab'): '$(card_desc)'"
+  key KEYCODE_BACK
+  await_card && ok "closing the HUD gives the card back" || bad "no card after the HUD closed"
+  category 5
+  pause 1.5
+  [ -z "$(card_desc)" ] && ok "apps get no card" || bad "an app shows: '$(card_desc)'"
+
+  # Online with the .env account (debug builds with secrets): the fetch works, the strip shows.
+  adb shell am force-stop "$PKG"
+  adb shell cmd connectivity airplane-mode disable
+  unlink_fake_account
+  start_app
+  user=$(ra_user)
+  if [ -n "$user" ]; then
+    adb shell am force-stop "$PKG"
+    seed_card_friends "$user"
+    adb logcat -c
+    start_app
+    chrono
+    await_card
+    for _ in $(seq 12); do [ -n "$(strip_desc)" ] && break; pause 0.5; done
+    [ "$(strip_desc)" = "Recently played by Alice, Bob, Carol and 1 more" ] \
+      && ok "online: RECENTLY PLAYED lists the three most recent friends on this game, then +1" || { bad "strip: '$(strip_desc)'"; show "$(screen)"; }
+    expect_line "+1" "the strip ends with +1"
+    shot telemetry-rich-strip
+    [ -z "$(ra_log | grep -v '^friends=5 activity=0 calls=0')" ] && ok "nothing fetched friends on focus ($(ra_log | tr '\n' ' '))" || bad "friends fetched: $(ra_log)"
+    # Airplane mode: the next fetch fails, the card stays without its strip.
+    adb shell am force-stop "$PKG"
+    adb shell cmd connectivity airplane-mode enable
+    start_app
+    chrono
+    await_card
+    pause 1.5
+    [ -n "$(card_desc)" ] && [ -z "$(strip_desc)" ] && ok "airplane mode: the card without the strip" || bad "airplane: card '$(card_desc)', strip '$(strip_desc)'"
+    adb shell cmd connectivity airplane-mode disable
+  else
+    skip 4 "the friend strip needs the debug build's .env RetroAchievements account"
+  fi
+  adb shell rm -rf /sdcard/Xross/data/ra/friends.json /sdcard/Xross/data/ra/matches.json /sdcard/Xross/data/ra/game-228.json /sdcard/Xross/media/ra/badges
+  telemetry_row
+  key KEYCODE_DPAD_CENTER
+  await_flat '"telemetryMode":null' && ok "Theme pack hands the badge back (null)" || bad "telemetryMode not reset"
+else
+  skip 22 "the telemetry checks need sqlite3 on the host and a debuggable build"
+fi
 
 suite_end

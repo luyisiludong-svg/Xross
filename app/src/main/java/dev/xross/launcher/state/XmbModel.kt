@@ -122,6 +122,20 @@ sealed interface Command {
      * theme color, quick profile and wave settings.
      */
     data object ResetThemeDefaults : Command
+    /** Settings ▸ Theme ▸ Components (2b.7a): sets status bar [side]'s slots; null hands it back to the pack. */
+    data class SetStatusSlots(val side: dev.xross.launcher.theme.pack.StatusSide, val slots: List<dev.xross.launcher.theme.pack.StatusSlot>?) : Command
+    /** One move, removal or addition of [slot] in status bar [side]; the slot list reopens on it. */
+    data class EditStatusSlot(val side: dev.xross.launcher.theme.pack.StatusSide, val slot: dev.xross.launcher.theme.pack.StatusSlot, val edit: SlotEdit) : Command
+    /** The next choice of a Components [row] over the pack (the pack's own first). */
+    data class CycleComponent(val row: dev.xross.launcher.theme.pack.ComponentRow) : Command
+    /** Sets [row] to [value] (null hands it back to the theme pack). */
+    data class SetComponent(val row: dev.xross.launcher.theme.pack.ComponentRow, val value: String?) : Command
+    /** Settings ▸ Theme ▸ Components ▸ Title badges (2b.7b): sets the badges in order; null hands them back to the pack. */
+    data class SetBadgePills(val pills: List<dev.xross.launcher.theme.pack.BadgePill>?) : Command
+    /** Turns one title badge on (at the end) or off; the list reopens on it. */
+    data class ToggleBadgePill(val pill: dev.xross.launcher.theme.pack.BadgePill) : Command
+    /** Opens the focused row's Options list (rows whose choices live there). */
+    data object ShowOptions : Command
     data object CycleSlideshowInterval : Command
     data object ToggleResumeMusicAfterGames : Command
     data object ToggleVideoLoop : Command
@@ -213,6 +227,8 @@ data class XmbNode(
     val action: NodeAction = NodeAction.None,
     /** Options (△ / Y) menu for this item; empty when it has none. */
     val menu: List<MenuOption> = emptyList(),
+    /** A game's `badgePills` (2b.7b), drawn beside its title while it is focused; empty for anything else. */
+    val pills: List<TitlePill> = emptyList(),
 )
 
 @Immutable

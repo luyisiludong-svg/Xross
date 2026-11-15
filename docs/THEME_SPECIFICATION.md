@@ -1,9 +1,9 @@
 # Theme 2.0 specification
 
-The reference for Xross's look and sound as implemented today (through Phase 2b.4): the theme pack
+The reference for Xross's look and sound as implemented today (through Phase 2b.7a): the theme pack
 format, surfaces, sounds, the background shader and Wave settings, wallpapers, focus frames, icon
-masks, particles, filters, variants, overrides, context rules, color layers, quick profiles and the
-single-file `.xtheme` archive.
+masks, particles, filters, variants, overrides, context rules, color layers, quick profiles, the
+single-file `.xtheme` archive and the `components` block (status-bar slots, §15).
 
 Related documents: the [user and storage guide](USER_GUIDE.md) (where `Xross/themes/` lives and
 the rest of the `Xross/` folder), [`Roadmap.md`](../Roadmap.md) §4.3 and Appendix A (the design
@@ -28,6 +28,7 @@ studio proposal).
 12. [`.xtheme` archives](#12-xtheme-archives)
 13. [Focused game background](#13-focused-game-background)
 14. [The Default pack and icon tooling](#14-the-default-pack-and-icon-tooling)
+15. [Components](#15-components)
 
 ## 1. Where a look comes from
 
@@ -44,6 +45,8 @@ Layers stack in this order, lowest to highest:
   chosen surface style or any effect picked in Settings ▸ Theme wins over all of them, §11).
 * **Colors:** Default pack → pack → variant → overrides → rules → your theme color → quick profile
   → circadian curve and battery tint → game art (§10).
+* **Components** (the status bar and the other widgets): Default pack → pack → variant → your
+  Settings ▸ Theme ▸ Components, nothing else (§15).
 
 ## 2. Pack layout
 
@@ -248,6 +251,7 @@ from Settings ▸ Theme; editing the file by hand works too and is picked up on 
 | `themeVariant` | a variant id; empty = the pack's base look | Theme variant (§9) |
 | `surfaceStyle` | a built-in or pack surface id; empty = the pack's | Surface style (§4) |
 | `customWallpaper` | a `content://` URI or a file path; empty = the pack's wallpaper | Xross wallpaper (§8) |
+| `components` | `statusBarLeft`, `statusBarRight`, `batteryMode`, `clockFormat`, …; `null` = the pack's | Settings ▸ Theme ▸ Components (§15) |
 | `effects` | `shaderPreset`, `backgroundFilter`, `uiFilter`, `focusFrameStyle`, `foregroundParticles`, `iconMask`, `bootIntro`, `launchCurtain`; empty = the pack's | Effect rows (§11) |
 | `quickProfile` | `NONE`, `OLED_TRUE_BLACK`, `Y2K_CYBER_PASTEL`, `MONOCHROME_EINK` | Quick profile (§10) |
 | `adaptiveGamePalette`, `circadianCurve`, `batteryTint` | `true` / `false`; `null` follows the pack | Adaptive colors / Circadian curve / Battery alert tint (§10) |
@@ -493,7 +497,7 @@ category and rule.
 kept across restarts) or goes back to the theme's (Reset to theme).
 
 *Reset to theme defaults* clears every pick that overrides the pack's look (those eight, the surface
-style, the three color layers and the Xross wallpaper) and keeps the pack, its variant, the theme
+style, the three color layers, the Xross wallpaper and the Components picks, §15) and keeps the pack, its variant, the theme
 color, the quick profile and the wave settings.
 
 ## 12. `.xtheme` archives
@@ -535,3 +539,150 @@ edit the map and run:
 python3 tools/icons/svg_icons.py list assets/icons /tmp/icons   # previews every icon id
 python3 tools/icons/svg_icons.py build assets/icons tools/icons/icon_map.txt app/src/main/assets/themes/default/icons
 ```
+
+## 15. Components
+
+The `components` block (Phase 2b.7) says which widgets the menu draws and how. It is read from
+the pack's base and its variants only: a category or system override or a rule can't change it
+(a `components` key there is reported and ignored), so the status bar never rearranges itself per
+category or battery level.
+
+```json
+"components": {
+  "statusBarLeft": ["LOGO", "WIFI"],
+  "statusBarRight": ["CLOCK", "BATTERY", "AVATAR"],
+  "batteryMode": "TIME_REMAINING",
+  "clockFormat": "EMMMdm",
+  "logo": "art/logo.svg",
+  "volumeAlways": false,
+  "miniPlayerMode": "STATUS_TICKER",
+  "glyphOverride": "AUTO",
+  "badgePills": ["SYSTEM", "YEAR", "RA_PROGRESS"]
+}
+```
+
+### Status bar
+
+* `statusBarLeft` draws at the top-left, `statusBarRight` at the top-right, each in array order.
+  Slots: `LOGO`, `WIFI`, `VOLUME`, `BATTERY`, `CLOCK`, `AVATAR`. A slot listed twice, or in both
+  clusters, is drawn once (on the left); these are reported.
+* `AVATAR` (the profile avatar and its mini-HUD) is always the rightmost slot of `statusBarRight`:
+  listed anywhere else, it is moved there and reported. Left out, there is no avatar in the bar and
+  Up at the top of a list stays in the list; the User Card is still in Settings ▸ Accounts.
+* While the HUD is open it fades every slot of the right cluster; the left cluster never fades.
+* The left cluster gets the width the right one leaves and is clipped before the category bar.
+* `LOGO`: the pack's `logo`, an SVG, PNG or WebP from the pack root (the same checks as icons),
+  drawn at the status text's cap height and its own aspect. An SVG is read like an icon (white,
+  black fills dropped); a PNG or WebP keeps its colors. No logo: the slot is skipped.
+* `WIFI`: Wi-Fi with its strength in 4 levels, mobile data, ethernet or offline. Xross reads the
+  signal strength only (the `ACCESS_WIFI_STATE` permission), never the network's name.
+* `VOLUME`: the system media volume in 4 levels, a muted glyph at 0, shown for 3 s after it
+  changes; `"volumeAlways": true` keeps it shown.
+* `BATTERY`: `batteryMode` is `CAPSULE_ICON` (the gauge), `PERCENTAGE`, `BOTH` (the default) or
+  `TIME_REMAINING`: "1 h 20 m to full" while charging when Android has an estimate, else exactly
+  like `PERCENTAGE`. There is no time-to-empty: Android doesn't estimate it.
+* `CLOCK`: `clockFormat` is a date-format skeleton of the letters `y M d E H h m a`; other letters
+  are dropped and reported. The date letters are written in the locale's order, then two spaces
+  and the time: `H` for 24 h, `h` for 12 h, `m` alone for the phone's own 12/24 h setting. Empty is
+  the default clock (`Md` and the phone's time). Examples: `MdHm` → "11/14  21:41", `EMMMdm` →
+  "Sat, Nov 14  9:41 PM", `m` → "9:41 PM".
+
+The Default pack: left `[]`, right `[CLOCK, BATTERY, AVATAR]`, `BOTH`, empty clock format.
+
+### Mini player, glyphs and title badges
+
+* `miniPlayerMode`: `FLOATING_CARD` (the default: art, title, artist and play/pause in the
+  lower-right corner), `STATUS_TICKER` (one line in the status bar's right cluster, just before
+  the avatar: the play/pause glyph and "Title — Artist" scrolling in a fixed width, faded with the
+  other slots while the avatar's HUD is open) or `OFF` (neither; music and its notification carry
+  on). Card and ticker share their rules: hidden while a screen or panel covers the menu, and 30 s
+  after a pause. Tap opens the audio controls, long press plays or pauses.
+* `glyphOverride`: the button labels in every hint (the menu, Search, Options, Achievements, the
+  avatar HUD). `AUTO` (the default) draws the detected controller's own; `PLAYSTATION` ✕ ○ △ □;
+  `XBOX` A B X Y, each in its color (A green, B red, X blue, Y yellow); `NINTENDO` A B X Y in
+  Nintendo places (south reads B); `MONOCHROME_MINIMAL` an outlined triangle pointing at the
+  button's place on the pad (▽ ▷ △ ◁), in outlined pills. The shapes (✕ ○ △ □ and the
+  triangles) are drawn, not set in the font, so all four are the same size and centered. Labels
+  only: which button confirms still follows the controller and Settings ▸ Controls.
+* `badgePills`: pills after the focused game's title, on the line under it, in array order, each
+  skipped when its data is missing: `SYSTEM` (the platform's short tag, e.g. DC, GC), `YEAR` (from
+  the release date, full or partial), `DEVELOPER` (cut at 18 characters), `PLAYTIME` ("1h 15m";
+  none before the first minute), `RA_PROGRESS` ("🏆 18/42", recognized games with achievements
+  only). Listing `SYSTEM` or `PLAYTIME` takes that part out of the line under the title. Pills use
+  the surface (`effects.surfaceStyle`) at a small radius, with figures in the `mono` font; games
+  only, never apps or media. The Default pack lists none.
+
+### Social stack
+
+* `topLeftCluster`: `EMPTY` (the default: nothing) or `SOCIAL_STACK`: the RetroAchievements users
+  the linked account follows, after the left slots in the same clipped row. Up to 4 overlapping
+  round avatars, the most recently active on top, with an amber badge counting the friends whose
+  latest game or last activity changed since the stack was last opened (`1`–`9`, then `9+`).
+* Opening it shows a panel below it: FOLLOWING, then each friend with their latest game and
+  console and how long ago they were active ("12 min", "3 h", "online"), newest first; friends new
+  since the last opening carry a dot. It opens with Left from the avatar's HUD (or Up at the top of
+  a list when the bar has no avatar), or a tap; Up and Down move, Right goes to the avatar, Back
+  or a tap outside closes. Opening it clears the badge.
+* It collapses (draws nothing, takes no room) when no account is linked, when offline with nothing
+  saved, or when the account follows nobody. Offline with a saved list, it shows that list.
+* Friend data is fetched only on a refresh (Games ▸ RetroAchievements' Refresh, the profile's own
+  refresh, opening the stack when it is stale, turning it on), never on focus or a timer; see
+  [RETROACHIEVEMENTS_API.md](RETROACHIEVEMENTS_API.md).
+
+### Achievement badge
+
+* `telemetryMode`: the focused game's RetroAchievements progress in the bottom corner, above the
+  button hints and below the mini player's floating card (with the ticker or no mini player it
+  has the corner). `OFF` draws nothing; `COMPACT_PILL` (the default) the trophy, unlocked/total
+  and points in a pill; `RICH_CARD` a card on the surface (`effects.surfaceStyle`) with the game's
+  box art cropped square, a platform pill (and ★ MASTERED at 100%), six badges (the newest
+  unlocks first, then locked ones greyed in the game's order), a progress bar with
+  "18/42 · 120/400 pts" (no points part for a set worth none) and a `RECENTLY PLAYED` strip: up to
+  three followed users whose latest game this is, most recent first, then "+N".
+* Recognized games with achievements only; nothing for other games, apps and media, unlinked, or
+  under an overlay or the avatar's HUD. The card keeps its game for a moment (dimmed) while the
+  focus moves, then crossfades to the next game's or fades out.
+* Offline (the friend refresh or this game's own fetch failed), the card draws from the saved
+  progress without the strip; no friend on the game, no strip. The card never fetches: it shows
+  the progress the focus already loads (as the pill always did) and the saved friends. Turning
+  the rich card on fetches the friends once when none are saved; the profile's refresh then
+  keeps them current, as for the social stack.
+
+### `components` reference
+
+Names ignore case, `-` and spaces; a bad value is reported and falls back to the layer below,
+leaving the rest of the block.
+
+| Key (aliases) | Values (aliases) |
+| --- | --- |
+| `topLeftCluster` (`topLeft`) | `EMPTY` (`NONE`), `SOCIAL_STACK` (`SOCIAL`, `FRIENDS`) |
+| `statusBarLeft`, `statusBarRight` | arrays of `LOGO`, `WIFI` (`WI-FI`, `NETWORK`), `VOLUME`, `BATTERY`, `CLOCK` (`TIME`), `AVATAR` (`PROFILE`) |
+| `batteryMode` (`battery`, `batteryDisplay`) | `CAPSULE_ICON` (`ICON`, `CAPSULE`, `GAUGE`), `PERCENTAGE` (`PERCENT`), `BOTH`, `TIME_REMAINING` (`TIME`, `TIME_TO_FULL`) |
+| `clockFormat` (`clock`) | a skeleton of `y M d E H h m a`; empty = the default clock |
+| `telemetryMode` (`telemetry`) | `OFF` (`NONE`), `COMPACT_PILL` (`PILL`, `COMPACT`), `RICH_CARD` (`CARD`, `RICH`) |
+| `miniPlayerMode` (`miniPlayer`) | `FLOATING_CARD` (`CARD`), `STATUS_TICKER` (`TICKER`), `OFF` (`NONE`) |
+| `glyphOverride` (`glyphs`, `glyphStyle`) | `AUTO`, `PLAYSTATION` (`PS`), `XBOX`, `NINTENDO` (`SWITCH`), `MONOCHROME_MINIMAL` (`MONOCHROME`, `MINIMAL`) |
+| `badgePills` | array of `SYSTEM` (`PLATFORM`), `YEAR` (`RELEASE_YEAR`), `DEVELOPER`, `PLAYTIME`, `RA_PROGRESS` (`RA`, `ACHIEVEMENTS`) |
+| `logo` | an SVG, PNG or WebP in the pack, or `none` |
+| `volumeAlways` | `true` / `false` |
+
+### Settings ▸ Theme ▸ Components
+
+* *Status bar left* and *Status bar right*: Confirm (or Options) opens the slot list: Theme pack
+  (the pack's slots), each slot with Move left, Move right, Move to the other side and Remove, and
+  Add. After a move the list reopens on that slot, so it can be moved again at once. The avatar
+  can only be removed or added back, always last.
+* *Battery display*: Theme pack, Icon, Percentage, Icon and percentage, Time to full.
+* *Clock format*: Theme pack, 24 h (`MdHm`), 12 h (`Mdhma`), Date and time (`EMMMdm`), Time only
+  (`m`).
+* *Mini player*: Theme pack, Floating card, Status bar ticker, Off.
+* *Button glyphs*: Theme pack, Controller's own, Shapes (✕ ○ △ □), Colored letters (A B X Y),
+  Letters, A on the right, Minimal outlines.
+* *Title badges*: Confirm (or Options) opens the list: Theme pack, None, then System, Release year,
+  Developer, Playtime and Achievements; Confirm turns a badge on (at the end) or off, and the list
+  stays open on it.
+* *Top-left*: Theme pack, Social stack, Empty.
+* *Achievement badge* (last): Theme pack, Off, Compact, Rich card.
+
+Saved as `display.components` in `settings.json` (`null` follows the pack); Reset to theme
+defaults clears it, quick profiles never touch it.

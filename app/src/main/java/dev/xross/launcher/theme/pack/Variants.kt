@@ -25,6 +25,8 @@ data class ResolvedVariant(
     val gains: Map<SoundRole, Float>? = null,
     /** `audio.bgmFile` (2b.5c), checked ([BgmRef.NONE] turns the pack's music off). */
     val bgm: BgmRef? = null,
+    /** `components` (2b.7a), checked. */
+    val components: ComponentsPatch? = null,
 )
 
 /** A checked `categoryOverrides` / `systemOverrides` entry (its tile aspect lives in [ThemeLayout]). */
@@ -176,6 +178,7 @@ internal fun resolveVariants(
             cosmetics = Cosmetics.of("variants.$id", v.effects, problems),
             gains = resolveGainPatch("variants.$id", v.audio, problems),
             bgm = BgmRef.of("variants.$id", v.audio?.bgmFile, problems),
+            components = ComponentsPatch.of("variants.$id", v.components, problems),
         )
     }
     return out

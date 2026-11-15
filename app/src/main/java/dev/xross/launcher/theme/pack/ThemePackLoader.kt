@@ -116,6 +116,10 @@ data class LoadedTheme(
     val cosmetics: Cosmetics = Cosmetics.NONE,
     /** Text of each CUSTOM UI filter (`postprocess.agsl`, 2b.4f) the pack names, by pack-relative path. */
     val customUiFilters: Map<String, String> = emptyMap(),
+    /** The `components` block (2b.7a): the Default pack's, then this pack's base. Variants add theirs ([components]). */
+    val components: ComponentsPatch = ComponentsPatch.NONE,
+    /** Each logo file the base or a variant names (`components.logo`), by pack-relative path (unreadable ones absent). */
+    val logos: Map<String, ThemeIcon> = emptyMap(),
     /** What the pack declared but couldn't be used (bad font, unreadable icon), for Settings. */
     val problems: List<String> = emptyList(),
     /** Bumped on every load, so a hot reload of the same files still counts as a change. */
@@ -167,6 +171,14 @@ data class LoadedTheme(
 
     /** The loop [ref] names (the look's music); null for none or a file that wasn't found. */
     fun bgmTrack(ref: BgmRef): BgmTrack? = ref.path?.let(bgmFiles::get)?.let(::BgmTrack)
+
+    /**
+     * The components with variant [variantId] (blank or unknown: the base) over the pack's own,
+     * then the user's [user] layer: the whole `components` cascade (Default pack, pack, variant,
+     * `display.components`). Category and system overrides and rules never change it.
+     */
+    fun components(variantId: String = "", user: ComponentOverrides = ComponentOverrides.NONE): ResolvedComponents =
+        components.over(variant(variantId)?.components).over(user.patch.takeUnless { user.empty }).resolve()
 
     /** Some rule depends on the battery. */
     val usesBattery: Boolean get() = rules.any { it.battery != null }
@@ -397,6 +409,13 @@ class ThemePackLoader(
             .mapNotNull { it.uiFilter }.filter { it.filter == UiFilter.CUSTOM }.map { it.path }.distinct()
         val customUiFilters = LinkedHashMap<String, String>()
         for (path in uiFilterPaths) packText(pack, "UI filter", path, problems)?.let { customUiFilters[path] = it }
+        // 2b.7a: the components block, over the Default pack's; logos are read like icons.
+        val components = (base?.components ?: ComponentsPatch.NONE).over(ComponentsPatch.of("theme", m.components, problems))
+        val logos = LinkedHashMap<String, ThemeIcon>()
+        for (path in (listOfNotNull(components.logo) + variants.mapNotNull { it.components?.logo }).filter { it.isNotEmpty() }.distinct()) {
+            val logo = logo(pack, path)
+            if (logo == null) problems += "Logo $path: not found in the pack, or not a readable SVG, PNG or WebP" else logos[path] = logo
+        }
 
         return LoadedTheme(
             info = pack,
@@ -427,6 +446,8 @@ class ThemePackLoader(
             bootVideo = bootVideo,
             cosmetics = cosmetics,
             customUiFilters = customUiFilters,
+            components = components,
+            logos = logos,
             problems = problems,
             revision = revisions.incrementAndGet(),
         )
@@ -487,6 +508,18 @@ class ThemePackLoader(
             if (icon != null) return icon
         }
         return null
+    }
+
+    /** `components.logo` at [path] from the pack root, through the same checks as icons (type, size, inside the pack). */
+    private fun logo(pack: ThemePackInfo, path: String): ThemeIcon? {
+        val ext = path.substringAfterLast('.', "").lowercase(Locale.ROOT)
+        if (ext !in ICON_TYPES) return null
+        return when (val s = pack.source) {
+            is PackSource.Builtin -> "${s.dir}/$path".takeIf { assetExists(it) }?.let { p ->
+                runCatching { assets.open(p).use { stream -> readIcon(ext, "logo") { stream.readBytes() } } }.getOrNull()
+            }
+            is PackSource.Folder -> inside(s.dir, path)?.takeIf { it.isFile }?.let { file -> readIcon(ext, "logo") { file.readBytes() } }
+        }
     }
 
     private fun readIcon(ext: String, id: String, bytes: () -> ByteArray): ThemeIcon? = try {

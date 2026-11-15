@@ -70,6 +70,11 @@ data class XrossSettings(
      * filter, focus frame, particles, app icon mask. Empty values follow the pack.
      */
     val effectOverrides: dev.xross.launcher.theme.pack.EffectOverrides = dev.xross.launcher.theme.pack.EffectOverrides.NONE,
+    /**
+     * Settings ▸ Theme ▸ Components picks over the pack's `components` (2b.7a): status-bar slots,
+     * battery display, clock format. Null values follow the pack.
+     */
+    val componentOverrides: dev.xross.launcher.theme.pack.ComponentOverrides = dev.xross.launcher.theme.pack.ComponentOverrides.NONE,
     /** [dev.xross.launcher.theme.QuickProfile] name (Settings ▸ Theme ▸ Quick profile); NONE = the theme's own look. */
     val quickProfile: String = dev.xross.launcher.theme.QuickProfile.NONE.name,
     /** Colors from the focused game's art; null follows the pack's `effects.adaptiveGamePalette` (on by default). */

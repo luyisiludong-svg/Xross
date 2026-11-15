@@ -63,10 +63,13 @@ object SvgIcon {
                     if (builder == null) {
                         if (tag != "svg") return null
                         val box = viewBox(attrs) ?: return null
+                        // 48 dp on the longest side, keeping the viewBox's aspect (square icons stay
+                        // 48 × 48; a wide `components.logo` stays wide).
+                        val aspect = if (box[2] > 0f && box[3] > 0f) box[2] / box[3] else 1f
                         builder = ImageVector.Builder(
                             name = name,
-                            defaultWidth = 48.dp,
-                            defaultHeight = 48.dp,
+                            defaultWidth = if (aspect >= 1f) 48.dp else 48.dp * aspect,
+                            defaultHeight = if (aspect >= 1f) 48.dp / aspect else 48.dp,
                             viewportWidth = box[2],
                             viewportHeight = box[3],
                         )

@@ -39,6 +39,8 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -98,7 +100,12 @@ import dev.xross.launcher.media.ThumbKind
 import dev.xross.launcher.state.MediaOverlay
 import dev.xross.launcher.state.MediaOverlayController
 import dev.xross.launcher.input.NavAction
+import dev.xross.launcher.model.Face
 import dev.xross.launcher.model.GlyphKey
+import dev.xross.launcher.model.GlyphStyle
+import dev.xross.launcher.theme.pack.MiniPlayerMode
+import dev.xross.launcher.state.BadgePills
+import dev.xross.launcher.state.TitlePill
 import dev.xross.launcher.state.NodeAction
 import dev.xross.launcher.state.NodeIcon
 import dev.xross.launcher.state.RemapSession
@@ -217,6 +224,9 @@ fun XmbScreen(
     onCloseAchievements: () -> Unit = {},
     onDetailsAchievements: () -> Unit = {},
     onCloseAvatarHud: () -> Unit = {},
+    /** Touch: the social stack (2b.7c) opens or closes its panel; a tap outside the panel closes it. */
+    onSocialTap: () -> Unit = {},
+    onCloseSocialPanel: () -> Unit = {},
     onAvatarRowTap: (Int) -> Unit = {},
     onAvatarSlider: (Int, Float) -> Unit = { _, _ -> },
     onCloseAvatarStyle: () -> Unit = {},
@@ -347,6 +357,13 @@ fun XmbScreen(
         // The avatar's glow pulses only while the menu is in front and in use: it holds still while
         // the screen rests, under overlays, and when the activity is stopped.
         val avatarGlowRuns = started && !idle && menuShown
+        val components = LocalComponents.current
+        // The mini player (card or ticker) hides while anything takes over the screen or the corner.
+        val miniCovered = state.overlay != null || state.search != null || state.nameEntry != null ||
+            state.details != null || state.optionsMenu != null || state.info != null ||
+            state.profileCard != null || state.remap != null || state.booting != null ||
+            state.waveEditor != null || state.achievements != null ||
+            state.avatarEditor != null || state.raHub != null
 
         Box(Modifier.fillMaxSize().graphicsLayer { alpha = menuAlpha }) {
         CategoryBar(
@@ -365,9 +382,9 @@ fun XmbScreen(
 
         // (The "now playing" line that used to sit top-left is the floating MiniPlayerCard below.)
 
-        // Status bar: clock and battery, then the avatar at the far right. The avatar is drawn by
-        // AvatarHud over the room the bar keeps for it, and grows in place into the mini-HUD,
-        // which takes the clock's and battery's place while it is open.
+        // Status bar (2b.7a): the pack's left and right slot clusters, the avatar always the
+        // rightmost slot. The avatar is drawn by AvatarHud over the room the bar keeps for it, and
+        // grows in place into the mini-HUD, which takes the right cluster's place while it is open.
         val hudExpansion = animateFloatAsState(
             if (state.avatarFocused) 1f else 0f,
             if (motion.instant) snap() else tween(260, easing = FastOutSlowInEasing),
@@ -377,13 +394,42 @@ fun XmbScreen(
         val statusEnd = (m.width * 0.025f).dp()
         StatusBar(
             source = statusBar,
+            components = components,
             textSize = m.statusSize.sp(),
-            modifier = Modifier.align(Alignment.TopEnd).padding(top = statusTop, end = statusEnd),
+            modifier = Modifier.align(Alignment.TopStart).fillMaxWidth().padding(top = statusTop, start = statusEnd, end = statusEnd),
             contentAlpha = { 1f - hudExpansion.value },
             trailingWidth = StatusAvatarBox + 10.dp,
             trailingHeight = StatusAvatarBox,
+            // The left cluster clips before it reaches the category bar's focused icon.
+            leftMaxHeight = (m.barY - m.categoryIcon * m.categoryFocusScale / 2 - m.s * 0.04f).coerceAtLeast(0f).dp(),
+            ticker = state.nowPlaying.takeIf { components.miniPlayer == MiniPlayerMode.STATUS_TICKER },
+            tickerCovered = miniCovered,
+            onTickerTap = onMiniPlayerTap,
+            onTickerLongPress = onMiniPlayerLongPress,
+            social = if (dev.xross.launcher.state.SocialStack.shows(components, state.friends)) state.friends.friends else emptyList(),
+            socialBadge = state.friends.badge,
+            socialOpen = state.socialPanel != null,
+            socialGlow = state.settings.avatarStyle.glowEnabled,
+            onSocialTap = onSocialTap,
         )
-        if (state.avatarFocused) {
+        state.socialPanel?.let { panel ->
+            // A tap anywhere outside the panel closes it.
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .clickable(remember { MutableInteractionSource() }, indication = null, onClick = onCloseSocialPanel),
+            )
+            SocialPanel(
+                friends = state.friends,
+                state = panel,
+                textSize = m.subtitleSize.sp(),
+                width = (m.s * 0.82f).coerceAtMost(m.width * 0.62f).dp(),
+                nowMs = remember(panel, state.friends) { System.currentTimeMillis() },
+                backGlyph = if (state.confirm == ConfirmLayout.EAST) state.glyphs.south else state.glyphs.east,
+                modifier = Modifier.align(Alignment.TopStart).padding(top = statusTop + StatusAvatarBox + 6.dp, start = statusEnd),
+            )
+        }
+        if (state.avatarFocused && components.avatar) {
             // A tap anywhere outside the expanded HUD collapses it.
             Box(
                 Modifier
@@ -391,7 +437,7 @@ fun XmbScreen(
                     .clickable(remember { MutableInteractionSource() }, indication = null, onClick = onCloseAvatarHud),
             )
         }
-        AvatarHud(
+        if (components.avatar) AvatarHud(
             expansion = { hudExpansion.value },
             expanded = state.avatarFocused,
             profile = state.profile,
@@ -419,13 +465,8 @@ fun XmbScreen(
         }
 
         // Floating mini player: at the root, outside the menu's fade, so it rides across every
-        // category; anything that takes over the screen or the corner covers it.
-        val miniCovered = state.overlay != null || state.search != null || state.nameEntry != null ||
-            state.details != null || state.optionsMenu != null || state.info != null ||
-            state.profileCard != null || state.remap != null || state.booting != null ||
-            state.waveEditor != null || state.achievements != null ||
-            state.avatarEditor != null || state.raHub != null
-        // The mini player stacks above the focused game's RetroAchievements badge, which sits
+        // category (miniCovered, above, hides it and the ticker alike).
+        // The mini player stacks above the focused game's RetroAchievements badge or card, which sits
         // just above the hints; each takes no room while hidden, so the other settles into place.
         Column(
             horizontalAlignment = Alignment.End,
@@ -442,10 +483,18 @@ fun XmbScreen(
                 loadThumb = loadThumb,
                 onClick = onMiniPlayerTap,
                 onLongClick = onMiniPlayerLongPress,
+                mode = components.miniPlayer,
             )
-            GameTelemetryBadge(
-                telemetry = state.focusedTelemetry.takeIf { !miniCovered && !state.avatarFocused },
+            // telemetryMode (2b.7d): nothing, the compact pill or the rich card; the mini player's
+            // ticker and Off modes leave the corner to it.
+            GameTelemetryCorner(
+                mode = components.telemetry,
+                telemetry = state.focusedTelemetry,
+                hidden = miniCovered || state.avatarFocused,
+                friends = state.friends,
                 size = m.subtitleSize.sp(),
+                loadArt = loadArt,
+                loadBadge = loadBadge,
             )
         }
 
@@ -832,6 +881,10 @@ private fun ItemColumn(
                 loadThumb = loadThumb,
                 loadArt = loadArt,
                 modifier = rowModifier,
+                pills = if (i != state.focusedIndex || node.pills.isEmpty()) emptyList() else {
+                    val telemetry = state.focusedTelemetry
+                    remember(node.pills, telemetry) { BadgePills.shown(node.pills, telemetry) }
+                },
             )
         }
     }
@@ -865,6 +918,8 @@ private fun ItemRow(
     loadThumb: suspend (ThumbKind, Long, Int) -> ImageBitmap?,
     loadArt: suspend (String, List<ArtKind>, Int) -> ImageBitmap?,
     modifier: Modifier,
+    /** The title badges drawn (2b.7b): the focused game's [XmbNode.pills], empty on every other row. */
+    pills: List<TitlePill> = emptyList(),
 ) {
     val density = LocalDensity.current
     val titleSp = with(density) { m.titleSize.toSp() }
@@ -927,11 +982,10 @@ private fun ItemRow(
                 modifier = Modifier.padding(top = with(density) { (m.s * 0.008f).toDp() }),
             )
             node.subtitle?.let {
-                Text(
-                    it,
-                    style = shadowed(subtitleSp, color = TextDim),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+                SubtitleLine(
+                    text = it,
+                    pills = pills,
+                    size = subtitleSp,
                     modifier = Modifier
                         .padding(top = with(density) { (m.s * 0.01f).toDp() })
                         .fadeAlpha { focus() },
@@ -939,6 +993,54 @@ private fun ItemRow(
             }
         }
     }
+}
+
+/**
+ * The line under a title: [pills] (2b.7b, the focused game's badges) then [text], ellipsized in
+ * the width the pills leave. The line is as tall as its text whether or not pills are drawn, so
+ * focusing a game with badges never moves its title.
+ */
+@Composable
+private fun SubtitleLine(text: String, pills: List<TitlePill>, size: TextUnit, modifier: Modifier) {
+    Layout(
+        modifier = modifier,
+        content = {
+            Text(text, style = shadowed(size, color = TextDim), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (pills.isNotEmpty()) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                    modifier = Modifier.clipToBounds(),
+                ) {
+                    for (p in pills) TitlePillChip(p, size * 0.8f)
+                }
+            }
+        },
+    ) { measurables, constraints ->
+        val pillRow = measurables.getOrNull(1)?.measure(Constraints(maxWidth = constraints.maxWidth))
+        val used = pillRow?.let { it.width + if (text.isEmpty()) 0 else 8.dp.roundToPx() } ?: 0
+        val line = measurables[0].measure(Constraints(maxWidth = (constraints.maxWidth - used).coerceAtLeast(0)))
+        val width = (used + line.width).coerceAtMost(constraints.maxWidth)
+        layout(width, line.height) {
+            pillRow?.place(0, (line.height - pillRow.height) / 2)
+            line.place(used, 0)
+        }
+    }
+}
+
+/** One title badge: the pack's surface at a small radius; figures in the `mono` font. */
+@Composable
+private fun TitlePillChip(pill: TitlePill, size: TextUnit) {
+    val family = if (pill.mono) ThemeTypography.mono ?: ThemeTypography.family else ThemeTypography.family
+    Text(
+        pill.text,
+        style = shadowed(size, weight = FontWeight.Medium).copy(fontFamily = family, shadow = null),
+        maxLines = 1,
+        softWrap = false,
+        modifier = Modifier
+            .xrossSurface(RoundedCornerShape(4.dp), strength = 0.85f, borderAlpha = 0.5f, borderScale = 2f / 3f)
+            .padding(horizontal = 6.dp, vertical = 1.dp),
+    )
 }
 
 /**
@@ -1470,20 +1572,52 @@ private fun ButtonHints(state: XmbUiState, size: TextUnit, modifier: Modifier) {
     }
 }
 
+/**
+ * One button hint: [glyph] on a pill, then [label]. A face label of the set on screen
+ * ([LocalGlyphs]) takes the set's style: an Xbox letter its color, a minimal glyph an outlined pill.
+ */
 @Composable
 internal fun Hint(glyph: String, label: String, size: TextUnit) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            glyph,
-            style = shadowed(size, weight = FontWeight.Bold),
-            modifier = Modifier
-                .clip(RoundedCornerShape(50))
-                .background(Pill)
-                .padding(horizontal = 7.dp, vertical = 2.dp),
+    val glyphs = LocalGlyphs.current
+    val face = if (glyphs.style == GlyphStyle.PLAIN) null else glyphs.faceOf(glyph)
+    val shape = RoundedCornerShape(50)
+    val pill = Modifier
+        .clip(shape)
+        .then(
+            if (face != null && glyphs.style == GlyphStyle.OUTLINE) Modifier.border(1.dp, Color(0xCCFFFFFF), shape)
+            else Modifier.background(Pill),
         )
+    val color = face?.let { glyphColor(glyphs.style, it) } ?: TextBright
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        val drawn = FaceShape.of(glyph)
+        if (drawn != null) {
+            // Shapes are drawn, not set in the font, so all four are the same size and centered;
+            // the pill keeps the height a text label's would have.
+            val line = with(LocalDensity.current) { (size * 1.17f).toDp() }
+            Box(contentAlignment = Alignment.Center, modifier = pill.padding(horizontal = 5.dp, vertical = 2.dp).size(line)) {
+                FaceShapeGlyph(drawn, glyph, line * 0.72f, color)
+            }
+        } else {
+            Text(
+                glyph,
+                style = shadowed(size, color = color, weight = FontWeight.Bold),
+                modifier = pill.padding(horizontal = 7.dp, vertical = 2.dp),
+            )
+        }
         Spacer(Modifier.width(6.dp))
         Text(label, style = shadowed(size), maxLines = 1, softWrap = false)
     }
+}
+
+/** The color of [face]'s label in [style]: the Xbox letters' own colors, white otherwise. */
+internal fun glyphColor(style: GlyphStyle, face: Face): Color = when (style) {
+    GlyphStyle.XBOX_COLORS -> when (face) {
+        Face.SOUTH -> Color(0xFF6CC24A) // A
+        Face.EAST -> Color(0xFFF2554B) // B
+        Face.WEST -> Color(0xFF4A9BF5) // X
+        Face.NORTH -> Color(0xFFF5C82E) // Y
+    }
+    else -> TextBright
 }
 
 @Composable

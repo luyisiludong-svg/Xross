@@ -1,8 +1,10 @@
 package dev.xross.launcher.theme
 
 import androidx.compose.runtime.Immutable
+import dev.xross.launcher.theme.pack.ComponentOverrides
 import dev.xross.launcher.theme.pack.EffectOverrides
 import dev.xross.launcher.theme.pack.LoadedTheme
+import dev.xross.launcher.theme.pack.ResolvedComponents
 import dev.xross.launcher.theme.pack.Surface
 import dev.xross.launcher.theme.pack.ThemeLayout
 import dev.xross.launcher.theme.pack.ThemeLook
@@ -30,6 +32,8 @@ data class LookInputs(
     val circadian: Boolean? = null,
     val batteryTint: Boolean? = null,
     val adaptive: Boolean? = null,
+    /** The user's Settings ▸ Theme ▸ Components picks (2b.7a). */
+    val components: ComponentOverrides = ComponentOverrides.NONE,
 )
 
 /** What the menu draws with, from [ThemeLookResolver]. The palette layers live in [ColorPipeline]. */
@@ -41,6 +45,8 @@ data class ResolvedLook(
     val surface: Surface,
     val switches: ColorSwitches,
     val profile: QuickProfile,
+    /** The widgets drawn (2b.7a): Default pack, pack, variant, then the user's; never per category. */
+    val components: ResolvedComponents = ResolvedComponents.DEFAULT,
 ) {
     /** The profile draws one still frame and snaps instead of animating (E-Ink). */
     val stillMotion: Boolean get() = profile.stillMotion
@@ -52,7 +58,9 @@ data class ResolvedLook(
  *     override → context rules (battery, clock) ([LoadedTheme.look]);
  *  2. the user's Settings ▸ Theme picks: effects, surface style, colour layers;
  *  3. the quick profile, over everything it lists in [QuickProfile.fields] and nothing else;
- *  4. the layout the look and profile give.
+ *  4. the layout the look and profile give;
+ *  5. the components ([LoadedTheme.components]): Default pack, pack, variant, the user's
+ *     `display.components`. Category and system overrides, rules and quick profiles don't touch it.
  * Pure: no Android or Compose state, so the whole cascade is unit tested.
  */
 object ThemeLookResolver {
@@ -66,6 +74,7 @@ object ThemeLookResolver {
             surface = surface,
             switches = ColorSwitches.resolve(look.flags, i.circadian, i.batteryTint, i.adaptive, p),
             profile = p,
+            components = i.pack.components(i.variant, i.components),
         )
     }
 }

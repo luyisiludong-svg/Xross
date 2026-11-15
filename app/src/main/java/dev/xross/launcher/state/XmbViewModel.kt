@@ -88,9 +88,9 @@ data class XmbUiState(
     val focusedIndex: Int = 0,
     val toast: String? = null,
     val remap: RemapSession? = null,
-    /** The detected controller: picks the AUTO confirm side (and, for now, the glyphs). */
+    /** The detected controller: picks the AUTO confirm side (and, under `glyphOverride: AUTO`, the glyphs). */
     val family: ControllerFamily = ControllerFamily.KEYBOARD,
-    /** Face-button labels every hint draws (the detected family's; 2b.7b lets a theme pick another set). */
+    /** Face-button labels every hint draws: the detected family's, or the set `glyphOverride` picks (2b.7b). */
     val glyphs: GlyphSet = ControllerFamily.KEYBOARD.glyphs,
     val confirm: ConfirmLayout = ConfirmLayout.SOUTH,
     val waveEnabled: Boolean = true,
@@ -127,6 +127,10 @@ data class XmbUiState(
     val profileCard: ProfileCardState? = null,
     /** The status bar avatar has the focus (Up from the top of a category). */
     val avatarFocused: Boolean = false,
+    /** Followed users (2b.7c), for the social stack. */
+    val friends: dev.xross.launcher.profile.FriendsState = dev.xross.launcher.profile.FriendsState.Unlinked,
+    /** The social stack's panel while it is open. */
+    val socialPanel: SocialPanelState? = null,
     /** Current settings (the wave uniforms and the Wave settings panel read them). */
     val settings: dev.xross.launcher.data.XrossSettings = dev.xross.launcher.data.XrossSettings(),
     /** Settings ▸ Theme ▸ Wave settings while it is open. */
@@ -199,8 +203,23 @@ class XmbViewModel(
     private val batteryMonitor = BatteryMonitor(context).also { it.start() }
     val battery: StateFlow<dev.xross.launcher.theme.BatteryLevel?> get() = batteryMonitor.level
 
-    /** The status bar's clock and battery, collected by the bar alone (Assessment #9). */
-    val statusBar: StateFlow<StatusBarState> = StatusBarSource(context, viewModelScope, batteryMonitor.level).state
+    /**
+     * The widgets drawn (2b.7a): the active pack's `components`, its variant's, then the user's
+     * `display.components`. The same cascade as [dev.xross.launcher.theme.ThemeLookResolver]'s,
+     * here for the status bar's sources and the avatar's place in navigation.
+     */
+    val components: StateFlow<dev.xross.launcher.theme.pack.ResolvedComponents> =
+        combine(container.themes.active, container.settings.settings) { pack, st -> pack.components(st.themeVariant, st.componentOverrides) }
+            .stateIn(
+                viewModelScope, SharingStarted.Eagerly,
+                container.settings.current.let { st -> container.themes.active.value.components(st.themeVariant, st.componentOverrides) },
+            )
+
+    /** The status bar's clock, battery, network and volume, collected by the bar alone (Assessment #9). */
+    val statusBar: StateFlow<StatusBarState> = StatusBarSource(
+        context, viewModelScope, batteryMonitor.level,
+        needs = components.map { it.needs }.stateIn(viewModelScope, SharingStarted.Eagerly, components.value.needs),
+    ).state
 
     /** For tests: a battery reading, as the system would broadcast it. */
     internal fun reportBattery(level: dev.xross.launcher.theme.BatteryLevel?) = batteryMonitor.report(level)
@@ -220,6 +239,7 @@ class XmbViewModel(
         scope = viewModelScope,
         profiles = container.profiles,
         achievements = container.achievements,
+        friends = container.friends,
         credentials = container.credentials,
         games = container.games,
         sounds = container.sounds,
@@ -230,6 +250,7 @@ class XmbViewModel(
             override fun promptLink(user: String, linked: Boolean) = emit(UiEffect.PromptRetroAchievements(user, linked))
             override fun moveCategory(delta: Int) = this@XmbViewModel.moveCategory(delta)
             override fun dismissMenus() = transient.update { it.copy(optionsMenu = null, details = null) }
+            override fun components() = this@XmbViewModel.components.value
         },
     )
 
@@ -333,7 +354,10 @@ class XmbViewModel(
         Settled(tr, st, ov, pr, r)
     }
 
-    val state: StateFlow<XmbUiState> = combine(tree, nav, settled, live) { t, n, sd, lv ->
+    /** The components' `glyphOverride` (2b.7b): which labels the hints draw. */
+    private val glyphMode = components.map { it.glyphs }.distinctUntilChanged()
+
+    val state: StateFlow<XmbUiState> = combine(tree, nav, settled, live, glyphMode) { t, n, sd, lv, glyphs ->
         val tr = sd.transient
         val settings = sd.settings
         val view = resolve(t, n, lv)
@@ -348,7 +372,7 @@ class XmbViewModel(
             toast = tr.toast,
             remap = tr.remap,
             family = tr.family,
-            glyphs = tr.family.glyphs,
+            glyphs = glyphs.glyphsFor(tr.family),
             confirm = settings.confirmLayout.resolve(tr.family),
             waveEnabled = settings.waveEnabled,
             waveSpeed = settings.waveSpeed,
@@ -369,6 +393,8 @@ class XmbViewModel(
             profile = sd.profile,
             profileCard = sd.ra.profileCard,
             avatarFocused = sd.ra.avatarFocused,
+            friends = sd.ra.friends,
+            socialPanel = sd.ra.socialPanel,
             settings = settings,
             waveEditor = tr.waveEditor,
             achievements = sd.ra.achievements,
@@ -378,7 +404,10 @@ class XmbViewModel(
             telemetry = sd.ra.telemetry,
             gamePlatforms = t.platformByGame,
         )
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, XmbUiState(coldBoot = coldBoot, bootPending = coldBoot))
+    }.stateIn(
+        viewModelScope, SharingStarted.Eagerly,
+        XmbUiState(coldBoot = coldBoot, bootPending = coldBoot, glyphs = components.value.glyphs.glyphsFor(ControllerFamily.KEYBOARD)),
+    )
 
     private data class ListView(
         val breadcrumb: List<String>,
@@ -476,7 +505,14 @@ class XmbViewModel(
         val ui = current()
         when (action) {
             // Up from the top of a category root climbs into the status bar: the avatar opens its mini-HUD.
-            NavAction.UP -> if (ui.depth == 0 && ui.focusedIndex == 0) ra.focusAvatar() else moveCursor(-1)
+            // Without an AVATAR slot (2b.7a) there is nothing to climb into; the User Card stays in Settings ▸ Accounts.
+            // Without one, the social stack (2b.7c) is what Up climbs into, when it shows.
+            NavAction.UP -> when {
+                ui.depth != 0 || ui.focusedIndex != 0 -> moveCursor(-1)
+                components.value.avatar -> ra.focusAvatar()
+                ra.socialStackShown() -> ra.openSocialPanel()
+                else -> moveCursor(-1)
+            }
             NavAction.DOWN -> moveCursor(+1)
             NavAction.LEFT -> if (ui.depth > 0) back() else moveCategory(-1)
             NavAction.RIGHT -> when {
@@ -531,6 +567,10 @@ class XmbViewModel(
     fun closeAvatarHud() = ra.closeAvatarHud()
 
     fun onAvatarTapped() = ra.onAvatarTapped()
+
+    fun onSocialStackTapped() = ra.onSocialStackTapped()
+
+    fun closeSocialPanel() = ra.closeSocialPanel()
 
     fun closeProfileCard() = ra.closeProfileCard()
 
@@ -635,6 +675,69 @@ class XmbViewModel(
     }
 
     /** Settings ▸ Theme (2b.4f): [slot] set to [value] over the pack, with a note where it can't show. */
+    /**
+     * Settings ▸ Theme ▸ Components (2b.7a): one move of a status-bar slot. The sides it changes
+     * are written as the user's (the other keeps following the pack), and the slot list reopens
+     * on the slot so it can be moved again.
+     */
+    private fun editStatusSlot(command: Command.EditStatusSlot) {
+        val pack = container.themes.active.value
+        val before = settingsStore.current
+        val shown = pack.components(before.themeVariant, before.componentOverrides)
+        val (left, right) = ComponentMenus.edit(shown, command.side, command.slot, command.edit) ?: return refuse()
+        settingsStore.update { st ->
+            var o = st.componentOverrides
+            if (left != shown.left) o = o.withSlots(dev.xross.launcher.theme.pack.StatusSide.LEFT, left)
+            if (right != shown.right) o = o.withSlots(dev.xross.launcher.theme.pack.StatusSide.RIGHT, right)
+            st.copy(componentOverrides = o)
+        }
+        val after = settingsStore.current
+        val now = pack.components(after.themeVariant, after.componentOverrides)
+        val userSet = (if (command.side == dev.xross.launcher.theme.pack.StatusSide.LEFT) after.componentOverrides.statusBarLeft else after.componentOverrides.statusBarRight) != null
+        val options = ComponentMenus.options(command.side, now, pack.components(after.themeVariant), userSet, now.logo in pack.logos)
+        val title = if (command.side == dev.xross.launcher.theme.pack.StatusSide.LEFT) "Status bar left" else "Status bar right"
+        transient.update { it.copy(optionsMenu = ComponentMenus.reopen(title, options, command.slot, command.edit)) }
+        if (command.edit == SlotEdit.REMOVE && command.slot == dev.xross.launcher.theme.pack.StatusSlot.AVATAR) {
+            toast("Avatar removed from the status bar · the User Card stays in Settings ▸ Accounts")
+        }
+    }
+
+    /**
+     * Settings ▸ Theme ▸ Components ▸ Title badges (2b.7b): the user's badges set to [pills] (null:
+     * the pack's), and the list reopened on the badge just turned on or off ([toggled]).
+     */
+    private fun editBadgePills(pills: List<dev.xross.launcher.theme.pack.BadgePill>?, toggled: dev.xross.launcher.theme.pack.BadgePill?) {
+        settingsStore.update { it.copy(componentOverrides = it.componentOverrides.withPills(pills)) }
+        val after = settingsStore.current
+        val pack = container.themes.active.value
+        val now = pack.components(after.themeVariant, after.componentOverrides)
+        val options = ComponentMenus.pillOptions(now.pills, pack.components(after.themeVariant).pills, after.componentOverrides.badgePills != null)
+        transient.update { it.copy(optionsMenu = ComponentMenus.reopenPills("Title badges", options, toggled, pills?.isEmpty() == true)) }
+    }
+
+    private fun setComponent(row: dev.xross.launcher.theme.pack.ComponentRow, value: String?) {
+        settingsStore.update { it.copy(componentOverrides = it.componentOverrides.with(row, value)) }
+        // Settled from what was just saved: [components] catches up a moment later.
+        val c = settingsStore.current.let { st -> container.themes.active.value.components(st.themeVariant, st.componentOverrides) }
+        val note = when (row) {
+            dev.xross.launcher.theme.pack.ComponentRow.BATTERY -> "Battery isn't in the status bar".takeIf { !c.shows(dev.xross.launcher.theme.pack.StatusSlot.BATTERY) }
+            dev.xross.launcher.theme.pack.ComponentRow.CLOCK -> "Clock isn't in the status bar".takeIf { !c.shows(dev.xross.launcher.theme.pack.StatusSlot.CLOCK) }
+            dev.xross.launcher.theme.pack.ComponentRow.TOP_LEFT ->
+                "Link a RetroAchievements account to see who you follow".takeIf {
+                    c.topLeft == dev.xross.launcher.theme.pack.TopLeftClusterMode.SOCIAL_STACK && !container.credentials.current.retroAchievementsLinked
+                }
+            dev.xross.launcher.theme.pack.ComponentRow.TELEMETRY ->
+                "Link a RetroAchievements account to see your progress".takeIf {
+                    c.telemetry != dev.xross.launcher.theme.pack.TelemetryMode.OFF && !container.credentials.current.retroAchievementsLinked
+                }
+            dev.xross.launcher.theme.pack.ComponentRow.MINI_PLAYER, dev.xross.launcher.theme.pack.ComponentRow.GLYPHS -> null
+        }
+        note?.let { toast(it) }
+        if (row == dev.xross.launcher.theme.pack.ComponentRow.TOP_LEFT || row == dev.xross.launcher.theme.pack.ComponentRow.TELEMETRY) {
+            ra.onFriendsWanted(components = c)
+        }
+    }
+
     private fun setEffect(slot: dev.xross.launcher.theme.pack.EffectSlot, value: String) {
         settingsStore.update { it.copy(effectOverrides = it.effectOverrides.with(slot, value)) }
         val v = settingsStore.current.effectOverrides[slot]
@@ -2265,6 +2368,13 @@ class XmbViewModel(
                 toast(if (container.themes.active.value.hasWallpaper) "Using the theme's wallpaper" else "Xross wallpaper removed")
             }
             Command.PickXrossWallpaper -> emit(UiEffect.PickWallpaperImage)
+            is Command.SetStatusSlots -> settingsStore.update { it.copy(componentOverrides = it.componentOverrides.withSlots(command.side, command.slots)) }
+            is Command.EditStatusSlot -> editStatusSlot(command)
+            is Command.CycleComponent -> setComponent(command.row, command.row.next(settingsStore.current.componentOverrides[command.row]))
+            is Command.SetComponent -> setComponent(command.row, command.value)
+            is Command.SetBadgePills -> editBadgePills(command.pills, null)
+            is Command.ToggleBadgePill -> editBadgePills(ComponentMenus.togglePill(components.value.pills, command.pill), command.pill)
+            Command.ShowOptions -> current().focused?.let(::openOptions) ?: refuse()
             is Command.CycleEffect -> setEffect(command.slot, command.slot.next(settingsStore.current.effectOverrides[command.slot]))
             is Command.SetEffect -> setEffect(command.slot, command.value)
             Command.ResetThemeDefaults -> {
@@ -2473,6 +2583,9 @@ class XmbViewModel(
                             packMusic = active.hasBgm,
                             packBootVideo = active.bootVideo != null,
                             looks = (listOf("") + active.variants.map { v -> v.id }).associateWith { v -> active.look(v) },
+                            components = (listOf("") + active.variants.map { v -> v.id })
+                                .associateWith { v -> active.components.over(active.variant(v)?.components) },
+                            logos = active.logos.keys,
                         ),
                     )
                 }

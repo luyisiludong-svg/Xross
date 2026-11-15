@@ -8,7 +8,8 @@ shippable. Branches: `refactor/2b7-prep` from `main` once 2b.5 is merged, merged
 
 **Order note.** The Roadmap recommended 2b.7 before 2b.5; 2b.5 went first (see
 [`PHASE_2B5_PROMPTS.md`](PHASE_2B5_PROMPTS.md)). Nothing here touches audio. The one neighbour is
-the status-bar `VOLUME` slot (2b.7a), which reads the 2b.5b mixer but never writes it. Merge 2b.5
+the status-bar `VOLUME` slot (2b.7a), which shows the system media volume (not the 2b.5b mixer,
+see Decisions) and never writes it. Merge 2b.5
 into `main` before cutting either 2b.7 branch: the prep slice moves code out of `XmbViewModel` and
 `XmbScreen`, which 2b.5 also changed.
 
@@ -23,7 +24,23 @@ it doesn't block 2b.7.
 
 ---
 
+## Progress
+
+| Slice | State |
+|---|---|
+| 2b.7-prep | ✅ merged into `main` (`f67f532`): `RaController`, `StatusBarState` / `StatusBarSource`, `model/GlyphKey` and `GlyphSet` |
+| 2b.7a | ✅ on `feat/theme-2b7` (2026-11-14): 793 unit tests, `lintDebug` 0 errors, theme suite **197/197** on the API 37 emulator (new 48-check "Components (2b.7a)" section), `display-matrix.sh` 12/12 default and stress, `palette-perf.sh` 0.15–0.75% janky ([STATUS §3.29](STATUS.md)). **A55** (2026-11-14): 48/48, volume keys and mute, a real "25 m to full", display matrix 24/24 ([STATUS §3.33](STATUS.md)). **Open:** Wi-Fi bars walking away from the router, an Android 9 image. As built: [2b.7a notes](#as-built-2b7a-2026-11-14) |
+| 2b.7b | ✅ on `feat/theme-2b7` (2026-11-14): 805 unit tests, `lintDebug` 0 errors, theme suite **235/235** on the API 37 emulator (new 38-check "Components (2b.7b)" section), `palette-perf.sh` 0.15–0.74% janky with badges ([STATUS §3.30](STATUS.md)). **A55** (2026-11-14): 33/38, the 5 mini-player fails are the suite expecting its seeded songs (re-done by hand with the user's music), badges 0.12–0.13% janky ([STATUS §3.33](STATUS.md)). **Open:** a real pad, touch on the ticker, `RA_PROGRESS` with an account, `display-matrix.sh` with the ticker and badges. As built: [2b.7b notes](#as-built-2b7b-2026-11-14) |
+| 2b.7c | ✅ on `feat/theme-2b7` (2026-11-14): friend API verified live ([RETROACHIEVEMENTS_API.md](RETROACHIEVEMENTS_API.md)), 825 unit tests, `lintDebug` 0 errors, theme suite **259/259** on the API 37 emulator (new 24-check "Components (2b.7c)" section) ([STATUS §3.31](STATUS.md)). **A55** (2026-11-14): 24/24, no refresh in 10 minutes at rest ([STATUS §3.33](STATUS.md)). **Open:** real followed users (the test account follows nobody). As built: [2b.7c notes](#as-built-2b7c-2026-11-14) |
+| 2b.7d | ✅ on `feat/theme-2b7` (2026-11-14): 836 unit tests, `lintDebug` 0 errors, theme suite **281/281** on the API 37 emulator (new 22-check "Components (2b.7d)" section, the friend strip live with the `.env` account), `palette-perf.sh` card median 0.45% vs pill 0.30% janky over 11 pairs ([STATUS §3.32](STATUS.md)). **A55** (2026-11-14): 22/22, card median 0.31% vs pill 0.38% janky over 5 interleaved pairs at 120 Hz ([STATUS §3.33](STATUS.md)). **Open:** portrait, real followed users. As built: [2b.7d notes](#as-built-2b7d-2026-11-14) |
+| 2b.7e | ⬜ next |
+
+---
+
 ## What exists today (2026-11-13)
+
+The table below is the starting point before the prep slice; what 2b.7a changed is in its
+[as-built notes](#as-built-2b7a-2026-11-14).
 
 | Piece | Where | State |
 |---|---|---|
@@ -177,6 +194,79 @@ in every cluster order.
   `WifiManager` path, if one is available.
 ```
 
+### As built (2b.7a, 2026-11-14)
+
+Where things live:
+
+| Piece | Where |
+|---|---|
+| Enums, the `components` block, its schema, `ComponentsPatch` (one layer), `ResolvedComponents` (settled, with `needs`), `ComponentOverrides` (`display.components`), `ComponentRow` (one-value Settings rows), `ClockFormat` | `theme/pack/Components.kt` |
+| Pack layers | `LoadedTheme.components` (Default pack over the pack's base), `ResolvedVariant.components`, `LoadedTheme.components(variant, user)`; logos in `LoadedTheme.logos` |
+| Resolution | `ThemeLookResolver` → `ResolvedLook.components`, provided as `LocalComponents` (MainActivity); the same cascade as `XmbViewModel.components` for the bar's sources and the avatar's place in navigation |
+| Bar state | `state/StatusBarState.kt` (`StatusBarState`, `StatusBarSource` with `StatusNeeds`, `StatusLevels`), `state/StatusMonitors.kt` (`NetworkMonitor`, `MediaVolumeMonitor`) |
+| Drawing | `ui/StatusBar.kt`: one `Layout` with the left and right clusters, a composable per slot |
+| Settings | `state/ComponentMenus.kt` (the slot list and its edits), `MenuTree` folder `DISPLAY_COMPONENTS`, commands `SetStatusSlots`, `EditStatusSlot`, `CycleComponent`, `SetComponent`, `ShowOptions` |
+
+Decisions made while building (the spec above is unchanged otherwise):
+
+- **Clock skeletons:** the date letters (`y M d E`) go through the locale's best pattern, then two
+  spaces (the gap the bar always had), then the time: `H` 24 h, `h` 12 h, and `m` without either
+  follows the phone's 12/24 h setting. Skeletons are formatted with ICU
+  (`android.text.format.DateFormat` prints `y` as two digits). Presets: 24 h `MdHm`, 12 h `Mdhma`,
+  Date and time `EMMMdm`, Time only `m`.
+- **`VOLUME`** counts every change of the volume index, not only a change of its 4 levels (14 → 12
+  of 15 is level 3 both times), and listens to `android.media.VOLUME_CHANGED_ACTION` as well as the
+  `Settings.System` observer: Android persists the volume up to a second after the key, the
+  broadcast arrives within milliseconds.
+- **`WIFI`:** `RSSI_CHANGED_ACTION` is read on every API (its `EXTRA_NEW_RSSI` beats an older
+  reading); on 29+ `signalStrength`, then the connection's RSSI, mapped with the AOSP
+  `calculateSignalLevel` formula. `ACCESS_WIFI_STATE` comes with `uses-feature
+  android.hardware.wifi required=false`, so Ethernet-only TVs aren't filtered out.
+- **Aliases** (case, `-` and spaces ignored): see the `components` reference in
+  [THEME_SPECIFICATION.md §15](THEME_SPECIFICATION.md#15-components).
+- **Logos:** SVG logos are read like icons (white, black fills dropped) and now keep their
+  `viewBox` aspect (`SvgIcon` used to make every vector 48 × 48 dp; the Default icons are all
+  square, so they are unchanged). PNG and WebP logos keep their colors.
+- **Slot editor:** Confirm on Status bar left / right opens the Options list (Theme pack, each
+  slot with Move left / Move right / Move to the other side / Remove, Add). After an edit the list
+  reopens on that slot, with its moves open after a left or right move. Edits write only the
+  side(s) they change; the other keeps following the pack.
+- **Avatar left out:** Up at the top of a list stays in the list (the view model checks
+  `components.avatar`); a toast says the User Card is in Settings ▸ Accounts.
+- **Accessibility and logs:** the glyph slots are described ("Wi-Fi, 3 of 3 bars", "Mobile data",
+  "Offline", "Volume 2 of 3", "Volume muted", "Battery gauge, 2 of 3 bars", "Theme logo"); debug and
+  profiling builds log one `XrossStatus` line per change of what the slots show (never per minute).
+
+Device-test lessons (in `test-theme.sh` and `display-matrix.sh` now):
+
+- Only the focused row shows its subtitle: move onto a row before expecting its summary.
+- Compose leaves alpha-0 nodes out of the accessibility tree, so while the HUD is open the right
+  cluster reads as empty; the check compares the clock's and battery's bounds before and after.
+- With Android's volume panel up, uiautomator doesn't list a slot that just appeared, so the
+  `VOLUME` checks read `XrossStatus`. On the emulator a volume key while the panel is hidden only
+  raises the panel, keys sent milliseconds apart both count as that, and
+  `cmd media_session volume --set` doesn't move the speaker volume: press the keys one at a time.
+- A resting-frames window that crosses a minute boundary sees the clock's one frame; the suite's
+  `rest_frames` waits past the boundary first.
+- `harness.sh`'s `top()` climbs onto the avatar and back down: with the avatar left out it lands
+  on the second row, so go to the top with `press DPAD_UP 25` instead.
+- The emulator's `dumpsys battery set ac 1` charger gives no charge-time estimate (−1), so only
+  the percentage fallback of `TIME_REMAINING` was seen on a device.
+
+### Notes for 2b.7b–e (from 2b.7a)
+
+- Every `components` key is already decoded, cascaded, saved under `display.components` and
+  carried in `ResolvedComponents` (`miniPlayer`, `glyphs`, `pills`, `telemetry`, `topLeft`); a
+  slice only has to draw it and add its Settings row. One-value rows extend `ComponentRow` and
+  `ComponentOverrides.get` / `with`; `badgePills` (multi-select) needs its own Options list, like
+  the slot editor.
+- 2b.7b's `STATUS_TICKER` belongs in the right cluster before the avatar, inside the row that
+  `contentAlpha` fades (`ResolvedComponents.rightOfText`).
+- 2b.7c's social stack goes after the left slots in the same clipped row of `StatusBar`'s
+  `Layout`; it gets the width the right cluster leaves, and `leftMaxHeight` keeps it above the
+  category bar.
+- A new watched source belongs in `StatusNeeds` so it only runs while something shows it.
+
 ---
 
 ## Slice 2b.7b: Mini player modes, glyph override, badge pills
@@ -214,6 +304,35 @@ in every cluster order.
 - Pills on a scraped game, an unscraped one and an app; Games navigation janky frames unchanged
   (`palette-perf.sh`).
 ```
+
+### As built (2b.7b, 2026-11-14)
+
+| Piece | Where |
+|---|---|
+| Glyph sets and styles (`Face`, `GlyphStyle`, `XBOX_COLORED`, `MINIMAL`) | `model/GlyphSet.kt` |
+| `glyphOverride` × detected family | `state/Glyphs.kt` (`GlyphOverrideMode.glyphsFor`); `XmbViewModel.state` combines the components' mode, so `state.glyphs` follows it |
+| Drawing a styled label | `ui/XmbScreen.kt` `Hint` reads `LocalGlyphs` (provided in MainActivity): a face label of an Xbox set takes its color, of the minimal set an outlined pill. The 43 hint call sites are unchanged |
+| Mini-player placement | `state/MiniPlayerLine.kt` (`spot`, `shows`, `tickerText`); the ticker is `MiniPlayerTicker` in `ui/MiniPlayerCard.kt`, drawn by `StatusBar` at the end of the faded right row |
+| Badge pills | `state/BadgePills.kt` (`TitlePill`, year parsing, developer cut, playtime); `MenuTree.gameNode` fills `XmbNode.pills`; `ItemColumn` hands the focused row its pills with `RA_PROGRESS` filled from `focusedTelemetry`; `SubtitleLine` draws them |
+| Settings | `ComponentRow.MINI_PLAYER` / `GLYPHS`; Title badges is an Options list (`ComponentMenus.pillOptions`, `togglePill`, `reopenPills`; commands `SetBadgePills`, `ToggleBadgePill`) |
+
+Decisions made while building:
+
+- **`MONOCHROME_MINIMAL`** is an outlined triangle pointing at the button's place on the pad
+  (south ▽, east ▷, north △, west ◁) in an outlined pill: shapes, no letters, and plain text, so a
+  glyph quoted in a sentence ("press ▽ to try again") reads the same.
+- **`XBOX`** colors the letter (A green, B red, X blue, Y yellow) on the usual pill; `AUTO` with an
+  Xbox pad stays plain, as before.
+- **Ticker:** 10 status-text heights wide (about 20 characters), the text at 85% of the status
+  size, after the right cluster's text slots and before the avatar. It brings its own gap, so the
+  bar is unchanged while nothing plays; it hides under the same overlays as the card.
+- **Pills** sit on the line under the title, before the subtitle, never taller than that line, so
+  focusing a game with badges doesn't move its title. They are composed for the focused row only
+  and fade in with it. Listing `SYSTEM` also takes the platform tag (and an extension that only
+  repeats it) out of the subtitle, like `PLAYTIME` takes the playtime; `PLAYTIME` draws nothing
+  before the first minute ("Never played" leaves with the subtitle part).
+- **Title badges list:** Theme pack, None, then each badge; Confirm turns one on (at the end) or
+  off and the list reopens on it, so the order is the order they were turned on.
 
 ---
 
@@ -268,6 +387,70 @@ locally either way (requirement 3).
 - At rest with the stack shown: no network calls for 10 min (`XrossRa` log silent).
 ```
 
+### As built (2b.7c, 2026-11-14)
+
+The verify step's answers are in [RETROACHIEVEMENTS_API.md](RETROACHIEVEMENTS_API.md): the
+following list carries name, ULID, points and follow-back but **no avatar or activity**; a friend's
+latest game and when come from `API_GetUserSummary` with `g=1&a=1` (`RecentlyPlayed[0].LastPlayed`
+and `RichPresenceMsgDate`; `LastActivity` is dead); the limit is a burst of about 7 calls that
+refills at about 3 a second (429, no `Retry-After`). The project's test account follows nobody.
+
+| Piece | Where |
+|---|---|
+| `RaFollowed`, `RaFriendActivity`, `fetchFollowing`, `fetchFriendActivity`, parsers; `RaResult.Failed.busy` on a 429 | `profile/RetroAchievementsClient.kt` |
+| `FriendsRepository` (`Xross/data/ra/friends.json`, avatars in `media/avatars/friends/`), `FriendsState`, `Friend` | `profile/FriendsRepository.kt` |
+| `RaState.friends` / `socialPanel`, refresh triggers, the panel's input | `state/RaController.kt`; pure rules (`shows`, panel input, "how long ago") in `state/SocialStack.kt` |
+| Drawing | `ui/SocialStack.kt` (`SocialStackSlot` in `StatusBar`'s left row, `SocialPanel` over the menu) |
+| Settings | `ComponentRow.TOP_LEFT`, the **last** row of Components (so 2b.7a–b's rows keep their places) |
+
+Decisions made while building:
+
+- **`fetchFollowing(apiKey)`**, no user: the endpoint answers for the key's account. One call with
+  `c=200`; it keeps paging past a short page while `Total` says there are more (up to 4 pages).
+- **Caps adjusted to the measured limit:** 350 ms between call starts (not 250: the passing run was
+  really ~330 ms apart); on a 429, one retry after 2 s, then the refresh ends. Any other failure
+  ends it at once (offline, 20 failing calls would say nothing new).
+- **Which 20:** the 15 most recently active, then the others least recently fetched first, so a list
+  longer than 20 is covered over a few refreshes instead of never.
+- **Refresh triggers** (A.13: never focus, hover, composition or a timer): the hub's Primary action
+  (always), the profile's own refresh (only while something shows friends: `SOCIAL_STACK` now,
+  `RICH_CARD` and the hub sidebar later), opening the stack when stale (list > 6 h or no activity
+  in 30 min), turning Top-left to Social stack, and at startup only when nothing was ever fetched
+  (else a stack with no cache would collapse and could never be opened to fetch).
+- **`newActivity`:** per friend, game id and last activity at the time the stack was opened; a
+  friend it never showed counts if they were active after that. The first refresh of an account
+  records the current state (nothing is news), like unlock toasts.
+- **States:** at startup the cache is `Ready` (no fetch failed yet); a failed refresh is `Offline`
+  with the saved list; `Loading` keeps the list it had. The stack collapses when unlinked, or the
+  list is empty (offline without a cache, following nobody).
+- **Focus:** Left from the avatar's HUD crosses to the stack (Left from the HUD moved category
+  before, and still does without a stack); Up at the top opens it only when the bar has no avatar.
+  In the panel Up/Down move, Right goes back to the avatar, L1/R1 move category, Back or a tap
+  outside closes. Opening clears the badge; the panel still dots who was new.
+- **Logs:** debug and profiling builds log `XrossRa friends=N activity=M calls=K` (`failed` when it
+  ended early) once per refresh.
+
+Device-test lessons (in `test-theme.sh` now):
+
+- Debug builds link the developer's `.env` account at every start (`AppContainer`,
+  `DEBUG_RETROACHIEVEMENTS_*`), so a cleared app is never unlinked there. The suite seeds its own
+  account (`SmokeUser`, a fake key, run in airplane mode) by writing the credentials file with
+  `run-as`, and checks "unlinked" only on builds without those secrets; with them, it checks the
+  live refresh instead.
+- Settings writes are read back through `components`, a derived flow that lags the save by a
+  moment: code acting on a just-saved component must settle it from `settingsStore.current`.
+- `wm size` reports the natural (portrait) size; the UI dump's root bounds follow the rotation.
+- Never edit a suite while it runs: bash reads the script as it goes.
+
+### Notes for 2b.7d–e (from 2b.7c)
+
+- `RaState.friends` / `XmbUiState.friends` carry everything: `Friend.activity.gameId` is the
+  RetroAchievements game id for 2b.7d's `RECENTLY PLAYED` strip; `gameIconUrl` for the card.
+- Add `RICH_CARD` (2b.7d) and the hub sidebar (2b.7e) to `RaController.friendsWanted()`, so the
+  profile's refresh fetches friends for them too.
+- Only the 20 fetched friends have activity (and avatars); the rest of a long list are names and
+  points. The sidebar sorts by points, so it can list everyone; the latest game shows for those 20.
+
 ---
 
 ## Slice 2b.7d: Telemetry tiers
@@ -303,6 +486,65 @@ locally either way (requirement 3).
   not worse than `COMPACT_PILL` by more than noise (`palette-perf.sh`, ≥ 3 interleaved rounds; see
   the A55 GPU note in STATUS).
 ```
+
+### As built (2b.7d, 2026-11-14)
+
+| Piece | Where |
+|---|---|
+| `GameTelemetry` gains `uuid`, `raGameId`, `platform`, `slots` and `offline` | `state/RaHub.kt` (`GameTelemetry.of(…, platform, peeked, uuid)`) |
+| Card rules: the badge row, "18/42 · 120/400 pts", the friend strip, `shows` | `state/TelemetryCard.kt` (`TelemetryCard`, `TelemetrySlot`, `FriendStrip`) |
+| Telemetry loading (platform tag, offline flag), `RICH_CARD` in `friendsWanted()` | `state/RaController.kt` |
+| Drawing: `GameTelemetryCorner` (off / pill / card), the card, its badges and strip | `ui/TelemetryCard.kt`; the pill stays `GameTelemetryBadge` in `ui/GameTile.kt` |
+| Settings | `ComponentRow.TELEMETRY` ("Achievement badge"), the **last** Components row |
+
+Decisions made while building:
+
+- **"Never fetches"** means the card adds no request: it shows the telemetry the focus already
+  loads (the saved copy 250 ms after the cursor rests, a fresh one 450 ms later, as the pill
+  always did) and `FriendsState` as it stands. Friends are never fetched on focus; the rich card
+  joins the social stack in `friendsWanted()`, so turning it on fetches them once when none are
+  saved, and the profile's refresh keeps them current.
+- **Offline** is either the friend refresh failing (`FriendsState.Offline`) or this game's fetch
+  failing (the progress falls back to the saved copy, `GameTelemetry.offline`). The saved copy
+  read before the fetch isn't offline yet, so the strip doesn't blink while the fetch runs.
+  `FriendsState.Loading` keeps the strip it had.
+- **Badge row:** the six newest unlocks; with fewer, the next locked ones in the game's order fill
+  the row, greyed (saturation 0, 38% alpha); a set with fewer than six leaves empty cells, so the
+  card keeps its width.
+- **Icon:** the library's box art (box, grid, 3D box, screenshot) cropped square, like the
+  Achievements header; the trophy without art. The platform pill is the library's short tag
+  ("SNES"), RetroAchievements' console name when there is none.
+- **Strip:** friends whose `activity.gameId` is this game, most recently active first, three
+  avatars then "+N". Only the 20 fetched friends have activity, so only they can appear.
+- **Switching games:** the card keeps its game for 700 ms after the focus leaves it, dimmed to
+  55%, then crossfades to the next game's (`AnimatedContent` keyed by game) or fades out. Art and
+  badge loads are `produceState`s of the shown card, so leaving a game cancels them; telemetry
+  itself only arrives once the cursor rests, so scrolling never queues loads.
+- **Accessibility and the suite:** the card reads "RetroAchievements: 2/8 · 10/40 pts" (",
+  mastered"), the strip "Recently played by Alice, Bob, Carol and 1 more".
+- **Switching games, as measured:** the first version crossfaded with `AnimatedContent` and a
+  size transform and cost 2–3 janky frames a pass over the pill; a plain `Crossfade` keyed by game
+  (the last two games' telemetry kept for the outgoing card) brought it to about one.
+
+Device-test lessons (in `test-theme.sh` and `palette-perf.sh` now):
+
+- A recognized game needs no real ROM: `matches.json` (the game's uuid, size and modified time
+  from the database, `listVersion` 2) and `game-<id>.json` make `peek` and an offline `load` use
+  the saved copy; badges are read from `Xross/media/ra/badges/<name>.png`.
+- Inside a folder Up stops at the first row and never reaches the avatar: open the HUD with a tap
+  on the avatar (content-desc is the user name).
+- For the strip the game's fetch must succeed, so it needs the debug build's `.env` account
+  online; its `friends.json` must be owned by that user and fresh (`followingFetchedAtMs` and each
+  activity's `fetchedAtMs` now), or the profile's refresh replaces it with the real list.
+- `palette-perf.sh` with `PERF_TELEMETRY=1` seeds progress for its 12 games and alternates the
+  card and the pill; keys 450 ms apart reach the saved copy (250 ms) but never the fetch (700 ms).
+
+### Notes for 2b.7e (from 2b.7d)
+
+- Add the hub's sidebar to `RaController.friendsWanted()` (the rich card is there now).
+- `TelemetryCard.friendStrip` shows how to match friends to a game by `activity.gameId`; the
+  sidebar's Confirm on a friend needs the reverse (a RetroAchievements id to a library game),
+  which `matches.json` holds per uuid (not exposed by `AchievementsRepository` yet).
 
 ---
 
@@ -369,6 +611,12 @@ Defaults chosen in this doc (change before the slice starts if needed):
 - 2b.5d on the A55: cold-start time with and without a boot video, and the video at 120 Hz.
 - 2b.6 (haptics) can run before or after 2b.7; it touches input, not components.
 - The particle slowdown on the A55 during navigation (STATUS §3.28): 2b.7d's `RICH_CARD` adds
-  per-focus work, so measure it with the same interleaved rounds.
+  per-focus work (about one janky frame a pass on the emulator). Measured on the A55 on
+  2026-11-14 (5 interleaved pairs): card median 0.31% vs pill 0.38%; one card pass in the slow
+  GPU mode, no missed deadlines (STATUS §3.33). The slow mode itself is still unexplained.
 - `PHASE_2B3_PENDING_TESTS.md` items still open (idle CPU at rest 16–21% vs < 10%); the status
-  bar's new slots must not add wakeups at rest beyond the minute tick and real changes.
+  bar's new slots must not add wakeups at rest beyond the minute tick and real changes. Measured
+  in 2b.7a on the emulator: 3-second windows at rest draw 0 frames, a minute tick 1; idle CPU on
+  the A55 not re-measured.
+- 2b.7a on the A55: Wi-Fi bars walking away from the router and an Android 9 image for the
+  `WifiManager` path (volume keys, mute and a real `TIME_REMAINING` passed on 2026-11-14, §3.33).

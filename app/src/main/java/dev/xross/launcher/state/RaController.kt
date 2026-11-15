@@ -8,6 +8,8 @@ import dev.xross.launcher.data.GameRepository
 import dev.xross.launcher.input.NavAction
 import dev.xross.launcher.profile.AchievementsRepository
 import dev.xross.launcher.profile.AchievementsState
+import dev.xross.launcher.profile.FriendsRepository
+import dev.xross.launcher.profile.FriendsState
 import dev.xross.launcher.profile.ProfileRepository
 import dev.xross.launcher.profile.RaConsoles
 import dev.xross.launcher.profile.RaResult
@@ -40,6 +42,10 @@ data class RaState(
     val raHub: RaHubState? = null,
     /** RetroAchievements numbers of the focused game, for the badge in the bottom corner. */
     val telemetry: GameTelemetry? = null,
+    /** Followed users (2b.7c), for the social stack. */
+    val friends: FriendsState = FriendsState.Unlinked,
+    /** The social stack's panel while it is open (it "has the focus", like the avatar's HUD). */
+    val socialPanel: SocialPanelState? = null,
 )
 
 /**
@@ -53,6 +59,7 @@ class RaController(
     private val scope: CoroutineScope,
     private val profiles: ProfileRepository,
     private val achievements: AchievementsRepository,
+    private val friends: FriendsRepository,
     private val credentials: CredentialStore,
     private val games: GameRepository,
     private val sounds: UiSounds,
@@ -70,6 +77,8 @@ class RaController(
         fun moveCategory(delta: Int)
         /** A RetroAchievements screen opened over the menu: close the Options menu and Details under it. */
         fun dismissMenus()
+        /** The status bar as drawn now: whether the social stack and the avatar are in it (2b.7a, c). */
+        fun components(): dev.xross.launcher.theme.pack.ResolvedComponents
     }
 
     private val _state = MutableStateFlow(RaState())
@@ -78,12 +87,15 @@ class RaController(
     private var profileJob: Job? = null
     private var raHubJob: Job? = null
     private var achievementsJob: Job? = null
+    private var friendsJob: Job? = null
 
     /** The offline profile cache has been read (see [loadProfile]). */
     private var profileLoaded = false
 
     /** Starts the background work: unlock toasts and the telemetry of the game under [focusedGameId]. */
     fun watch(focusedGameId: Flow<Long?>) {
+        // Followed users: whatever FriendsRepository knows; it only fetches when asked to refresh.
+        scope.launch { friends.state.collect { f -> _state.update { it.copy(friends = f) } } }
         // Unlock toasts: new unlocks found by any profile refresh, one at a time.
         scope.launch {
             profiles.unlocks.collect { badges ->
@@ -102,13 +114,15 @@ class RaController(
                 delay(TELEMETRY_PEEK_MS)
                 val game = games.get(id) ?: return@collectLatest
                 if (RaConsoles.of(game.platformId) == null) return@collectLatest
-                GameTelemetry.of(id, achievements.peek(game))?.let { known -> _state.update { it.copy(telemetry = known) } }
+                val platform = dev.xross.launcher.storage.PlatformRegistry.byId(game.platformId)?.shortName
+                GameTelemetry.of(id, achievements.peek(game), platform, peeked = true, uuid = game.uuid)?.let { known -> _state.update { it.copy(telemetry = known) } }
                 delay(TELEMETRY_LOAD_MS)
                 when (val fresh = achievements.load(game)) {
                     is AchievementsState.Ready,
                     AchievementsState.NoMatch,
-                    -> _state.update { it.copy(telemetry = GameTelemetry.of(id, fresh)) }
-                    else -> Unit // offline or refused: keep what the Xross folder had
+                    -> _state.update { it.copy(telemetry = GameTelemetry.of(id, fresh, platform, uuid = game.uuid)) }
+                    // Offline or refused: keep what the Xross folder had, now known to be offline.
+                    else -> _state.update { s -> s.copy(telemetry = s.telemetry?.takeIf { it.gameId == id }?.copy(offline = true)) }
                 }
             }
         }
@@ -118,13 +132,29 @@ class RaController(
     fun loadProfile() {
         scope.launch {
             profiles.load()
+            friends.load()
             profileLoaded = true
-            if (profiles.isStale()) refreshProfile(quiet = true)
+            if (profiles.isStale()) refreshProfile(quiet = true) else onFriendsWanted(onlyWithoutCache = true)
         }
     }
 
+    /**
+     * The social stack or the rich telemetry card was turned on (Settings ▸ Theme ▸ Components ▸
+     * Top-left, Achievement badge), or the app started with one on: without this, a stack with no
+     * cache would collapse and never be opened to fetch, and the card's strip would stay empty.
+     * Fetches when stale, or at startup ([onlyWithoutCache]) only when nothing was ever fetched.
+     * [components]: the bar as just saved, when the host's copy may not have caught up yet.
+     */
+    fun onFriendsWanted(onlyWithoutCache: Boolean = false, components: dev.xross.launcher.theme.pack.ResolvedComponents? = null) {
+        if (!profiles.current.linked || !friendsWanted(components ?: host.components())) return
+        if (if (onlyWithoutCache) !friends.hasCache() else friends.isStale()) refreshFriends()
+    }
+
     /** The Xross folder moved: read the profile from its new place. */
-    suspend fun reloadProfile() = profiles.load()
+    suspend fun reloadProfile() {
+        profiles.load()
+        friends.load()
+    }
 
     /** Back in front: refresh a stale profile (once the offline copy has been read). */
     fun onForeground() {
@@ -151,8 +181,9 @@ class RaController(
         return false
     }
 
-    /** Input while the avatar HUD is expanded; false when it isn't. */
+    /** Input while the avatar HUD or the social panel is open; false when neither is. */
     fun onAvatarAction(action: NavAction): Boolean {
+        _state.value.socialPanel?.let { socialPanelAction(it, action); return true }
         if (!_state.value.avatarFocused) return false
         avatarAction(action)
         return true
@@ -161,7 +192,8 @@ class RaController(
     /** Now Playing opened over everything: close every RetroAchievements screen and the HUD. */
     fun dismissAll() {
         achievementsJob?.cancel()
-        _state.update { it.copy(profileCard = null, avatarFocused = false, achievements = null, raHub = null) }
+        if (_state.value.socialPanel != null) markFriendsSeen()
+        _state.update { it.copy(profileCard = null, avatarFocused = false, achievements = null, raHub = null, socialPanel = null) }
     }
 
     // endregion
@@ -171,7 +203,8 @@ class RaController(
     /** Expands the avatar into its mini-HUD (the avatar "has the focus" while the HUD is open). */
     fun focusAvatar() {
         sounds.play(UiSound.MOVE)
-        _state.update { it.copy(avatarFocused = true) }
+        // From the social panel (Right, or a tap on the avatar while it is open): the HUD takes over.
+        _state.update { it.copy(avatarFocused = true, socialPanel = null) }
         if (profiles.current.linked && profiles.isStale()) refreshProfile(quiet = true)
     }
 
@@ -196,9 +229,17 @@ class RaController(
                 }
             }
             NavAction.DOWN, NavAction.BACK -> closeAvatarHud()
-            NavAction.LEFT, NavAction.RIGHT, NavAction.PREV_CATEGORY, NavAction.NEXT_CATEGORY -> {
+            // Left crosses the bar to the social stack when it shows (2b.7c).
+            NavAction.LEFT -> if (socialStackShown()) {
                 _state.update { it.copy(avatarFocused = false) }
-                host.moveCategory(if (action == NavAction.LEFT || action == NavAction.PREV_CATEGORY) -1 else +1)
+                openSocialPanel()
+            } else {
+                _state.update { it.copy(avatarFocused = false) }
+                host.moveCategory(-1)
+            }
+            NavAction.RIGHT, NavAction.PREV_CATEGORY, NavAction.NEXT_CATEGORY -> {
+                _state.update { it.copy(avatarFocused = false) }
+                host.moveCategory(if (action == NavAction.PREV_CATEGORY) -1 else +1)
             }
             // Account management (unlink, link another) lives on the full User Card.
             NavAction.OPTIONS -> openProfileCard()
@@ -283,27 +324,110 @@ class RaController(
         profileJob = scope.launch {
             host.toast("Checking RetroAchievements account…")
             when (val result = profiles.link(name, apiKey)) {
-                is RaResult.Ok -> host.toast("Linked RetroAchievements as ${result.profile.username}")
+                is RaResult.Ok -> {
+                    host.toast("Linked RetroAchievements as ${result.profile.username}")
+                    // Another account's friends aren't this one's.
+                    friends.load()
+                    if (friendsWanted()) refreshFriends()
+                }
                 else -> host.fail(failure(result))
             }
         }
     }
 
-    private fun refreshProfile(quiet: Boolean) {
+    /**
+     * Refreshes the profile; once it worked, also the followed users when something shows them
+     * ([friendsWanted]) or [withFriends] (the hub's Primary action).
+     */
+    private fun refreshProfile(quiet: Boolean, withFriends: Boolean = false) {
         if (!profiles.current.linked) return
-        if (profileJob?.isActive == true) return
+        if (profileJob?.isActive == true) {
+            if (withFriends) refreshFriends()
+            return
+        }
         profileJob = scope.launch {
             val result = profiles.refresh()
             if (!quiet) host.toast(if (result is RaResult.Ok) "Profile updated" else failure(result))
+            if (result is RaResult.Ok && (withFriends || friendsWanted())) refreshFriends()
         }
     }
 
+    // region Social stack (2b.7c)
+
+    /** Something draws friend data: the social stack or the rich telemetry card's strip (2b.7e's sidebar adds to this). */
+    private fun friendsWanted(components: dev.xross.launcher.theme.pack.ResolvedComponents = host.components()): Boolean =
+        components.topLeft == dev.xross.launcher.theme.pack.TopLeftClusterMode.SOCIAL_STACK ||
+            components.telemetry == dev.xross.launcher.theme.pack.TelemetryMode.RICH_CARD
+
+    /** The stack is in the bar now (see [SocialStack.shows]). */
+    fun socialStackShown(): Boolean = SocialStack.shows(host.components(), _state.value.friends)
+
+    private fun refreshFriends() {
+        if (!profiles.current.linked || friendsJob?.isActive == true) return
+        friendsJob = scope.launch {
+            friends.refresh()
+            // Found while the panel is open: seen, not news for the badge later.
+            if (_state.value.socialPanel != null) friends.markOpened()
+        }
+    }
+
+    /** Opens the stack's panel (Up from the top without an avatar, Left from the avatar HUD, or a tap). */
+    fun openSocialPanel() {
+        if (!socialStackShown()) return
+        sounds.play(UiSound.MOVE)
+        val newKeys = _state.value.friends.friends.filter { it.isNew }.mapTo(HashSet()) { it.key }
+        _state.update { it.copy(socialPanel = SocialPanelState(newKeys = newKeys), avatarFocused = false) }
+        markFriendsSeen()
+        if (friends.isStale()) refreshFriends()
+    }
+
+    fun closeSocialPanel() {
+        if (_state.value.socialPanel != null) {
+            sounds.play(UiSound.MOVE)
+            _state.update { it.copy(socialPanel = null) }
+        }
+    }
+
+    /** Touch: tap the stack to open its panel, tap it again to close. */
+    fun onSocialStackTapped() {
+        if (_state.value.socialPanel != null) closeSocialPanel() else openSocialPanel()
+    }
+
+    private fun markFriendsSeen() {
+        scope.launch { friends.markOpened() }
+    }
+
+    private fun socialPanelAction(panel: SocialPanelState, action: NavAction) {
+        val count = _state.value.friends.friends.size
+        val outcome = SocialStack.onAction(panel, action, count, host.components().avatar)
+        when (val effect = outcome.effect) {
+            SocialPanelEffect.Close -> return closeSocialPanel()
+            SocialPanelEffect.ToAvatar -> {
+                _state.update { it.copy(socialPanel = null) }
+                return focusAvatar()
+            }
+            is SocialPanelEffect.MoveCategory -> {
+                _state.update { it.copy(socialPanel = null) }
+                return host.moveCategory(effect.delta)
+            }
+            SocialPanelEffect.None -> Unit
+        }
+        if (outcome.state != panel) {
+            sounds.play(UiSound.MOVE)
+            _state.update { it.copy(socialPanel = outcome.state) }
+        }
+    }
+
+    // endregion
+
     private fun unlink() {
         profileJob?.cancel()
+        friendsJob?.cancel()
         profileJob = scope.launch {
             profiles.unlink()
+            friends.clear()
             withContext(Dispatchers.IO) { achievements.clear() }
-            _state.update { it.copy(profileCard = it.profileCard?.let { ProfileCardState() }) }
+            _state.update { it.copy(profileCard = it.profileCard?.let { ProfileCardState() }, socialPanel = null) }
             host.toast("RetroAchievements account unlinked")
         }
     }
@@ -357,7 +481,7 @@ class RaController(
             RaHubEffect.Primary -> {
                 sounds.play(UiSound.ENTER)
                 if (profiles.current.linked) {
-                    refreshProfile(quiet = false)
+                    refreshProfile(quiet = false, withFriends = true)
                     loadRaSummary()
                 } else {
                     _state.update { it.copy(raHub = null) }

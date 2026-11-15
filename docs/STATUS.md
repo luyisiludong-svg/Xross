@@ -26,6 +26,10 @@ Legend: ✅ done and verified · ◐ partial · ❌ not started · 🧪 verified
 | Phase 2b.4d (focus frames and icon masks): `effects.focusFrameStyle` (`BREATHING_HALO`, `STATIC_NEON`, `HARD_SHADOW`, `GOLD_BEZEL` in `palette.focusGold`), `effects.iconMask` (`SQUIRCLE`, `CIRCLE`, `Y2K_CHROME_FRAME`) and `effects.iconFilter` (`DUOTONE`, `MONOCHROME`) through the cascade, icons cached by package, style and size | ✅ 🧪 on `feat/theme-2b4` (2026-11-12): 603 unit tests; theme suite 98/98 and library suite 41/41 on the API 37 emulator; Apps list 0.5% janky on the profiling build with the cache cold or warm. **Galaxy A55** (2026-11-13): real apps' icons 3–11 ms each (chrome), 2–4 ms (squircle), off the main thread (§3.25, §3.28) |
 | Phase 2b.4e (foreground particles): `effects.foregroundParticles` (`SNOW`, `BOKEH`, `DUST_MOTES`) as layer 4, ≤48 particles in flat arrays drawn in one `graphicsLayer`; resting after 10 s without input, in the background, and hidden under a snap, full-screen media and E-Ink | ✅ 🧪 on `feat/theme-2b4` (2026-11-13): 622 unit tests; theme suite 102/102 on the API 37 emulator; profiling build: UI thread 0.3 ms p50 per frame with or without particles, 0.2–0.4% janky in most windows (as without). **Galaxy A55** (2026-11-13): 120 Hz, 0 frames at rest, hidden under a playing snap; during game navigation 7 of 16 passes doubled the render time (deadline jank unchanged, §3.28) |
 | Phase 2b.4f (post-processing and Settings rows): `effects.backgroundFilter` (`SCANLINES`, `CRT`, `LCD_GRID`) as a GL pass snapped to render pixels, `effects.uiFilter` (`SCANLINES_UI`, `BLOOM`, custom `postprocess.agsl`) as an AGSL `RenderEffect` on Android 13+, Settings ▸ Theme rows for every 2b.4 effect (`display.effects`), Pick custom wallpaper, Reset to theme defaults, the `effects` schema | ✅ 🧪 on `feat/theme-2b4` (2026-11-13): 645 unit tests; 226/226 device checks on the API 37 emulator (theme 134/134); `palette-perf.sh` 0.30–0.45% janky, the same as the build before it, and 0.30–0.44% with CRT and Bloom on. **Galaxy A55** (2026-11-13): 645 unit tests, `lintDebug` 0 errors, **215/226** device checks (theme 134/134; the 11 are seeded-media checks), every slice checked by hand, `palette-perf.sh` 0.12–0.19% janky (0.06–0.19% with CRT and Bloom) (§3.28). **2b.4 is complete on the emulator and the A55** |
+| Phase 2b.7a (components block and status-bar clusters): `components` in the manifest (Default pack → pack → variant → `display.components`; never overrides or rules), `statusBarLeft` / `statusBarRight` slots (`LOGO`, `WIFI`, `VOLUME`, `BATTERY`, `CLOCK`, `AVATAR` always last), battery modes with time to full, clock skeletons, Settings ▸ Theme ▸ Components | ✅ 🧪 on `feat/theme-2b7` (2026-11-14): 793 unit tests, `lintDebug` 0 errors; theme suite **197/197** on the API 37 emulator, display matrix 12/12 default and stress, `palette-perf.sh` 0.15–0.75% janky (§3.29). **Galaxy A55** (2026-11-14): 48/48 on the phone, a real "25 m to full", volume keys and mute, offline in 0.9 s, display matrix 24/24 (§3.33) |
+| Phase 2b.7b (mini player, glyphs, badge pills): `miniPlayerMode` (`FLOATING_CARD`, `STATUS_TICKER` in the status bar before the avatar, `OFF`), `glyphOverride` (`AUTO`, `PLAYSTATION`, colored `XBOX`, `NINTENDO`, `MONOCHROME_MINIMAL`; labels only), `badgePills` beside the focused title; Settings ▸ Theme ▸ Components rows | ✅ 🧪 on `feat/theme-2b7` (2026-11-14): 805 unit tests, `lintDebug` 0 errors; theme suite **235/235** on the API 37 emulator, `palette-perf.sh` 0.15–0.74% janky with badges (§3.30). **Galaxy A55** (2026-11-14): 33/38, the 5 mini-player checks re-done by hand with the user's music; badges 0.12–0.13% janky (§3.33) |
+| Phase 2b.7c (friend data and the social stack): followed users (`API_GetUsersIFollow`) and their latest game (`API_GetUserSummary`), cached in `Xross/data/ra/friends.json`, fetched on refresh only, ≤ 20 activity calls 350 ms apart; `topLeftCluster: SOCIAL_STACK` with a `9+` badge and a FOLLOWING panel; Settings ▸ Theme ▸ Components ▸ Top-left | ✅ 🧪 on `feat/theme-2b7` (2026-11-14): API verified live ([RETROACHIEVEMENTS_API.md](RETROACHIEVEMENTS_API.md)); 825 unit tests, `lintDebug` 0 errors; theme suite **259/259** on the API 37 emulator (§3.31). **Galaxy A55** (2026-11-14): 24/24, no refresh in 10 min at rest (§3.33); the test account follows nobody |
+| Phase 2b.7d (telemetry tiers): `telemetryMode` `OFF`, `COMPACT_PILL` (today's pill) and `RICH_CARD`: box art, platform pill, the six newest unlocks (locked ones greyed), progress with "18/42 · 120/400 pts" and a `RECENTLY PLAYED` strip of followed users on that game; offline without the strip; never fetches; Settings ▸ Theme ▸ Components ▸ Achievement badge | ✅ 🧪 on `feat/theme-2b7` (2026-11-14): 836 unit tests, `lintDebug` 0 errors; theme suite **281/281** on the API 37 emulator, the strip shown live with the `.env` account; `palette-perf.sh` card 0.30–1.37% janky (one 4.22% outlier in 11 passes) vs pill 0.15–1.16% (§3.32). **Galaxy A55** (2026-11-14): 22/22, card median 0.31% vs pill 0.38% janky over 5 interleaved pairs (§3.33) |
 | Phase 3 (dual screen, hot-swap, RetroAchievements, Web Portal, FTPS) | ◐ RetroAchievements account linking, status bar avatar and User Card (§3.12), per-game achievement lists and unlock toasts (§3.13), live on the emulator and the Galaxy A55 (§3.14); hot-swap and live resolution change done; dual screen, docking, Portal and FTPS not started |
 | Phase 4 (onboarding, triage, profiling, plugin API) | ◐ app triage and performance work started |
 
@@ -142,7 +146,11 @@ parked until an API is documented.
 | Icons from the design SVGs | ✅ | `tools/icons/svg_icons.py` → 29 SVGs in the Default pack, read by `SvgIcon` at runtime |
 | Custom fonts | ✅ | One .ttf/.otf per theme pack, applied to all launcher text |
 | UI scale slider (50–150%) | ❌ | Layout already scales automatically (§4) |
-| Aspect-ratio overrides | ❌ | Xross stays immersive (Android's system bars hidden); showing Android's status bar was dropped (2026-11-14). Xross's own status-bar slots come in Phase 2b.7 |
+| Aspect-ratio overrides | ❌ | Xross stays immersive (Android's system bars hidden); showing Android's status bar was dropped (2026-11-14). Xross's own status-bar slots are below |
+| Status bar components | ✅ 🧪 | `components.statusBarLeft` / `statusBarRight` slots (logo, network, system volume, battery, clock, avatar), battery modes including time to full, clock skeletons; Settings ▸ Theme ▸ Components (2b.7a, §3.29) |
+| Mini player modes, button glyphs, title badges | ✅ 🧪 | `components.miniPlayerMode`, `glyphOverride`, `badgePills`; Settings ▸ Theme ▸ Components (2b.7b, §3.30) |
+| Social stack | ✅ 🧪 | `components.topLeftCluster: SOCIAL_STACK`: followed RetroAchievements users, an unread badge and a FOLLOWING panel; cached for offline (2b.7c, §3.31) |
+| Achievement badge tiers | ✅ 🧪 | `components.telemetryMode`: off, the compact pill, or a rich card with recent badges and the friends who last played the game (2b.7d, §3.32) |
 | Game tiles and avatar style | ✅ 🧪 | 16:9 XMB tiles in Games; `profile.avatarStyle` with Settings ▸ Theme ▸ Profile customization (Phase 2b.1, §3.15) |
 
 ### 3.5 Device integration & form factors
@@ -1344,6 +1352,214 @@ a Perfetto GPU-queue trace would confirm.
 **Not covered:** sync of the audio uniforms judged by eye, Bluetooth output latency, E-Ink with a
 pack shader, `HARD_SHADOW` and the RA badge frames by eye, handhelds (Adreno, Mali).
 
+### 3.29 Phase 2b.7a: components block and status-bar clusters (2026-11-14)
+
+On `feat/theme-2b7`, API 37 emulator (`-gpu host`, 2400×1080).
+
+**Host:** 793 unit tests pass (4 skipped): `ComponentsTest` (decoding with aliases and bad values,
+unknown keys, the cascade, `components` in overrides and rules ignored and reported, `AVATAR` moved
+last, duplicates, the logo, `display.components`, Reset, the Components rows, slot edits through
+the view model and the avatar gating Up) and `StatusSlotsTest` (clock skeletons, battery text per
+mode, time to full with −1 and discharging, Wi-Fi levels from RSSI, volume levels and mute, which
+monitors run for which slots). `lintDebug` 0 errors, 61 warnings (as before; `ACCESS_WIFI_STATE`
+comes with `uses-feature android.hardware.wifi required=false`, so Ethernet-only TVs still qualify).
+
+**Theme suite: 197/197** (the 149 before plus a new 48-check "Components (2b.7a)" section): each
+battery mode, on and off the charger; the four clock presets; three slot orders, the HUD fading the
+right cluster and giving it back with the clock's and battery's bounds unchanged; airplane mode
+on (network slot offline in **0.17–0.26 s**) and off; the volume keys showing `VOLUME` for 3 s and
+the muted glyph at 0; the avatar removed (Up at the top stays in the list) and Reset; **a minute
+tick at rest draws 1 frame**, and 3-second windows away from the minute draw 0.
+
+**Display matrix:** 12/12 with the Default pack and with a stress pack that fills both clusters (a
+5:1 logo, network, volume always shown, a "Sat, Nov 14, 2026  13:11" clock, battery, avatar): no
+clipped texts, no left-cluster glyph past the right cluster; at 640×480 the left cluster clips its
+last slot. **`palette-perf.sh`** (profiling, 3 interleaved pairs): 0.15–0.75% janky (deadline);
+the build before read 0.30–0.45%; the 0.75% is the first, cold pass.
+
+**Found and fixed on the device:** `VOLUME` counted level changes, not volume changes, so a step
+inside one level (14 → 12 of 15) didn't show it; it now counts every change and also listens to
+the volume-changed broadcast, since Android writes the volume to `Settings.System` up to a second
+after the key (now 5 ms). SVG logos were squashed to 48 × 48 dp; `SvgIcon` now keeps the
+`viewBox` aspect (square icons unchanged). The 2b.4f "at rest under Bloom" check failed once when
+its 3-second window crossed a minute boundary (the clock's frame, already there before 2b.7); the
+suite's rest windows now avoid the boundary.
+
+**Not covered:** the Galaxy A55 (volume keys, Wi-Fi strength walking away from the router, 120 Hz),
+an Android 9 image for the `WifiManager` RSSI path, a real charge-time estimate (the emulator's
+`dumpsys battery` charger gives −1, so only the percentage fallback was seen on a device).
+
+### 3.30 Phase 2b.7b: mini player modes, button glyphs, title badges (2026-11-14)
+
+On `feat/theme-2b7`, API 37 emulator (`-gpu host`, 2400×1080).
+
+**Host:** 805 unit tests pass (4 skipped): the new `ComponentsTwoBTest` (every `glyphOverride`
+over every detected family; the labels change and the confirm side doesn't, through the view
+model; year parsing from full and partial dates; missing data skipping a badge; the developer cut
+at 18 characters; `RA_PROGRESS` only with telemetry; game rows carrying their badges, with
+`SYSTEM` and `PLAYTIME` leaving the subtitle; no badges on settings, music or apps; card, ticker
+and off; the ticker following the card's visibility and pause timeout; the Mini player and Button
+glyphs rows; Title badges toggled in order through the view model and cleared by Reset), and
+`ComponentsTest` with the three new rows. `lintDebug` 0 errors, 61 warnings (as before).
+
+**Theme suite: 235/235** (the 197 before plus a new 38-check "Components (2b.7b)" section): a
+song from the media fixtures as the floating card, then as the ticker ("Smoke Song 2 — Smoke
+Artist" after the battery, before the avatar), faded under the avatar HUD and back in place,
+paused with its pause glyph, then Off with the music still playing; each glyph set in the menu's
+hints (Enter, ✕ ○ △, A B Y in color, B on the south for Nintendo, ▽ ▷ △), in Search (△ Space) and
+in the avatar HUD; Title badges turned on in order, Chrono Trigger (a release date, a developer
+and 75 minutes patched into the database) showing SNES, 1995, Square and 1h 15m with the
+playtime gone from its subtitle, badges only on the focused game, an unscraped game keeping SNES,
+none on an app; each row back to Theme pack.
+
+**`palette-perf.sh`** (profiling, 3 interleaved pairs, new `PERF_COMPONENTS`): the Default
+components 0.29–0.74% janky (deadline), with System, Release year, Developer and Playtime badges
+0.15–0.74%: within the gate and the noise. The perf seed's games carry no release date or
+playtime, so that run drew the System badge alone.
+
+**Found and fixed on the device:** nothing in the app; the suite's glyph reader first took the
+Search keyboard's own Space key for the hint's.
+
+**Not covered:** the A55 (a real pad's glyph sets, touch on the ticker, 120 Hz), the
+`RA_PROGRESS` badge on a device (needs a linked account), the ticker's 30-second hide after a
+pause on a device (unit-tested on virtual time), `display-matrix.sh` with badges and the ticker.
+
+### 3.31 Phase 2b.7c: friend data and the social stack (2026-11-14)
+
+On `feat/theme-2b7`, API 37 emulator (`-gpu host`, 2400×1080).
+
+**Verify step (live, the project's test account):** `API_GetUsersIFollow` (no user parameter, `c`
+≤ 500) carries name, ULID, points and follow-back, no avatar or activity; a friend's latest game
+and when come from `API_GetUserSummary` with `g=1&a=1`; the limit is a burst of about 7 calls
+refilling at about 3 a second, answered with a bare 429. Details and the measurements in
+[RETROACHIEVEMENTS_API.md](RETROACHIEVEMENTS_API.md). The account follows nobody.
+
+**Host:** 825 unit tests pass (4 skipped): the new `FriendsTest` (both parsers with empty,
+paginated and malformed answers; one call for up to 200, paging past a short page; activity by
+ULID and a 429 flagged busy; cache freshness at 30 min and 6 h; the 20-friend cap with call starts
+≥ 350 ms apart and the rotation through a longer list; no call from loading, reading state,
+staleness checks or opening; new activity across refreshes and after opening, the `9+` cap and
+across sessions; offline stopping at the first failure with the cache kept; one retry after a
+429; following nobody; another account's cache ignored and unlink clearing the file and avatars;
+no key in any file; the collapse rules; the panel's input; "how long ago"; the Top-left row; the
+controller's refresh triggers, Left from the HUD and taps), and `ComponentsTest` with the new row.
+`lintDebug` 0 errors, 61 warnings (as before).
+
+**Theme suite: 259/259** (the 235 before plus a new 24-check "Components (2b.7c)" section): the
+Top-left row saved as `display.components.topLeftCluster`; turning it on with the debug build's
+`.env` account refreshed it **live** (`friends=0 activity=0 calls=1`); in airplane mode with a
+seeded account, profile and `friends.json`: the cached friends and a 2 badge at the top-left with
+no refresh at startup, Left from the HUD opening FOLLOWING in activity order with each latest
+game, the stale stack's one failed refresh keeping the saved list ("Offline · saved list"), Back
+and a tap outside closing it, a tap opening it, the badge cleared and kept across a restart, no
+key in `friends.json`; collapsed offline without a cache (after one startup try), following
+nobody (and no refresh in 15 s at rest), and with another account's cache.
+
+**Found and fixed on the device:** turning the stack on didn't fetch (the view model read the
+components before its flow caught up with the saved setting). Suite fixes: debug builds link the
+`.env` account at every start, so "unlinked" can't be set up on them; the outside tap used
+`wm size`, which doesn't follow the rotation.
+
+**From the first look (2026-11-14):** the PlayStation shapes were uneven (the font draws ○ small,
+△ and ✕ off center): every shape label (✕ ○ △ □ ▽ ▷ ◁) is now drawn as strokes of one size,
+centered, still read as its character by accessibility and the suite. The `WIFI` fan's outer arc
+reached past the top of its slot and was clipped: the arcs now fit the slot. Profile customization
+▸ Glow (which already turned the breathing glow off) now also turns off the halo on a focused
+avatar, the social stack's front avatar included.
+
+**Not covered:** a stack with real followed users (the test account follows nobody), the A55,
+`palette-perf.sh` with the stack (it adds no per-frame work; not measured), the 10-minute
+silent-at-rest check (15 s in the suite).
+
+### 3.32 Phase 2b.7d: telemetry tiers (2026-11-14)
+
+On `feat/theme-2b7`, API 37 emulator (`-gpu host`, 2400×1080).
+
+**Host:** 836 unit tests pass (4 skipped): the new `TelemetryCardTest` (the badge row with fewer
+than six unlocks, many unlocks, a mastered set of two worth no points, large counts; the platform
+fallback; the strip matched by RetroAchievements game id, newest first, `+N`, kept while loading,
+none for another game or an unknown id; collapse when unlinked, unrecognized, failed or without
+achievements; offline from the friend refresh or the game's own fetch, and the saved copy before
+the fetch not counted as offline; the Achievement badge row and its subtitles), a controller test
+in `FriendsTest` (the rich card fetches friends once without a cache; focusing games, startup with
+a cache and the compact pill fetch none; a stale list is fetched when asked), and `ComponentsTest`
+with the new row. `lintDebug` 0 errors.
+
+**Theme suite: 281/281** (the 259 before plus a new 22-check "Components (2b.7d)" section): the
+row cycling Off, Compact and Rich card into `display.components.telemetryMode`; with a seeded
+saved copy for Chrono Trigger (`matches.json`, `game-228.json`, badges) and the fake account in
+airplane mode: nothing with Off, today's pill with Compact, the card "2/8 · 10/40 pts" with its
+SNES pill and no strip (the fetch failed), no friend refresh on focus, gone on EarthBound
+(unrecognized) and back on Chrono Trigger, covered by the avatar's HUD (opened by a tap) and back,
+none on apps. With the debug build's `.env` account online, the live fetch (game 228, 89
+achievements) and four saved friends on it drew "Recently played by Alice, Bob, Carol and 1
+more" with `+1`, no friend call; in airplane mode the card again without the strip.
+
+**Performance (`PERF_TELEMETRY=1 palette-perf.sh`, new):** the 12 test games get saved progress
+and badges, the passes run in airplane mode and alternate the rich card and the pill. With the
+first version (`AnimatedContent` with a size transform) the card was 0.59–0.71% janky against
+0.29–0.30% in all three rounds; the shipped one is a plain `Crossfade` (every card has the same
+size). Over 11 interleaved pairs: card median 0.45% (0.30–1.37%, one pass at 4.22% that didn't
+recur), pill median 0.30% (0.15–1.16%), about one frame per pass; both went up together while the
+emulator ran slow (p50 23 ms). No GC or Davey lines from Xross in the passes logged.
+
+**Not covered:** the A55 (120 Hz, the gate with the interleaved rounds there), portrait (the
+emulator ignored `wm size` in this run; `display-matrix.sh` doesn't focus a recognized game),
+real followed users (the strip used seeded friends).
+
+### 3.33 Phase 2b.7a–d on the Galaxy A55 (2026-11-14)
+
+All of 2b.7a–d on the user's Galaxy A55 (Android 17 / API 37, 1080×2340 at 120 Hz, 450 dpi), on
+`feat/theme-2b7` at `7666a9b`. The phone's ROMs, app data, `Xross/config`, `Xross/data` and the
+RetroAchievements badges and avatars were backed up first and restored after (checksums matched);
+the RetroArch stub was installed for the suites and removed; the profiling build was put back.
+
+**Host:** **836 unit tests** pass (4 skipped), `lintDebug` **0 errors** (61 warnings).
+
+**Device suites (`run-all.sh`, debug build): 380/398.** Library 41/41, input 11/11, integration
+9/9, theme **275/281**, media 44/56. Every check in Components 2b.7a (48/48), 2b.7c (24/24) and
+2b.7d (22/22) passed; 2b.7b 33/38. The 18 failures:
+
+- **12 media checks** and **5 of 2b.7b's mini-player checks** expect the seeded `XrossSmoke` songs
+  and photos; on the phone "Shuffle all" plays the user's own library (the suite's "a song plays"
+  passed, but with "Need Somebody — XUITCASECITY"). Re-done by hand with the user's song: the
+  floating card draws art, title, artist and the play glyph; the ticker draws "Title — Artist"
+  after the battery (x 1685 vs 1425) and before the avatar, fades under the HUD and comes back at
+  the same bounds, and keeps the `❚❚` glyph when paused.
+- **"Effects volume cycles"** (2b.5b) was a broken check: it looked for "100%" anywhere on screen,
+  which on the emulator is the battery. The row steps 75% → 80% as designed; the check now reads
+  `sound.effectsVolume` from `settings.json`. It had passed on the emulator by accident.
+
+**On the phone, beyond the emulator:**
+
+| Check | Result |
+|---|---|
+| `TIME_REMAINING` on a charger | A real `computeChargeTimeRemaining()` estimate: "25 m to full" (the emulator only ever gave −1) |
+| `VOLUME` | The phone's volume keys: a step showed `volume=1#2`, hid again after 3 s, and 0 drew the muted glyph |
+| `WIFI` | Wi-Fi 3 of 3 bars at the start; airplane mode on: offline in **0.9 s**; off: back within the check, as cellular (Wi-Fi reconnects later) |
+| HUD in every order | Default, battery first and with a left cluster: the clock and battery fade and come back at the same bounds |
+| Minute tick at rest | 1 frame |
+| Social stack at rest | `SOCIAL_STACK` on with the `.env` account, then **10 min untouched: no `XrossRa` line** (no refresh); only the once-a-minute `XrossStatus` battery lines while charging. Xross's uid moved about 2 KB each way in that window with no request logged (likely an idle connection closing) |
+
+**Frame pacing (profiling build, 120 Hz):**
+
+- `PERF_TELEMETRY=1 palette-perf.sh 5` (rich card and pill interleaved, airplane mode): card
+  **0.19–0.38% janky (median 0.31%)**, pill **0.19–0.43% (median 0.38%)**: inside the 0–1.5% gate
+  and no worse than the pill. The first card pass ran in the A55's slow GPU mode (p50 19 ms, GPU
+  p50 9 ms, legacy 91%) with no missed deadlines; the other nine p50 12–13 ms.
+- Badge pills (`SYSTEM`, `YEAR`, `DEVELOPER`, `PLAYTIME`), `palette-perf.sh 3`: **0.12–0.13%** in
+  all 6 passes, the same as 2b.4's 0.12–0.19%.
+
+**Display matrix on the phone (`display-matrix.sh`, default and stress):** 24/24, **no clipped
+texts and no left-cluster glyph past the right cluster** in any configuration; 0–0.93% janky,
+p99 11–27 ms. With the stress pack at 640×480 the wide logo and Wi-Fi clip before the clock and
+the always-on volume glyph is clipped away, as designed. The portrait row stays landscape on the
+phone (the app is `sensorLandscape`). The phone's size and density were reset after.
+
+**Not covered:** real followed users (the `.env` account follows nobody, so the stack and strip
+used seeded friends), Wi-Fi bars walking away from the router, an Android 9 image for the
+`WifiManager` path, a physical controller for the glyph sets.
+
 ## 4. Display matrix & performance
 
 All numbers are from the Android emulator on an Apple M5 with the host GPU, using an
@@ -1459,7 +1675,7 @@ implemented, by phase, including the Phase 2b customization engine).
 ./gradlew :app:testDebugUnitTest                         # unit tests
 ./gradlew :app:installDebug :emulator-stub:installRetroarchDebug
 tools/device-tests/smoke.sh                              # quick device smoke test, 12 checks (clears app data)
-tools/device-tests/run-all.sh                            # full device regression: the five suites, 226 checks
+tools/device-tests/run-all.sh                            # full device regression: the five suites, 314 checks
 ./gradlew :app:assembleProfiling                         # optimized build for frame timing
 adb shell dumpsys gfxinfo dev.xross.launcher              # UI frame stats
 adb logcat -s WaveFrames XrossScan                        # GL pacing + scan timing (debug/profiling)

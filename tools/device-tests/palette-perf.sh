@@ -6,6 +6,16 @@
 #   tools/device-tests/palette-perf.sh [pairs]     # default 3 pairs of passes
 #   PERF_EFFECTS='{"backgroundFilter": "CRT", "uiFilter": "BLOOM"}' tools/device-tests/palette-perf.sh
 #                                                  # the same with Settings ▸ Theme effects on
+#   PERF_COMPONENTS='{"badgePills": ["SYSTEM", "YEAR", "DEVELOPER", "PLAYTIME"]}' tools/device-tests/palette-perf.sh
+#                                                  # the same with Settings ▸ Theme ▸ Components picks
+#   PERF_TELEMETRY=1 tools/device-tests/palette-perf.sh
+#                                                  # passes alternate the rich telemetry card and the
+#                                                  # compact pill (2b.7d) instead of adaptive on and off
+#
+# PERF_TELEMETRY also seeds saved RetroAchievements progress (matches.json, game-*.json and
+# badges) for the 12 games, so each focus draws its card from the saved copy, and runs the passes
+# in airplane mode (no fetch when the cursor rests). It needs a linked account: the debug build
+# links the .env one.
 #
 # Installs the debug build to seed 12 scraped SNES games with distinct hero art (it must be
 # debuggable to edit the database), then the profiling build over it (same signing, data kept).
@@ -45,6 +55,8 @@ import json, os, sys
 p = sys.argv[1]; s = json.load(open(p)); d = s["display"]
 # The pack's own effects unless PERF_EFFECTS names some (2b.4f, display.effects).
 d["effects"] = json.loads(os.environ.get("PERF_EFFECTS") or "{}")
+# The pack's own components unless PERF_COMPONENTS names some (2b.7, display.components).
+d["components"] = json.loads(os.environ.get("PERF_COMPONENTS") or "{}")
 d.update(theme="LAVENDER", themePack="default", themeVariant="", surfaceStyle="", quickProfile="NONE",
          adaptiveGamePalette=sys.argv[2] == "true")
 for k in ("circadianCurve", "batteryTint"): d.pop(k, None)
@@ -91,6 +103,34 @@ adb shell chmod 644 /data/local/tmp/xross-perf.db
 adb shell run-as "$PKG" sh -c "'cp /data/local/tmp/xross-perf.db databases/xross.db && rm -f databases/xross.db-wal databases/xross.db-shm'"
 adb shell rm -f /data/local/tmp/xross-perf.db
 echo "  12 scraped games with hero art"
+if [ -n "${PERF_TELEMETRY:-}" ]; then
+  # Each game matched to a RetroAchievements id (7001–7012) with 24 achievements, 0–11 unlocked.
+  sqlite3 -separator ' ' "$OUT/xross.db" "SELECT uuid, sizeBytes, lastModified FROM games WHERE fileName LIKE 'Perf Game%' ORDER BY fileName" > "$OUT/games.txt"
+  python3 -I - "$OUT" <<'PY'
+import json, os, struct, sys, zlib
+d = sys.argv[1]
+rows = [l.split() for l in open(os.path.join(d, "games.txt")) if l.strip()]
+json.dump({u: {"raId": 7001 + i, "kind": "HASH", "size": int(s), "modified": int(m), "listVersion": 2} for i, (u, s, m) in enumerate(rows)},
+          open(os.path.join(d, "matches.json"), "w"))
+os.makedirs(os.path.join(d, "ra"), exist_ok=True)
+for i in range(len(rows)):
+    ach = [dict(id=70000 + i * 100 + k, title="A%d" % k, points=5, badgeName="7%04d" % (i * 24 + k), displayOrder=k,
+                **({"unlockedAt": "2026-11-%02d 10:00:00" % (k + 1)} if k < i else {})) for k in range(24)]
+    json.dump({"gameId": 7001 + i, "title": "Perf %d" % i, "consoleName": "SNES", "achievements": ach}, open(os.path.join(d, "ra", "game-%d.json" % (7001 + i)), "w"))
+os.makedirs(os.path.join(d, "badges"), exist_ok=True)
+def png(path, rgb):
+    raw = b"".join(b"\0" + bytes(rgb) * 64 for _ in range(64))
+    chunk = lambda t, b: struct.pack(">I", len(b)) + t + b + struct.pack(">I", zlib.crc32(t + b) & 0xFFFFFFFF)
+    open(path, "wb").write(b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", 64, 64, 8, 2, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b""))
+for n in range(12 * 24): png(os.path.join(d, "badges", "7%04d.png" % n), ((n * 37) % 256, (n * 91) % 256, (n * 53) % 256))
+PY
+  adb shell mkdir -p /sdcard/Xross/data/ra /sdcard/Xross/media/ra/badges
+  adb push "$OUT/matches.json" /sdcard/Xross/data/ra/matches.json >/dev/null
+  adb push "$OUT"/ra/. /sdcard/Xross/data/ra/ >/dev/null
+  adb push "$OUT"/badges/. /sdcard/Xross/media/ra/badges/ >/dev/null
+  echo "  saved RetroAchievements progress and badges for the 12 games"
+  adb shell cmd connectivity airplane-mode enable
+fi
 adb install -r "$APK/profiling/app-profiling.apk" >/dev/null
 
 pass() { # pass <label>
@@ -119,8 +159,17 @@ pass() { # pass <label>
 echo "== Passes (profiling build)"
 printf '%-6s %-7s %-14s %-9s %-6s %-6s %-6s %-6s %s\n' pass frames janky legacy p50 p90 p99 gpu50 extractions
 for i in $(seq "$PAIRS"); do
-  settings true; pass "on$i"
-  settings false; pass "off$i"
+  if [ -n "${PERF_TELEMETRY:-}" ]; then
+    PERF_COMPONENTS='{"telemetryMode": "RICH_CARD"}' settings true; pass "card$i"
+    PERF_COMPONENTS='{"telemetryMode": "COMPACT_PILL"}' settings true; pass "pill$i"
+  else
+    settings true; pass "on$i"
+    settings false; pass "off$i"
+  fi
 done
 settings true
+if [ -n "${PERF_TELEMETRY:-}" ]; then
+  adb shell cmd connectivity airplane-mode disable
+  adb shell rm -rf /sdcard/Xross/data/ra/matches.json "/sdcard/Xross/data/ra/game-70*.json" /sdcard/Xross/media/ra/badges
+fi
 rm -rf "$OUT"

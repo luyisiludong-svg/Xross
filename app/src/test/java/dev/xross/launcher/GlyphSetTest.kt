@@ -4,6 +4,7 @@ import dev.xross.launcher.input.ConfirmLayout
 import dev.xross.launcher.input.ControllerFamily
 import dev.xross.launcher.input.resolve
 import dev.xross.launcher.model.GlyphSet
+import dev.xross.launcher.ui.FaceShape
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -39,5 +40,24 @@ class GlyphSetTest {
 
     @Test fun theUiStateCarriesTheDetectedFamilysGlyphsByDefault() {
         assertEquals(GlyphSet.KEYBOARD, dev.xross.launcher.state.XmbUiState().glyphs)
+    }
+
+    @Test fun shapeLabelsAreDrawnAndLettersStayText() {
+
+        // Every label of the PlayStation and minimal sets is a drawn shape, each its own.
+        for (set in listOf(GlyphSet.PLAYSTATION, GlyphSet.MINIMAL)) {
+            val shapes = dev.xross.launcher.model.Face.entries.map { FaceShape.of(set[it]) }
+            assertEquals("$set", 4, shapes.filterNotNull().distinct().size)
+        }
+        assertEquals(FaceShape.CROSS, FaceShape.of("✕"))
+        assertEquals(FaceShape.CIRCLE, FaceShape.of("○"))
+        assertEquals(FaceShape.TRIANGLE_UP, FaceShape.of("△"))
+        assertEquals(FaceShape.SQUARE, FaceShape.of("□"))
+        assertEquals(FaceShape.TRIANGLE_DOWN, FaceShape.of("▽"))
+        // Letters and words stay text.
+        for (set in listOf(GlyphSet.XBOX, GlyphSet.NINTENDO, GlyphSet.KEYBOARD)) {
+            assertEquals("$set", emptyList<Any>(), dev.xross.launcher.model.Face.entries.mapNotNull { FaceShape.of(set[it]) })
+        }
+        assertEquals(null, FaceShape.of("L1"))
     }
 }
