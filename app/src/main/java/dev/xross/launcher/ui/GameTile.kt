@@ -49,7 +49,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
-import dev.xross.launcher.scrape.ArtKind
+import dev.xross.launcher.model.ArtKind
 import dev.xross.launcher.state.GameTelemetry
 import dev.xross.launcher.model.GlyphKey
 import dev.xross.launcher.state.NodeIcon

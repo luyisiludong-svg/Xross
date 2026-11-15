@@ -1,7 +1,7 @@
 package dev.xross.launcher.state
 
 import dev.xross.launcher.model.GlyphKey
-import dev.xross.launcher.audio.MusicUnderSnaps
+import dev.xross.launcher.data.MusicUnderSnaps
 import dev.xross.launcher.audio.VolumeChannel
 import android.content.Context
 import android.content.Intent
@@ -23,7 +23,7 @@ import dev.xross.launcher.input.NavAction
 import dev.xross.launcher.input.resolve
 import dev.xross.launcher.launch.GameLauncher
 import dev.xross.launcher.launch.LaunchPlan
-import dev.xross.launcher.storage.PlatformRegistry
+import dev.xross.launcher.model.PlatformRegistry
 import dev.xross.launcher.storage.StorageAccess
 import dev.xross.launcher.storage.StorageVolumes
 import dev.xross.launcher.storage.VolumeEvent
@@ -49,6 +49,28 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import dev.xross.launcher.data.BackupInfo
+import dev.xross.launcher.data.BackupResult
+import dev.xross.launcher.data.DatRepository
+import dev.xross.launcher.data.DatSummary
+import dev.xross.launcher.data.GameMetadataEntity
+import dev.xross.launcher.data.XrossSettings
+import dev.xross.launcher.media.MediaFolders
+import dev.xross.launcher.media.NowPlaying
+import dev.xross.launcher.media.Photo
+import dev.xross.launcher.profile.FriendsState
+import dev.xross.launcher.profile.ProfileState
+import dev.xross.launcher.scrape.Network
+import dev.xross.launcher.scrape.ScrapeStatus
+import dev.xross.launcher.scrape.providers.AccountCheck
+import dev.xross.launcher.storage.SystemFolders
+import dev.xross.launcher.storage.XrossLayout
+import dev.xross.launcher.theme.AvatarStyleLimits
+import dev.xross.launcher.theme.BatteryLevel
+import dev.xross.launcher.theme.QuickProfile
+import dev.xross.launcher.theme.pack.PackSource
+import dev.xross.launcher.theme.pack.ResolvedComponents
+import dev.xross.launcher.theme.pack.ThemeWatcher
 
 /** One-shot requests that need an Activity. */
 sealed interface UiEffect {
@@ -102,13 +124,13 @@ data class XmbUiState(
     /** True on the first screen after process start: the UI fades in with the startup cue. */
     val coldBoot: Boolean = false,
     /** The cold-start intro on screen (2b.5d): the boot video or the shader ramp, or its crossfade out. */
-    val boot: dev.xross.launcher.ui.BootState? = null,
+    val boot: BootState? = null,
     /** Cold start, before the saved theme pack is loaded and the intro decided: the screen stays black. */
     val bootPending: Boolean = false,
     /** Full-screen photo viewer / video player / Now Playing, if open. */
     val overlay: MediaOverlay? = null,
     /** Music state for the mini indicator and Now Playing. */
-    val nowPlaying: dev.xross.launcher.media.NowPlaying = dev.xross.launcher.media.NowPlaying(),
+    val nowPlaying: NowPlaying = NowPlaying(),
     /** The focused item's Options menu while it is open. */
     val optionsMenu: OptionsMenuState? = null,
     /** Search overlay (gamepad keyboard + live results) while it is open. */
@@ -123,17 +145,17 @@ data class XmbUiState(
     val busy: Boolean = false,
     val showButtonHints: Boolean = true,
     /** The linked RetroAchievements profile behind the status bar avatar. */
-    val profile: dev.xross.launcher.profile.ProfileState = dev.xross.launcher.profile.ProfileState(),
+    val profile: ProfileState = ProfileState(),
     /** The User Card while it is open. */
     val profileCard: ProfileCardState? = null,
     /** The status bar avatar has the focus (Up from the top of a category). */
     val avatarFocused: Boolean = false,
     /** Followed users (2b.7c), for the social stack. */
-    val friends: dev.xross.launcher.profile.FriendsState = dev.xross.launcher.profile.FriendsState.Unlinked,
+    val friends: FriendsState = FriendsState.Unlinked,
     /** The social stack's panel while it is open. */
     val socialPanel: SocialPanelState? = null,
     /** Current settings (the wave uniforms and the Wave settings panel read them). */
-    val settings: dev.xross.launcher.data.XrossSettings = dev.xross.launcher.data.XrossSettings(),
+    val settings: XrossSettings = XrossSettings(),
     /** Settings ▸ Theme ▸ Wave settings while it is open. */
     val waveEditor: WaveEditorState? = null,
     /** Settings ▸ Theme ▸ Layout while it is open (2b.8a); the menu stays in full view behind it. */
@@ -170,7 +192,7 @@ private data class Transient(
     val remap: RemapSession? = null,
     val family: ControllerFamily = ControllerFamily.KEYBOARD,
     val booting: String? = null,
-    val boot: dev.xross.launcher.ui.BootState? = null,
+    val boot: BootState? = null,
     val bootPending: Boolean = false,
     val optionsMenu: OptionsMenuState? = null,
     val search: SearchState? = null,
@@ -199,21 +221,21 @@ class XmbViewModel(
     private val audio = container.audio
 
     /** Hot reload: the active folder pack's files changed; a broken edit keeps the last good theme. */
-    private val themeWatcher = dev.xross.launcher.theme.pack.ThemeWatcher(viewModelScope) {
+    private val themeWatcher = ThemeWatcher(viewModelScope) {
         container.themes.hotReload()?.let { toast("Theme not reloaded: $it") }
     }
     private val music = container.music
 
     /** Battery level for the battery tint and `battery` context rules (Theme 2.0, 2b.3). */
     private val batteryMonitor = BatteryMonitor(context).also { it.start() }
-    val battery: StateFlow<dev.xross.launcher.theme.BatteryLevel?> get() = batteryMonitor.level
+    val battery: StateFlow<BatteryLevel?> get() = batteryMonitor.level
 
     /**
      * The widgets drawn (2b.7a): the active pack's `components`, its variant's, then the user's
      * `display.components`. The same cascade as [dev.xross.launcher.theme.ThemeLookResolver]'s,
      * here for the status bar's sources and the avatar's place in navigation.
      */
-    val components: StateFlow<dev.xross.launcher.theme.pack.ResolvedComponents> =
+    val components: StateFlow<ResolvedComponents> =
         combine(container.themes.active, container.settings.settings) { pack, st -> pack.components(st.themeVariant, st.componentOverrides) }
             .stateIn(
                 viewModelScope, SharingStarted.Eagerly,
@@ -227,7 +249,7 @@ class XmbViewModel(
     ).state
 
     /** For tests: a battery reading, as the system would broadcast it. */
-    internal fun reportBattery(level: dev.xross.launcher.theme.BatteryLevel?) = batteryMonitor.report(level)
+    internal fun reportBattery(level: BatteryLevel?) = batteryMonitor.report(level)
 
     val media = MediaOverlayController(
         context = context,
@@ -277,7 +299,7 @@ class XmbViewModel(
             override fun emit(effect: UiEffect) = this@XmbViewModel.emit(effect)
             override fun showOptions(menu: OptionsMenuState) = transient.update { it.copy(optionsMenu = menu) }
             override fun components() = this@XmbViewModel.components.value
-            override fun friendsWanted(components: dev.xross.launcher.theme.pack.ResolvedComponents) = ra.onFriendsWanted(components = components)
+            override fun friendsWanted(components: ResolvedComponents) = ra.onFriendsWanted(components = components)
             override fun photoUri(photoId: Long) = container.media.library.value.photos.firstOrNull { it.id == photoId }?.uri
             override fun dismissOptions() = transient.update { it.copy(optionsMenu = null) }
             override fun openNameEntry(entry: NameEntry) = transient.update { it.copy(optionsMenu = null, nameEntry = entry) }
@@ -305,8 +327,8 @@ class XmbViewModel(
 
     /** DAT summaries and per-game metadata: one input so the tree's combine stays within five flows. */
     private data class Meta(
-        val dats: List<dev.xross.launcher.data.DatSummary> = emptyList(),
-        val metadata: Map<Long, dev.xross.launcher.data.GameMetadataEntity> = emptyMap(),
+        val dats: List<DatSummary> = emptyList(),
+        val metadata: Map<Long, GameMetadataEntity> = emptyMap(),
     )
 
     private val meta = combine(container.dats.summaries, container.database.metadata().observeAll()) { d, m ->
@@ -364,7 +386,7 @@ class XmbViewModel(
     /** Inputs that only some lists read live (fingerprint progress, Now Playing). */
     private data class Live(
         val fingerprints: FingerprintStatus,
-        val nowPlaying: dev.xross.launcher.media.NowPlaying,
+        val nowPlaying: NowPlaying,
         val scrape: ScrapeProgress = ScrapeProgress(),
     )
 
@@ -376,9 +398,9 @@ class XmbViewModel(
     private data class Settled(
         val transient: Transient,
         val layoutEditor: LayoutEditorState?,
-        val settings: dev.xross.launcher.data.XrossSettings,
+        val settings: XrossSettings,
         val overlay: MediaOverlay?,
-        val profile: dev.xross.launcher.profile.ProfileState,
+        val profile: ProfileState,
         val ra: RaState,
     )
 
@@ -849,7 +871,7 @@ class XmbViewModel(
     // region Options menu
 
     /** The photo viewer's Options: its wallpaper choices, over the viewer. */
-    private fun openPhotoOptions(photo: dev.xross.launcher.media.Photo) {
+    private fun openPhotoOptions(photo: Photo) {
         val options = MediaMenus.photoOptions(photo.id, customWallpaper = settingsStore.current.customWallpaper.isNotBlank())
         transient.update { it.copy(optionsMenu = OptionsMenuState.open(photo.name.substringBeforeLast('.'), options)) }
     }
@@ -923,7 +945,7 @@ class XmbViewModel(
         when {
             !scraper.isConfigured -> toast("Turn on Hasheous or add a ScreenScraper or SteamGridDB account first")
             scraper.progress.value.running -> toast("Already scraping")
-            settingsStore.current.scrapeWifiOnly && !dev.xross.launcher.scrape.Network.isUnmetered(context) ->
+            settingsStore.current.scrapeWifiOnly && !Network.isUnmetered(context) ->
                 toast("Connect to Wi-Fi, or turn off Wi-Fi only")
             else -> {
                 scraper.start(viewModelScope)
@@ -939,9 +961,9 @@ class XmbViewModel(
         }
         datWork {
             when (container.scraper.scrapeOne(gameId)) {
-                dev.xross.launcher.scrape.ScrapeStatus.OK -> "Updated from online sources"
-                dev.xross.launcher.scrape.ScrapeStatus.NOT_FOUND -> "No service knows this game — try Find match"
-                dev.xross.launcher.scrape.ScrapeStatus.ERROR -> "Couldn't reach the services; try again later"
+                ScrapeStatus.OK -> "Updated from online sources"
+                ScrapeStatus.NOT_FOUND -> "No service knows this game — try Find match"
+                ScrapeStatus.ERROR -> "Couldn't reach the services; try again later"
                 null -> "This game needs a fingerprint first; it's taken in the background"
             }
         }
@@ -951,7 +973,7 @@ class XmbViewModel(
     private fun chooseMatch(command: Command.ChooseMatch) = datWork {
         withContext(Dispatchers.IO) {
             container.database.metadata().edit(command.gameId) { row ->
-                val base = dev.xross.launcher.data.DatRepository.withoutDatMatch(row).copy(locked = true, scrapeStatus = null)
+                val base = DatRepository.withoutDatMatch(row).copy(locked = true, scrapeStatus = null)
                 when (command.provider) {
                     ProviderId.SCREENSCRAPER -> base.copy(screenScraperId = command.id)
                     ProviderId.STEAMGRIDDB -> base.copy(steamGridDbId = command.id)
@@ -961,7 +983,7 @@ class XmbViewModel(
             container.database.games().applyTitles()
         }
         when (container.scraper.scrapeOne(command.gameId)) {
-            dev.xross.launcher.scrape.ScrapeStatus.OK -> "Match saved and scraped"
+            ScrapeStatus.OK -> "Match saved and scraped"
             else -> "Match saved; scraping didn't finish — try Scrape again later"
         }
     }
@@ -994,7 +1016,7 @@ class XmbViewModel(
             }
             is TextPrompt.AvatarBorderColor -> {
                 if (value.isEmpty()) return
-                val color = dev.xross.launcher.theme.AvatarStyleLimits.normalizeColor(value)
+                val color = AvatarStyleLimits.normalizeColor(value)
                     ?: return fail("That isn't a hex color — use #RRGGBB, like #FFB5C5")
                 settingsStore.update { AvatarEditor.apply(it, it.avatarStyle.copy(borderColorHex = color)) }
                 toast("Avatar ring color: $color")
@@ -1393,7 +1415,7 @@ class XmbViewModel(
     }
 
     /** Art follows the Xross folder to its new place, in the background. */
-    private fun moveArtFrom(previous: dev.xross.launcher.storage.XrossLayout) {
+    private fun moveArtFrom(previous: XrossLayout) {
         if (previous.media.absolutePath == container.environment.current.media.absolutePath) return
         viewModelScope.launch {
             val report = runCatching { container.assets.relocateFrom(previous.media) }.getOrNull() ?: return@launch
@@ -1539,7 +1561,7 @@ class XmbViewModel(
         }
         viewModelScope.launch {
             val base = baseRomsFolder(settingsStore.current.baseRomsFolder)
-            val result = withContext(Dispatchers.IO) { dev.xross.launcher.storage.SystemFolders.create(base) }
+            val result = withContext(Dispatchers.IO) { SystemFolders.create(base) }
             when {
                 !result.ok -> {
                     sounds.play(UiSound.ERROR)
@@ -1572,8 +1594,8 @@ class XmbViewModel(
     }
 
     /** Applies the folder lists to the media library and reloads it when they changed. */
-    private fun syncMediaFolders(s: dev.xross.launcher.data.XrossSettings) {
-        if (container.media.setFolders(dev.xross.launcher.media.MediaFolders(s.photoFolders, s.videoFolders))) {
+    private fun syncMediaFolders(s: XrossSettings) {
+        if (container.media.setFolders(MediaFolders(s.photoFolders, s.videoFolders))) {
             viewModelScope.launch { container.media.refresh() }
         }
     }
@@ -1584,7 +1606,7 @@ class XmbViewModel(
     private fun datFolder(setting: String): File =
         if (setting.isBlank()) container.environment.current.dats else File(setting)
 
-    private fun backupToRestore(): dev.xross.launcher.data.BackupInfo? =
+    private fun backupToRestore(): BackupInfo? =
         env.value.portable.restorable ?: env.value.portable.backupOnDisk
 
     private fun confirmRestore() {
@@ -1605,14 +1627,14 @@ class XmbViewModel(
             container.scraper.stop()
             withContext(Dispatchers.IO) { settingsStore.flush() }
             when (val result = container.backups.stageRestore(backup)) {
-                is dev.xross.launcher.data.BackupResult.Done -> {
+                is BackupResult.Done -> {
                     sounds.play(UiSound.OK)
                     toast("Restoring ${countOf(result.info.games, "game")}…")
                     delay(RESTART_DELAY_MS)
                     emit(UiEffect.RestartApp)
                 }
-                is dev.xross.launcher.data.BackupResult.Skipped -> toast(result.reason)
-                is dev.xross.launcher.data.BackupResult.Failed -> {
+                is BackupResult.Skipped -> toast(result.reason)
+                is BackupResult.Failed -> {
                     sounds.play(UiSound.ERROR)
                     toast("Restore failed: ${result.reason}")
                 }
@@ -1857,13 +1879,13 @@ class XmbViewModel(
         val pack = container.themes.active.value
         val look = pack.look(s.themeVariant, category = state.value.categoryId)
         val user = s.effectOverrides.cosmetics.bootIntro
-        val plan = dev.xross.launcher.ui.BootSequence.resolve(
-            dev.xross.launcher.ui.BootInputs(
+        val plan = BootSequence.resolve(
+            BootInputs(
                 coldBoot = true,
                 intro = user ?: look.cosmetics.bootIntro,
                 userChoice = user != null,
                 video = pack.bootVideo,
-                stillMotion = dev.xross.launcher.theme.QuickProfile.byName(s.quickProfile).stillMotion,
+                stillMotion = QuickProfile.byName(s.quickProfile).stillMotion,
                 startupSound = s.bootSound,
                 cueVolume = s.cueVolume,
                 waveEnabled = s.waveEnabled,
@@ -1878,22 +1900,22 @@ class XmbViewModel(
             // Skipped before it began: no video, no ramp and no slow fade-in, just the crossfade to the menu.
             logBoot(plan, skipped = true, atMs = 0)
             audio.onColdBoot()
-            val quick = dev.xross.launcher.ui.BootState(dev.xross.launcher.ui.BootPlan(dev.xross.launcher.ui.BootMode.FADE), now, ending = true, endedAtNanos = now)
+            val quick = BootState(BootPlan(BootMode.FADE), now, ending = true, endedAtNanos = now)
             transient.update { it.copy(bootPending = false, boot = quick) }
             bootJob = viewModelScope.launch {
-                delay(dev.xross.launcher.ui.BootSequence.CROSSFADE_MS)
+                delay(BootSequence.CROSSFADE_MS)
                 transient.update { it.copy(boot = null) }
             }
             return
         }
-        if (plan.mode == dev.xross.launcher.ui.BootMode.FADE) {
+        if (plan.mode == BootMode.FADE) {
             transient.update { it.copy(bootPending = false) }
             logBoot(plan, skipped = false, atMs = 0)
             audio.onColdBoot()
             return
         }
-        transient.update { it.copy(bootPending = false, boot = dev.xross.launcher.ui.BootState(plan, now)) }
-        if (plan.mode == dev.xross.launcher.ui.BootMode.VIDEO) audio.onBootVideo(true) else audio.onColdBoot()
+        transient.update { it.copy(bootPending = false, boot = BootState(plan, now)) }
+        if (plan.mode == BootMode.VIDEO) audio.onBootVideo(true) else audio.onColdBoot()
         bootJob = viewModelScope.launch {
             delay(plan.maxMs)
             endBoot(skipped = false)
@@ -1923,13 +1945,13 @@ class XmbViewModel(
         }
         transient.update { it.copy(boot = boot.copy(ending = true, endedAtNanos = now)) }
         bootJob = viewModelScope.launch {
-            delay(dev.xross.launcher.ui.BootSequence.CROSSFADE_MS)
+            delay(BootSequence.CROSSFADE_MS)
             transient.update { it.copy(boot = null) }
         }
     }
 
-    private fun logBoot(plan: dev.xross.launcher.ui.BootPlan, skipped: Boolean, atMs: Long) {
-        if (BuildConfig.PERF_LOG) android.util.Log.i("XrossBoot", dev.xross.launcher.ui.BootSequence.describe(plan, skipped, atMs))
+    private fun logBoot(plan: BootPlan, skipped: Boolean, atMs: Long) {
+        if (BuildConfig.PERF_LOG) android.util.Log.i("XrossBoot", BootSequence.describe(plan, skipped, atMs))
     }
 
     // endregion
@@ -2033,9 +2055,9 @@ class XmbViewModel(
             Command.OpenProfileCard -> ra.openProfileCard()
             Command.CheckScreenScraperAccount -> datWork {
                 when (val check = container.screenScraper.checkAccount()) {
-                    is dev.xross.launcher.scrape.providers.AccountCheck.Ok ->
+                    is AccountCheck.Ok ->
                         "Signed in" + (check.quota.user?.let { " as $it" } ?: "") + " · " + check.quota.summary
-                    is dev.xross.launcher.scrape.providers.AccountCheck.Failed -> check.reason
+                    is AccountCheck.Failed -> check.reason
                 }
             }
             Command.ClearArtwork -> viewModelScope.launch {
@@ -2129,12 +2151,12 @@ class XmbViewModel(
             Command.CycleXrossVolume -> cycleXrossVolume()
             Command.BackupNow -> viewModelScope.launch {
                 when (val result = container.backups.backupNow()) {
-                    is dev.xross.launcher.data.BackupResult.Done -> {
+                    is BackupResult.Done -> {
                         sounds.play(UiSound.OK)
                         toast("Library backed up (${countOf(result.info.games, "game")})")
                     }
-                    is dev.xross.launcher.data.BackupResult.Skipped -> toast(result.reason)
-                    is dev.xross.launcher.data.BackupResult.Failed -> {
+                    is BackupResult.Skipped -> toast(result.reason)
+                    is BackupResult.Failed -> {
                         sounds.play(UiSound.ERROR)
                         toast("Backup failed: ${result.reason}")
                     }
@@ -2296,7 +2318,7 @@ class XmbViewModel(
                 Triple(packs, active, rejected)
             }.collect { (packs, active, rejected) ->
                 sounds.useTheme(active)
-                themeWatcher.watch((active.info.source as? dev.xross.launcher.theme.pack.PackSource.Folder)?.dir)
+                themeWatcher.watch((active.info.source as? PackSource.Folder)?.dir)
                 env.update {
                     it.copy(
                         themes = ThemeSetup(

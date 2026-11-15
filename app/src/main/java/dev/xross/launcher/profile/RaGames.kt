@@ -1,6 +1,7 @@
 package dev.xross.launcher.profile
 
 import kotlinx.serialization.Serializable
+import dev.xross.launcher.data.GameEntity
 
 /** One achievement of a game, with the linked user's unlock state. Public data. */
 @Serializable
@@ -81,7 +82,7 @@ data class RaLibrarySummary(
 
     companion object {
         /** [known] pairs a library game with its cached progress; two dumps of one game count once. */
-        fun of(supportedGames: Int, known: List<Pair<dev.xross.launcher.data.GameEntity, RaGameProgress>>): RaLibrarySummary {
+        fun of(supportedGames: Int, known: List<Pair<GameEntity, RaGameProgress>>): RaLibrarySummary {
             val sets = known.filter { it.second.total > 0 }.distinctBy { it.second.gameId }
             return RaLibrarySummary(
                 supportedGames = supportedGames,
@@ -132,8 +133,8 @@ data class RaHubSummary(
          * cached progress. [order] ranks a platform id (the registry's order); [tag] names it.
          */
         fun of(
-            supported: List<dev.xross.launcher.data.GameEntity>,
-            known: List<Pair<dev.xross.launcher.data.GameEntity, RaGameProgress>>,
+            supported: List<GameEntity>,
+            known: List<Pair<GameEntity, RaGameProgress>>,
             order: (String) -> Int = { 0 },
             tag: (String) -> String = { it.uppercase() },
         ): RaHubSummary {

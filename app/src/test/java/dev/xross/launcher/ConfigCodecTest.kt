@@ -6,8 +6,8 @@ import dev.xross.launcher.data.XrossSettings
 import dev.xross.launcher.input.ConfirmLayout
 import dev.xross.launcher.input.ControllerProfile
 import dev.xross.launcher.input.NavAction
-import dev.xross.launcher.storage.PlatformRegistry
-import dev.xross.launcher.storage.SystemOverride
+import dev.xross.launcher.model.PlatformRegistry
+import dev.xross.launcher.model.SystemOverride
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -19,6 +19,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import dev.xross.launcher.data.MusicUnderSnaps
 
 /** settings.json, controllers.json and systems.json encoding (Robolectric: key names come from KeyEvent). */
 @RunWith(RobolectricTestRunner::class)
@@ -48,7 +49,7 @@ class ConfigCodecTest {
         bgmVolume = 0.3f,
         musicVolume = 0.9f,
         snapVolume = 0.1f,
-        musicUnderSnaps = dev.xross.launcher.audio.MusicUnderSnaps.DUCK,
+        musicUnderSnaps = MusicUnderSnaps.DUCK,
         bootSound = false,
         gameBootSound = false,
         hashLargeImages = true,

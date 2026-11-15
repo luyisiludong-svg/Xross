@@ -19,8 +19,9 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
-import dev.xross.launcher.scrape.ArtKind
+import dev.xross.launcher.model.ArtKind
 import kotlinx.coroutines.delay
+import dev.xross.launcher.audio.SnapRamp
 
 /**
  * Timing of the focused-game background (Games ribbon):
@@ -37,14 +38,13 @@ object BackdropTiming {
     const val HERO_FADE_OUT_MS = 220
     const val VIDEO_DELAY_MS = 1_200L
     const val VIDEO_FADE_MS = 300
-    const val AUDIO_RAMP_MS = 300L
+    const val AUDIO_RAMP_MS = SnapRamp.MS
 
     /** Art kinds tried for the background, best first. */
     val HERO_ART = listOf(ArtKind.HERO, ArtKind.SCREENSHOT)
 
     /** Volume [elapsedMs] into the ramp towards [target]. */
-    fun rampVolume(elapsedMs: Long, target: Float): Float =
-        target.coerceIn(0f, 1f) * (elapsedMs.toFloat() / AUDIO_RAMP_MS).coerceIn(0f, 1f)
+    fun rampVolume(elapsedMs: Long, target: Float): Float = SnapRamp.volume(elapsedMs, target)
 
     /** True when opaque art or video covers every pixel, so the wave underneath needn't draw. */
     fun covers(heroAlpha: Float, videoAlpha: Float): Boolean = heroAlpha >= 0.999f || videoAlpha >= 0.999f

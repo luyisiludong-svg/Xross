@@ -1,7 +1,6 @@
 package dev.xross.launcher.theme.pack
 
 import androidx.compose.runtime.Immutable
-import dev.xross.launcher.data.XrossSettings
 
 /**
  * Every pick the user layers over the active theme pack (Phase 2b.8), in one value: what the
@@ -32,18 +31,6 @@ data class UserLook(
     /** True when nothing is set: the pack as it is. */
     val isNone: Boolean get() = this == NONE
 
-    /** [s] with these picks written back (the rest of [s] as it is). */
-    fun writeTo(s: XrossSettings): XrossSettings = s.copy(
-        effectOverrides = effects,
-        componentOverrides = components,
-        layoutOverrides = layout,
-        surfaceStyle = surfaceStyle,
-        customWallpaper = customWallpaper,
-        adaptiveGamePalette = adaptiveGamePalette,
-        circadianCurve = circadianCurve,
-        batteryTint = batteryTint,
-    )
-
     /**
      * What is set, one phrase per kind, in Reset's order: "2 layout values", "3 effects",
      * "1 component", "surface", "2 color layers", "wallpaper". Empty for [NONE].
@@ -62,18 +49,6 @@ data class UserLook(
     companion object {
         /** The pack as it is: no user pick. */
         val NONE = UserLook()
-
-        /** The user layer saved in [s]. */
-        fun of(s: XrossSettings): UserLook = UserLook(
-            effects = s.effectOverrides,
-            components = s.componentOverrides,
-            layout = s.layoutOverrides,
-            surfaceStyle = s.surfaceStyle,
-            customWallpaper = s.customWallpaper,
-            adaptiveGamePalette = s.adaptiveGamePalette,
-            circadianCurve = s.circadianCurve,
-            batteryTint = s.batteryTint,
-        )
 
         private fun countOf(n: Int, noun: String) =
             if (n == 1) "1 $noun" else "${java.text.NumberFormat.getIntegerInstance().format(n)} ${noun}s"

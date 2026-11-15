@@ -16,7 +16,7 @@ import dev.xross.launcher.theme.pack.EffectSlot
 import dev.xross.launcher.theme.pack.FocusFrameStyle
 import dev.xross.launcher.theme.pack.IconMask
 import dev.xross.launcher.theme.pack.ParticlePreset
-import dev.xross.launcher.theme.pack.ThemeDefaults
+import dev.xross.launcher.data.ThemeDefaults
 import dev.xross.launcher.theme.pack.ThemeLook
 import dev.xross.launcher.theme.pack.ThemeManifest
 import dev.xross.launcher.theme.pack.ThemePackLoader

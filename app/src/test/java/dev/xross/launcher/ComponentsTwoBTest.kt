@@ -41,7 +41,7 @@ import dev.xross.launcher.theme.pack.ComponentRow
 import dev.xross.launcher.theme.pack.ComponentsPatch
 import dev.xross.launcher.theme.pack.GlyphOverrideMode
 import dev.xross.launcher.theme.pack.MiniPlayerMode
-import dev.xross.launcher.theme.pack.ThemeDefaults
+import dev.xross.launcher.data.ThemeDefaults
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent

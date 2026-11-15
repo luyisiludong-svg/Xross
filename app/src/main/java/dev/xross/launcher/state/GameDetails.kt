@@ -3,8 +3,11 @@ package dev.xross.launcher.state
 import androidx.compose.runtime.Immutable
 import dev.xross.launcher.data.GameEntity
 import dev.xross.launcher.data.GameMetadataEntity
-import dev.xross.launcher.storage.Platform
+import dev.xross.launcher.model.Platform
 import java.util.Locale
+import dev.xross.launcher.profile.AchievementsState
+import dev.xross.launcher.profile.RaConsoles
+import dev.xross.launcher.scrape.HtmlText
 
 /**
  * The Game Details screen: art, description and release facts for one game. Built from rows
@@ -29,7 +32,7 @@ data class GameDetailsState(
     /** Synopsis scroll step, moved by up/down. */
     val scroll: Int = 0,
     /** RetroAchievements progress; null while loading or for systems without achievements. */
-    val achievements: dev.xross.launcher.profile.AchievementsState? = null,
+    val achievements: AchievementsState? = null,
     /** The system has RetroAchievements (the summary row is shown). */
     val achievementsSupported: Boolean = false,
     /** Where this game is in the list Details was opened from (0-based), and that list's size. */
@@ -62,7 +65,7 @@ data class GameDetailsState(
                 title = game.title,
                 platform = platform?.name,
                 // Descriptions scraped before entity decoding still hold "&quot;" and friends.
-                synopsis = meta?.synopsis?.trim()?.ifEmpty { null }?.let(dev.xross.launcher.scrape.HtmlText::decode),
+                synopsis = meta?.synopsis?.trim()?.ifEmpty { null }?.let(HtmlText::decode),
                 facts = facts,
                 rating = meta?.rating,
                 playtime = when {
@@ -72,7 +75,7 @@ data class GameDetailsState(
                 },
                 artVersion = artVersion,
                 scraped = meta?.scrapeStatus == "OK",
-                achievementsSupported = dev.xross.launcher.profile.RaConsoles.of(game.platformId) != null,
+                achievementsSupported = RaConsoles.of(game.platformId) != null,
             )
         }
 

@@ -199,15 +199,3 @@ enum class EffectSlot(val title: String, val choices: List<Pair<String, String>>
         return "Theme pack ($name)"
     }
 }
-
-/**
- * Settings ▸ Theme ▸ Reset to theme defaults (2b.4f): everything the user set over the active
- * pack's look ([UserLook]) goes back to the pack. Kept: which pack and variant, the theme color,
- * the quick profile (a look of its own, with its own row) and the wave's speed and shape.
- */
-object ThemeDefaults {
-    fun reset(s: dev.xross.launcher.data.XrossSettings): dev.xross.launcher.data.XrossSettings = UserLook.NONE.writeTo(s)
-
-    /** True when [s] overrides nothing [reset] would clear. */
-    fun isDefault(s: dev.xross.launcher.data.XrossSettings): Boolean = UserLook.of(s).isNone
-}

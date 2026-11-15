@@ -1,7 +1,7 @@
 package dev.xross.launcher.theme.pack
 
 import androidx.compose.runtime.Immutable
-import dev.xross.launcher.state.Categories
+import dev.xross.launcher.model.CategoryIds
 import dev.xross.launcher.theme.BatteryLevel
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
@@ -225,7 +225,7 @@ data class ResolvedRule(
 }
 
 /** Category ids a rule may name. */
-private val RULE_CATEGORIES: Set<String> by lazy { Categories.all.mapTo(HashSet()) { it.id } }
+private val RULE_CATEGORIES: Set<String> by lazy { CategoryIds.all.toHashSet() }
 
 /** At most this many rules are read from a pack. */
 const val MAX_RULES = 64

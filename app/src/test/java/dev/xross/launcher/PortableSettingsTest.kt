@@ -9,8 +9,8 @@ import dev.xross.launcher.data.SettingsStore
 import dev.xross.launcher.data.XrossSettings
 import dev.xross.launcher.input.ConfirmLayout
 import dev.xross.launcher.input.NavAction
-import dev.xross.launcher.storage.PlatformRegistry
-import dev.xross.launcher.storage.SystemOverride
+import dev.xross.launcher.model.PlatformRegistry
+import dev.xross.launcher.model.SystemOverride
 import dev.xross.launcher.storage.XrossEnvironment
 import org.junit.After
 import org.junit.Assert.assertEquals

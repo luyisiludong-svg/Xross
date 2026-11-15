@@ -10,6 +10,8 @@ import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
+import dev.xross.launcher.theme.pack.ColorFlags
+import dev.xross.launcher.theme.pack.Motion
 
 /** Battery charge (0–100) and whether it is charging (or full on the charger). */
 @Immutable
@@ -330,7 +332,7 @@ enum class QuickProfile(
     fun layout(base: ThemeLayout): ThemeLayout {
         if (motion == null && !stillMotion) return base
         var l = base
-        motion?.let { if (l.motion.profile != it) l = l.copy(motion = dev.xross.launcher.theme.pack.Motion(it)) }
+        motion?.let { if (l.motion.profile != it) l = l.copy(motion = Motion(it)) }
         if (stillMotion && l.textOverflow == TextOverflowMode.MARQUEE) l = l.copy(textOverflow = TextOverflowMode.ELLIPSIS)
         return l
     }
@@ -363,7 +365,7 @@ data class ColorSwitches(
     companion object {
         /** The user's choice (null: follow the pack), else the pack's, else the defaults of A.7. */
         fun resolve(
-            pack: dev.xross.launcher.theme.pack.ColorFlags,
+            pack: ColorFlags,
             userCircadian: Boolean?,
             userBatteryTint: Boolean?,
             userAdaptive: Boolean?,

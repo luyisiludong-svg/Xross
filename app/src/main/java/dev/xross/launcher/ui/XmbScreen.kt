@@ -113,7 +113,7 @@ import dev.xross.launcher.state.XmbCategory
 import dev.xross.launcher.state.XmbNode
 import dev.xross.launcher.state.XmbUiState
 import dev.xross.launcher.media.SnapPlayer
-import dev.xross.launcher.scrape.ArtKind
+import dev.xross.launcher.model.ArtKind
 import dev.xross.launcher.theme.ThemePalette
 import dev.xross.launcher.theme.XrossTheme
 import dev.xross.launcher.theme.rememberActivePalette
@@ -128,6 +128,13 @@ import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.min
 import kotlin.math.roundToInt
+import dev.xross.launcher.state.SocialStack
+import dev.xross.launcher.state.StatusBarState
+import dev.xross.launcher.theme.WallpaperSource
+import dev.xross.launcher.theme.pack.Cosmetics
+import dev.xross.launcher.theme.pack.ParticlePreset
+import dev.xross.launcher.theme.pack.UiFilter
+import dev.xross.launcher.theme.pack.UiFilterRef
 
 internal val TextBright = Color(0xFFFFFFFF)
 internal val TextDim = Color(0xD9FFFFFF)
@@ -187,7 +194,7 @@ fun XmbScreen(
     media: MediaOverlayController,
     music: MusicPlayer,
     /** The status bar's own slice; only the bar collects it. */
-    statusBar: kotlinx.coroutines.flow.StateFlow<dev.xross.launcher.state.StatusBarState>,
+    statusBar: kotlinx.coroutines.flow.StateFlow<StatusBarState>,
     onAction: (NavAction) -> Unit,
     onCategoryTap: (Int) -> Unit,
     onItemTap: (Int) -> Unit,
@@ -213,10 +220,10 @@ fun XmbScreen(
     /** Opaque hero art, a video snap or an opaque wallpaper covers the screen: the wave can stop rendering. */
     onBackdropCoverChanged: (Boolean) -> Unit = {},
     /** The wallpaper behind the menu (the user's Xross wallpaper or the pack's); null: none. */
-    wallpaper: dev.xross.launcher.theme.WallpaperSource? = null,
+    wallpaper: WallpaperSource? = null,
     /** The pack's wallpaper, shown when [wallpaper] (the user's) can't be read. */
-    packWallpaper: dev.xross.launcher.theme.WallpaperSource? = null,
-    loadWallpaper: suspend (dev.xross.launcher.theme.WallpaperSource, Int) -> Wallpaper? = { _, _ -> null },
+    packWallpaper: WallpaperSource? = null,
+    loadWallpaper: suspend (WallpaperSource, Int) -> Wallpaper? = { _, _ -> null },
     onWaveRowTap: (Int) -> Unit = {},
     onWaveSlider: (Int, Float) -> Unit = { _, _ -> },
     onCloseWaveSettings: () -> Unit = {},
@@ -262,8 +269,8 @@ fun XmbScreen(
 
     // The experimental UI filter (2b.4f, Android 13+): an AGSL RenderEffect on the whole menu.
     // Static filters never animate; a custom one that reads uTime rests with the screen.
-    val filterRef = LocalThemeLook.current?.cosmetics?.screenFilter ?: dev.xross.launcher.theme.pack.UiFilterRef.OFF
-    val filterSource = filterRef.takeIf { it.filter == dev.xross.launcher.theme.pack.UiFilter.CUSTOM }
+    val filterRef = LocalThemeLook.current?.cosmetics?.screenFilter ?: UiFilterRef.OFF
+    val filterSource = filterRef.takeIf { it.filter == UiFilter.CUSTOM }
         ?.let { LocalThemePack.current?.customUiFilters?.get(it.path) }
     val filterStill = LocalStillMotion.current
 
@@ -334,8 +341,8 @@ fun XmbScreen(
         androidx.compose.runtime.SideEffect { FrostedBackdrop.suppressed = frostOff }
         // Layer 4: ambient particles over the art (2b.4e), hidden under a snap, full-screen media,
         // the wave editor and E-Ink, resting when stopped or after 10 s without input.
-        val particlePreset = (LocalThemeLook.current?.cosmetics ?: dev.xross.launcher.theme.pack.Cosmetics.NONE).particleField
-        if (particlePreset != dev.xross.launcher.theme.pack.ParticlePreset.NONE) {
+        val particlePreset = (LocalThemeLook.current?.cosmetics ?: Cosmetics.NONE).particleField
+        if (particlePreset != ParticlePreset.NONE) {
             val stillMotion = LocalStillMotion.current
             val particleState = ParticleRest.of(
                 preset = particlePreset,
@@ -414,7 +421,7 @@ fun XmbScreen(
             tickerCovered = miniCovered,
             onTickerTap = onMiniPlayerTap,
             onTickerLongPress = onMiniPlayerLongPress,
-            social = if (dev.xross.launcher.state.SocialStack.shows(components, state.friends)) state.friends.friends else emptyList(),
+            social = if (SocialStack.shows(components, state.friends)) state.friends.friends else emptyList(),
             socialBadge = state.friends.badge,
             socialOpen = state.socialPanel != null,
             socialGlow = state.settings.avatarStyle.glowEnabled,

@@ -21,6 +21,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.IOException
+import dev.xross.launcher.storage.FileHash
+import dev.xross.launcher.storage.HashSource
 
 /** Live state of a scrape pass, for Settings and the busy indicator. */
 data class ScrapeProgress(
@@ -149,7 +151,7 @@ class ScrapeOrchestrator(
             // Scrape once fingerprinting has had its turn: by hash, by a chosen id, or (arcade sets,
             // files too large to hash) by whole-file hashes and names.
             val identifiable = hash.hasContentHash() || meta?.screenScraperId != null || game.platformId == "arcade" ||
-                hash?.source == dev.xross.launcher.storage.HashSource.SKIPPED.name
+                hash?.source == HashSource.SKIPPED.name
             if (!identifiable) return@withLock null
 
             var request = buildRequest(game, hash, meta)
@@ -210,8 +212,8 @@ class ScrapeOrchestrator(
         // file (the zip); DAT-based Hasheous indexes the ROM chips inside it, so it gets the
         // largest chip's hashes in the header-less slots.
         val arcade = game.platformId == "arcade" && hash.hasContentHash().not()
-        val whole = if (arcade) dev.xross.launcher.storage.FileHash.of(java.io.File(game.path), ARCADE_HASH_LIMIT) else null
-        val chip = if (arcade) dev.xross.launcher.storage.FileHash.ofLargestZipMember(java.io.File(game.path), ARCADE_HASH_LIMIT) else null
+        val whole = if (arcade) FileHash.of(java.io.File(game.path), ARCADE_HASH_LIMIT) else null
+        val chip = if (arcade) FileHash.ofLargestZipMember(java.io.File(game.path), ARCADE_HASH_LIMIT) else null
         return ScrapeRequest(
             gameId = game.id,
             uuid = game.uuid,

@@ -29,6 +29,7 @@ import dev.xross.launcher.theme.pack.SurfaceShape
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.sin
+import dev.xross.launcher.theme.pack.withOpacity
 
 /**
  * Draws a card, panel or toast with the active theme surface ([ThemeSurfaces.active], from the
@@ -76,7 +77,7 @@ internal fun Modifier.xrossSurface(
         val shadowPaints = (listOfNotNull(s.glow) + s.shadows).map { sh ->
             android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
                 // A translucent shadow color sets the shadow's own alpha (an opaque one would take the paint's).
-                val faded = dev.xross.launcher.theme.pack.withOpacity(sh.argb, k)
+                val faded = withOpacity(sh.argb, k)
                 val argb = if (faded ushr 24 == 0xFF) (faded and 0x00FFFFFF) or (0xFE shl 24) else faded
                 color = argb
                 setShadowLayer(sh.blurDp.dp.toPx().coerceAtLeast(0.5f), sh.dxDp.dp.toPx(), sh.dyDp.dp.toPx(), argb)

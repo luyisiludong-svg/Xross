@@ -22,6 +22,7 @@ import kotlinx.serialization.json.intOrNull
 import java.io.File
 import java.io.IOException
 import java.util.Locale
+import dev.xross.launcher.theme.BatteryLevel
 
 /** Where a pack's files come from. */
 sealed interface PackSource {
@@ -217,7 +218,7 @@ data class LoadedTheme(
         variantId: String = "",
         category: String? = null,
         system: String? = null,
-        battery: dev.xross.launcher.theme.BatteryLevel? = null,
+        battery: BatteryLevel? = null,
         minuteOfDay: Int? = null,
     ): ThemeLook {
         val v = variant(variantId)

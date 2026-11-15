@@ -36,6 +36,7 @@ import java.io.File
 import java.io.InputStream
 import java.time.LocalDate
 import java.util.zip.ZipFile
+import dev.xross.launcher.data.of
 
 /**
  * The Appendix A.13 gate for 2b.8 (Phase 2b.8c): for the built-in Default pack and the stress

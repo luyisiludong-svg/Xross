@@ -15,6 +15,12 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import java.io.File
+import dev.xross.launcher.data.GameEntity
+import dev.xross.launcher.model.ArtKind
+import dev.xross.launcher.scrape.AssetCache
+import dev.xross.launcher.scrape.RateLimiter
+import dev.xross.launcher.scrape.providers.HasheousProvider
+import dev.xross.launcher.scrape.providers.SteamGridDbProvider
 
 /**
  * Real calls to the metadata services, against the ROMs in the git-ignored `localTestMedia/Roms/` folder.
@@ -48,7 +54,7 @@ class ScreenScraperLiveTest {
         val env = env()
         assumeTrue("SCREENSCRAPER_DEV_ID missing from .env", !env["SCREENSCRAPER_DEV_ID"].isNullOrBlank())
         val http = UrlConnectionHttp("Xross/live-test")
-        val limiter = dev.xross.launcher.scrape.RateLimiter(baseIntervalMs = 1_200)
+        val limiter = RateLimiter(baseIntervalMs = 1_200)
         val provider = ScreenScraperProvider(http, {
             ScreenScraperCredentials(
                 devId = env.getValue("SCREENSCRAPER_DEV_ID"),
@@ -73,7 +79,7 @@ class ScreenScraperLiveTest {
         assumeTrue("no ROMs in localTestMedia/Roms/", samples.isNotEmpty())
         val xross = java.nio.file.Files.createTempDirectory("xross-live-ss").toFile()
         val mediaDir = File(xross, "media")
-        val cache = dev.xross.launcher.scrape.AssetCache({ mediaDir })
+        val cache = AssetCache({ mediaDir })
         var found = 0
         var described = 0
         var cachedImages = 0
@@ -82,7 +88,7 @@ class ScreenScraperLiveTest {
         try {
             for ((file, platform) in samples) {
                 val hashes = FileHash.of(file, maxBytes = 256L shl 20) // 3DS images are too big: name search
-                val game = dev.xross.launcher.data.GameEntity(
+                val game = GameEntity(
                     path = file.absolutePath, platformId = platform, title = RomScanner.cleanTitle(file.nameWithoutExtension),
                     fileName = file.name, sizeBytes = file.length(), lastModified = file.lastModified(),
                 )
@@ -106,7 +112,7 @@ class ScreenScraperLiveTest {
                             val tmp = cache.tempFile()
                             try {
                                 val dl = http.download(m.url, tmp, m.kind.maxBytes)
-                                val ext = dev.xross.launcher.scrape.AssetCache.sniff(tmp)
+                                val ext = AssetCache.sniff(tmp)
                                 if (dl.code !in 200..299 || ext == null || (ext == "mp4") != m.kind.isVideo) {
                                     "${m.kind} ${dl.code} rejected"
                                 } else {
@@ -152,8 +158,8 @@ class ScreenScraperLiveTest {
         val key = env["STEAMGRIDDB_API_KEY"] ?: env["SteamGridDB_API"]
         assumeTrue("STEAMGRIDDB_API_KEY missing from .env", !key.isNullOrBlank())
         val http = UrlConnectionHttp("Xross/live-test")
-        val hasheous = dev.xross.launcher.scrape.providers.HasheousProvider(http, { true })
-        val sgdb = dev.xross.launcher.scrape.providers.SteamGridDbProvider(http, { key!! })
+        val hasheous = HasheousProvider(http, { true })
+        val sgdb = SteamGridDbProvider(http, { key!! })
 
         val samples = listOf("ARCADE" to "arcade", "3DS" to "n3ds").flatMap { (dir, platform) ->
             File(root, "localTestMedia/Roms/$dir").listFiles().orEmpty().filter { it.isFile }.sortedBy { it.name }.take(4).map { it to platform }
@@ -181,7 +187,7 @@ class ScreenScraperLiveTest {
                     val first = result.game.media.first()
                     val dest = File(out, "${file.nameWithoutExtension}.part")
                     val dl = http.download(first.url, dest, first.kind.maxBytes)
-                    val type = dev.xross.launcher.scrape.AssetCache.sniff(dest)
+                    val type = AssetCache.sniff(dest)
                     if (dl.code == 200 && type != null) withArt++
                     "#${result.game.providerId} ${result.game.media.joinToString { it.kind.name }} · ${first.kind} ${dl.code} ${dl.bytes / 1024} KB $type"
                 }
@@ -196,6 +202,6 @@ class ScreenScraperLiveTest {
     }
 
     private companion object {
-        val BOX_KINDS = setOf(dev.xross.launcher.scrape.ArtKind.BOX_2D, dev.xross.launcher.scrape.ArtKind.BOX_3D)
+        val BOX_KINDS = setOf(ArtKind.BOX_2D, ArtKind.BOX_3D)
     }
 }

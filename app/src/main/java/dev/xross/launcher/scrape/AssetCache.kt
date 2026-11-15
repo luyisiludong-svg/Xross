@@ -8,24 +8,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.Locale
-
-/**
- * Kinds of downloaded art, each stored at most once per game. [folder] is the kind's folder in
- * `Xross/media/` (ES-DE's names where ES-DE has the kind); [fileStem] names it in the old private
- * cache, kept for the one-time migration.
- */
-enum class ArtKind(val folder: String, val fileStem: String, val maxBytes: Long, val isVideo: Boolean = false) {
-    BOX_3D("3dboxes", "box3d", 8L shl 20),
-    BOX_2D("covers", "box2d", 8L shl 20),
-    WHEEL("wheels", "wheel", 4L shl 20),
-    SCREENSHOT("screenshots", "screenshot", 4L shl 20),
-    /** Wide banner for the details screen background. */
-    HERO("heroes", "hero", 8L shl 20),
-    /** Portrait capsule (600×900). */
-    GRID("capsules", "grid", 8L shl 20),
-    /** Video snap. */
-    VIDEO("snaps", "video", 40L shl 20, isVideo = true),
-}
+import dev.xross.launcher.model.ArtKind
+import dev.xross.launcher.config.AtomicFiles
+import dev.xross.launcher.data.GameEntity
 
 /**
  * Downloaded media on disk in the portable, ES-DE-compatible layout
@@ -66,7 +51,7 @@ class AssetCache(
     // region Library index
 
     /** Updates the UUID → file name index from the whole library. */
-    fun setLibrary(library: List<dev.xross.launcher.data.GameEntity>) = synchronized(lock) {
+    fun setLibrary(library: List<GameEntity>) = synchronized(lock) {
         val next = library.filter { UUID.matches(it.uuid) }
             .associate { it.uuid to MediaGame(it.id, it.uuid, it.platformId, it.fileName) }
         for ((uuid, slot) in slots) if (uuid !in next) departed[uuid] = slot
@@ -76,7 +61,7 @@ class AssetCache(
     }
 
     /** Adds one game (a scrape can start before the library index has caught up). */
-    fun register(game: dev.xross.launcher.data.GameEntity) = synchronized(lock) {
+    fun register(game: GameEntity) = synchronized(lock) {
         if (!UUID.matches(game.uuid)) return
         val entry = MediaGame(game.id, game.uuid, game.platformId, game.fileName)
         if (games[game.uuid] == entry) return
@@ -281,7 +266,7 @@ class AssetCache(
                     continue
                 }
                 ensureNomedia()
-                dev.xross.launcher.config.AtomicFiles.copy(file, File(kindDir(kind, slot), "${slot.name}.$ext"))
+                AtomicFiles.copy(file, File(kindDir(kind, slot), "${slot.name}.$ext"))
                 file.delete()
                 moved++
             }
@@ -312,7 +297,7 @@ class AssetCache(
                     continue
                 }
                 ensureNomedia()
-                dev.xross.launcher.config.AtomicFiles.copy(file, target)
+                AtomicFiles.copy(file, target)
                 file.delete()
                 moved++
             }

@@ -1,8 +1,8 @@
 package dev.xross.launcher.theme.pack
 
 import androidx.compose.runtime.Immutable
-import dev.xross.launcher.state.Categories
-import dev.xross.launcher.storage.PlatformRegistry
+import dev.xross.launcher.model.CategoryIds
+import dev.xross.launcher.model.PlatformRegistry
 import dev.xross.launcher.theme.ThemePalette
 import dev.xross.launcher.theme.shader.ShaderRef
 import java.util.Locale
@@ -143,7 +143,7 @@ fun cascade(
 private val VARIANT_ID = Regex("[A-Za-z0-9_.-]{1,48}")
 
 /** Category ids an override may name (`GAMES` or `games`). */
-private val CATEGORY_IDS: Set<String> by lazy { Categories.all.mapTo(HashSet()) { it.id } }
+private val CATEGORY_IDS: Set<String> by lazy { CategoryIds.all.toHashSet() }
 
 /** [ThemeManifest.variants] checked: unique valid ids, parseable colors, known surfaces. */
 internal fun resolveVariants(

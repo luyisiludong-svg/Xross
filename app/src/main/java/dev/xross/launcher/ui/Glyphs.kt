@@ -15,6 +15,11 @@ import androidx.compose.ui.text.font.FontFamily
 import dev.xross.launcher.model.GlyphKey
 import dev.xross.launcher.theme.pack.LoadedTheme
 import dev.xross.launcher.theme.pack.ThemeIcon
+import dev.xross.launcher.model.GlyphSet
+import dev.xross.launcher.theme.pack.ResolvedComponents
+import dev.xross.launcher.theme.pack.Surface
+import dev.xross.launcher.theme.pack.ThemeLayout
+import dev.xross.launcher.theme.pack.ThemeLook
 
 /** The active theme pack, provided at the root of the UI (see MainActivity). */
 val LocalThemePack = staticCompositionLocalOf<LoadedTheme?> { null }
@@ -23,25 +28,25 @@ val LocalThemePack = staticCompositionLocalOf<LoadedTheme?> { null }
  * The active pack's look in the current context (variant, category and system overrides). Dynamic,
  * unlike [LocalThemePack], so a category or system switch recomposes only what reads it.
  */
-val LocalThemeLook = androidx.compose.runtime.compositionLocalOf<dev.xross.launcher.theme.pack.ThemeLook?> { null }
+val LocalThemeLook = androidx.compose.runtime.compositionLocalOf<ThemeLook?> { null }
 
 /**
  * The widgets drawn (2b.7a, [dev.xross.launcher.theme.pack.ResolvedComponents]): status-bar slots,
  * battery and clock modes. Changes only with the pack, its variant or Settings ▸ Theme ▸ Components.
  */
-val LocalComponents = androidx.compose.runtime.compositionLocalOf { dev.xross.launcher.theme.pack.ResolvedComponents.DEFAULT }
+val LocalComponents = androidx.compose.runtime.compositionLocalOf { ResolvedComponents.DEFAULT }
 
 /**
  * The face-button labels on screen (2b.7b): the detected controller's or the set `glyphOverride`
  * picks. [Hint] reads it to draw a label in its set's style (Xbox colors, outlined).
  */
-val LocalGlyphs = androidx.compose.runtime.compositionLocalOf { dev.xross.launcher.model.GlyphSet.KEYBOARD }
+val LocalGlyphs = androidx.compose.runtime.compositionLocalOf { GlyphSet.KEYBOARD }
 
 /**
  * The layout drawn now: the pack's, with the tile shapes and `layout` patches of the context rules
  * that hold, and the quick profile's motion (E-Ink moves instantly). Null: the pack's own.
  */
-val LocalThemeLayout = androidx.compose.runtime.compositionLocalOf<dev.xross.launcher.theme.pack.ThemeLayout?> { null }
+val LocalThemeLayout = androidx.compose.runtime.compositionLocalOf<ThemeLayout?> { null }
 
 /**
  * The theme pack's typeface for all launcher text. Snapshot state rather than a composition
@@ -64,7 +69,7 @@ object ThemeTypography {
  * read only while drawing, so switching surfaces redraws without recomposing anything.
  */
 object ThemeSurfaces {
-    var active: dev.xross.launcher.theme.pack.Surface by mutableStateOf(dev.xross.launcher.theme.pack.Surface.FALLBACK)
+    var active: Surface by mutableStateOf(Surface.FALLBACK)
 }
 
 private val Blank = ColorPainter(Color.Transparent)

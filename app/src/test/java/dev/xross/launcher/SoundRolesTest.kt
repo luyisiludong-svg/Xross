@@ -17,6 +17,8 @@ import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import java.io.File
+import dev.xross.launcher.theme.BatteryLevel
+import dev.xross.launcher.theme.pack.ThemeLook
 
 /**
  * Phase 2b.5a sound roles (Appendix A.9): the three new roles and their fallback chain (pack
@@ -205,7 +207,7 @@ class SoundRolesTest {
             listOf("cursor.wav", "ok.wav"),
         )
         assertTrue(theme.problems.toString(), theme.problems.isEmpty())
-        fun gain(role: SoundRole, look: dev.xross.launcher.theme.pack.ThemeLook) = look.gains.getValue(role)
+        fun gain(role: SoundRole, look: ThemeLook) = look.gains.getValue(role)
 
         val base = theme.look()
         assertEquals(0.8f, gain(SoundRole.CURSOR, base), 1e-6f)
@@ -260,7 +262,7 @@ class SoundRolesTest {
         val theme = pack("gainrule", """{"name": "GainRule", "rules": [{"match": {"battery": "<= 20"}, "apply": {"audio": {"soundGains": {"cursor": 0.1}}}}]}""")
         assertTrue(theme.problems.toString(), theme.problems.isEmpty())
         assertEquals(1, theme.rules.size)
-        assertEquals(0.1f, theme.look(battery = dev.xross.launcher.theme.BatteryLevel(10, charging = false)).gains.getValue(SoundRole.CURSOR), 1e-6f)
+        assertEquals(0.1f, theme.look(battery = BatteryLevel(10, charging = false)).gains.getValue(SoundRole.CURSOR), 1e-6f)
     }
 
     @Test fun cascadeGainsWithoutPatchesIsTheBase() {

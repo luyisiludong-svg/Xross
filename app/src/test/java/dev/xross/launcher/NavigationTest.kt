@@ -10,7 +10,7 @@ import dev.xross.launcher.state.MenuTree
 import dev.xross.launcher.state.NavState
 import dev.xross.launcher.state.NodeAction
 import dev.xross.launcher.state.RemapSession
-import dev.xross.launcher.storage.PlatformRegistry
+import dev.xross.launcher.model.PlatformRegistry
 import dev.xross.launcher.storage.StorageVolumes
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull

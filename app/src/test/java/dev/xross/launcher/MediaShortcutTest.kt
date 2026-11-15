@@ -17,6 +17,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import dev.xross.launcher.state.SearchEffect
+import dev.xross.launcher.state.SearchState
 
 /** Media controls shortcut (Select / held Guide) and the auto-hiding mini-player line. */
 @RunWith(RobolectricTestRunner::class)
@@ -52,10 +54,10 @@ class MediaShortcutTest {
     }
 
     @Test fun searchKeepsTheMediaButtonForItself() {
-        val search = dev.xross.launcher.state.SearchState()
+        val search = SearchState()
         val outcome = search.onAction(NavAction.MEDIA)
         assertEquals(search, outcome.state)
-        assertEquals(dev.xross.launcher.state.SearchEffect.None, outcome.effect)
+        assertEquals(SearchEffect.None, outcome.effect)
     }
 
     // endregion

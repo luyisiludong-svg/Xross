@@ -3,7 +3,7 @@ package dev.xross.launcher.theme
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import androidx.palette.graphics.Palette
-import dev.xross.launcher.scrape.ArtKind
+import dev.xross.launcher.model.ArtKind
 import java.io.File
 
 /**

@@ -3,6 +3,17 @@ package dev.xross.launcher.state
 import dev.xross.launcher.model.GlyphKey
 import androidx.compose.runtime.Immutable
 import dev.xross.launcher.media.ThumbKind
+import dev.xross.launcher.model.CategoryIds
+import dev.xross.launcher.audio.VolumeChannel
+import dev.xross.launcher.data.MusicUnderSnaps
+import dev.xross.launcher.model.ArtKind
+import dev.xross.launcher.scrape.ProviderId
+import dev.xross.launcher.theme.pack.BadgePill
+import dev.xross.launcher.theme.pack.ComponentRow
+import dev.xross.launcher.theme.pack.EffectSlot
+import dev.xross.launcher.theme.pack.ExportScope
+import dev.xross.launcher.theme.pack.StatusSide
+import dev.xross.launcher.theme.pack.StatusSlot
 
 /** Icon identifiers; the UI layer maps these to vectors or loads app icons. */
 sealed interface NodeIcon {
@@ -17,7 +28,7 @@ sealed interface NodeIcon {
      */
     data class Art(
         val uuid: String,
-        val kinds: List<dev.xross.launcher.scrape.ArtKind>,
+        val kinds: List<ArtKind>,
         val fallback: GlyphKey,
         val version: Long,
     ) : NodeIcon
@@ -86,12 +97,12 @@ sealed interface Command {
     data object KeepBothImportedThemes : Command
     data object ToggleSoundEffects : Command
     /** Settings ▸ Sound: the next 10% step of [channel] (wrapping to 0). */
-    data class CycleVolume(val channel: dev.xross.launcher.audio.VolumeChannel) : Command
+    data class CycleVolume(val channel: VolumeChannel) : Command
     /** Settings ▸ Sound ▸ a volume ▸ Options: Mute, 50% or 100%. */
-    data class SetVolume(val channel: dev.xross.launcher.audio.VolumeChannel, val value: Float) : Command
+    data class SetVolume(val channel: VolumeChannel, val value: Float) : Command
     /** Settings ▸ Sound ▸ Music during video snaps: Pause ↔ Lower. */
     data object CycleMusicUnderSnaps : Command
-    data class SetMusicUnderSnaps(val mode: dev.xross.launcher.audio.MusicUnderSnaps) : Command
+    data class SetMusicUnderSnaps(val mode: MusicUnderSnaps) : Command
     data object ToggleBootSound : Command
     data object ToggleGameBootSound : Command
     data object ToggleLargeImageHashing : Command
@@ -102,7 +113,7 @@ sealed interface Command {
     data class ToggleFavorite(val gameId: Long) : Command
     data class LaunchGame(val gameId: Long) : Command
     data object OpenSearch : Command
-    /** [key] is an [dev.xross.launcher.storage.EmulatorOption.key]; null returns to the platform default. */
+    /** [key] is an [dev.xross.launcher.model.EmulatorOption.key]; null returns to the platform default. */
     data class SetGameEmulator(val gameId: Long, val key: String?) : Command
     data object OpenNowPlaying : Command
     data object ShuffleAllSongs : Command
@@ -115,9 +126,9 @@ sealed interface Command {
     /** Settings ▸ Theme ▸ Xross wallpaper ▸ Pick a picture: any image, through the system picker. */
     data object PickXrossWallpaper : Command
     /** Settings ▸ Theme (2b.4f): the next choice of [slot] over the pack (the pack's own first). */
-    data class CycleEffect(val slot: dev.xross.launcher.theme.pack.EffectSlot) : Command
+    data class CycleEffect(val slot: EffectSlot) : Command
     /** Sets [slot] to [value] (an enum name; empty hands it back to the theme pack). */
-    data class SetEffect(val slot: dev.xross.launcher.theme.pack.EffectSlot, val value: String) : Command
+    data class SetEffect(val slot: EffectSlot, val value: String) : Command
     /**
      * Settings ▸ Theme ▸ Reset to theme defaults: drops every pick that overrides the pack's look
      * (effects, surface style, color layers, the Xross wallpaper), keeping the pack, variant,
@@ -129,7 +140,7 @@ sealed interface Command {
     /** The Theme pack row's Options ▸ Export a pack…: the scopes pack [id] can be exported in. */
     data class ExportThemePack(val id: String) : Command
     /** Export pack [packId] in [scope] (to an `.xtheme` file when [share], 2b.8c): the name entry opens next. */
-    data class ChooseExportScope(val packId: String, val scope: dev.xross.launcher.theme.pack.ExportScope, val share: Boolean = false) : Command
+    data class ChooseExportScope(val packId: String, val scope: ExportScope, val share: Boolean = false) : Command
     /** The confirm panel's Export: writes the pending export into Xross/themes. */
     data object ConfirmThemeExport : Command
     /** After an export: switch to the new pack, so the screen doesn't change. */
@@ -139,17 +150,17 @@ sealed interface Command {
     /** After an export (2b.8c): zip the folder just written into an `.xtheme` file the user picks. */
     data object ShareExportedTheme : Command
     /** Settings ▸ Theme ▸ Components (2b.7a): sets status bar [side]'s slots; null hands it back to the pack. */
-    data class SetStatusSlots(val side: dev.xross.launcher.theme.pack.StatusSide, val slots: List<dev.xross.launcher.theme.pack.StatusSlot>?) : Command
+    data class SetStatusSlots(val side: StatusSide, val slots: List<StatusSlot>?) : Command
     /** One move, removal or addition of [slot] in status bar [side]; the slot list reopens on it. */
-    data class EditStatusSlot(val side: dev.xross.launcher.theme.pack.StatusSide, val slot: dev.xross.launcher.theme.pack.StatusSlot, val edit: SlotEdit) : Command
+    data class EditStatusSlot(val side: StatusSide, val slot: StatusSlot, val edit: SlotEdit) : Command
     /** The next choice of a Components [row] over the pack (the pack's own first). */
-    data class CycleComponent(val row: dev.xross.launcher.theme.pack.ComponentRow) : Command
+    data class CycleComponent(val row: ComponentRow) : Command
     /** Sets [row] to [value] (null hands it back to the theme pack). */
-    data class SetComponent(val row: dev.xross.launcher.theme.pack.ComponentRow, val value: String?) : Command
+    data class SetComponent(val row: ComponentRow, val value: String?) : Command
     /** Settings ▸ Theme ▸ Components ▸ Title badges (2b.7b): sets the badges in order; null hands them back to the pack. */
-    data class SetBadgePills(val pills: List<dev.xross.launcher.theme.pack.BadgePill>?) : Command
+    data class SetBadgePills(val pills: List<BadgePill>?) : Command
     /** Turns one title badge on (at the end) or off; the list reopens on it. */
-    data class ToggleBadgePill(val pill: dev.xross.launcher.theme.pack.BadgePill) : Command
+    data class ToggleBadgePill(val pill: BadgePill) : Command
     /** Opens the focused row's Options list (rows whose choices live there). */
     data object ShowOptions : Command
     data object CycleSlideshowInterval : Command
@@ -218,7 +229,7 @@ sealed interface Command {
     data class ShowAchievements(val gameId: Long) : Command
     data class EditTitle(val gameId: Long) : Command
     data class FindMatch(val gameId: Long) : Command
-    data class ChooseMatch(val gameId: Long, val provider: dev.xross.launcher.scrape.ProviderId, val id: String) : Command
+    data class ChooseMatch(val gameId: Long, val provider: ProviderId, val id: String) : Command
     data class Rescrape(val gameId: Long) : Command
     data class ResetMetadata(val gameId: Long) : Command
 }
@@ -255,12 +266,12 @@ data class XmbCategory(
 )
 
 object Categories {
-    const val SETTINGS = "settings"
-    const val PHOTO = "photo"
-    const val MUSIC = "music"
-    const val VIDEO = "video"
-    const val GAMES = "games"
-    const val APPS = "apps"
+    const val SETTINGS = CategoryIds.SETTINGS
+    const val PHOTO = CategoryIds.PHOTO
+    const val MUSIC = CategoryIds.MUSIC
+    const val VIDEO = CategoryIds.VIDEO
+    const val GAMES = CategoryIds.GAMES
+    const val APPS = CategoryIds.APPS
 
     val all = listOf(
         XmbCategory(SETTINGS, "Settings", GlyphKey.SETTINGS),

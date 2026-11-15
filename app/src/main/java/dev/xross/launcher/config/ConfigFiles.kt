@@ -6,9 +6,9 @@ import dev.xross.launcher.input.ConfirmLayout
 import dev.xross.launcher.input.ControllerKey
 import dev.xross.launcher.input.ControllerProfile
 import dev.xross.launcher.input.NavAction
-import dev.xross.launcher.storage.Platform
-import dev.xross.launcher.storage.PlatformRegistry
-import dev.xross.launcher.storage.SystemOverride
+import dev.xross.launcher.model.Platform
+import dev.xross.launcher.model.PlatformRegistry
+import dev.xross.launcher.model.SystemOverride
 import dev.xross.launcher.theme.AvatarStyleConfig
 import dev.xross.launcher.theme.AvatarStyleLimits
 import dev.xross.launcher.theme.WaveLimits
@@ -17,6 +17,13 @@ import dev.xross.launcher.theme.pack.ThemeManifest
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import dev.xross.launcher.data.MusicUnderSnaps
+import dev.xross.launcher.model.FolderNames
+import dev.xross.launcher.theme.QuickProfile
+import dev.xross.launcher.theme.pack.ComponentOverrides
+import dev.xross.launcher.theme.pack.EffectOverrides
+import dev.xross.launcher.theme.pack.LayoutOverrides
+import dev.xross.launcher.theme.pack.LenientLayoutOverrides
 
 /** Defaults come from [XrossSettings] so they are defined in one place. */
 private val D = XrossSettings()
@@ -82,18 +89,18 @@ data class SettingsFile(
          * Overrides of the pack's effects (Settings ▸ Theme): `shaderPreset`, `backgroundFilter`,
          * `uiFilter`, `focusFrameStyle`, `foregroundParticles`, `iconMask`; empty = the pack's.
          */
-        val effects: dev.xross.launcher.theme.pack.EffectOverrides = D.effectOverrides,
+        val effects: EffectOverrides = D.effectOverrides,
         /**
          * Overrides of the pack's `components` (Settings ▸ Theme ▸ Components, 2b.7a):
          * `statusBarLeft`, `statusBarRight`, `batteryMode`, `clockFormat`, …; null = the pack's.
          */
-        val components: dev.xross.launcher.theme.pack.ComponentOverrides = D.componentOverrides,
+        val components: ComponentOverrides = D.componentOverrides,
         /**
          * Overrides of the pack's layout (Settings ▸ Theme ▸ Layout, 2b.8a): `preset` (a crosshair
          * preset), `uiScale` 0.5–1.5, `itemSpacingDp` 0–32, `focusedScale` 1.00–1.35; null = the pack's.
          */
-        @Serializable(with = dev.xross.launcher.theme.pack.LenientLayoutOverrides::class)
-        val layout: dev.xross.launcher.theme.pack.LayoutOverrides = D.layoutOverrides,
+        @Serializable(with = LenientLayoutOverrides::class)
+        val layout: LayoutOverrides = D.layoutOverrides,
         /** NONE, OLED_TRUE_BLACK, Y2K_CYBER_PASTEL or MONOCHROME_EINK. */
         val quickProfile: String = D.quickProfile,
         /** Colors from the focused game's art; null = the theme pack's choice (on by default). */
@@ -324,7 +331,7 @@ object ConfigCodec {
         effectOverrides = f.display.effects.normalized(),
         componentOverrides = f.display.components.normalized(),
         layoutOverrides = f.display.layout.normalized(),
-        quickProfile = dev.xross.launcher.theme.QuickProfile.normalize(f.display.quickProfile),
+        quickProfile = QuickProfile.normalize(f.display.quickProfile),
         adaptiveGamePalette = f.display.adaptiveGamePalette,
         circadianCurve = f.display.circadianCurve,
         batteryTint = f.display.batteryTint,
@@ -351,7 +358,7 @@ object ConfigCodec {
         bgmVolume = f.sound.bgmVolume.volumeOr(D.bgmVolume),
         musicVolume = f.sound.musicVolume.volumeOr(D.musicVolume),
         snapVolume = f.sound.snapVolume.volumeOr(f.sound.effectsVolume.finiteOr(D.soundVolume)),
-        musicUnderSnaps = dev.xross.launcher.audio.MusicUnderSnaps.parse(f.sound.musicUnderSnaps),
+        musicUnderSnaps = MusicUnderSnaps.parse(f.sound.musicUnderSnaps),
         bootSound = f.sound.startupSound,
         gameBootSound = f.sound.gameStartSound,
         slideshowSeconds = f.media.slideshowSeconds.coerceIn(1, 600),
@@ -366,7 +373,7 @@ object ConfigCodec {
         hiddenApps = f.apps.hidden.map { it.trim() }.filter { it.isNotEmpty() }.toSet(),
         hideSystemApps = f.apps.hideSystemApps,
         appFolders = f.apps.folders.mapNotNull { (pkg, folder) ->
-            val name = dev.xross.launcher.state.AppFolders.normalizeName(folder) ?: return@mapNotNull null
+            val name = FolderNames.normalize(folder) ?: return@mapNotNull null
             pkg.trim().takeIf { it.isNotEmpty() }?.let { it to name }
         }.toMap(),
         photoFolders = cleanFolders(f.photo.customFolders),

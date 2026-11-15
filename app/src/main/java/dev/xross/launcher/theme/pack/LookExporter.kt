@@ -1,6 +1,5 @@
 package dev.xross.launcher.theme.pack
 
-import dev.xross.launcher.data.XrossSettings
 import dev.xross.launcher.theme.PACK_THEME
 import dev.xross.launcher.theme.SeasonalPalette
 import dev.xross.launcher.theme.ThemePalette
@@ -39,9 +38,8 @@ data class WaveValues(
     val tint: String = WaveTint.THEME.name,
     val colors: WaveColors = WaveColors(),
 ) {
-    companion object {
-        fun of(s: XrossSettings) = WaveValues(s.waveSpeed, s.waveLineCount, s.waveTurbulence, s.waveThickness, s.waveTint, s.waveColors)
-    }
+    /** `WaveValues.of(settings)` lives in `data/`, beside the settings it reads. */
+    companion object
 }
 
 /** Everything over the pack that a [ExportScope.CurrentLook] export bakes in. */
@@ -58,10 +56,8 @@ data class LookPicks(
      */
     val wallpaperType: String? = null,
 ) {
-    companion object {
-        fun of(s: XrossSettings, wallpaperType: String? = null) =
-            LookPicks(s.themeVariant, UserLook.of(s), s.theme, WaveValues.of(s), wallpaperType)
-    }
+    /** `LookPicks.of(settings)` lives in `data/`, beside the settings it reads. */
+    companion object
 }
 
 /** Where an exported file's bytes come from. */

@@ -1,6 +1,8 @@
 package dev.xross.launcher.storage
 
 import java.io.File
+import dev.xross.launcher.model.Platform
+import dev.xross.launcher.model.PlatformRegistry
 
 data class ScannedRom(
     val path: String,

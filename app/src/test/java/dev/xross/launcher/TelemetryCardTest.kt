@@ -23,6 +23,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.Locale
+import dev.xross.launcher.data.XrossSettings
 
 /**
  * Phase 2b.7d: `telemetryMode` — the rich card's content from progress, its friend strip, and
@@ -182,7 +183,7 @@ class TelemetryCardTest {
 
         fun rows(linked: Boolean, value: String?) = MenuTree(
             MenuSnapshot(
-                settings = dev.xross.launcher.data.XrossSettings(componentOverrides = ComponentOverrides(telemetryMode = value)),
+                settings = XrossSettings(componentOverrides = ComponentOverrides(telemetryMode = value)),
                 accounts = AccountsSetup(retroAchievementsLinked = linked),
             ),
         ).list(MenuTree.DISPLAY_COMPONENTS)

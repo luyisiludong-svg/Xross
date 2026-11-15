@@ -6,6 +6,7 @@ import dev.xross.launcher.theme.shader.ProgramState
 import dev.xross.launcher.theme.shader.ShaderSpec
 import dev.xross.launcher.theme.shader.ShaderSources
 import dev.xross.launcher.theme.shader.ShaderStatus
+import dev.xross.launcher.theme.pack.BackgroundFilter
 
 /**
  * One background program on the GL thread (2b.4a). [begin] hands the source to the driver and
@@ -174,7 +175,7 @@ internal class ScreenFilterPass {
         uStrength = GLES30.glGetUniformLocation(program, "uStrength")
     }
 
-    fun draw(filter: dev.xross.launcher.theme.pack.BackgroundFilter, width: Int, height: Int, pxPerDp: Float, strength: Float = 1f) {
+    fun draw(filter: BackgroundFilter, width: Int, height: Int, pxPerDp: Float, strength: Float = 1f) {
         if (handle == 0) return
         val mode = mode(filter)
         if (mode == 0) return
@@ -191,11 +192,11 @@ internal class ScreenFilterPass {
 
     companion object {
         /** `uMode` of [filter]: 0 none, 1 scanlines, 2 CRT, 3 LCD grid (as in the shader). */
-        fun mode(filter: dev.xross.launcher.theme.pack.BackgroundFilter): Int = when (filter) {
-            dev.xross.launcher.theme.pack.BackgroundFilter.NONE -> 0
-            dev.xross.launcher.theme.pack.BackgroundFilter.SCANLINES -> 1
-            dev.xross.launcher.theme.pack.BackgroundFilter.CRT -> 2
-            dev.xross.launcher.theme.pack.BackgroundFilter.LCD_GRID -> 3
+        fun mode(filter: BackgroundFilter): Int = when (filter) {
+            BackgroundFilter.NONE -> 0
+            BackgroundFilter.SCANLINES -> 1
+            BackgroundFilter.CRT -> 2
+            BackgroundFilter.LCD_GRID -> 3
         }
 
         /** The shader's `pitch(dp, minPx)`: [dp] in whole render pixels, at least [minPx]. */

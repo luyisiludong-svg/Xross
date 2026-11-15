@@ -10,8 +10,8 @@ import dev.xross.launcher.input.ConfirmLayout
 import dev.xross.launcher.input.ControllerKey
 import dev.xross.launcher.input.ControllerProfile
 import dev.xross.launcher.input.NavAction
-import dev.xross.launcher.storage.PlatformRegistry
-import dev.xross.launcher.storage.SystemOverride
+import dev.xross.launcher.model.PlatformRegistry
+import dev.xross.launcher.model.SystemOverride
 import dev.xross.launcher.storage.XrossEnvironment
 import dev.xross.launcher.storage.XrossLayout
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -23,6 +23,15 @@ import org.json.JSONObject
 import java.io.File
 import java.io.IOException
 import java.util.concurrent.ConcurrentHashMap
+import dev.xross.launcher.theme.AvatarStyleConfig
+import dev.xross.launcher.theme.QuickProfile
+import dev.xross.launcher.theme.WaveColors
+import dev.xross.launcher.theme.WaveLimits
+import dev.xross.launcher.theme.WaveTint
+import dev.xross.launcher.theme.pack.ComponentOverrides
+import dev.xross.launcher.theme.pack.EffectOverrides
+import dev.xross.launcher.theme.pack.LayoutOverrides
+import dev.xross.launcher.theme.pack.ThemePackLoader
 
 data class XrossSettings(
     val romFolders: List<String> = emptyList(),
@@ -38,23 +47,23 @@ data class XrossSettings(
     val keyRemap: Map<Int, NavAction> = emptyMap(),
     /** [ControllerKey.id] → that controller model's own mapping. */
     val controllerProfiles: Map<String, ControllerProfile> = emptyMap(),
-    /** platformId → [dev.xross.launcher.storage.EmulatorOption.key] */
+    /** platformId → [dev.xross.launcher.model.EmulatorOption.key] */
     val emulatorChoice: Map<String, String> = emptyMap(),
     val waveEnabled: Boolean = true,
     /** Wave shader uniforms (Settings ▸ Theme ▸ Wave settings); ranges in [dev.xross.launcher.theme.WaveLimits]. */
     val waveSpeed: Float = 1f,
     /** Fine strands riding the main ribbon (0–12). */
-    val waveLineCount: Int = dev.xross.launcher.theme.WaveLimits.DEFAULT_LINES,
+    val waveLineCount: Int = WaveLimits.DEFAULT_LINES,
     /** Wave amplitude multiplier (0 = flat, 2 = stormy). */
-    val waveTurbulence: Float = dev.xross.launcher.theme.WaveLimits.DEFAULT_TURBULENCE,
+    val waveTurbulence: Float = WaveLimits.DEFAULT_TURBULENCE,
     /** Ribbon crest and halo width multiplier. */
-    val waveThickness: Float = dev.xross.launcher.theme.WaveLimits.DEFAULT_THICKNESS,
+    val waveThickness: Float = WaveLimits.DEFAULT_THICKNESS,
     /** [dev.xross.launcher.theme.WaveTint] name: the theme's colors, a preset, or [waveColors]. */
-    val waveTint: String = dev.xross.launcher.theme.WaveTint.THEME.name,
+    val waveTint: String = WaveTint.THEME.name,
     /** Gradient used when [waveTint] is CUSTOM. */
-    val waveColors: dev.xross.launcher.theme.WaveColors = dev.xross.launcher.theme.WaveColors(),
+    val waveColors: WaveColors = WaveColors(),
     /** Active theme pack: "default" (built in) or a folder name in `Xross/themes/`. */
-    val themePack: String = dev.xross.launcher.theme.pack.ThemePackLoader.DEFAULT_ID,
+    val themePack: String = ThemePackLoader.DEFAULT_ID,
     /** A surface id (preset or one of the pack's); empty uses the theme pack's `effects.surfaceStyle`. */
     val surfaceStyle: String = "",
     /** The active pack's variant id (Settings ▸ Theme ▸ Theme variant); empty or unknown = the pack's base look. */
@@ -69,19 +78,19 @@ data class XrossSettings(
      * Settings ▸ Theme picks over the pack's effects (2b.4f): background shader and filter, UI
      * filter, focus frame, particles, app icon mask. Empty values follow the pack.
      */
-    val effectOverrides: dev.xross.launcher.theme.pack.EffectOverrides = dev.xross.launcher.theme.pack.EffectOverrides.NONE,
+    val effectOverrides: EffectOverrides = EffectOverrides.NONE,
     /**
      * Settings ▸ Theme ▸ Components picks over the pack's `components` (2b.7a): status-bar slots,
      * battery display, clock format. Null values follow the pack.
      */
-    val componentOverrides: dev.xross.launcher.theme.pack.ComponentOverrides = dev.xross.launcher.theme.pack.ComponentOverrides.NONE,
+    val componentOverrides: ComponentOverrides = ComponentOverrides.NONE,
     /**
      * Settings ▸ Theme ▸ Layout picks over the pack's layout (2b.8a): crosshair preset, UI scale,
      * list spacing, focused scale. Null values follow the pack.
      */
-    val layoutOverrides: dev.xross.launcher.theme.pack.LayoutOverrides = dev.xross.launcher.theme.pack.LayoutOverrides.NONE,
+    val layoutOverrides: LayoutOverrides = LayoutOverrides.NONE,
     /** [dev.xross.launcher.theme.QuickProfile] name (Settings ▸ Theme ▸ Quick profile); NONE = the theme's own look. */
-    val quickProfile: String = dev.xross.launcher.theme.QuickProfile.NONE.name,
+    val quickProfile: String = QuickProfile.NONE.name,
     /** Colors from the focused game's art; null follows the pack's `effects.adaptiveGamePalette` (on by default). */
     val adaptiveGamePalette: Boolean? = null,
     /** The hourly circadian curve; null follows the pack's `palette.circadianCurve` (off by default). */
@@ -104,7 +113,7 @@ data class XrossSettings(
     /** Video snaps, 0–1. */
     val snapVolume: Float = 0.75f,
     /** What a playing song does while a video snap's sound plays. */
-    val musicUnderSnaps: dev.xross.launcher.audio.MusicUnderSnaps = dev.xross.launcher.audio.MusicUnderSnaps.PAUSE,
+    val musicUnderSnaps: MusicUnderSnaps = MusicUnderSnaps.PAUSE,
     val bootSound: Boolean = true,
     val gameBootSound: Boolean = true,
     /** Fully hash disc images over the size limit (slow on SD cards). */
@@ -146,7 +155,7 @@ data class XrossSettings(
     /** Video shows only these folders; empty means everything MediaStore knows. */
     val videoFolders: List<String> = emptyList(),
     /** Ring and glow of the profile avatar (Settings ▸ Theme ▸ Profile customization). */
-    val avatarStyle: dev.xross.launcher.theme.AvatarStyleConfig = dev.xross.launcher.theme.AvatarStyleConfig(),
+    val avatarStyle: AvatarStyleConfig = AvatarStyleConfig(),
 )
 
 /**

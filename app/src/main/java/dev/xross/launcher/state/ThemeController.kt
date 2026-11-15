@@ -39,7 +39,7 @@ import dev.xross.launcher.theme.pack.StatusSide
 import dev.xross.launcher.theme.pack.StatusSlot
 import dev.xross.launcher.theme.pack.TelemetryMode
 import dev.xross.launcher.theme.pack.ThemeArchive
-import dev.xross.launcher.theme.pack.ThemeDefaults
+import dev.xross.launcher.data.ThemeDefaults
 import dev.xross.launcher.theme.pack.ThemePackLoader
 import dev.xross.launcher.theme.pack.ThemeRuntime
 import dev.xross.launcher.theme.pack.TopLeftClusterMode
@@ -51,6 +51,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import dev.xross.launcher.data.of
+import dev.xross.launcher.data.writeTo
+import dev.xross.launcher.platform.AgslSupport
+import dev.xross.launcher.theme.WaveTint
 
 /**
  * Settings ▸ Theme, split out of [XmbViewModel] (Architecture Assessment #6, Phase 2b.8-prep):
@@ -380,7 +384,7 @@ class ThemeController(
         val v = settings.current.effectOverrides[slot]
         val note = when {
             slot == EffectSlot.UI_FILTER && v.isNotEmpty() && v != "NONE" &&
-                !dev.xross.launcher.ui.UiFilterSupport.supported() -> "UI filters need Android 13 or later"
+                !AgslSupport.supported() -> "UI filters need Android 13 or later"
             slot == EffectSlot.SHADER && !settings.current.waveEnabled -> "Turn Wave background on to see it"
             slot == EffectSlot.BOOT_INTRO -> "Shown on the next cold start"
             else -> null
@@ -682,7 +686,7 @@ class ThemeController(
                         themeVariant = "",
                         theme = if (loaded.look().palette != null) PACK_THEME else s.theme,
                         // The tint's colors are the pack's palette now.
-                        waveTint = dev.xross.launcher.theme.WaveTint.THEME.name,
+                        waveTint = WaveTint.THEME.name,
                     )
                 }
             }

@@ -9,7 +9,7 @@ import dev.xross.launcher.audio.Mix
 import dev.xross.launcher.audio.MixInputs
 import dev.xross.launcher.audio.MusicOnLaunch
 import dev.xross.launcher.audio.MusicOutput
-import dev.xross.launcher.audio.MusicUnderSnaps
+import dev.xross.launcher.data.MusicUnderSnaps
 import dev.xross.launcher.audio.SnapState
 import dev.xross.launcher.audio.UiSounds
 import dev.xross.launcher.data.XrossSettings

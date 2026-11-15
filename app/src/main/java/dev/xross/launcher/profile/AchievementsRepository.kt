@@ -21,6 +21,7 @@ import java.io.IOException
 import java.security.MessageDigest
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
+import dev.xross.launcher.model.PlatformRegistry
 
 /** How a ROM was tied to its RetroAchievements game. */
 enum class RaMatchKind { HASH, SET_NAME, TITLE }
@@ -201,12 +202,12 @@ class AchievementsRepository(
                 ?: matches[game.uuid]?.takeIf { it.raId > 0 }?.let { readProgress(it.raId) }
             progress?.let { game to it }
         }
-        val order = dev.xross.launcher.storage.PlatformRegistry.all.withIndex().associate { (i, p) -> p.id to i }
+        val order = PlatformRegistry.all.withIndex().associate { (i, p) -> p.id to i }
         RaHubSummary.of(
             supported,
             known,
             order = { order[it] ?: Int.MAX_VALUE },
-            tag = { id -> dev.xross.launcher.storage.PlatformRegistry.byId(id)?.shortName ?: id.uppercase() },
+            tag = { id -> PlatformRegistry.byId(id)?.shortName ?: id.uppercase() },
         )
     }
 

@@ -2,6 +2,7 @@ package dev.xross.launcher.state
 
 import androidx.compose.runtime.Immutable
 import dev.xross.launcher.input.NavAction
+import dev.xross.launcher.theme.pack.ExportScope
 
 /** What a typed name is for. */
 sealed interface NamePurpose {
@@ -9,7 +10,7 @@ sealed interface NamePurpose {
     data class NewAppFolder(val packageName: String) : NamePurpose
 
     /** The name of a theme exported from pack [packId] in [scope] (2b.8b), into an `.xtheme` file when [share] (2b.8c). */
-    data class ExportTheme(val packId: String, val scope: dev.xross.launcher.theme.pack.ExportScope, val share: Boolean = false) : NamePurpose
+    data class ExportTheme(val packId: String, val scope: ExportScope, val share: Boolean = false) : NamePurpose
 }
 
 sealed interface NameEntryEffect {

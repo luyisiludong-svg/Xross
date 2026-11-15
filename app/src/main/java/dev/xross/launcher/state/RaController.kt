@@ -27,6 +27,11 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import dev.xross.launcher.model.PlatformRegistry
+import dev.xross.launcher.profile.ProfileState
+import dev.xross.launcher.theme.pack.ResolvedComponents
+import dev.xross.launcher.theme.pack.TelemetryMode
+import dev.xross.launcher.theme.pack.TopLeftClusterMode
 
 /** What the RetroAchievements screens and the status bar avatar show (the profile itself is [ProfileRepository.state]). */
 data class RaState(
@@ -78,7 +83,7 @@ class RaController(
         /** A RetroAchievements screen opened over the menu: close the Options menu and Details under it. */
         fun dismissMenus()
         /** The status bar as drawn now: whether the social stack and the avatar are in it (2b.7a, c). */
-        fun components(): dev.xross.launcher.theme.pack.ResolvedComponents
+        fun components(): ResolvedComponents
         /** Moves the menu's cursor onto [gameId] in its system's list (the hub's sidebar, 2b.7e). */
         fun revealGame(gameId: Long)
     }
@@ -119,7 +124,7 @@ class RaController(
                 delay(TELEMETRY_PEEK_MS)
                 val game = games.get(id) ?: return@collectLatest
                 if (RaConsoles.of(game.platformId) == null) return@collectLatest
-                val platform = dev.xross.launcher.storage.PlatformRegistry.byId(game.platformId)?.shortName
+                val platform = PlatformRegistry.byId(game.platformId)?.shortName
                 GameTelemetry.of(id, achievements.peek(game), platform, peeked = true, uuid = game.uuid)?.let { known -> _state.update { it.copy(telemetry = known) } }
                 delay(TELEMETRY_LOAD_MS)
                 when (val fresh = achievements.load(game)) {
@@ -150,7 +155,7 @@ class RaController(
      * Fetches when stale, or at startup ([onlyWithoutCache]) only when nothing was ever fetched.
      * [components]: the bar as just saved, when the host's copy may not have caught up yet.
      */
-    fun onFriendsWanted(onlyWithoutCache: Boolean = false, components: dev.xross.launcher.theme.pack.ResolvedComponents? = null) {
+    fun onFriendsWanted(onlyWithoutCache: Boolean = false, components: ResolvedComponents? = null) {
         if (!profiles.current.linked || !friendsWanted(components ?: host.components())) return
         if (if (onlyWithoutCache) !friends.hasCache() else friends.isStale()) refreshFriends()
     }
@@ -363,9 +368,9 @@ class RaController(
      * Something draws friend data: the social stack, the rich telemetry card's strip, or the hub's
      * `FOLLOWING` sidebar while Games ▸ RetroAchievements is open (2b.7e).
      */
-    private fun friendsWanted(components: dev.xross.launcher.theme.pack.ResolvedComponents = host.components()): Boolean =
-        components.topLeft == dev.xross.launcher.theme.pack.TopLeftClusterMode.SOCIAL_STACK ||
-            components.telemetry == dev.xross.launcher.theme.pack.TelemetryMode.RICH_CARD ||
+    private fun friendsWanted(components: ResolvedComponents = host.components()): Boolean =
+        components.topLeft == TopLeftClusterMode.SOCIAL_STACK ||
+            components.telemetry == TelemetryMode.RICH_CARD ||
             _state.value.raHub != null
 
     /** The stack is in the bar now (see [SocialStack.shows]). */
@@ -580,7 +585,7 @@ class RaController(
         achievementsJob?.cancel()
         achievementsJob = scope.launch {
             val game = games.get(gameId) ?: return@launch
-            val platform = dev.xross.launcher.storage.PlatformRegistry.byId(game.platformId)
+            val platform = PlatformRegistry.byId(game.platformId)
             val view = AchievementsViewState(
                 gameId = game.id,
                 uuid = game.uuid,
@@ -667,7 +672,7 @@ class RaController(
         private val HUB_EDGES = setOf(NavAction.PREV_CATEGORY, NavAction.NEXT_CATEGORY)
 
         /** The linked user's own sidebar row, once the profile was fetched. */
-        fun selfRow(p: dev.xross.launcher.profile.ProfileState): SidebarRow? = p.profile?.let {
+        fun selfRow(p: ProfileState): SidebarRow? = p.profile?.let {
             SidebarRow(it.username, it.totalPoints, p.avatar, p.avatarVersion, self = true)
         }
 

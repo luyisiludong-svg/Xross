@@ -7,7 +7,7 @@ import android.content.Intent
 import android.webkit.MimeTypeMap
 import androidx.core.content.FileProvider
 import dev.xross.launcher.data.GameEntity
-import dev.xross.launcher.storage.PlatformRegistry
+import dev.xross.launcher.model.PlatformRegistry
 import java.io.File
 
 /** An emulator launch as an Intent; the ROM is shared through a `content://` URI with a read grant. */

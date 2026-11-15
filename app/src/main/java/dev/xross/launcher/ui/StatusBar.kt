@@ -59,6 +59,7 @@ import dev.xross.launcher.theme.pack.ThemeIcon
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
 import kotlin.math.max
+import dev.xross.launcher.profile.Friend
 
 /** The ticker's fixed width, in status-text heights (about 20 characters). */
 private const val TICKER_WIDTH_EMS = 10f
@@ -97,7 +98,7 @@ fun StatusBar(
     onTickerTap: () -> Unit = {},
     onTickerLongPress: () -> Unit = {},
     /** `topLeftCluster: SOCIAL_STACK` (2b.7c): the friends to stack after the left slots; empty: collapsed. */
-    social: List<dev.xross.launcher.profile.Friend> = emptyList(),
+    social: List<Friend> = emptyList(),
     /** The stack's unread badge ("", "1"–"9", "9+"). */
     socialBadge: String = "",
     socialOpen: Boolean = false,

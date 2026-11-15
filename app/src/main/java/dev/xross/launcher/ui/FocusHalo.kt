@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.unit.dp
 import dev.xross.launcher.theme.pack.FocusFrameStyle
+import dev.xross.launcher.theme.ThemePalette
 
 /**
  * The theme's focus frame (2b.4d, `effects.focusFrameStyle`) and its colors: [neon] for
@@ -169,7 +170,7 @@ private fun DrawScope.ring(plate: Size, color: Color, spread: Float, width: Floa
  * wave color when the accent is plain white, so the built-in themes' neon still has a hue; gold
  * from `palette.focusGold` ([focusGold]) when the pack sets it.
  */
-fun focusFrameOf(style: FocusFrameStyle, palette: dev.xross.launcher.theme.ThemePalette, focusGold: Int?): FocusFrame {
+fun focusFrameOf(style: FocusFrameStyle, palette: ThemePalette, focusGold: Int?): FocusFrame {
     val accent = Color(palette.glow)
     val neon = if (accent == Color.White) Color(palette.wave) else accent
     return FocusFrame(style, neon = neon, gold = focusGold?.let(::Color) ?: Gold)

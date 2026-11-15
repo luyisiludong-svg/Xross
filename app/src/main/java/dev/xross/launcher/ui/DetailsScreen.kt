@@ -46,8 +46,10 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import dev.xross.launcher.scrape.ArtKind
+import dev.xross.launcher.model.ArtKind
 import dev.xross.launcher.state.GameDetailsState
+import dev.xross.launcher.model.GlyphKey
+import dev.xross.launcher.profile.AchievementsState
 
 /**
  * Game Details: background art (or the playing video snap, which shows through), box art on the
@@ -240,7 +242,7 @@ private fun rememberArt(
  */
 @Composable
 private fun AchievementsSummary(
-    state: dev.xross.launcher.profile.AchievementsState?,
+    state: AchievementsState?,
     m: XmbMetrics,
     loadBadge: suspend (String, Int) -> ImageBitmap?,
     onOpen: () -> Unit,
@@ -258,14 +260,14 @@ private fun AchievementsSummary(
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Image(
-                glyphPainter(dev.xross.launcher.model.GlyphKey.TROPHY),
+                glyphPainter(GlyphKey.TROPHY),
                 contentDescription = null,
                 colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(Pastel.Amber),
                 modifier = Modifier.height((m.subtitleSize * 1.2f).dp()).width((m.subtitleSize * 1.2f).dp()),
             )
             Spacer(Modifier.width(8.dp))
             when (state) {
-                is dev.xross.launcher.profile.AchievementsState.Ready -> {
+                is AchievementsState.Ready -> {
                     TrophyCount(state.progress.unlocked, state.progress.total, m.subtitleSize.sp())
                     Spacer(Modifier.width(10.dp))
                     ProgressBar(state.progress.completion, Modifier.weight(1f), height = 7.dp)
@@ -273,11 +275,11 @@ private fun AchievementsSummary(
                 else -> Text(
                     when (state) {
                         null -> "Checking RetroAchievements…"
-                        dev.xross.launcher.profile.AchievementsState.NotLinked -> "Link RetroAchievements in Settings ▸ Accounts"
-                        dev.xross.launcher.profile.AchievementsState.NoMatch -> "This file isn't recognized by RetroAchievements"
-                        is dev.xross.launcher.profile.AchievementsState.Unsupported -> "No achievements for this system"
-                        is dev.xross.launcher.profile.AchievementsState.Failed -> state.reason
-                        is dev.xross.launcher.profile.AchievementsState.Ready -> ""
+                        AchievementsState.NotLinked -> "Link RetroAchievements in Settings ▸ Accounts"
+                        AchievementsState.NoMatch -> "This file isn't recognized by RetroAchievements"
+                        is AchievementsState.Unsupported -> "No achievements for this system"
+                        is AchievementsState.Failed -> state.reason
+                        is AchievementsState.Ready -> ""
                     },
                     style = shadowed((m.subtitleSize * 0.9f).sp(), color = TextDim),
                     maxLines = 1,
@@ -285,7 +287,7 @@ private fun AchievementsSummary(
                 )
             }
         }
-        val ready = state as? dev.xross.launcher.profile.AchievementsState.Ready
+        val ready = state as? AchievementsState.Ready
         val recent = ready?.progress?.ordered()?.filter { it.unlocked }?.take(7).orEmpty()
         if (recent.isNotEmpty()) {
             Spacer(Modifier.height(7.dp))

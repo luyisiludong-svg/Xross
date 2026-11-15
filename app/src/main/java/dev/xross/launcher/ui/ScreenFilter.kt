@@ -10,6 +10,7 @@ import android.util.Log
 import androidx.annotation.RequiresApi
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import dev.xross.launcher.platform.AgslSupport
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -42,7 +43,7 @@ import kotlin.math.max
  * - A compile error (or a missing `content`) turns the filter off with a toast, once per file.
  */
 object UiFilterSupport {
-    const val MIN_SDK = Build.VERSION_CODES.TIRAMISU
+    const val MIN_SDK = AgslSupport.MIN_SDK
 
     /** Scanline pitch: 1.5 dp at native resolution, at least 2 px. */
     const val SCANLINE_DP = 1.5f
@@ -57,7 +58,7 @@ object UiFilterSupport {
     /** A custom filter that reads `uTime` advances it at most this often. */
     const val ANIMATION_FPS = 30
 
-    fun supported(sdk: Int = Build.VERSION.SDK_INT): Boolean = sdk >= MIN_SDK
+    fun supported(sdk: Int = Build.VERSION.SDK_INT): Boolean = AgslSupport.supported(sdk)
 
     /** The filter drawn for [ref] on [sdk]: [ref], or off where AGSL isn't available. */
     fun active(ref: UiFilterRef, sdk: Int = Build.VERSION.SDK_INT): UiFilterRef =

@@ -60,6 +60,7 @@ import dev.xross.launcher.state.MiniPlayerLine
 import dev.xross.launcher.state.MiniPlayerSpot
 import dev.xross.launcher.state.MiniPlayerVisibility
 import dev.xross.launcher.theme.pack.MiniPlayerMode
+import dev.xross.launcher.model.GlyphKey
 
 private val CardShape = RoundedCornerShape(14.dp)
 private val ArtShape = RoundedCornerShape(8.dp)
@@ -142,7 +143,7 @@ private fun CardBody(
                 Image(image, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
             } else {
                 Image(
-                    glyphPainter(dev.xross.launcher.model.GlyphKey.MUSIC),
+                    glyphPainter(GlyphKey.MUSIC),
                     contentDescription = null,
                     colorFilter = ColorFilter.tint(Color(0xCCFFFFFF)),
                     modifier = Modifier.size(22.dp),

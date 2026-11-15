@@ -9,6 +9,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import dev.xross.launcher.model.PlatformRegistry
 
 /** Verifies each intent recipe matches the launch contract the emulator's activity reads. */
 @RunWith(RobolectricTestRunner::class)
@@ -123,7 +124,7 @@ class EmulatorIntentTest {
     }
 
     @Test fun newPlatformsAreRecognisedAndPreferStandaloneEmulators() {
-        val registry = dev.xross.launcher.storage.PlatformRegistry
+        val registry = PlatformRegistry
         assertEquals("n3ds", registry.forFolder("3DS")?.id)
         assertEquals("n3ds", registry.forFolder("n3ds")?.id)
         assertEquals("switch", registry.forFolder("Switch")?.id)

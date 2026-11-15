@@ -1,4 +1,4 @@
-package dev.xross.launcher.storage
+package dev.xross.launcher.model
 
 /**
  * One emulator choice for a platform. [core] is the libretro core basename when the emulator is

@@ -28,6 +28,7 @@ import dev.xross.launcher.theme.WallpaperSource
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
+import dev.xross.launcher.theme.LruCache
 
 /** A decoded wallpaper; [opaque] when it has no transparent pixels (the shader can rest under it). */
 @Immutable
@@ -39,7 +40,7 @@ class Wallpaper(val key: String, val image: ImageBitmap, val opaque: Boolean)
  * user's, or a hot reload of other files, decodes nothing.
  */
 class WallpaperLoader(private val resolver: ContentResolver, private val xrossRoot: () -> File) {
-    private val decoded = dev.xross.launcher.theme.LruCache<String, Wallpaper>(2)
+    private val decoded = LruCache<String, Wallpaper>(2)
 
     /** [source] decoded to about [maxPx] on its longer side; null when it can't be read. */
     suspend fun load(source: WallpaperSource, maxPx: Int): Wallpaper? {

@@ -41,6 +41,16 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import java.io.File
 import java.io.IOException
+import dev.xross.launcher.data.XrossSettings
+import dev.xross.launcher.profile.AchievementsRepository
+import dev.xross.launcher.profile.ProfileRepository
+import dev.xross.launcher.state.AccountsSetup
+import dev.xross.launcher.state.MenuSnapshot
+import dev.xross.launcher.state.MenuTree
+import dev.xross.launcher.state.RaController
+import dev.xross.launcher.theme.pack.ComponentOverrides
+import dev.xross.launcher.theme.pack.ComponentRow
+import dev.xross.launcher.theme.pack.TelemetryMode
 
 /**
  * Phase 2b.7c: the two friend calls and their parsers, [FriendsRepository] (cache, the 20-friend
@@ -473,22 +483,22 @@ class FriendsTest {
     }
 
     @Test fun topLeftRowCyclesThemePackSocialStackEmpty() {
-        val row = dev.xross.launcher.theme.pack.ComponentRow.TOP_LEFT
+        val row = ComponentRow.TOP_LEFT
         assertEquals(listOf("SOCIAL_STACK", "EMPTY"), row.choices.map { it.first })
         assertEquals("SOCIAL_STACK", row.next(null))
         assertEquals("EMPTY", row.next("SOCIAL_STACK"))
         assertNull(row.next("EMPTY"))
-        val o = dev.xross.launcher.theme.pack.ComponentOverrides.NONE.with(row, "social")
+        val o = ComponentOverrides.NONE.with(row, "social")
         assertEquals("SOCIAL_STACK", o[row])
         assertEquals(TopLeftClusterMode.SOCIAL_STACK, o.patch.topLeft)
         assertEquals("Theme pack (Empty)", row.packLabel(ResolvedComponents.DEFAULT))
 
-        fun subtitle(linked: Boolean, value: String?) = dev.xross.launcher.state.MenuTree(
-            dev.xross.launcher.state.MenuSnapshot(
-                settings = dev.xross.launcher.data.XrossSettings(componentOverrides = dev.xross.launcher.theme.pack.ComponentOverrides(topLeftCluster = value)),
-                accounts = dev.xross.launcher.state.AccountsSetup(retroAchievementsLinked = linked),
+        fun subtitle(linked: Boolean, value: String?) = MenuTree(
+            MenuSnapshot(
+                settings = XrossSettings(componentOverrides = ComponentOverrides(topLeftCluster = value)),
+                accounts = AccountsSetup(retroAchievementsLinked = linked),
             ),
-        ).list(dev.xross.launcher.state.MenuTree.DISPLAY_COMPONENTS).single { it.id == "disp:comp:top_left" }.subtitle
+        ).list(MenuTree.DISPLAY_COMPONENTS).single { it.id == "disp:comp:top_left" }.subtitle
         assertEquals("Theme pack (Empty) · Friends you follow on RetroAchievements, after the left slots", subtitle(true, null))
         assertEquals("Social stack · Needs a RetroAchievements account (Settings ▸ Accounts)", subtitle(false, "SOCIAL_STACK"))
         assertEquals("Social stack · Friends you follow, newest activity first", subtitle(true, "SOCIAL_STACK"))
@@ -521,7 +531,7 @@ class FriendsTest {
 
     // region Through the controller
 
-    private class Host(var components: ResolvedComponents) : dev.xross.launcher.state.RaController.Host {
+    private class Host(var components: ResolvedComponents) : RaController.Host {
         val moves = ArrayList<Int>()
         override fun toast(message: String) = Unit
         override fun fail(message: String) = Unit
@@ -550,10 +560,10 @@ class FriendsTest {
         val container = AppContainer(context)
         val scope = kotlinx.coroutines.MainScope()
         val host = Host(ResolvedComponents(topLeft = TopLeftClusterMode.SOCIAL_STACK))
-        val controller = dev.xross.launcher.state.RaController(
+        val controller = RaController(
             scope = scope,
-            profiles = dev.xross.launcher.profile.ProfileRepository(client, credentials, { layout }, clock = { clock.now }),
-            achievements = dev.xross.launcher.profile.AchievementsRepository(client, credentials, { layout }, hashes = { null }),
+            profiles = ProfileRepository(client, credentials, { layout }, clock = { clock.now }),
+            achievements = AchievementsRepository(client, credentials, { layout }, hashes = { null }),
             friends = friends,
             credentials = credentials,
             games = container.games,
@@ -620,11 +630,11 @@ class FriendsTest {
         val client = RetroAchievementsClient(ra, clock = { clock.now })
         val container = AppContainer(context)
         val scope = kotlinx.coroutines.MainScope()
-        val host = Host(ResolvedComponents(telemetry = dev.xross.launcher.theme.pack.TelemetryMode.RICH_CARD))
-        val controller = dev.xross.launcher.state.RaController(
+        val host = Host(ResolvedComponents(telemetry = TelemetryMode.RICH_CARD))
+        val controller = RaController(
             scope = scope,
-            profiles = dev.xross.launcher.profile.ProfileRepository(client, credentials, { layout }, clock = { clock.now }),
-            achievements = dev.xross.launcher.profile.AchievementsRepository(client, credentials, { layout }, hashes = { null }),
+            profiles = ProfileRepository(client, credentials, { layout }, clock = { clock.now }),
+            achievements = AchievementsRepository(client, credentials, { layout }, hashes = { null }),
             friends = friends,
             credentials = credentials,
             games = container.games,
@@ -661,7 +671,7 @@ class FriendsTest {
             idle()
             assertEquals(known, friendCalls())
             // Back on the rich card, a stale list is fetched when asked (the profile's refresh, turning it on).
-            host.components = ResolvedComponents(telemetry = dev.xross.launcher.theme.pack.TelemetryMode.RICH_CARD)
+            host.components = ResolvedComponents(telemetry = TelemetryMode.RICH_CARD)
             controller.onFriendsWanted()
             await("the stale list's refresh") { friendCalls() > known }
         } finally {

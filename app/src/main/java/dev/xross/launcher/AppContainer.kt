@@ -33,6 +33,18 @@ import dev.xross.launcher.profile.ProfileRepository
 import dev.xross.launcher.profile.RetroAchievementsClient
 import dev.xross.launcher.storage.FingerprintPolicy
 import dev.xross.launcher.storage.StorageVolumes
+import dev.xross.launcher.audio.AudioDirector
+import dev.xross.launcher.audio.PlaybackWatcher
+import dev.xross.launcher.media.ThemeBgm
+import dev.xross.launcher.profile.AchievementsRepository
+import dev.xross.launcher.profile.FriendsRepository
+import dev.xross.launcher.theme.ArtSwatches
+import dev.xross.launcher.theme.GamePaletteExtractor
+import dev.xross.launcher.theme.pack.ThemePackLoader
+import dev.xross.launcher.theme.pack.ThemeRuntime
+import dev.xross.launcher.theme.shader.ShaderCanary
+import dev.xross.launcher.theme.shader.ShaderHealth
+import dev.xross.launcher.ui.WallpaperLoader
 
 /** Manual dependency graph; swap for Hilt once the module split happens. */
 class AppContainer(context: Context) {
@@ -50,19 +62,19 @@ class AppContainer(context: Context) {
     val volumes: StorageVolumes by lazy { StorageVolumes(appContext) }
     val launcher: GameLauncher by lazy { AndroidIntentGameLauncher(appContext) }
     /** Theme packs: the built-in Default pack and folders in `Xross/themes/`. */
-    val themePacks: dev.xross.launcher.theme.pack.ThemePackLoader by lazy {
-        dev.xross.launcher.theme.pack.ThemePackLoader(appContext.assets) { environment.current.themes }
+    val themePacks: ThemePackLoader by lazy {
+        ThemePackLoader(appContext.assets) { environment.current.themes }
     }
     /**
      * Background shader status, toasts and the crash-loop canary (`Xross/cache/`). Its creation
      * runs the canary's recovery, so it is built in [XrossApplication.onCreate], before any frame.
      */
-    val shaderHealth: dev.xross.launcher.theme.shader.ShaderHealth by lazy {
-        dev.xross.launcher.theme.shader.ShaderHealth(
-            dev.xross.launcher.theme.shader.ShaderCanary { java.io.File(environment.current.root, CACHE_DIR) },
+    val shaderHealth: ShaderHealth by lazy {
+        ShaderHealth(
+            ShaderCanary { java.io.File(environment.current.root, CACHE_DIR) },
         )
     }
-    val themes: dev.xross.launcher.theme.pack.ThemeRuntime by lazy { dev.xross.launcher.theme.pack.ThemeRuntime(themePacks) }
+    val themes: ThemeRuntime by lazy { ThemeRuntime(themePacks) }
     val sounds: UiSounds by lazy { UiSounds(appContext).also { it.useTheme(themes.active.value) } }
     val sessions: PlaySessionTracker by lazy { PlaySessionTracker(PrefsSessionStore(appContext)) }
     val media: MediaRepository by lazy { MediaRepository(appContext) }
@@ -109,25 +121,25 @@ class AppContainer(context: Context) {
     val art: ArtLoader by lazy { ArtLoader(assets) }
 
     /** The wallpaper behind the menu (2b.4c): Set as Xross wallpaper, or the theme pack's. */
-    val wallpapers: dev.xross.launcher.ui.WallpaperLoader by lazy {
-        dev.xross.launcher.ui.WallpaperLoader(appContext.contentResolver) { environment.current.root }
+    val wallpapers: WallpaperLoader by lazy {
+        WallpaperLoader(appContext.contentResolver) { environment.current.root }
     }
 
     /**
      * Colors of the focused game's hero or wheel art (Theme 2.0 contextual palette), debounced and
      * cached per game; extraction runs on [kotlinx.coroutines.Dispatchers.Default].
      */
-    val gamePalette: dev.xross.launcher.theme.GamePaletteExtractor<android.graphics.Bitmap> by lazy {
-        dev.xross.launcher.theme.GamePaletteExtractor(
+    val gamePalette: GamePaletteExtractor<android.graphics.Bitmap> by lazy {
+        GamePaletteExtractor(
             scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate),
             load = { key ->
-                val uuid = dev.xross.launcher.theme.ArtSwatches.uuidOf(key)
-                dev.xross.launcher.theme.ArtSwatches.KINDS.firstNotNullOfOrNull { assets.file(uuid, it) }
-                    ?.let(dev.xross.launcher.theme.ArtSwatches::decode)
+                val uuid = ArtSwatches.uuidOf(key)
+                ArtSwatches.KINDS.firstNotNullOfOrNull { assets.file(uuid, it) }
+                    ?.let(ArtSwatches::decode)
             },
             analyze = { bitmap ->
                 val start = android.os.SystemClock.elapsedRealtimeNanos()
-                dev.xross.launcher.theme.ArtSwatches.analyze(bitmap).also {
+                ArtSwatches.analyze(bitmap).also {
                     // Debug and profiling builds: what was extracted, how long it took, and where.
                     if (BuildConfig.PERF_LOG) {
                         android.util.Log.i(
@@ -143,11 +155,11 @@ class AppContainer(context: Context) {
         )
     }
     /** Every volume and pause decision across effects, cues, music and snaps. */
-    val audio: dev.xross.launcher.audio.AudioDirector by lazy {
-        dev.xross.launcher.audio.AudioDirector(
+    val audio: AudioDirector by lazy {
+        AudioDirector(
             music, sounds,
-            bgm = dev.xross.launcher.media.ThemeBgm(appContext),
-            playback = dev.xross.launcher.audio.PlaybackWatcher(appContext),
+            bgm = ThemeBgm(appContext),
+            playback = PlaybackWatcher(appContext),
         ) { settings.current }
     }
     val snaps: SnapPlayer by lazy {
@@ -195,8 +207,8 @@ class AppContainer(context: Context) {
     }
 
     /** Followed RetroAchievements users and what they played last (2b.7c). */
-    val friends: dev.xross.launcher.profile.FriendsRepository by lazy {
-        dev.xross.launcher.profile.FriendsRepository(
+    val friends: FriendsRepository by lazy {
+        FriendsRepository(
             client = RetroAchievementsClient(http),
             credentials = credentials,
             layout = { environment.current },
@@ -204,8 +216,8 @@ class AppContainer(context: Context) {
     }
 
     /** RetroAchievements game lists and progress for the Details and Achievements screens. */
-    val achievements: dev.xross.launcher.profile.AchievementsRepository by lazy {
-        dev.xross.launcher.profile.AchievementsRepository(
+    val achievements: AchievementsRepository by lazy {
+        AchievementsRepository(
             client = RetroAchievementsClient(http),
             credentials = credentials,
             layout = { environment.current },

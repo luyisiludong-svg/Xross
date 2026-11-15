@@ -10,7 +10,7 @@ import dev.xross.launcher.state.MenuSnapshot
 import dev.xross.launcher.state.MenuTree
 import dev.xross.launcher.storage.Fingerprint
 import dev.xross.launcher.storage.HashSource
-import dev.xross.launcher.storage.PlatformRegistry
+import dev.xross.launcher.model.PlatformRegistry
 import dev.xross.launcher.storage.SkipReason
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse

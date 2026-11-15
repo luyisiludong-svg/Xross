@@ -35,6 +35,7 @@ import java.io.File
 import java.io.IOException
 import java.io.InputStream
 import java.time.LocalDate
+import dev.xross.launcher.data.of
 
 /**
  * 2b.8b: the export writer (staging, rename, failures, ids, the cap), that each scope loads back

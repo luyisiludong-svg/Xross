@@ -18,6 +18,7 @@ import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import java.io.File
+import dev.xross.launcher.model.GlyphKey
 
 /**
  * 2b.8-prep: a loaded pack keeps the merged manifest JSON it was decoded from
@@ -83,7 +84,7 @@ class ThemePackLoaderTest {
         val dir = ThemePackLoader.DEFAULT_DIR
         val shipped = context.assets.list("$dir/icons").orEmpty().map { "icons/$it" }
         // An icon is read when a glyph has its name (icons/power.svg ships but no glyph draws it).
-        val icons = dev.xross.launcher.model.GlyphKey.entries.map { "icons/${it.iconId}.svg" }.filter { it in shipped }
+        val icons = GlyphKey.entries.map { "icons/${it.iconId}.svg" }.filter { it in shipped }
         assertTrue("power.svg isn't a glyph", "icons/power.svg" in shipped && "icons/power.svg" !in icons)
         // Every sound in the folder is a role's.
         val sounds = context.assets.list("$dir/sounds").orEmpty().map { "sounds/$it" }

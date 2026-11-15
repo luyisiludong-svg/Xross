@@ -46,6 +46,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
+import dev.xross.launcher.state.TextPrompt
+import dev.xross.launcher.state.XmbNode
 
 /**
  * Phase 2b.1: avatar style settings, playtime subtitles, Details paging, the avatar mini-HUD's
@@ -201,10 +203,10 @@ class Phase2bFeaturesTest {
         assertEquals(AvatarRow.WIDTH.ordinal, vm.state.value.avatarEditor!!.index)
 
         // A custom hex typed in the prompt is validated before it is saved.
-        vm.onTextEntered(dev.xross.launcher.state.TextPrompt.AvatarBorderColor("#00E5FF"), "not-a-color")
+        vm.onTextEntered(TextPrompt.AvatarBorderColor("#00E5FF"), "not-a-color")
         idle()
         assertEquals(AvatarColorPreset.NEON_CYAN.hex, container.settings.current.avatarStyle.borderColorHex)
-        vm.onTextEntered(dev.xross.launcher.state.TextPrompt.AvatarBorderColor("#00E5FF"), "a1b2c3")
+        vm.onTextEntered(TextPrompt.AvatarBorderColor("#00E5FF"), "a1b2c3")
         idle()
         assertEquals("#A1B2C3", container.settings.current.avatarStyle.borderColorHex)
 
@@ -363,7 +365,7 @@ class Phase2bFeaturesTest {
 
     @Test fun telemetryFollowsTheFocusedRow() {
         val game = XmbUiState(
-            items = listOf(dev.xross.launcher.state.XmbNode("game:5", "G", action = NodeAction.LaunchGame(5))),
+            items = listOf(XmbNode("game:5", "G", action = NodeAction.LaunchGame(5))),
             telemetry = GameTelemetry(5, 1, 2, 10, 20),
         )
         assertNotNull(game.focusedTelemetry)

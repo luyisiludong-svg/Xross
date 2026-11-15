@@ -77,8 +77,11 @@ launch intent they receive. Never install them alongside real emulators.
 
 ```
 app/src/main/java/dev/xross/launcher/
+  model/    Pure shared types: GlyphKey/GlyphSet, CategoryIds, Platform (PlatformRegistry), ArtKind,
+            FolderNames
+  platform/ Android SDK checks (AgslSupport)
   input/    GamepadHandler, KeyMapper, StickTracker, ControllerFamily, ControllerProfiles
-  storage/  Platform (PlatformRegistry), RomScanner, Fingerprinter, FileHashes, StorageVolumes,
+  storage/  RomScanner, Fingerprinter, FileHashes, StorageVolumes,
             VolumeMonitor, XrossPaths, XrossEnvironment (the Xross/ folder), StorageAccess, SystemFolders
   config/   ConfigFiles (settings/controllers/systems JSON), AtomicFiles, ConfigWriter
   data/     Room (GameEntity, GameHashEntity, MetadataEntities, DAOs, XrossDatabase), GameRepository,
@@ -111,6 +114,17 @@ tools/icons/         SVG → VectorDrawable converter and icon role map
 tools/emulator-stub/ test-only emulator stand-ins (Gradle module :emulator-stub)
 tools/device-tests/  adb-driven device tests: quick smoke, five suites, run-all.sh, frame timing
 ```
+
+**Package layering.** `ArchitectureTest` (a plain JVM unit test, run by `testDebugUnitTest`)
+reads every `dev.xross.launcher` reference under `app/src/main`, imports and fully qualified
+names alike, and fails on an edge outside the target graph of
+[`design/ARCHITECTURE_ASSESSMENT.md`](design/ARCHITECTURE_ASSESSMENT.md) §5. In short: `model`
+depends on nothing; the theme engine (`theme/`) only on `model`; `data` and `config` (one
+persistence layer) may use the engine's types but not the reverse; feature packages (`audio`,
+`launch`, `scrape`, `profile`, `media`) never reach `state` or `ui`; `state` never reaches `ui`.
+It also keeps Android and Compose UI imports in `theme/` to the files listed there (the future
+`:theme:android`). A new top-level package has to be added to the test's table. Prefer imports to
+inline fully qualified names, which hide a file's real dependencies.
 
 The tree lists the main classes per package; 2b.4 added shader, effect and cache classes to
 `ui/`, `theme/` and `audio/`; see

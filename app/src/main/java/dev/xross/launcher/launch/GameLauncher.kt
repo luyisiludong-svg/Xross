@@ -2,8 +2,8 @@ package dev.xross.launcher.launch
 
 import android.app.Activity
 import dev.xross.launcher.data.GameEntity
-import dev.xross.launcher.storage.EmulatorOption
-import dev.xross.launcher.storage.Platform
+import dev.xross.launcher.model.EmulatorOption
+import dev.xross.launcher.model.Platform
 
 /** What [GameLauncher.plan] decided for a game. */
 sealed interface LaunchPlan {

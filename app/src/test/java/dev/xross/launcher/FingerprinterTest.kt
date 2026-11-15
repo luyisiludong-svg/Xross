@@ -3,7 +3,7 @@ package dev.xross.launcher
 import dev.xross.launcher.storage.Fingerprinter
 import dev.xross.launcher.storage.FingerprintPolicy
 import dev.xross.launcher.storage.HashSource
-import dev.xross.launcher.storage.PlatformRegistry
+import dev.xross.launcher.model.PlatformRegistry
 import dev.xross.launcher.storage.SkipReason
 import kotlinx.coroutines.test.runTest
 import org.apache.commons.compress.archivers.sevenz.SevenZOutputFile
