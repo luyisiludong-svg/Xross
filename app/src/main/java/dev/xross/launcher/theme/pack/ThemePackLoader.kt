@@ -358,6 +358,59 @@ class ThemePackLoader(
         return h
     }
 
+    /**
+     * Every file of [info] as pack-relative `/` paths (2b.8b's whole-pack export): the APK asset
+     * folder of the built-in pack, the pack folder otherwise, four folders deep. Dot-files and
+     * dot-folders (`.git`, `.nomedia`) are left out.
+     */
+    fun packFiles(info: ThemePackInfo): Set<String> {
+        val out = java.util.TreeSet<String>()
+        when (val s = info.source) {
+            is PackSource.Builtin -> {
+                fun walk(prefix: String, depth: Int) {
+                    val names = runCatching { assets.list(if (prefix.isEmpty()) s.dir else "${s.dir}/$prefix") }.getOrNull().orEmpty()
+                    for (name in names) {
+                        if (name.startsWith(".")) continue
+                        val path = if (prefix.isEmpty()) name else "$prefix/$name"
+                        val children = runCatching { assets.list("${s.dir}/$path") }.getOrNull().orEmpty()
+                        if (children.isEmpty()) out += path else if (depth < 4) walk(path, depth + 1)
+                    }
+                }
+                walk("", 0)
+            }
+            is PackSource.Folder -> {
+                fun walk(dir: File, depth: Int) {
+                    for (f in dir.listFiles().orEmpty()) {
+                        if (f.name.startsWith(".")) continue
+                        if (f.isDirectory) {
+                            if (depth < 4) walk(f, depth + 1)
+                        } else {
+                            relativePath(s.dir, f)?.let(out::add)
+                        }
+                    }
+                }
+                walk(s.dir, 0)
+            }
+        }
+        return out
+    }
+
+    /** Opens [path] (pack-relative) of [info]; throws [IOException] when it isn't there or leaves the pack. */
+    fun openPackFile(info: ThemePackInfo, path: String): java.io.InputStream = when (val s = info.source) {
+        is PackSource.Builtin -> {
+            if (path.split('/').any { it == ".." }) throw IOException("$path leaves the pack")
+            assets.open("${s.dir}/$path")
+        }
+        is PackSource.Folder -> (inside(s.dir, path)?.takeIf { it.isFile } ?: throw IOException("$path not found in the pack")).inputStream()
+    }
+
+    /** The size of [path] of [info]; null when it can't be told without reading (a compressed asset). */
+    fun packFileSize(info: ThemePackInfo, path: String): Long? = when (val s = info.source) {
+        is PackSource.Builtin -> runCatching { assets.openFd("${s.dir}/$path").use { it.length } }.getOrNull()
+            ?: runCatching { assets.open("${s.dir}/$path").use { it.available().toLong() } }.getOrNull()
+        is PackSource.Folder -> inside(s.dir, path)?.takeIf { it.isFile }?.length()
+    }
+
     private fun base(): LoadedTheme {
         val default = builtIn() ?: error("Built-in theme pack missing from the APK")
         return resolve(default, null)

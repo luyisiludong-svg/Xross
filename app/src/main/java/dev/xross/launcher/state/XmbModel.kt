@@ -124,6 +124,16 @@ sealed interface Command {
      * theme color, quick profile and wave settings.
      */
     data object ResetThemeDefaults : Command
+    /** Settings ▸ Theme ▸ Export theme… (2b.8b): the scopes the active pack can be exported in. */
+    data object ExportTheme : Command
+    /** The Theme pack row's Options ▸ Export a pack…: the scopes pack [id] can be exported in. */
+    data class ExportThemePack(val id: String) : Command
+    /** Export pack [packId] in [scope]: the name entry opens next. */
+    data class ChooseExportScope(val packId: String, val scope: dev.xross.launcher.theme.pack.ExportScope) : Command
+    /** The confirm panel's Export: writes the pending export into Xross/themes. */
+    data object ConfirmThemeExport : Command
+    /** After an export: switch to the new pack, so the screen doesn't change. */
+    data object SwitchToExportedTheme : Command
     /** Settings ▸ Theme ▸ Components (2b.7a): sets status bar [side]'s slots; null hands it back to the pack. */
     data class SetStatusSlots(val side: dev.xross.launcher.theme.pack.StatusSide, val slots: List<dev.xross.launcher.theme.pack.StatusSlot>?) : Command
     /** One move, removal or addition of [slot] in status bar [side]; the slot list reopens on it. */

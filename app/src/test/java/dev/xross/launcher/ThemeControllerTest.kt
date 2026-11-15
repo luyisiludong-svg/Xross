@@ -9,6 +9,7 @@ import dev.xross.launcher.state.Categories
 import dev.xross.launcher.state.ColorSwitch
 import dev.xross.launcher.state.Command
 import dev.xross.launcher.state.MenuTree
+import dev.xross.launcher.state.NameEntry
 import dev.xross.launcher.state.OptionsMenuState
 import dev.xross.launcher.state.SlotEdit
 import dev.xross.launcher.state.ThemeController
@@ -28,6 +29,12 @@ import dev.xross.launcher.theme.pack.StatusSlot.BATTERY
 import dev.xross.launcher.theme.pack.StatusSlot.CLOCK
 import dev.xross.launcher.theme.pack.ThemeDefaults
 import dev.xross.launcher.theme.pack.UserLook
+import dev.xross.launcher.state.NamePurpose
+import dev.xross.launcher.theme.XrossTheme
+import dev.xross.launcher.theme.pack.ExportScope
+import dev.xross.launcher.theme.pack.LayoutOverrides
+import dev.xross.launcher.theme.pack.LookExporter
+import java.io.File
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
 import org.junit.After
@@ -174,6 +181,10 @@ class ThemeControllerTest {
         override fun photoUri(photoId: Long) = photos[photoId]
         var optionsDismissed = 0
         override fun dismissOptions() { optionsDismissed++ }
+        var nameEntry: NameEntry? = null
+        override fun openNameEntry(entry: NameEntry) { nameEntry = entry }
+        val busy = mutableListOf<Boolean>()
+        override fun busy(on: Boolean) { busy += on }
     }
 
     private val scope = MainScope()
@@ -217,7 +228,8 @@ class ThemeControllerTest {
             Command.SetStatusSlots(StatusSide.RIGHT, null), Command.EditStatusSlot(StatusSide.RIGHT, CLOCK, SlotEdit.LATER),
             Command.CycleComponent(ComponentRow.CLOCK), Command.SetComponent(ComponentRow.CLOCK, null), Command.SetBadgePills(null),
             Command.ToggleBadgePill(YEAR), Command.CycleEffect(EffectSlot.SHADER), Command.SetEffect(EffectSlot.SHADER, ""),
-            Command.ResetThemeDefaults, Command.OpenLayoutSettings,
+            Command.ResetThemeDefaults, Command.OpenLayoutSettings, Command.ExportTheme, Command.ExportThemePack("default"),
+            Command.ChooseExportScope("default", ExportScope.WholePack), Command.ConfirmThemeExport, Command.SwitchToExportedTheme,
         )
         theirs.forEach { assertTrue("$it", c.onCommand(it)) }
         idle()
@@ -332,6 +344,173 @@ class ThemeControllerTest {
         c.onCommand(Command.SetTheme("NOT_A_THEME"))
         assertEquals(before, container.settings.current.theme)
     }
+
+    // region Export (2b.8b)
+
+    private fun labels(menu: OptionsMenuState) = menu.current.options.map { it.label }
+
+    @Test fun theScopeListPerPack() {
+        val container = AppContainer(context)
+        val host = FakeHost()
+        val c = controller(host, container)
+        // The built-in pack: no variants, so no variant rows; it is active, so Current look.
+        c.onCommand(Command.ExportTheme)
+        val default = host.menus.last()
+        assertEquals("Export Default", default.title)
+        assertEquals(listOf("Whole pack", "Current look"), labels(default))
+        assertEquals("Default, as it ships", default.current.options[0].detail)
+        assertEquals("What is on screen", default.current.options[1].detail)
+        container.settings.update { it.copy(effectOverrides = EffectOverrides(shaderPreset = "BOKEH"), layoutOverrides = LayoutOverrides(uiScale = 1.2f)) }
+        c.onCommand(Command.ExportTheme)
+        assertEquals("With your picks: 1 layout value, 1 effect", host.menus.last().current.options[1].detail)
+
+        // Another pack: a row per variant (the base look included), and no Current look.
+        StressPack.write(container.environment.current.themes)
+        c.onCommand(Command.ExportThemePack(StressPack.ID))
+        await("the stress pack's scopes") { host.menus.last().title == "Export Stress" }
+        val stress = host.menus.last()
+        assertEquals(listOf("Whole pack", "Base look only", "Night only", "Day only"), labels(stress))
+        assertEquals("Stress, 2 variants", stress.current.options[0].detail)
+        assertEquals(Command.ChooseExportScope(StressPack.ID, ExportScope.Variant("night")), stress.current.options[2].command)
+        c.onCommand(Command.ChooseExportScope(StressPack.ID, ExportScope.CurrentLook))
+        assertEquals("Current look is the active pack's only", 1, host.refused)
+        assertNull(host.nameEntry)
+
+        c.onCommand(Command.ExportThemePack("no-such-pack"))
+        await("the failure") { host.fails.isNotEmpty() }
+        assertEquals("Couldn't load no-such-pack to export it", host.fails.last())
+    }
+
+    @Test fun settingsThemeOffersExportAfterResetAndThePackRowForAnyPack() {
+        val setup = dev.xross.launcher.state.ThemeSetup(packs = listOf("default" to "Default", "stress" to "Stress"))
+        val rows = MenuTree(dev.xross.launcher.state.MenuSnapshot(themes = setup)).list(MenuTree.DISPLAY)
+        val ids = rows.map { it.id }
+        assertEquals(ids.indexOf("disp:reset") + 1, ids.indexOf("disp:export"))
+        val export = rows.single { it.id == "disp:export" }
+        assertEquals("Export theme…", export.title)
+        assertEquals("Save Default or your look as a new pack in Xross/themes", export.subtitle)
+        val packMenu = rows.single { it.id == "disp:pack" }.menu.single { it.label == "Export a pack…" }
+        assertEquals(listOf(Command.ExportThemePack("default"), Command.ExportThemePack("stress")), packMenu.submenu.map { it.command })
+    }
+
+    /** Scope → name entry → confirm → write, as the menu drives it; returns the new pack's id. */
+    private fun export(c: ThemeController, host: FakeHost, packId: String, scope: ExportScope, name: String? = null): String {
+        c.onCommand(Command.ChooseExportScope(packId, scope))
+        val entry = host.nameEntry!!
+        assertEquals("Name the exported theme", entry.title)
+        val typed = name ?: entry.text
+        c.onExportNamed(entry.purpose as NamePurpose.ExportTheme, typed)
+        await("the confirm panel") { host.menus.lastOrNull()?.title == "Export as $typed" }
+        val confirm = host.menus.last()
+        assertEquals(listOf("Export", "Licences"), labels(confirm))
+        assertEquals(LookExporter.LICENCE_NOTE, confirm.current.options[1].detail)
+        c.onCommand(Command.ConfirmThemeExport)
+        await("the export") { host.toasts.lastOrNull() == "Saved as $typed in Xross/themes" }
+        val saved = host.menus.last()
+        assertEquals("$typed saved", saved.title)
+        assertEquals("Switch to $typed", saved.current.options[0].label)
+        return saved.current.options[1].detail!!.removePrefix("Xross/themes/")
+    }
+
+    @Test fun aWholePackExportKeepsTheVariantAndTheUserLayerOnSwitch() {
+        val container = AppContainer(context)
+        val host = FakeHost()
+        val c = controller(host, container)
+        container.settings.update { it.copy(effectOverrides = EffectOverrides(focusFrameStyle = "GOLD_BEZEL"), theme = XrossTheme.ROSE.name, waveSpeed = 1.7f) }
+        val before = container.settings.current
+        c.onCommand(Command.ExportTheme)
+        val id = export(c, host, "default", ExportScope.WholePack)
+        assertEquals("default-pack", id)
+        assertEquals("Busy while building and while writing", listOf(true, false, true, false), host.busy)
+        val confirm = host.menus[host.menus.size - 2]
+        assertTrue(confirm.current.options[0].detail!!, Regex("""Default, \d+ files, [\d.]+ (KB|MB)""").matches(confirm.current.options[0].detail!!))
+        assertTrue(File(container.environment.current.themes, "$id/theme.json").isFile)
+
+        c.onCommand(Command.SwitchToExportedTheme)
+        await("the switch") { container.settings.current.themePack == id }
+        val after = container.settings.current
+        assertEquals(id, container.themes.active.value.id)
+        assertEquals(UserLook.of(before), UserLook.of(after))
+        assertEquals(before.theme, after.theme)
+        assertEquals(1.7f, after.waveSpeed)
+        assertEquals("Theme pack: Default", host.toasts.last())
+    }
+
+    @Test fun aVariantExportStartsOnTheNewBaseAndKeepsTheUserLayer() {
+        val container = AppContainer(context)
+        val host = FakeHost()
+        val c = controller(host, container)
+        StressPack.write(container.environment.current.themes)
+        c.onCommand(Command.ExportThemePack(StressPack.ID))
+        await("the scopes") { host.menus.lastOrNull()?.title == "Export Stress" }
+        container.settings.update { it.copy(themeVariant = "night", layoutOverrides = LayoutOverrides(itemSpacingDp = 6f)) }
+        val id = export(c, host, StressPack.ID, ExportScope.Variant("night"))
+        assertEquals("stress-night", id)
+        assertEquals("Stress · Night", host.nameEntry!!.text)
+        val detail = host.menus[host.menus.size - 2].current.options[0].detail!!
+        assertTrue(detail, detail.startsWith("Stress · Night, "))
+        c.onCommand(Command.SwitchToExportedTheme)
+        await("the switch") { container.settings.current.themePack == id }
+        assertEquals("", container.settings.current.themeVariant)
+        assertEquals(LayoutOverrides(itemSpacingDp = 6f), container.settings.current.layoutOverrides)
+    }
+
+    @Test fun aCurrentLookExportResetsTheUserLayerOnSwitch() {
+        val container = AppContainer(context)
+        val host = FakeHost()
+        val c = controller(host, container)
+        container.settings.update {
+            it.copy(
+                effectOverrides = EffectOverrides(foregroundParticles = "SNOW"), layoutOverrides = LayoutOverrides(uiScale = 0.9f),
+                theme = XrossTheme.TEAL.name, waveTint = dev.xross.launcher.theme.WaveTint.AURORA.name, quickProfile = QuickProfile.OLED_TRUE_BLACK.name,
+            )
+        }
+        c.onCommand(Command.ExportTheme)
+        val id = export(c, host, "default", ExportScope.CurrentLook, name = "My look")
+        assertEquals("my-look", id)
+        val detail = host.menus[host.menus.size - 2].current.options[0].detail!!
+        assertTrue(detail, detail.startsWith("Default + 1 layout value, 1 effect, the Aurora wave colors, "))
+        assertTrue(detail, detail.endsWith("; quick profile not included"))
+
+        c.onCommand(Command.SwitchToExportedTheme)
+        await("the switch") { container.settings.current.themePack == id }
+        val after = container.settings.current
+        assertTrue(UserLook.of(after).isNone)
+        assertEquals("", after.themeVariant)
+        assertEquals(dev.xross.launcher.theme.PACK_THEME, after.theme)
+        assertEquals(dev.xross.launcher.theme.WaveTint.THEME.name, after.waveTint)
+        assertEquals("The quick profile stays a setting", QuickProfile.OLED_TRUE_BLACK.name, after.quickProfile)
+    }
+
+    @Test fun cancellingAtEachStepWritesNothing() {
+        val container = AppContainer(context)
+        val host = FakeHost()
+        val c = controller(host, container)
+        val dir = container.environment.current.themes.apply { mkdirs() }
+        val before = dir.list()!!.toSet()
+        // Nothing pending: Export and Switch to say so.
+        c.onCommand(Command.ConfirmThemeExport)
+        assertEquals("Start the export again from Settings ▸ Theme", host.toasts.last())
+        c.onCommand(Command.SwitchToExportedTheme)
+        assertEquals("Nothing exported yet", host.toasts.last())
+        // The scope list closed: no name entry. The name entry closed: no confirm panel.
+        c.onCommand(Command.ExportTheme)
+        c.onCommand(Command.ChooseExportScope("default", ExportScope.WholePack))
+        assertEquals("Default", host.nameEntry!!.text)
+        assertEquals(ThemeController.MAX_EXPORT_NAME, host.nameEntry!!.maxLength)
+        c.onExportNamed(host.nameEntry!!.purpose as NamePurpose.ExportTheme, "   ")
+        assertEquals("Type a name first", host.toasts.last())
+        // The confirm panel closed, then another export started: the first one is gone.
+        c.onExportNamed(host.nameEntry!!.purpose as NamePurpose.ExportTheme, "Dropped")
+        await("the confirm panel") { host.menus.last().title == "Export as Dropped" }
+        c.onCommand(Command.ExportTheme)
+        c.onCommand(Command.ConfirmThemeExport)
+        assertEquals("Start the export again from Settings ▸ Theme", host.toasts.last())
+        idle()
+        assertEquals(before, dir.list()!!.toSet())
+    }
+
+    // endregion
 
     // endregion
 }

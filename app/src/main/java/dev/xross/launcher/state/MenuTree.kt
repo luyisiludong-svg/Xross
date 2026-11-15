@@ -935,6 +935,14 @@ class MenuTree(private val s: MenuSnapshot) {
                     add(MenuOption(name, command = Command.SetThemePack(id), selected = id == s.themes.activeId))
                 }
                 add(MenuOption("Look for new packs", detail = "Rescan Xross/themes", command = Command.ReloadThemePacks))
+                // 2b.8b: any installed pack, the built-in Default pack included.
+                add(
+                    MenuOption(
+                        "Export a pack…",
+                        detail = "Save a copy in Xross/themes",
+                        submenu = s.themes.packs.map { (id, name) -> MenuOption(name, command = Command.ExportThemePack(id)) },
+                    ),
+                )
             },
         ),
     ) + themeVariantRow() + listOf(
@@ -947,6 +955,11 @@ class MenuTree(private val s: MenuSnapshot) {
         layoutRow(),
         folder(DISPLAY_MENU, "Menu and profile", GlyphKey.USERS, "Profile customization, button hints, platform folders"),
         resetThemeRow(),
+        setting(
+            "disp:export", "Export theme…",
+            "Save ${s.themes.activeName} or your look as a new pack in Xross/themes",
+            GlyphKey.STORAGE, Command.ExportTheme,
+        ),
         setting(
             "disp:import", "Import theme (.xtheme)…",
             "Pick a theme file; it is checked, then unpacked into Xross/themes",

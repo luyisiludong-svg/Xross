@@ -19,6 +19,18 @@ import dev.xross.launcher.theme.pack.BadgePill
 import dev.xross.launcher.theme.pack.ComponentRow
 import dev.xross.launcher.theme.pack.EffectSlot
 import dev.xross.launcher.theme.pack.InstallResult
+import dev.xross.launcher.theme.pack.ExportPlan
+import dev.xross.launcher.theme.pack.ExportReader
+import dev.xross.launcher.theme.pack.ExportResult
+import dev.xross.launcher.theme.pack.ExportScope
+import dev.xross.launcher.theme.pack.ExportSource
+import dev.xross.launcher.theme.pack.LoadedTheme
+import dev.xross.launcher.theme.pack.LookExport
+import dev.xross.launcher.theme.pack.LookExporter
+import dev.xross.launcher.theme.pack.LookPicks
+import dev.xross.launcher.theme.pack.PackLoad
+import dev.xross.launcher.theme.pack.ThemeExport
+import dev.xross.launcher.theme.pack.UserLook
 import dev.xross.launcher.theme.pack.LayoutOverrides
 import dev.xross.launcher.theme.pack.ResolvedComponents
 import dev.xross.launcher.theme.pack.StagedTheme
@@ -43,8 +55,8 @@ import java.io.File
  * Settings ▸ Theme, split out of [XmbViewModel] (Architecture Assessment #6, Phase 2b.8-prep):
  * theme pack, variant, colour theme, quick profile, colour switches, surface style, effects,
  * components (status slots, badge pills), the Layout panel (2b.8a), the Xross wallpaper, the `.xtheme` import with its
- * pending Replace / Keep both, and Reset to theme defaults. The view model owns one of these and
- * hands it every theme [Command] ([onCommand]). The Layout panel (2b.8a) lives here too; 2b.8b's export adds its commands.
+ * pending Replace / Keep both, Reset to theme defaults and Export theme… (2b.8b). The view model
+ * owns one of these and hands it every theme [Command] ([onCommand]).
  */
 class ThemeController(
     private val context: Context,
@@ -75,6 +87,10 @@ class ThemeController(
         fun photoUri(photoId: Long): Uri?
         /** Closes the Options menu (a panel opens in its place). */
         fun dismissOptions()
+        /** Opens the gamepad keyboard for a name (2b.8b: an exported theme's), in place of the Options menu. */
+        fun openNameEntry(entry: NameEntry)
+        /** The menu's busy icon, while a theme is exported. */
+        fun busy(on: Boolean)
     }
 
     private val _layoutEditor = MutableStateFlow<LayoutEditorState?>(null)
@@ -183,6 +199,11 @@ class ThemeController(
             is Command.SetEffect -> setEffect(command.slot, command.value)
             Command.ResetThemeDefaults -> resetThemeDefaults()
             Command.OpenLayoutSettings -> openLayoutSettings()
+            Command.ExportTheme -> openExport(themes.active.value.id)
+            is Command.ExportThemePack -> openExport(command.id)
+            is Command.ChooseExportScope -> chooseExportScope(command.packId, command.scope)
+            Command.ConfirmThemeExport -> confirmExport()
+            Command.SwitchToExportedTheme -> switchToExport()
             else -> return false
         }
         return true
@@ -427,6 +448,266 @@ class ThemeController(
 
     // endregion
 
+    // region Export (2b.8b)
+
+    /** A built export waiting for the confirm panel's Export. */
+    private data class ExportDraft(val pack: LoadedTheme, val export: LookExport, val wallpaper: String, val plan: ExportPlan? = null)
+
+    /** What was last written, for Switch to. */
+    private data class Exported(val id: String, val name: String, val scope: ExportScope)
+
+    /** The pack whose scope list is open (a non-active one is loaded for it). */
+    private var exportPack: LoadedTheme? = null
+    private var exportDraft: ExportDraft? = null
+    private var exported: Exported? = null
+
+    private val themeExport by lazy { ThemeExport(themesDir = { environment.current.themes }) }
+
+    /** Opens the scope list for pack [id]: the active one at once, another after it loads. */
+    private fun openExport(id: String) {
+        exportDraft = null
+        val active = themes.active.value
+        if (id == active.id) return showExportScopes(active)
+        scope.launch {
+            val pack = withContext(Dispatchers.IO) { (packs.loadStrict(id) as? PackLoad.Ok)?.theme }
+                ?: return@launch host.fail("Couldn't load $id to export it")
+            showExportScopes(pack)
+        }
+    }
+
+    private fun showExportScopes(pack: LoadedTheme) {
+        exportPack = pack
+        sounds.play(UiSound.OPTION)
+        host.showOptions(OptionsMenuState.open("Export ${pack.info.name}", exportOptions(pack)))
+    }
+
+    /**
+     * The scope list for [pack]: Whole pack, one row per variant when it has them (the base look
+     * included), and Current look for the active pack only.
+     */
+    fun exportOptions(pack: LoadedTheme): List<MenuOption> = buildList {
+        val name = pack.info.name
+        val n = pack.variants.size
+        add(
+            MenuOption(
+                "Whole pack",
+                detail = if (n == 0) "$name, as it ships" else "$name, $n variant" + (if (n == 1) "" else "s"),
+                command = Command.ChooseExportScope(pack.id, ExportScope.WholePack),
+            ),
+        )
+        if (n > 0) {
+            for (id in listOf("") + pack.variants.map { it.id }) {
+                add(
+                    MenuOption(
+                        "${LookExporter.variantName(pack, id)} only",
+                        detail = "One look, without your picks",
+                        command = Command.ChooseExportScope(pack.id, ExportScope.Variant(id)),
+                    ),
+                )
+            }
+        }
+        if (pack.id == themes.active.value.id) {
+            val picks = UserLook.of(settings.current).changes()
+            add(
+                MenuOption(
+                    "Current look",
+                    detail = if (picks.isEmpty()) "What is on screen" else "With your picks: " + picks.joinToString(", "),
+                    command = Command.ChooseExportScope(pack.id, ExportScope.CurrentLook),
+                ),
+            )
+        }
+    }
+
+    private fun exportPackFor(id: String): LoadedTheme? =
+        exportPack?.takeIf { it.id == id } ?: themes.active.value.takeIf { it.id == id }
+
+    private fun chooseExportScope(packId: String, exportScope: ExportScope) {
+        val pack = exportPackFor(packId) ?: return host.toast("Pick the pack to export again")
+        if (exportScope == ExportScope.CurrentLook && pack.id != themes.active.value.id) return host.refuse()
+        val name = LookExporter.defaultName(pack, exportScope).take(MAX_EXPORT_NAME)
+        host.openNameEntry(
+            NameEntry("Name the exported theme", NamePurpose.ExportTheme(packId, exportScope), SearchState(query = name), maxLength = MAX_EXPORT_NAME),
+        )
+    }
+
+    /** The name entry's Done: builds the export (off the main thread) and shows what goes in. */
+    fun onExportNamed(purpose: NamePurpose.ExportTheme, text: String) {
+        val name = text.trim().replace(Regex("\\s+"), " ").take(MAX_EXPORT_NAME)
+        if (name.isEmpty()) return host.toast("Type a name first")
+        val pack = exportPackFor(purpose.packId) ?: return host.toast("Pick the pack to export again")
+        val s = settings.current
+        scope.launch {
+            host.busy(true)
+            val draft = try {
+                withContext(Dispatchers.IO) { buildExport(pack, purpose.scope, name, s) }
+            } finally {
+                host.busy(false)
+            }
+            exportDraft = draft
+            sounds.play(UiSound.OPTION)
+            host.showOptions(OptionsMenuState.open("Export as $name", confirmOptions(draft, s)))
+        }
+    }
+
+    private fun buildExport(pack: LoadedTheme, exportScope: ExportScope, name: String, s: XrossSettings): ExportDraft {
+        val wallpaper = if (exportScope == ExportScope.CurrentLook) s.customWallpaper.trim() else ""
+        val picks = LookPicks.of(s, wallpaperType = wallpaper.takeIf { it.isNotEmpty() }?.let(::wallpaperType))
+        val available = if (exportScope == ExportScope.WholePack) packs.packFiles(pack.info) else emptySet()
+        val export = LookExporter.export(pack, exportScope, name, java.time.LocalDate.now(), available, picks)
+        val draft = ExportDraft(pack, export, wallpaper)
+        return draft.copy(plan = themeExport.plan(export, reader(draft)))
+    }
+
+    /** The confirm panel: what goes in, its size and the licence note, then Export. */
+    private fun confirmOptions(draft: ExportDraft, s: XrossSettings): List<MenuOption> {
+        val e = draft.export
+        val plan = draft.plan ?: ExportPlan(e.files.size, 0, emptyList())
+        val size = "${plan.files} file" + (if (plan.files == 1) "" else "s") + ", " + ThemeExport.megabytes(plan.bytes)
+        val pack = draft.pack.info.name
+        val what = when (val sc = e.scope) {
+            ExportScope.WholePack -> {
+                val n = draft.pack.variants.size
+                "$pack, " + (if (n == 0) "" else "$n variant" + (if (n == 1) ", " else "s, ")) + size
+            }
+            is ExportScope.Variant -> "$pack · ${LookExporter.variantName(draft.pack, sc.id)}, $size"
+            ExportScope.CurrentLook -> {
+                val picks = UserLook.of(s).changes().map { phrase ->
+                    if (phrase == "wallpaper") (if (e.files.any { it.source == ExportSource.UserWallpaper }) "your wallpaper" else "your wallpaper left out (it can't be read)") else phrase
+                } + e.notes
+                buildString {
+                    append(pack)
+                    if (picks.isNotEmpty()) append(" + ").append(picks.joinToString(", "))
+                    append(", ").append(size)
+                    if (QuickProfile.byName(s.quickProfile) != QuickProfile.NONE) append("; quick profile not included")
+                }
+            }
+        }
+        return listOf(
+            MenuOption("Export", detail = what, command = Command.ConfirmThemeExport),
+            MenuOption("Licences", detail = LookExporter.LICENCE_NOTE),
+        )
+    }
+
+    private fun confirmExport() {
+        val draft = exportDraft ?: return host.toast("Start the export again from Settings ▸ Theme")
+        exportDraft = null
+        host.dismissOptions()
+        scope.launch {
+            host.busy(true)
+            val result = try {
+                withContext(Dispatchers.IO) { themeExport.write(draft.export, reader(draft)) }
+            } finally {
+                host.busy(false)
+            }
+            when (result) {
+                is ExportResult.Refused -> host.fail("Theme not exported: ${result.reason}")
+                is ExportResult.Saved -> {
+                    themes.rediscover()
+                    val name = draft.export.name
+                    exported = Exported(result.id, name, draft.export.scope)
+                    sounds.play(UiSound.OK)
+                    host.toast("Saved as $name in Xross/themes")
+                    host.showOptions(
+                        OptionsMenuState.open(
+                            "$name saved",
+                            listOf(
+                                MenuOption("Switch to $name", detail = switchDetail(draft.export.scope), command = Command.SwitchToExportedTheme),
+                                MenuOption("Saved in", detail = "Xross/themes/${result.id}"),
+                            ),
+                        ),
+                    )
+                }
+            }
+        }
+    }
+
+    private fun switchDetail(exportScope: ExportScope) = when (exportScope) {
+        ExportScope.WholePack -> "Keeps your variant and picks"
+        is ExportScope.Variant -> "Keeps your picks"
+        ExportScope.CurrentLook -> "Your picks are in it, so they reset"
+    }
+
+    /**
+     * Switch to the pack just written, so the screen doesn't change: a whole pack keeps the
+     * variant and the user layer; a variant keeps the user layer on the new pack's base look; a
+     * current look starts on its base with the pack's colours and no user layer (it's all in the pack).
+     */
+    private fun switchToExport() {
+        val done = exported ?: return host.toast("Nothing exported yet")
+        host.dismissOptions()
+        scope.launch {
+            val loaded = themes.select(done.id)
+            if (loaded.id != done.id) {
+                sounds.useTheme(loaded)
+                return@launch host.fail("Couldn't load ${done.name}; using Default")
+            }
+            val before = settings.current
+            settings.update { s ->
+                when (done.scope) {
+                    ExportScope.WholePack -> s.copy(themePack = loaded.id)
+                    is ExportScope.Variant -> s.copy(themePack = loaded.id, themeVariant = "")
+                    ExportScope.CurrentLook -> UserLook.NONE.writeTo(s).copy(
+                        themePack = loaded.id,
+                        themeVariant = "",
+                        theme = if (loaded.look().palette != null) PACK_THEME else s.theme,
+                        // The tint's colors are the pack's palette now.
+                        waveTint = dev.xross.launcher.theme.WaveTint.THEME.name,
+                    )
+                }
+            }
+            if (done.scope == ExportScope.CurrentLook) releaseWallpaperGrant(before.customWallpaper)
+            sounds.useTheme(loaded)
+            sounds.play(UiSound.OK)
+            host.toast("Theme pack: ${loaded.info.name}")
+        }
+    }
+
+    /** Reads the pack's files from its assets or folder, and the Xross wallpaper through its URI or path. */
+    private fun reader(draft: ExportDraft): ExportReader = object : ExportReader {
+        override fun size(source: ExportSource): Long? = when (source) {
+            is ExportSource.Pack -> packs.packFileSize(draft.pack.info, source.path)
+            ExportSource.UserWallpaper -> wallpaperSize(draft.wallpaper)
+        }
+
+        override fun open(source: ExportSource): java.io.InputStream = when (source) {
+            is ExportSource.Pack -> packs.openPackFile(draft.pack.info, source.path)
+            ExportSource.UserWallpaper -> openWallpaper(draft.wallpaper)
+        }
+    }
+
+    private fun wallpaperFile(location: String): File =
+        File(location).let { if (it.isAbsolute) it else File(environment.current.root, location) }
+
+    private fun isUri(location: String) = location.startsWith("content://") || location.startsWith("file://")
+
+    private fun openWallpaper(location: String): java.io.InputStream =
+        if (isUri(location)) context.contentResolver.openInputStream(location.toUri()) ?: throw java.io.IOException("can't open your wallpaper")
+        else wallpaperFile(location).inputStream()
+
+    private fun wallpaperSize(location: String): Long? = if (isUri(location)) {
+        runCatching {
+            context.contentResolver.query(location.toUri(), arrayOf(android.provider.OpenableColumns.SIZE), null, null, null)?.use { c ->
+                if (c.moveToFirst() && !c.isNull(0)) c.getLong(0) else null
+            }
+        }.getOrNull()
+    } else {
+        wallpaperFile(location).takeIf { it.isFile }?.length()
+    }
+
+    /** `png`, `jpg` or `webp` from the picture's first bytes (its name or MIME type can lie); null if it can't be read or isn't one. */
+    private fun wallpaperType(location: String): String? {
+        val head = runCatching { openWallpaper(location).use { input -> ByteArray(12).also { b -> var n = 0; while (n < b.size) { val r = input.read(b, n, b.size - n); if (r < 0) break; n += r } } } }.getOrNull()
+            ?: return null
+        return when {
+            head[0] == 0x89.toByte() && head[1] == 'P'.code.toByte() && head[2] == 'N'.code.toByte() && head[3] == 'G'.code.toByte() -> "png"
+            head[0] == 0xFF.toByte() && head[1] == 0xD8.toByte() -> "jpg"
+            String(head, 0, 4, Charsets.US_ASCII) == "RIFF" && String(head, 8, 4, Charsets.US_ASCII) == "WEBP" -> "webp"
+            else -> null
+        }
+    }
+
+    // endregion
+
     // region .xtheme import
 
     private val themeArchive by lazy {
@@ -521,4 +802,9 @@ class ThemeController(
     }
 
     // endregion
+
+    companion object {
+        /** The longest name an exported theme takes (folder ids keep 48 characters). */
+        const val MAX_EXPORT_NAME = 40
+    }
 }

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Theme suite (351 checks): Settings ▸ Theme and its folders (theme color, wave and avatar panels,
+# Theme suite (407 checks): Settings ▸ Theme and its folders (theme color, wave and avatar panels,
 # platform folders, surface style, the 2b.4f effect rows, Pick custom wallpaper, Reset to theme
 # defaults), quick profiles (OLED, Y2K, E-Ink), color layers (adaptive colors,
 # circadian curve, battery tint and charging pulse through `dumpsys battery`), the Sound section,
@@ -19,7 +19,10 @@
 # RetroAchievements hub (2b.7e: the Achievements header, three rows of badges on all 12 display-matrix
 # configurations, the banner; the L1/R1 platform filter, the FOLLOWING sidebar and Confirm on a friend),
 # and the Layout mixer (2b.8a: each crosshair preset, UI scale, list spacing and focused scale moving
-# the menu while the panel is open, the ends held, a restart, Reset layout and Reset to theme defaults).
+# the menu while the panel is open, the ends held, a restart, Reset layout and Reset to theme defaults),
+# and Export theme (2b.8b: the built-in Default pack whole and as a current look, a pack with variants,
+# overrides and rules whole, per variant and as a current look, and a picked wallpaper copied in; each
+# compared before and after Switch to by screenshots and logged colours in 8 places).
 #
 #   tools/device-tests/test-theme.sh
 #
@@ -29,7 +32,7 @@
 # The battery override is always reset at exit, even after Ctrl-C.
 set -u
 . "$(dirname "$0")/lib/harness.sh"
-suite_begin theme 351
+suite_begin theme 407
 
 setup_base_env
 setup_theme_fixtures
@@ -184,7 +187,8 @@ press DPAD_DOWN 3 KEYCODE_DPAD_CENTER
 top_list
 key KEYCODE_BUTTON_Y
 expect "Look for new packs" "Theme pack Options offer a rescan"
-press DPAD_DOWN 6 KEYCODE_DPAD_CENTER
+# Look for new packs is the second to last row (Export a pack… is last, 2b.8b).
+press DPAD_DOWN 6 KEYCODE_DPAD_UP KEYCODE_DPAD_CENTER
 pause 1
 key KEYCODE_DPAD_CENTER
 pause 1.5
@@ -1749,5 +1753,212 @@ expect "Clears 2 layout values" "Reset to theme defaults counts the layout value
 key KEYCODE_DPAD_CENTER
 for _ in $(seq 10); do settings_has '"preset": null' && break; pause 0.5; done
 settings_has '"preset": null' && settings_has '"uiScale": null' && ok "Reset to theme defaults clears display.layout" || bad "layout values left after Reset"
+
+section "Export (2b.8b)"
+# Settings ▸ Theme ▸ Export theme… (the row after Reset to theme defaults) writes a new pack into
+# Xross/themes in one of three scopes; Switch to <name> then changes nothing on screen. Each check
+# compares screenshots of the same places before and after (the wave off, so only the breathing
+# focus halo moves: under 1% of the pixels) and the colours, effects and cosmetics the debug build
+# logs there.
+display_set() { # display_set <python over d, settings.json's display block>: written with Xross stopped
+  adb shell am force-stop "$PKG"
+  adb shell cat /sdcard/Xross/config/settings.json > "$XT_TMP/settings.json"
+  python3 -I - "$XT_TMP/settings.json" "$1" <<'PY'
+import json, sys
+p = sys.argv[1]; s = json.load(open(p)); d = s.setdefault("display", {})
+exec(sys.argv[2])
+json.dump(s, open(p, "w"), indent=2)
+PY
+  adb push "$XT_TMP/settings.json" /sdcard/Xross/config/settings.json >/dev/null
+  start_app
+}
+display_get() { # display_get <key>: a display value from settings.json, as JSON
+  adb shell cat /sdcard/Xross/config/settings.json | python3 -I -c "import json,sys; print(json.dumps(json.load(sys.stdin)['display'].get(sys.argv[1])))" "$1"
+}
+look_state() { # the latest colours, effects and cosmetics the debug build logged (not whether the user set them)
+  for tag in XrossColors XrossEffects XrossCosmetics; do adb logcat -d -s "$tag:I" | grep -v '^-' | tail -1 | sed 's/.*: //; s/ user=[a-z]*//'; done
+}
+xshot() { pause 1.5; adb exec-out screencap > "$XT_TMP/x-$1.raw"; look_state > "$XT_TMP/x-$1.txt"; }
+# xshots <name>: from a fresh start, each category's root, then a SNES game focused (its system
+# override) and Music at 28% battery (a rule; Android's own low-battery heads-up, at 20% and below, would cover the menu).
+xshots() {
+  adb shell am force-stop "$PKG"; adb logcat -c; start_app
+  local i; for i in 0 1 2 3 4 5; do category "$i"; xshot "$1-cat$i"; done
+  home; local above; above=$(collections_above); all_games "$above"; key KEYCODE_DPAD_CENTER; pause 1; xshot "$1-snes"
+  adb shell dumpsys battery unplug; adb shell dumpsys battery set level 28
+  category 2; xshot "$1-low"
+  adb shell dumpsys battery reset
+}
+diff_pct() { # diff_pct <a> <b>: % of pixels below the status bar differing by more than 24 in a channel
+  python3 -I - "$XT_TMP/x-$1.raw" "$XT_TMP/x-$2.raw" <<'PY'
+import struct, sys
+a = open(sys.argv[1], "rb").read(); b = open(sys.argv[2], "rb").read()
+w, h = struct.unpack_from("<II", a, 0)
+oa = len(a) - w * h * 4; ob = len(b) - w * h * 4
+diff = n = 0
+for y in range(int(h * 0.12), h, 2):
+    ra = oa + y * w * 4; rb = ob + y * w * 4
+    for x in range(0, w, 2):
+        p = ra + x * 4; q = rb + x * 4
+        n += 1
+        if max(abs(a[p] - b[q]), abs(a[p + 1] - b[q + 1]), abs(a[p + 2] - b[q + 2])) > 24: diff += 1
+print(f"{100.0 * diff / n:.2f}")
+PY
+}
+same_look() { # same_look <before> <after> <description>: every place of xshots looks and logs the same
+  local where worst=0 off=""
+  for where in cat0 cat1 cat2 cat3 cat4 cat5 snes low; do
+    local d; d=$(diff_pct "$1-$where" "$2-$where")
+    awk "BEGIN{exit !($d > $worst)}" && worst=$d
+    awk "BEGIN{exit !($d >= 2)}" && off="$off $where:${d}%"
+    cmp -s "$XT_TMP/x-$1-$where.txt" "$XT_TMP/x-$2-$where.txt" || off="$off $where:log($(diff "$XT_TMP/x-$1-$where.txt" "$XT_TMP/x-$2-$where.txt" | grep '^>' | head -1))"
+    [ -n "${XROSS_SHOTS:-}" ] && { mkdir -p "$XROSS_SHOTS"; cp "$XT_TMP/x-$2-$where.raw" "$XROSS_SHOTS/export-$2-$where.raw"; }
+  done
+  [ -z "$off" ] && ok "$3 (8 places, at most ${worst}% of pixels differ)" || bad "$3 —$off"
+}
+# open_export: Settings ▸ Theme ▸ Export theme… (second from the bottom), its scope list open.
+open_export() { category 0; press DPAD_DOWN 3 KEYCODE_DPAD_CENTER; top_list; press DPAD_DOWN 25 KEYCODE_DPAD_UP; key KEYCODE_DPAD_CENTER; pause 1; }
+# export_as <scope row> <name shown in the entry>: picks the scope, keeps the prefilled name, exports.
+export_as() {
+  [ "$1" -gt 0 ] && press DPAD_DOWN "$1"
+  key KEYCODE_DPAD_CENTER; pause 0.8
+  expect "$2" "the name entry is prefilled with “$2”"
+  key KEYCODE_ENTER; pause 1.5
+  expect "Licences" "the confirm panel lists what goes in, with the licence note"
+  key KEYCODE_DPAD_CENTER
+  for _ in $(seq 20); do screen | grep -qF "Switch to $2" && break; pause 0.5; done
+}
+switch_to() { expect "Switch to $1" "after the export: Switch to $1"; key KEYCODE_DPAD_CENTER; pause 2; }
+
+# From the Default pack with nothing over it but the wave turned off (earlier sections leave picks).
+display_set 'd.update({"wave": False, "themePack": "default", "themeVariant": "", "theme": "LAVENDER", "effects": {}, "components": {}, "layout": {}, "surfaceStyle": "", "customWallpaper": "", "adaptiveGamePalette": None, "circadianCurve": None, "batteryTint": None, "quickProfile": "NONE", "waveTint": "THEME"})'
+# The built-in Default pack, whole: the same pack from a folder.
+open_export
+expect "Whole pack" "Export theme… opens the scope list"
+expect "Default, as it ships" "…the built-in pack as it ships"
+expect "Current look" "…and the active pack's current look"
+expect_not "Base look only" "no variant rows for a pack without variants"
+key KEYCODE_BACK
+xshots def
+open_export
+export_as 0 "Default"
+adb shell ls /sdcard/Xross/themes/default-pack/theme.json >/dev/null 2>&1 && ok "the whole pack is written to Xross/themes/default-pack" || bad "no default-pack folder"
+n=$(adb shell 'ls /sdcard/Xross/themes/default-pack/sounds /sdcard/Xross/themes/default-pack/icons' | grep -cE '\.(wav|svg)$')
+[ "$n" -eq 36 ] && ok "…with its 7 sounds and 29 icons from the APK assets" || bad "default-pack has $n sounds and icons, not 36"
+adb shell cat /sdcard/Xross/themes/default-pack/theme.json | grep -q '"FLAT_GLASS"' && ok "…and surfaces.json merged into its one theme.json" || bad "surfaces not in theme.json"
+adb shell ls /sdcard/Xross/themes/ | grep -q '^\.export-' && bad "a staging folder was left behind" || ok "no staging folder is left behind"
+switch_to "Default"
+[ "$(display_get themePack)" = '"default-pack"' ] && ok "Switch to makes default-pack the active pack" || bad "themePack is $(display_get themePack)"
+xshots defpack
+same_look def defpack "the exported Default pack looks the same as the built-in one"
+
+# The Default pack's current look: effects, components, layout and a colour theme baked in.
+display_set 'd["themePack"] = "default"; d["theme"] = "CRIMSON"; d["effects"] = {"focusFrameStyle": "GOLD_BEZEL", "iconMask": "CIRCLE", "backgroundFilter": "SCANLINES"}; d["components"] = {"batteryMode": "PERCENTAGE", "statusBarRight": ["BATTERY", "CLOCK", "AVATAR"]}; d["layout"] = {"preset": "PSP_CENTER", "uiScale": 1.1, "itemSpacingDp": 20}; d["surfaceStyle"] = "Y2K_GLOSSY_BEZEL"'
+xshots mine
+open_export
+press DPAD_DOWN 1
+expect "With your picks: 3 layout values, 3 effects, 2 components, surface" "Current look lists the user's picks"
+export_as 0 "Default (my look)"
+switch_to "Default (my look)"
+[ "$(display_get theme)" = '"PACK"' ] && [ "$(display_get effects | grep -c GOLD)" = 0 ] && [ "$(display_get surfaceStyle)" = '""' ] \
+  && ok "Switch to a current look uses its colours and clears the user layer" || bad "after Switch to: theme $(display_get theme), effects $(display_get effects)"
+xshots minepack
+same_look mine minepack "the current-look export of Default with effects, components, layout and Crimson looks the same"
+
+# A pack with variants, overrides and rules: the whole pack, each variant and the current look.
+xs=$(tmpdir export_stress)
+mkdir -p "$xs/export_stress/sounds" "$xs/export_stress/icons" "$xs/export_stress/wallpapers"
+cp "$REPO_ROOT/app/src/main/assets/themes/default/sounds/back.wav" "$xs/export_stress/sounds/cursor.wav"
+cp "$REPO_ROOT/app/src/main/assets/themes/default/icons/home.svg" "$xs/export_stress/icons/games.svg"
+cp "$FIX/smoke_wallpaper.png" "$xs/export_stress/wallpapers/ember.png"
+cat > "$xs/export_stress/theme.json" <<'JSON'
+{"schemaVersion": 2, "name": "Export Stress", "author": "smoke", "version": "1.2",
+ "palette": {"canvas": "#101830", "accent": "#FFFFFF", "accentSecondary": "#C0E0FF"},
+ "effects": {"focusFrameStyle": "STATIC_NEON"},
+ "layout": {"preset": "CLASSIC_PS3"},
+ "variants": [
+   {"id": "ember", "name": "Ember", "palette": {"canvas": "#2A0A04", "accentSecondary": "#FF8C42"},
+    "effects": {"surfaceStyle": "Y2K_GLOSSY_BEZEL", "wallpaperPath": "wallpapers/ember.png"}},
+   {"id": "mono", "name": "Mono", "palette": {"accent": "#A0A0A0"}, "effects": {"focusFrameStyle": "HARD_SHADOW", "iconMask": "CIRCLE"}}],
+ "categoryOverrides": {
+   "MUSIC": {"palette": {"canvas": "#0A2A10"}, "effects": {"surfaceStyle": "OLED_TRUE_BLACK"}},
+   "SETTINGS": {"effects": {"focusFrameStyle": "GOLD_BEZEL"}}},
+ "systemOverrides": {"snes": {"palette": {"canvas": "#300A0A", "accentSecondary": "#FF8C42"}, "cardAspectRatio": "3:4"}},
+ "rules": [
+   {"match": {"battery": "<= 30"}, "apply": {"palette": {"accent": "#FF3344"}, "effects": {"focusFrameStyle": "BREATHING_HALO"}}},
+   {"match": {"category": "PHOTO"}, "apply": {"layout": {"itemSpacingDp": 20}}}]}
+JSON
+adb push "$xs/export_stress" /sdcard/Xross/themes/ >/dev/null
+display_set 'd["themePack"] = "export_stress"; d["themeVariant"] = "ember"; d["theme"] = "PACK"; d["effects"] = {}; d["components"] = {}; d["layout"] = {}; d["surfaceStyle"] = ""'
+xshots ember
+open_export
+expect "Export Stress, 2 variants" "a pack with variants: the whole pack counts them"
+expect "Base look only" "…a row for its base look"
+expect "Ember only" "…and one per variant"
+key KEYCODE_BACK
+open_export
+export_as 0 "Export Stress"
+switch_to "Export Stress"
+[ "$(display_get themeVariant)" = '"ember"' ] && ok "Switch to a whole pack keeps the variant" || bad "themeVariant is $(display_get themeVariant)"
+xshots emberwhole
+same_look ember emberwhole "the whole-pack export with Ember selected looks the same"
+adb shell ls /sdcard/Xross/themes/export-stress/wallpapers/ember.png >/dev/null 2>&1 && ok "…and carries the variant's wallpaper" || bad "ember.png not copied"
+row=1
+for v in "" ember mono; do
+  display_set "d['themePack'] = 'export_stress'; d['themeVariant'] = '$v'"
+  xshots "v$row"
+  case "$v" in "") name="Base look" ;; ember) name="Ember" ;; *) name="Mono" ;; esac
+  open_export
+  export_as "$row" "Export Stress · $name"
+  switch_to "Export Stress · $name"
+  [ "$(display_get themeVariant)" = '""' ] && ok "Switch to $name only starts on its base look" || bad "themeVariant is $(display_get themeVariant)"
+  xshots "v$row-pack"
+  same_look "v$row" "v$row-pack" "the $name-only export looks the same as the pack with $name"
+  row=$((row + 1))
+done
+display_set 'd["themePack"] = "export_stress"; d["themeVariant"] = "mono"; d["theme"] = "EMERALD"; d["effects"] = {"focusFrameStyle": "GOLD_BEZEL", "backgroundFilter": "LCD_GRID"}; d["layout"] = {"preset": "MODERN_WIDESCREEN", "focusedScale": 1.1}; d["components"] = {"batteryMode": "BOTH", "statusBarLeft": ["CLOCK"]}; d["surfaceStyle"] = "OLED_TRUE_BLACK"'
+xshots stressmine
+open_export
+export_as 4 "Export Stress (my look)"
+adb shell cat "'/sdcard/Xross/themes/export-stress-my-look/theme.json'" > "$XT_TMP/mine.json"
+python3 -I - "$XT_TMP/mine.json" <<'PY' && ok "the current look takes the user's frame out of the Settings override and the battery rule" || bad "the user's pick is still in an override or rule"
+import json, sys
+m = json.load(open(sys.argv[1]))
+assert "SETTINGS" not in m.get("categoryOverrides", {}), m.get("categoryOverrides")
+assert all("focusFrameStyle" not in r["apply"].get("effects", {}) for r in m.get("rules", []))
+assert m["effects"]["focusFrameStyle"] == "GOLD_BEZEL" and "variants" not in m and m["author"] == ""
+PY
+switch_to "Export Stress (my look)"
+xshots stressminepack
+same_look stressmine stressminepack "the current-look export of a pack with variants, overrides and rules looks the same"
+
+# A picture picked as the Xross wallpaper is copied into a current-look export; the pack shows it
+# after Switch to has let go of the picker's grant and the picture is deleted.
+display_set 'd["themePack"] = "default"; d["themeVariant"] = ""; d["theme"] = "LAVENDER"; d["effects"] = {}; d["components"] = {}; d["layout"] = {}; d["surfaceStyle"] = ""'
+adb push "$FIX/smoke_wallpaper.png" /sdcard/Download/smoke_export.png >/dev/null
+media_scan
+category 0; press DPAD_DOWN 3 KEYCODE_DPAD_CENTER; top_list; press DPAD_DOWN 3 KEYCODE_DPAD_CENTER; press DPAD_DOWN 2
+key KEYCODE_DPAD_CENTER; pause 2
+pick smoke_export.png 0.3
+for _ in $(seq 10); do settings_has '"customWallpaper": "content://' && break; pause 0.5; done
+xshots photo
+open_export
+press DPAD_DOWN 1
+expect "wallpaper" "Current look counts the picked wallpaper"
+export_as 0 "Default (my look)"
+adb shell ls /sdcard/Xross/themes/default-my-look-2/wallpaper.png >/dev/null 2>&1 && ok "the picture is copied as wallpaper.png" || bad "no wallpaper.png in the export ($(adb shell ls /sdcard/Xross/themes/))"
+switch_to "Default (my look)"
+adb shell dumpsys activity permissions 2>/dev/null | grep -q smoke_export && bad "the picker's grant is still held" || ok "Switch to lets go of the picker's grant"
+xshots photopack
+same_look photo photopack "the export with the picked wallpaper looks the same"
+# The picture deleted (it is in the Photo category's list, so only after the shots): the copy still shows.
+adb shell rm -f /sdcard/Download/smoke_export.png; media_scan
+adb shell am force-stop "$PKG"; adb logcat -c; start_app
+adb logcat -d -s XrossWallpaper:I | tail -1 | grep -q "wallpaper=pack .*opaque=true" \
+  && ok "the export shows the copied picture with the original gone" || bad "no pack wallpaper ($(adb logcat -d -s XrossWallpaper:I | tail -1))"
+adb shell rm -rf /sdcard/Xross/themes/default-pack /sdcard/Xross/themes/default-my-look /sdcard/Xross/themes/default-my-look-2 \
+  /sdcard/Xross/themes/export_stress /sdcard/Xross/themes/export-stress "'/sdcard/Xross/themes/export-stress-base-look'" \
+  /sdcard/Xross/themes/export-stress-ember /sdcard/Xross/themes/export-stress-mono /sdcard/Xross/themes/export-stress-my-look
+display_set 'd["themePack"] = "default"; d["wave"] = True'
 
 suite_end

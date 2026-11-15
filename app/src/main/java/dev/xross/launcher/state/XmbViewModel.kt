@@ -179,6 +179,8 @@ private data class Transient(
     val scanning: Boolean = false,
     /** DATs are being imported or matched. */
     val datWork: Boolean = false,
+    /** A theme is being exported (2b.8b). */
+    val themeWork: Boolean = false,
     val waveEditor: WaveEditorState? = null,
     val avatarEditor: AvatarEditorState? = null,
 )
@@ -276,6 +278,8 @@ class XmbViewModel(
             override fun friendsWanted(components: dev.xross.launcher.theme.pack.ResolvedComponents) = ra.onFriendsWanted(components = components)
             override fun photoUri(photoId: Long) = container.media.library.value.photos.firstOrNull { it.id == photoId }?.uri
             override fun dismissOptions() = transient.update { it.copy(optionsMenu = null) }
+            override fun openNameEntry(entry: NameEntry) = transient.update { it.copy(optionsMenu = null, nameEntry = entry) }
+            override fun busy(on: Boolean) = transient.update { it.copy(themeWork = on) }
         },
     )
 
@@ -416,7 +420,7 @@ class XmbViewModel(
             nameEntry = tr.nameEntry,
             info = tr.info,
             details = tr.details,
-            busy = tr.scanning || tr.datWork || lv.fingerprints.current != null || lv.scrape.running,
+            busy = tr.scanning || tr.datWork || tr.themeWork || lv.fingerprints.current != null || lv.scrape.running,
             showButtonHints = settings.showButtonHints,
             profile = sd.profile,
             profileCard = sd.ra.profileCard,
@@ -1474,6 +1478,7 @@ class XmbViewModel(
                         val name = AppFolders.normalizeName(effect.text)
                         if (name == null) toast("Type a name first") else moveAppToFolder(purpose.packageName, name)
                     }
+                    is NamePurpose.ExportTheme -> theme.onExportNamed(purpose, effect.text)
                 }
             }
         }
@@ -1960,7 +1965,8 @@ class XmbViewModel(
             is Command.SetColorSwitch, Command.CycleSurfaceStyle, is Command.SetXrossWallpaper, Command.ResetXrossWallpaper,
             Command.PickXrossWallpaper, is Command.SetStatusSlots, is Command.EditStatusSlot, is Command.CycleComponent,
             is Command.SetComponent, is Command.SetBadgePills, is Command.ToggleBadgePill, is Command.CycleEffect,
-            is Command.SetEffect, Command.ResetThemeDefaults, Command.OpenLayoutSettings,
+            is Command.SetEffect, Command.ResetThemeDefaults, Command.OpenLayoutSettings, Command.ExportTheme,
+            is Command.ExportThemePack, is Command.ChooseExportScope, Command.ConfirmThemeExport, Command.SwitchToExportedTheme,
             -> check(theme.onCommand(command)) { "ThemeController didn't take $command" }
             Command.RequestStorageAccess ->
                 if (env.value.storageGranted) toast("Already granted") else emit(UiEffect.RequestStorageAccess)

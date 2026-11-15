@@ -45,7 +45,7 @@ singletons, imaging, modules) still waits: none of it blocks 2b.8.
 |---|---|
 | 2b.8-prep | ✅ on `refactor/2b8-prep` (2026-11-15): 872 unit tests (852 + 20), `lintDebug` 0 errors, `XmbViewModel` 2,647 → 2,331 lines; theme suite **311/312** on the API 37 emulator, the same as `main` (the one fail is 2b.4f's wallpaper toast missed by the screen dump; the wallpaper was saved, drawn and kept across a restart); `palette-perf.sh 3` 0.15–0.71% janky against 0.29–1.50% on `main` (inside the noise and the gate). As built: [2b.8-prep notes](#as-built-2b8-prep-2026-11-15) |
 | 2b.8a | ✅ on `feat/theme-2b8` (2026-11-15): 886 unit tests (872 + 14), `lintDebug` 0 errors; theme suite **348/351** on the API 37 emulator, all 39 new checks passing (new 39-check "Layout mixer (2b.8a)" section); `display-matrix.sh` 12/12 with both extremes; `palette-perf.sh 3` 0.29–0.45% janky with a non-default layout against 0.44–0.75% without. **Open:** the A55 (a held D-pad on UI scale). As built: [2b.8a notes](#as-built-2b8a-2026-11-15) |
-| 2b.8b | ⬜ |
+| 2b.8b | ✅ on `feat/theme-2b8` (2026-11-15): 912 unit tests (886 + 26), `lintDebug` 0 errors; theme suite **407/407** on the API 37 emulator (new 56-check "Export (2b.8b)" section: the built-in Default pack whole and as a current look, a pack with variants, overrides and rules in every scope, a picked wallpaper; each the same on screen after Switch to). **Open:** the A55 with a folder pack; the import allowlist vs. paths the loader reads (2b.8c). As built: [2b.8b notes](#as-built-2b8b-2026-11-15) |
 | 2b.8c | ⬜ |
 
 ---
@@ -409,6 +409,74 @@ clearing the layout).
 - A photo wallpaper: copied; the export still loads with the photo's grant revoked.
 - On the A55 with a folder pack and the user's own picks.
 ```
+
+### As built (2b.8b, 2026-11-15)
+
+| Piece | Where |
+|---|---|
+| `ExportScope` (`WholePack`, `Variant(id)`, `CurrentLook`), `LookPicks`, `WaveValues`, `LookExport`, `ExportFile` / `ExportSource` | `theme/pack/LookExporter.kt` |
+| `LookExporter.export` (pure): `sourceJson` → one `theme.json` and the files; `defaultName`, `LICENCE_NOTE` | `theme/pack/LookExporter.kt` |
+| `ThemeExport.write`: `.export-<nanos>/` staging, rename to a free id, 50 MB cap, `ExportReader` for the bytes | `theme/pack/ThemeExport.kt` |
+| `ThemePackLoader.packFiles` / `openPackFile` / `packFileSize`: a pack's files from its APK assets or folder | `theme/pack/ThemePackLoader.kt` |
+| Flow: `Command.ExportTheme`, `ExportThemePack(id)`, `ChooseExportScope`, `ConfirmThemeExport`, `SwitchToExportedTheme`; `NamePurpose.ExportTheme`; the host's `openNameEntry` and `busy` | `state/ThemeController.kt`, `state/XmbModel.kt`, `state/NameEntry.kt`, `state/XmbViewModel.kt` |
+| Settings ▸ Theme ▸ **Export theme…** (after Reset to theme defaults); the Theme pack row's Options ▸ **Export a pack…** (every installed pack) | `state/MenuTree.kt` |
+| Tests: `LookExporterTest` (11), `ThemeExportTest` (9: writer, each scope loaded back and resolved equal in 84 contexts, A.1), `ThemeControllerTest` (+6) | `app/src/test` |
+| Device: "Export (2b.8b)" (56 checks) in the theme suite | `tools/device-tests/test-theme.sh` |
+
+Device checks (2026-11-15, API 37 emulator with `-gpu host`, 2400×1080):
+
+| Check | Result |
+|---|---|
+| Theme suite | **407/407**, the new "Export (2b.8b)" section 56/56 (the first full run found the "Theme packs" section stepping onto the new last row of the Theme pack row's Options, and the emulator's low-battery heads-up at 20% and below; both fixed in the suite) |
+| Whole pack of the built-in Default pack | written to `Xross/themes/default-pack` (7 sounds and 29 icons from the APK assets, `surfaces.json` merged, no staging folder left); after Switch to, each category's root, a SNES game focused and the battery rule: at most 1.08% of pixels differ (the breathing halo), the logged colours, effects and cosmetics equal |
+| Current look of Default (Crimson, 3 effects, 2 components, 3 layout values, a surface) | Switch to sets the pack's colours and clears the user layer; 0% of pixels differ, logs equal |
+| A pack with 2 variants, 2 category overrides, a SNES override and 2 rules | whole pack with Ember selected (keeps the variant, carries its wallpaper), Base look only, Ember only, Mono only, and the current look over Mono (Emerald, effects, layout, components, a surface; the user's frame taken out of the Settings override and the battery rule): at most 1.41% of pixels differ, logs equal |
+| A picture picked as the Xross wallpaper | copied as `wallpaper.png`; Switch to lets go of the picker's grant; the same look (1.36%); with the picture deleted, the pack's copy still shows after a restart |
+
+Decisions made while building:
+
+- **The defaults above were kept:** no quick profile in an export, the custom wallpaper copied in,
+  Switch to offered after every export, `author` empty for the current look, no user pick in a
+  whole-pack export.
+- **Flattening writes checked values, not raw JSON.** A variant's palette, effects, sounds and
+  components go into the base from `ResolvedVariant` under the canonical key names (an alias such as
+  `shader` is removed with its key, a bad colour never reaches the base). A pack whose base has no
+  palette takes the variant's as the palette, not as a patch over the base's unused colours (the
+  cascade does the same). User picks are written from `EffectOverrides.normalized()` and
+  `LayoutOverrides.normalized()`, and the crosshair as `preset` (the base's `crosshairX/Y` removed).
+- **Colours: what is on screen becomes the palette.** A colour theme other than the pack's (or a pack
+  without colours) writes `canvas`, `accent` and `accentSecondary` and a two-stop `wave.gradient`, and
+  takes those roles out of every patch; a pack without colours also loses its patches' other colour
+  roles, which never showed. A wave tint is baked the same way (canvas, ribbon and gradient from the
+  tint, the pack's accent kept, as `wavePalette` keeps the glow), and Switch to resets the tint to
+  Theme colors. Original writes this month's colours ("Original's November colors" in the summary).
+  One thing a pack can't say: under a tint, the icon filters' canvas colour is the tint's after the
+  switch (it was the theme's).
+- **Files by elimination.** A flattened export keeps `LoadedTheme.files` minus each file only a
+  dropped layer named (another variant's wallpaper, a CUSTOM shader the user's shader replaced),
+  found by resolving the shader, UI filter, wallpaper, music and logo references of the source and
+  the output manifests. Fonts, icons, sounds and the boot video can't be patched, so they always
+  stay. A whole pack adds every file the import allowlist knows (`icons/`, `sounds/`, `audio/`,
+  `fonts/`, `shaders/`, `wallpapers/`, the root convention files, `.md` / `.txt` notes), never a
+  dot-file, never the JSON (it is merged into the one `theme.json`).
+- **`variants` is dropped** rather than written as `[]` in a flattened export (the same to the
+  loader).
+- **The confirm panel is an Options menu** ("Export as <name>": Export with the summary, then the
+  licence note), like the import's Replace / Keep both; Back cancels. Names take 40 characters
+  (`NameEntry.maxLength`; Apps folders keep 24).
+- **Switch to doesn't go through the pack switch**, which resets the wave to the new pack's defaults
+  and the variant to the base: a whole pack keeps the variant, the user layer and the wave values; a
+  variant keeps the user layer; a current look clears it (and lets go of the photo's grant).
+- **Device screenshots need the wave off and the battery at 28%:** with the wave on, two shots of an
+  unchanged menu differ by 7–11% of their pixels (0–0.95% with it off, the breathing halo), and at
+  20% and below the emulator's own "18% battery left" heads-up covers the menu, so the device pack's
+  battery rule is `<= 30` and the shot is taken at 28%. Each comparison also checks the colours,
+  effects and cosmetics the debug build logs.
+
+Open for 2b.8c: the import allowlist (`ThemeArchive.disallowed`) refuses some paths the loader reads
+and an export copies, such as a root `logo.svg` or an `art/` folder (the stress pack has both); the
+share has to either widen the allowlist to what the loader reads or refuse those packs with a reason.
+Open: the A55 with a folder pack and the user's own picks.
 
 ---
 
