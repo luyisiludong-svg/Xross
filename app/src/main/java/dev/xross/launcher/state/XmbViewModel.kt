@@ -26,12 +26,10 @@ import dev.xross.launcher.launch.GameLauncher
 import dev.xross.launcher.launch.LaunchPlan
 import dev.xross.launcher.model.PlatformRegistry
 import dev.xross.launcher.storage.StorageAccess
-import dev.xross.launcher.storage.StorageVolumes
 import dev.xross.launcher.storage.VolumeEvent
 import dev.xross.launcher.scrape.ProviderId
 import dev.xross.launcher.scrape.ScrapeProgress
 import dev.xross.launcher.theme.XrossTheme
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
@@ -50,13 +48,10 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
-import dev.xross.launcher.data.BackupInfo
-import dev.xross.launcher.data.BackupResult
 import dev.xross.launcher.data.DatRepository
 import dev.xross.launcher.data.DatSummary
 import dev.xross.launcher.data.GameMetadataEntity
 import dev.xross.launcher.data.XrossSettings
-import dev.xross.launcher.media.MediaFolders
 import dev.xross.launcher.media.NowPlaying
 import dev.xross.launcher.media.Photo
 import dev.xross.launcher.profile.FriendsState
@@ -64,11 +59,7 @@ import dev.xross.launcher.profile.ProfileState
 import dev.xross.launcher.scrape.Network
 import dev.xross.launcher.scrape.ScrapeStatus
 import dev.xross.launcher.scrape.providers.AccountCheck
-import dev.xross.launcher.storage.SystemFolders
-import dev.xross.launcher.storage.XrossLayout
-import dev.xross.launcher.theme.AvatarStyleLimits
 import dev.xross.launcher.theme.BatteryLevel
-import dev.xross.launcher.theme.QuickProfile
 import dev.xross.launcher.theme.pack.PackSource
 import dev.xross.launcher.theme.pack.ResolvedComponents
 import dev.xross.launcher.theme.pack.ThemeWatcher
@@ -192,22 +183,11 @@ private data class Transient(
     val toast: String? = null,
     val remap: RemapSession? = null,
     val family: ControllerFamily = ControllerFamily.KEYBOARD,
-    val booting: String? = null,
-    val boot: BootState? = null,
-    val bootPending: Boolean = false,
     val optionsMenu: OptionsMenuState? = null,
-    val search: SearchState? = null,
-    val nameEntry: NameEntry? = null,
     val info: GameInfoState? = null,
     val details: GameDetailsState? = null,
-    /** A library scan is running (fingerprinting is tracked by [FingerprintStatus.current]). */
-    val scanning: Boolean = false,
-    /** DATs are being imported or matched. */
-    val datWork: Boolean = false,
     /** A theme is being exported (2b.8b). */
     val themeWork: Boolean = false,
-    val waveEditor: WaveEditorState? = null,
-    val avatarEditor: AvatarEditorState? = null,
 )
 
 class XmbViewModel(
@@ -303,8 +283,97 @@ class XmbViewModel(
             override fun friendsWanted(components: ResolvedComponents) = ra.onFriendsWanted(components = components)
             override fun photoUri(photoId: Long) = container.media.library.value.photos.firstOrNull { it.id == photoId }?.uri
             override fun dismissOptions() = transient.update { it.copy(optionsMenu = null) }
-            override fun openNameEntry(entry: NameEntry) = transient.update { it.copy(optionsMenu = null, nameEntry = entry) }
+            override fun openNameEntry(entry: NameEntry) {
+                transient.update { it.copy(optionsMenu = null) }
+                typing.openNameEntry(entry)
+            }
             override fun busy(on: Boolean) = transient.update { it.copy(themeWork = on) }
+        },
+    )
+
+    /** Settings ▸ Theme ▸ Wave settings and Profile customization (Assessment §7.1). */
+    private val editors = EditorController(
+        settings = container.settings,
+        sounds = container.sounds,
+        waveDefaults = { container.themes.active.value.wave },
+        host = object : EditorController.Host {
+            override fun toast(message: String) = this@XmbViewModel.toast(message)
+            override fun fail(message: String) = this@XmbViewModel.fail(message)
+            override fun refuse() = this@XmbViewModel.refuse()
+            override fun promptText(prompt: TextPrompt) = emit(UiEffect.PromptText(prompt))
+        },
+    )
+
+    /** Search and name entry, the two gamepad keyboards (Assessment §7.1). */
+    private val typing = SearchController(
+        scope = viewModelScope,
+        sounds = container.sounds,
+        find = { fts -> tree.value.gameNodes(container.games.search(fts)) },
+        host = object : SearchController.Host {
+            override fun activate(node: XmbNode) = this@XmbViewModel.activate(node)
+            override fun openOptions(node: XmbNode) = this@XmbViewModel.openOptions(node)
+            override fun submitName(purpose: NamePurpose, text: String) = this@XmbViewModel.submitName(purpose, text)
+        },
+    )
+
+    /** ROM, base ROMs, DAT and media folders (Assessment §7.1). */
+    private val folders: FolderPickers = FolderPickers(
+        scope = viewModelScope,
+        settings = container.settings,
+        sounds = container.sounds,
+        media = container.media,
+        treeToPath = container.volumes::treeUriToPath,
+        layout = { container.environment.current },
+        host = object : FolderPickers.Host {
+            override fun toast(message: String) = this@XmbViewModel.toast(message)
+            override fun emit(effect: UiEffect) = this@XmbViewModel.emit(effect)
+            override fun storageGranted() = library.state.value.storageGranted
+            override fun refreshFolders() = library.refreshFolders()
+            override fun refreshFoldersAndRescan() = library.refreshFoldersAndRescan()
+            override fun importDats() = library.importDats()
+        },
+    )
+
+    /** Storage access, scans, hot-swap, fingerprints, DATs, the Xross folder and backups (Assessment §7.1). */
+    private val library: LibraryJobs = LibraryJobs(
+        scope = viewModelScope,
+        settings = container.settings,
+        sounds = container.sounds,
+        environment = container.environment,
+        volumes = container.volumes,
+        games = container.games,
+        fingerprints = container.fingerprints,
+        scraper = container.scraper,
+        dats = container.dats,
+        database = container.database,
+        backups = container.backups,
+        assets = container.assets,
+        media = container.media,
+        folders = folders,
+        storageAccess = { storageAccess(context) },
+        host = object : LibraryJobs.Host {
+            override fun toast(message: String) = this@XmbViewModel.toast(message)
+            override fun fail(message: String) = this@XmbViewModel.fail(message)
+            override fun emit(effect: UiEffect) = this@XmbViewModel.emit(effect)
+            override fun showOptions(menu: OptionsMenuState) = transient.update { it.copy(optionsMenu = menu) }
+            override suspend fun onXrossFolderMoved() = ra.reloadProfile()
+        },
+    )
+
+    /** The cold-start intro and the game start transition (Assessment §7.1). */
+    private val transitions = TransitionController(
+        scope = viewModelScope,
+        settings = container.settings,
+        audio = container.audio,
+        games = container.games,
+        launcher = container.launcher,
+        sessions = container.sessions,
+        pack = { container.themes.active.value },
+        category = { state.value.categoryId },
+        coldBoot = coldBoot,
+        host = object : TransitionController.Host {
+            override fun fail(message: String) = this@XmbViewModel.fail(message)
+            override fun emit(effect: UiEffect) = this@XmbViewModel.emit(effect)
         },
     )
 
@@ -318,10 +387,13 @@ class XmbViewModel(
             stacks = mapOf(Categories.GAMES to listOf(Frame(Categories.rootKey(Categories.GAMES), "Games", index = 1))),
         ),
     )
-    private val transient = MutableStateFlow(Transient(bootPending = coldBoot))
+    private val transient = MutableStateFlow(Transient())
     private val env = MutableStateFlow(
         MenuSnapshot(versionName = BuildConfig.VERSION_NAME, settings = settingsStore.current),
     )
+
+    /** The menu's snapshot with the library's status in it. */
+    private val menuEnv = combine(env, library.state) { e, l -> l.into(e) }
 
     private val _effects = Channel<UiEffect>(Channel.BUFFERED)
     val effects = _effects.receiveAsFlow()
@@ -337,7 +409,7 @@ class XmbViewModel(
     }
 
     private val tree: StateFlow<MenuTree> = combine(
-        combine(env, meta, container.credentials.accounts, container.screenScraper.quota, container.profiles.state) { e, m, accounts, quota, profile ->
+        combine(menuEnv, meta, container.credentials.accounts, container.screenScraper.quota, container.profiles.state) { e, m, accounts, quota, profile ->
             e.copy(
                 accounts = AccountsSetup(
                     retroAchievementsUser = accounts.retroAchievementsUser,
@@ -366,12 +438,12 @@ class XmbViewModel(
                 apps = apps,
                 settings = settings,
                 media = mediaLib,
-                datFolder = datFolder(settings.datFolder).absolutePath,
-                baseRomsFolder = baseRomsFolder(settings.baseRomsFolder).absolutePath,
+                datFolder = folders.datFolder(settings.datFolder).absolutePath,
+                baseRomsFolder = folders.baseRomsFolder(settings.baseRomsFolder).absolutePath,
             ),
         )
     }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, MenuTree(env.value))
+        .stateIn(viewModelScope, SharingStarted.Eagerly, MenuTree(library.state.value.into(env.value)))
 
     private val fingerprints = container.fingerprints
 
@@ -381,8 +453,6 @@ class XmbViewModel(
         combine(fingerprints.stats, fingerprints.current) { st, cur -> FingerprintStatus(st, cur) }
             .sample(500)
             .stateIn(viewModelScope, SharingStarted.Eagerly, FingerprintStatus())
-
-    private var foreground = false
 
     /** Inputs that only some lists read live (fingerprint progress, Now Playing). */
     private data class Live(
@@ -398,7 +468,11 @@ class XmbViewModel(
 
     private data class Settled(
         val transient: Transient,
+        val transitions: TransitionState,
         val layoutEditor: LayoutEditorState?,
+        val editors: EditorsState,
+        val typing: TypingState,
+        val library: LibraryStatus,
         val settings: XrossSettings,
         val overlay: MediaOverlay?,
         val profile: ProfileState,
@@ -406,10 +480,23 @@ class XmbViewModel(
     )
 
     private val settled = combine(
-        combine(transient, theme.layoutEditor, ::Pair), settingsStore.settings, media.overlay, container.profiles.state, ra.state,
-    ) { (tr, le), st, ov, pr, r ->
-        Settled(tr, le, st, ov, pr, r)
+        combine(
+            combine(transient, transitions.state, ::Pair), theme.layoutEditor, editors.state, typing.state, library.state,
+        ) { (tr, tn), le, ed, ty, lib -> Panels(tr, tn, le, ed, ty, lib) },
+        settingsStore.settings, media.overlay, container.profiles.state, ra.state,
+    ) { p, st, ov, pr, r ->
+        Settled(p.transient, p.transitions, p.layoutEditor, p.editors, p.typing, p.library, st, ov, pr, r)
     }
+
+    /** The panels' own flows, combined first so [settled] stays within five inputs. */
+    private data class Panels(
+        val transient: Transient,
+        val transitions: TransitionState,
+        val layoutEditor: LayoutEditorState?,
+        val editors: EditorsState,
+        val typing: TypingState,
+        val library: LibraryStatus,
+    )
 
     /** The components' `glyphOverride` (2b.7b): which labels the hints draw. */
     private val glyphMode = components.map { it.glyphs }.distinctUntilChanged()
@@ -434,18 +521,18 @@ class XmbViewModel(
             waveEnabled = settings.waveEnabled,
             waveSpeed = settings.waveSpeed,
             theme = settings.theme,
-            booting = tr.booting,
+            booting = sd.transitions.booting,
             coldBoot = coldBoot,
-            boot = tr.boot,
-            bootPending = tr.bootPending,
+            boot = sd.transitions.boot,
+            bootPending = sd.transitions.bootPending,
             overlay = sd.overlay,
             nowPlaying = lv.nowPlaying,
             optionsMenu = tr.optionsMenu,
-            search = tr.search,
-            nameEntry = tr.nameEntry,
+            search = sd.typing.search,
+            nameEntry = sd.typing.nameEntry,
             info = tr.info,
             details = tr.details,
-            busy = tr.scanning || tr.datWork || tr.themeWork || lv.fingerprints.current != null || lv.scrape.running,
+            busy = sd.library.scanning || sd.library.datWork || tr.themeWork || lv.fingerprints.current != null || lv.scrape.running,
             showButtonHints = settings.showButtonHints,
             profile = sd.profile,
             profileCard = sd.ra.profileCard,
@@ -453,11 +540,11 @@ class XmbViewModel(
             friends = sd.ra.friends,
             socialPanel = sd.ra.socialPanel,
             settings = settings,
-            waveEditor = tr.waveEditor,
+            waveEditor = sd.editors.wave,
             layoutEditor = sd.layoutEditor,
             achievements = sd.ra.achievements,
             unlockToast = sd.ra.unlockToast,
-            avatarEditor = tr.avatarEditor,
+            avatarEditor = sd.editors.avatar,
             raHub = sd.ra.raHub,
             telemetry = sd.ra.telemetry,
             gamePlatforms = t.platformByGame,
@@ -533,13 +620,6 @@ class XmbViewModel(
         }
 
     private var toastJob: Job? = null
-    private var scanJob: Job? = null
-
-    private var environmentLoaded = false
-
-    /** A volume was mounted or removed while a game was in front; rescan on the next resume. */
-    private var volumesChangedInBackground = false
-    private var volumeJob: Job? = null
 
     override fun onCleared() {
         themeWatcher.watch(null)
@@ -553,24 +633,21 @@ class XmbViewModel(
     override fun onAction(action: NavAction) {
         // The cold-start intro takes the first key (any key skips it); the menu gets the next one.
         // A key before the intro is decided (the saved pack still loading) skips it in advance.
-        if (transient.value.bootPending) {
-            bootSkippedEarly = true
-            return
-        }
-        if (transient.value.boot?.ending == false) return skipBoot()
-        if (transient.value.remap != null || transient.value.booting != null) return
-        transient.value.nameEntry?.let { return nameEntryAction(it, action) }
+        // The game start transition takes no input.
+        if (transitions.takesInput()) return
+        if (transient.value.remap != null) return
+        if (typing.onNameAction(action)) return
         if (action == NavAction.MEDIA) return toggleMediaControls()
-        transient.value.waveEditor?.let { return waveEditorAction(it, action) }
+        if (editors.onWaveAction(action)) return
         if (theme.onLayoutAction(action)) return
-        transient.value.avatarEditor?.let { return avatarEditorAction(it, action) }
+        if (editors.onAvatarAction(action)) return
         if (ra.onScreenAction(action)) return
         transient.value.info?.let { return infoAction(it, action) }
         transient.value.details?.let { return detailsAction(it, action) }
         // Before the media screens: the photo viewer's Options menu opens over it.
         transient.value.optionsMenu?.let { return optionsAction(it, action) }
         if (media.onAction(action)) return
-        transient.value.search?.let { return searchAction(it, action) }
+        if (typing.onSearchAction(action)) return
         if (ra.onAvatarAction(action)) return
         val ui = current()
         when (action) {
@@ -605,7 +682,7 @@ class XmbViewModel(
      * the photo viewer and video player ignore it.
      */
     private fun toggleMediaControls() {
-        if (transient.value.search != null) return
+        if (typing.state.value.search != null) return
         when (media.toggleNowPlaying()) {
             MediaOverlayController.NowPlayingToggle.OPENED -> {
                 sounds.play(UiSound.OPTION)
@@ -613,9 +690,8 @@ class XmbViewModel(
                 detailsJob?.cancel()
                 ra.dismissAll()
                 theme.dismissLayoutSettings()
-                transient.update {
-                    it.copy(optionsMenu = null, info = null, details = null, waveEditor = null, avatarEditor = null)
-                }
+                editors.dismissAll()
+                transient.update { it.copy(optionsMenu = null, info = null, details = null) }
             }
             MediaOverlayController.NowPlayingToggle.CLOSED -> sounds.play(UiSound.BACK)
             MediaOverlayController.NowPlayingToggle.NOTHING_PLAYING -> toast(NOTHING_PLAYING)
@@ -696,187 +772,35 @@ class XmbViewModel(
 
     fun onLayoutSliderChanged(index: Int, fraction: Float) = theme.onLayoutSliderChanged(index, fraction)
 
-    private fun openWaveSettings() {
-        transient.update { it.copy(waveEditor = WaveEditorState(), optionsMenu = null) }
-    }
+    // Settings ▸ Theme ▸ Wave settings: forwarded to [EditorController].
 
-    private fun waveEditorAction(editor: WaveEditorState, action: NavAction) {
-        val outcome = WaveEditor.onAction(editor, action, settingsStore.current, container.themes.active.value.wave)
-        applyWaveOutcome(editor, outcome)
-    }
+    fun closeWaveSettings() = editors.closeWave()
 
-    private fun applyWaveOutcome(before: WaveEditorState, outcome: WaveEditorOutcome) {
-        when {
-            outcome.close -> return closeWaveSettings()
-            outcome.blocked -> refuse()
-            outcome.settings != null -> {
-                settingsStore.update { outcome.settings }
-                sounds.play(UiSound.MOVE)
-            }
-            outcome.state != before -> sounds.play(UiSound.MOVE)
-        }
-        if (outcome.state != before) transient.update { it.copy(waveEditor = outcome.state) }
-    }
+    fun onWaveRowTapped(index: Int) = editors.onWaveRowTapped(index)
 
-    fun closeWaveSettings() {
-        if (transient.value.waveEditor != null) {
-            sounds.play(UiSound.BACK)
-            transient.update { it.copy(waveEditor = null) }
-        }
-    }
-
-    /** Touch: tap a row to focus it; tapping the focused row acts like Confirm. */
-    fun onWaveRowTapped(index: Int) {
-        val editor = transient.value.waveEditor ?: return
-        if (index == editor.index) {
-            waveEditorAction(editor, NavAction.CONFIRM)
-        } else if (index in WaveEditor.rows.indices) {
-            sounds.play(UiSound.MOVE)
-            transient.update { it.copy(waveEditor = editor.copy(index = index)) }
-        }
-    }
-
-    /** Touch: a slider dragged or tapped at [fraction] of its track. */
-    fun onWaveSliderChanged(index: Int, fraction: Float) {
-        val editor = transient.value.waveEditor ?: return
-        val row = WaveEditor.rows.getOrNull(index) ?: return
-        if (editor.index != index) transient.update { it.copy(waveEditor = editor.copy(index = index)) }
-        settingsStore.update { WaveEditor.setFraction(row, it, fraction) }
-    }
+    fun onWaveSliderChanged(index: Int, fraction: Float) = editors.onWaveSliderChanged(index, fraction)
 
     // endregion
 
-    // region Profile customization (avatar ring and glow)
+    // region Profile customization (avatar ring and glow; forwarded to [EditorController])
 
-    private fun openAvatarStyle() {
-        transient.update { it.copy(avatarEditor = AvatarEditorState(), optionsMenu = null) }
-    }
+    fun closeAvatarStyle() = editors.closeAvatar()
 
-    private fun avatarEditorAction(editor: AvatarEditorState, action: NavAction) =
-        applyAvatarOutcome(editor, AvatarEditor.onAction(editor, action, settingsStore.current.avatarStyle))
+    fun onAvatarRowTapped(index: Int) = editors.onAvatarRowTapped(index)
 
-    private fun applyAvatarOutcome(before: AvatarEditorState, outcome: AvatarEditorOutcome) {
-        when {
-            outcome.close -> return closeAvatarStyle()
-            outcome.promptColor -> {
-                sounds.play(UiSound.ENTER)
-                emit(UiEffect.PromptText(TextPrompt.AvatarBorderColor(settingsStore.current.avatarStyle.borderColorHex)))
-            }
-            outcome.blocked -> refuse()
-            outcome.style != null -> {
-                settingsStore.update { AvatarEditor.apply(it, outcome.style) }
-                sounds.play(UiSound.MOVE)
-            }
-            outcome.state != before -> sounds.play(UiSound.MOVE)
-        }
-        if (outcome.state != before) transient.update { it.copy(avatarEditor = outcome.state) }
-    }
-
-    fun closeAvatarStyle() {
-        if (transient.value.avatarEditor != null) {
-            sounds.play(UiSound.BACK)
-            transient.update { it.copy(avatarEditor = null) }
-        }
-    }
-
-    /** Touch: tap a row to focus it; tapping the focused row acts like Confirm. */
-    fun onAvatarRowTapped(index: Int) {
-        val editor = transient.value.avatarEditor ?: return
-        if (index == editor.index) {
-            avatarEditorAction(editor, NavAction.CONFIRM)
-        } else if (index in AvatarEditor.rows.indices) {
-            sounds.play(UiSound.MOVE)
-            transient.update { it.copy(avatarEditor = editor.copy(index = index)) }
-        }
-    }
-
-    /** Touch: a slider dragged or tapped at [fraction] of its track. */
-    fun onAvatarSliderChanged(index: Int, fraction: Float) {
-        val editor = transient.value.avatarEditor ?: return
-        val row = AvatarEditor.rows.getOrNull(index) ?: return
-        if (editor.index != index) transient.update { it.copy(avatarEditor = editor.copy(index = index)) }
-        settingsStore.update { AvatarEditor.apply(it, AvatarEditor.setFraction(row, it.avatarStyle, fraction)) }
-    }
+    fun onAvatarSliderChanged(index: Int, fraction: Float) = editors.onAvatarSliderChanged(index, fraction)
 
     // endregion
 
     // region Search
 
-    private var searchJob: Job? = null
+    // Forwarded to [SearchController].
 
-    private fun searchAction(search: SearchState, action: NavAction) {
-        val outcome = search.onAction(action)
-        applySearch(search, outcome.state)
-        when (val effect = outcome.effect) {
-            SearchEffect.None -> Unit
-            SearchEffect.Close -> closeSearch()
-            is SearchEffect.Activate -> activate(effect.node)
-            is SearchEffect.Options -> openOptions(effect.node)
-        }
-    }
+    fun closeSearch() = typing.closeSearch()
 
-    private fun applySearch(before: SearchState, after: SearchState) {
-        if (after == before) return
-        sounds.play(if (after.query != before.query) UiSound.ENTER else UiSound.MOVE)
-        transient.update { it.copy(search = after) }
-        if (after.query != before.query) runSearch(SEARCH_DEBOUNCE_MS)
-    }
+    fun onSearchKeyTapped(row: Int, column: Int) = typing.onSearchKeyTapped(row, column)
 
-    /**
-     * Queries the FTS index for the current text. Debounced while typing; Room runs the query on
-     * its own background executor, and a result for text that has since changed is dropped.
-     */
-    private fun runSearch(delayMs: Long) {
-        searchJob?.cancel()
-        searchJob = viewModelScope.launch {
-            delay(delayMs)
-            val query = transient.value.search?.query ?: return@launch
-            val fts = SearchQuery.toFts(query)
-            val nodes = if (fts == null) emptyList() else tree.value.gameNodes(container.games.search(fts))
-            transient.update { it.copy(search = it.search?.withResults(query, nodes)) }
-        }
-    }
-
-    fun closeSearch() {
-        if (transient.value.search != null) {
-            searchJob?.cancel()
-            sounds.play(UiSound.BACK)
-            transient.update { it.copy(search = null) }
-        }
-    }
-
-    /** Touch: tap a key to type it. */
-    fun onSearchKeyTapped(row: Int, column: Int) {
-        val search = transient.value.search ?: return
-        val moved = search.copy(row = row, column = column, focus = SearchFocus.KEYS)
-        applySearch(search, moved.onAction(NavAction.CONFIRM).state)
-    }
-
-    /** Touch: tap a result to focus it, tap the focused one to launch it. */
-    fun onSearchResultTapped(index: Int) {
-        val search = transient.value.search ?: return
-        if (search.focus == SearchFocus.RESULTS && search.resultIndex == index) {
-            search.focusedResult?.let(::activate)
-        } else {
-            applySearch(search, search.copy(focus = SearchFocus.RESULTS, resultIndex = index))
-        }
-    }
-
-    /** Hardware keyboards type straight into the search field. */
-    private fun searchRawKey(search: SearchState, keyCode: Int): Boolean {
-        val next = when (keyCode) {
-            in android.view.KeyEvent.KEYCODE_A..android.view.KeyEvent.KEYCODE_Z ->
-                search.type('A' + (keyCode - android.view.KeyEvent.KEYCODE_A))
-            in android.view.KeyEvent.KEYCODE_0..android.view.KeyEvent.KEYCODE_9 ->
-                search.type('0' + (keyCode - android.view.KeyEvent.KEYCODE_0))
-            android.view.KeyEvent.KEYCODE_SPACE -> search.type(' ')
-            android.view.KeyEvent.KEYCODE_DEL -> search.backspace()
-            android.view.KeyEvent.KEYCODE_ENTER -> search.onAction(NavAction.START).state
-            else -> return false
-        }
-        applySearch(search, next.copy(focus = if (keyCode == android.view.KeyEvent.KEYCODE_ENTER) next.focus else SearchFocus.KEYS))
-        return true
-    }
+    fun onSearchResultTapped(index: Int) = typing.onSearchResultTapped(index)
 
     // endregion
 
@@ -1026,13 +950,7 @@ class XmbViewModel(
                 }
                 toast(if (value.isEmpty()) "Automatic title restored" else "Title changed")
             }
-            is TextPrompt.AvatarBorderColor -> {
-                if (value.isEmpty()) return
-                val color = AvatarStyleLimits.normalizeColor(value)
-                    ?: return fail("That isn't a hex color — use #RRGGBB, like #FFB5C5")
-                settingsStore.update { AvatarEditor.apply(it, it.avatarStyle.copy(borderColorHex = color)) }
-                toast("Avatar ring color: $color")
-            }
+            is TextPrompt.AvatarBorderColor -> editors.onAvatarColorEntered(text)
             is TextPrompt.MatchQuery -> {
                 if (value.isEmpty()) return
                 datWork {
@@ -1061,7 +979,7 @@ class XmbViewModel(
 
     /** Game ids of the list Details pages through: the search results while searching, else the open list. */
     private fun detailsSiblings(): List<Long> {
-        val rows = transient.value.search?.results ?: current().items
+        val rows = typing.state.value.search?.results ?: current().items
         return rows.mapNotNull { (it.action as? NodeAction.LaunchGame)?.gameId }
     }
 
@@ -1093,10 +1011,10 @@ class XmbViewModel(
     private fun pageDetails(details: GameDetailsState, delta: Int) {
         val next = DetailsPager.neighbor(detailsSiblings(), details.gameId, delta) ?: return refuse()
         // The list cursor follows, so Back lands on the game that was on screen.
-        val search = transient.value.search
+        val search = typing.state.value.search
         if (search != null) {
             val i = search.results.indexOfFirst { (it.action as? NodeAction.LaunchGame)?.gameId == next }
-            if (i >= 0) transient.update { it.copy(search = it.search?.copy(resultIndex = i)) }
+            if (i >= 0) typing.focusResult(i)
         } else {
             val ui = current()
             val i = ui.items.indexOfFirst { (it.action as? NodeAction.LaunchGame)?.gameId == next }
@@ -1127,7 +1045,7 @@ class XmbViewModel(
             NavAction.BACK -> closeDetails()
             NavAction.OPTIONS -> {
                 closeDetails()
-                (transient.value.search?.results ?: current().items)
+                (typing.state.value.search?.results ?: current().items)
                     .firstOrNull { (it.action as? NodeAction.LaunchGame)?.gameId == details.gameId }?.let(::openOptions)
             }
             NavAction.LEFT, NavAction.PREV_CATEGORY -> pageDetails(details, -1)
@@ -1148,62 +1066,11 @@ class XmbViewModel(
 
     // region DATs
 
-    private var datJob: Job? = null
+    /** DAT and scraper-lookup work, one job at a time: see [LibraryJobs.datWork]. */
+    private fun datWork(work: suspend () -> String) = library.datWork(work)
 
-    /** Runs DAT work with the busy indicator on and toasts its summary; one job at a time. */
-    private fun datWork(work: suspend () -> String) {
-        if (datJob?.isActive == true) {
-            toast("Still working on DATs…")
-            return
-        }
-        datJob = viewModelScope.launch {
-            transient.update { it.copy(datWork = true) }
-            try {
-                toast(work())
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                sounds.play(UiSound.ERROR)
-                toast("DAT error: ${e.message ?: e.javaClass.simpleName}")
-            } finally {
-                transient.update { it.copy(datWork = false) }
-            }
-        }
-    }
-
-    private fun importDats() {
-        if (!env.value.storageGranted) {
-            fail("Grant All files access first")
-            return
-        }
-        val dir = datFolder(settingsStore.current.datFolder)
-        datWork {
-            withContext(Dispatchers.IO) { dir.mkdirs() }
-            val result = container.dats.importFolder(dir)
-            val verified = container.database.metadata().getAll().count { it.matchKind != null }
-            when {
-                result.failures.isNotEmpty() -> "Couldn't read ${result.failures.first()}"
-                result.imported + result.unchanged == 0 -> "No DATs in ${dir.absolutePath}"
-                else -> buildList {
-                    if (result.imported > 0) add("Imported ${result.imported} DAT" + if (result.imported == 1) "" else "s")
-                    if (result.imported == 0) add("DATs up to date")
-                    if (result.removed > 0) add("${result.removed} removed")
-                    add(gamesVerified(verified))
-                }.joinToString(" · ")
-            }
-        }
-    }
-
-    fun onDatFolderPicked(uri: Uri?) {
-        uri ?: return
-        val path = container.volumes.treeUriToPath(uri)
-        if (path == null) {
-            toast("That location isn't a local folder")
-            return
-        }
-        settingsStore.update { it.copy(datFolder = path) }
-        importDats()
-    }
+    /** Settings ▸ Library ▸ DAT folder: see [FolderPickers.onDatFolderPicked]. */
+    fun onDatFolderPicked(uri: Uri?) = folders.onDatFolderPicked(uri)
 
     // endregion
 
@@ -1278,9 +1145,10 @@ class XmbViewModel(
 
     override fun onRawKeyDown(keyCode: Int, controller: ConnectedController?): Boolean {
         val tr = transient.value
-        tr.nameEntry?.let { return nameRawKey(it, keyCode) }
-        if (tr.remap == null && tr.optionsMenu == null && tr.info == null && tr.details == null && tr.booting == null && !media.isOpen) {
-            tr.search?.let { return searchRawKey(it, keyCode) }
+        val keyboards = typing.state.value
+        if (keyboards.nameEntry != null) return typing.onNameRawKey(keyCode)
+        if (tr.remap == null && tr.optionsMenu == null && tr.info == null && tr.details == null && !transitions.launching && !media.isOpen) {
+            if (keyboards.search != null) return typing.onSearchRawKey(keyCode)
         }
         val session = transient.value.remap ?: return false
         val next = session.capture(keyCode, controller)
@@ -1342,23 +1210,14 @@ class XmbViewModel(
 
     // region Environment
 
-    /**
-     * Re-reads permission, ROM folders and installed apps/emulators. Called on resume. Scans
-     * quietly on first load, and with a toast when access has just been granted.
-     */
     /** Activity resumed: refresh the environment and continue fingerprinting in the background. */
     fun onForeground() {
-        foreground = true
+        library.setForeground(true)
         refreshEnvironment()
         audio.onReturnFromGame()
         recordFinishedSession()
         viewModelScope.launch { container.media.refresh() }
-        if (volumesChangedInBackground) {
-            volumesChangedInBackground = false
-            refreshFoldersAndRescan(quiet = true)
-        }
-        if (env.value.storageGranted && scanJob?.isActive != true) fingerprints.start(viewModelScope)
-        if (settingsStore.current.scrapeAutomatically && scanJob?.isActive != true) container.scraper.start(viewModelScope)
+        library.resumeBackgroundWork()
         ra.onForeground()
         // Theme files edited while Xross was in the background (or events FUSE didn't deliver).
         viewModelScope.launch { container.themes.reloadIfChanged()?.let { toast("Theme not reloaded: $it") } }
@@ -1366,10 +1225,8 @@ class XmbViewModel(
 
     /** Activity paused (a game or another app is in front): stop background I/O. */
     fun onBackground() {
-        foreground = false
         container.sessions.onBackground()
-        fingerprints.stop()
-        container.scraper.stop()
+        library.onBackground()
         media.onBackground()
     }
 
@@ -1385,97 +1242,14 @@ class XmbViewModel(
         }
     }
 
-    fun refreshEnvironment() {
-        val wasGranted = env.value.storageGranted
-        val granted = storageAccess(context)
-        val firstLoad = !environmentLoaded
-        environmentLoaded = true
-        env.update { it.copy(storageGranted = granted) }
-        refreshFolders()
-        if (granted && (firstLoad || !wasGranted)) rescan(quiet = firstLoad)
-        onAppsChanged()
-        viewModelScope.launch { syncXrossFolder(firstLoad) }
-    }
-
-    // region Xross folder and backups
-
     /**
-     * Follows the Xross folder: once shared storage can be written it moves out of app storage,
-     * and config already there (an SD card from another device, a reinstall) is adopted. Config
-     * files edited outside Xross are picked up. On a clean install a backup found in the folder
-     * is offered for restore.
+     * Re-reads permission, ROM folders and installed apps/emulators. Called on resume. Scans
+     * quietly on first load, and with a toast when access has just been granted.
      */
-    private suspend fun syncXrossFolder(firstLoad: Boolean) {
-        val previous = container.environment.current
-        val moved = withContext(Dispatchers.IO) {
-            val changed = container.environment.refresh()
-            if (changed) settingsStore.relocate(container.environment.current) else settingsStore.reloadIfChanged()
-            changed
-        }
-        if (moved) {
-            moveArtFrom(previous)
-            ra.reloadProfile()
-        }
-        publishPortable()
-        if (firstLoad || moved) {
-            val restorable = container.backups.findRestorable()
-            env.update { it.copy(portable = it.portable.copy(restorable = restorable)) }
-            if (restorable != null && container.backups.announceOnce(restorable)) {
-                toast("Found a library backup with ${countOf(restorable.games, "game")} — restore it from Games")
-            }
-        }
-    }
-
-    /** Art follows the Xross folder to its new place, in the background. */
-    private fun moveArtFrom(previous: XrossLayout) {
-        if (previous.media.absolutePath == container.environment.current.media.absolutePath) return
-        viewModelScope.launch {
-            val report = runCatching { container.assets.relocateFrom(previous.media) }.getOrNull() ?: return@launch
-            if (report.moved > 0) toast("Moved ${countOf(report.moved, "art file")} to the new Xross folder")
-        }
-    }
-
-    private suspend fun publishPortable() {
-        val layout = container.environment.current
-        val onDisk = container.backups.currentBackup()
-        env.update {
-            it.copy(portable = it.portable.copy(root = layout.root.absolutePath, portable = layout.portable, backupOnDisk = onDisk))
-        }
-    }
-
-    private fun cycleXrossVolume() {
-        val layout = container.environment.current
-        if (!layout.portable) {
-            emit(UiEffect.RequestStorageAccess)
-            return
-        }
-        viewModelScope.launch {
-            val volumes = withContext(Dispatchers.IO) { container.volumes.volumes() }.sortedByDescending { it.primary }
-            if (volumes.size < 2) {
-                toast("No other drive is connected")
-                return@launch
-            }
-            val previous = container.environment.current
-            val currentVolume = StorageVolumes.volumeRootOf(layout.root.absolutePath)
-            val index = volumes.indexOfFirst { it.root.path.trimEnd('/') == currentVolume }
-            val next = volumes[(index + 1) % volumes.size]
-            val moved = withContext(Dispatchers.IO) {
-                container.environment.chooseVolume(if (next.primary) null else next.root).also { changed ->
-                    if (changed) settingsStore.relocate(container.environment.current)
-                }
-            }
-            val now = container.environment.current
-            if (moved && now.root.absolutePath.startsWith(next.root.path)) {
-                sounds.play(UiSound.OK)
-                toast("Xross folder: ${now.root.absolutePath}")
-                moveArtFrom(previous)
-                container.backups.backupNow()
-            } else {
-                sounds.play(UiSound.ERROR)
-                toast("${next.label} can't be written; the Xross folder stays at ${now.root.absolutePath}")
-            }
-            publishPortable()
-        }
+    fun refreshEnvironment() {
+        val firstLoad = library.refresh()
+        onAppsChanged()
+        library.launchFolderSync(firstLoad)
     }
 
     // region Apps
@@ -1498,163 +1272,32 @@ class XmbViewModel(
         toast(if (name == null) "${appLabel(packageName)} is out of its folder" else "${appLabel(packageName)} moved to $name")
     }
 
-    private fun nameEntryAction(entry: NameEntry, action: NavAction) {
-        val outcome = entry.onAction(action)
-        applyNameEntry(entry, outcome)
-    }
-
-    private fun applyNameEntry(before: NameEntry, outcome: NameEntryOutcome) {
-        when (val effect = outcome.effect) {
-            NameEntryEffect.None -> if (outcome.state != before) {
-                sounds.play(if (outcome.state.text != before.text) UiSound.ENTER else UiSound.MOVE)
-                transient.update { it.copy(nameEntry = outcome.state) }
+    /** A name typed on the gamepad keyboard ([SearchController]) and confirmed. */
+    private fun submitName(purpose: NamePurpose, text: String) {
+        when (purpose) {
+            is NamePurpose.NewAppFolder -> {
+                val name = AppFolders.normalizeName(text)
+                if (name == null) toast("Type a name first") else moveAppToFolder(purpose.packageName, name)
             }
-            NameEntryEffect.Close -> closeNameEntry()
-            is NameEntryEffect.Submit -> {
-                transient.update { it.copy(nameEntry = null) }
-                when (val purpose = before.purpose) {
-                    is NamePurpose.NewAppFolder -> {
-                        val name = AppFolders.normalizeName(effect.text)
-                        if (name == null) toast("Type a name first") else moveAppToFolder(purpose.packageName, name)
-                    }
-                    is NamePurpose.ExportTheme -> theme.onExportNamed(purpose, effect.text)
-                }
-            }
+            is NamePurpose.ExportTheme -> theme.onExportNamed(purpose, text)
         }
     }
 
-    fun closeNameEntry() {
-        if (transient.value.nameEntry != null) {
-            sounds.play(UiSound.BACK)
-            transient.update { it.copy(nameEntry = null) }
-        }
-    }
+    fun closeNameEntry() = typing.closeNameEntry()
 
-    /** Touch: tap a key of the name keyboard. */
-    fun onNameKeyTapped(row: Int, column: Int) {
-        val entry = transient.value.nameEntry ?: return
-        applyNameEntry(entry, entry.tap(row, column))
-    }
-
-    /** Hardware keyboards type names directly. */
-    private fun nameRawKey(entry: NameEntry, keyCode: Int): Boolean {
-        val next = when (keyCode) {
-            in android.view.KeyEvent.KEYCODE_A..android.view.KeyEvent.KEYCODE_Z -> entry.type('A' + (keyCode - android.view.KeyEvent.KEYCODE_A))
-            in android.view.KeyEvent.KEYCODE_0..android.view.KeyEvent.KEYCODE_9 -> entry.type('0' + (keyCode - android.view.KeyEvent.KEYCODE_0))
-            android.view.KeyEvent.KEYCODE_SPACE -> entry.type(' ')
-            android.view.KeyEvent.KEYCODE_DEL -> entry.backspace()
-            android.view.KeyEvent.KEYCODE_ENTER -> return true.also { applyNameEntry(entry, entry.onAction(NavAction.START)) }
-            else -> return false
-        }
-        applyNameEntry(entry, NameEntryOutcome(next))
-        return true
-    }
+    fun onNameKeyTapped(row: Int, column: Int) = typing.onNameKeyTapped(row, column)
 
     // endregion
 
     // region Base ROMs folder and media folders
 
-    /** The base ROMs folder setting, or `roms/` in the Xross folder in use. */
-    private fun baseRomsFolder(setting: String): File =
-        if (setting.isBlank()) container.environment.current.roms else File(setting)
+    // Forwarded to [FolderPickers].
 
-    fun onBaseRomsFolderPicked(uri: Uri?) {
-        uri ?: return
-        val path = container.volumes.treeUriToPath(uri) ?: return toast("That location isn't a local folder")
-        settingsStore.update { it.copy(baseRomsFolder = path) }
-        toast("Base ROMs folder: $path")
-        refreshFoldersAndRescan()
-    }
+    fun onBaseRomsFolderPicked(uri: Uri?) = folders.onBaseRomsFolderPicked(uri)
 
-    private fun createSystemFolders() {
-        if (!env.value.storageGranted || !container.environment.current.portable) {
-            emit(UiEffect.RequestStorageAccess)
-            return
-        }
-        viewModelScope.launch {
-            val base = baseRomsFolder(settingsStore.current.baseRomsFolder)
-            val result = withContext(Dispatchers.IO) { SystemFolders.create(base) }
-            when {
-                !result.ok -> {
-                    sounds.play(UiSound.ERROR)
-                    toast("Couldn't create ${countOf(result.failed.size, "folder")} in ${base.absolutePath}")
-                }
-                result.created.isEmpty() -> toast("All ${result.existing.size} system folders are already in ${base.absolutePath}")
-                else -> {
-                    sounds.play(UiSound.OK)
-                    toast("Created ${countOf(result.created.size, "folder")} in ${base.absolutePath}")
-                }
-            }
-            refreshFolders()
-        }
-    }
-
-    fun onMediaFolderPicked(kind: MediaFolderKind, uri: Uri?) {
-        uri ?: return
-        val path = container.volumes.treeUriToPath(uri)?.trimEnd('/') ?: return toast("That location isn't a local folder")
-        updateMediaFolders(kind) { (it + path).distinct() }
-        toast("${kind.label} now includes $path")
-    }
-
-    private fun updateMediaFolders(kind: MediaFolderKind, transform: (List<String>) -> List<String>) {
-        settingsStore.update {
-            when (kind) {
-                MediaFolderKind.PHOTO -> it.copy(photoFolders = transform(it.photoFolders))
-                MediaFolderKind.VIDEO -> it.copy(videoFolders = transform(it.videoFolders))
-            }
-        }
-    }
-
-    /** Applies the folder lists to the media library and reloads it when they changed. */
-    private fun syncMediaFolders(s: XrossSettings) {
-        if (container.media.setFolders(MediaFolders(s.photoFolders, s.videoFolders))) {
-            viewModelScope.launch { container.media.refresh() }
-        }
-    }
+    fun onMediaFolderPicked(kind: MediaFolderKind, uri: Uri?) = folders.onMediaFolderPicked(kind, uri)
 
     // endregion
-
-    /** The DAT folder setting, or `dats/` in the Xross folder in use. */
-    private fun datFolder(setting: String): File =
-        if (setting.isBlank()) container.environment.current.dats else File(setting)
-
-    private fun backupToRestore(): BackupInfo? =
-        env.value.portable.restorable ?: env.value.portable.backupOnDisk
-
-    private fun confirmRestore() {
-        val backup = backupToRestore() ?: return toast("No library backup in the Xross folder")
-        sounds.play(UiSound.OPTION)
-        val option = MenuOption(
-            "Replace library and restart",
-            detail = "${countOf(backup.games, "game")} · saved ${MenuTree.formatTime(backup.modifiedAt)}",
-            command = Command.RestoreBackup,
-        )
-        transient.update { it.copy(optionsMenu = OptionsMenuState.open("Restore library backup", listOf(option))) }
-    }
-
-    private fun restoreBackup() {
-        val backup = backupToRestore() ?: return
-        viewModelScope.launch {
-            fingerprints.stop()
-            container.scraper.stop()
-            withContext(Dispatchers.IO) { settingsStore.flush() }
-            when (val result = container.backups.stageRestore(backup)) {
-                is BackupResult.Done -> {
-                    sounds.play(UiSound.OK)
-                    toast("Restoring ${countOf(result.info.games, "game")}…")
-                    delay(RESTART_DELAY_MS)
-                    emit(UiEffect.RestartApp)
-                }
-                is BackupResult.Skipped -> toast(result.reason)
-                is BackupResult.Failed -> {
-                    sounds.play(UiSound.ERROR)
-                    toast("Restore failed: ${result.reason}")
-                }
-            }
-        }
-    }
-
-    private var backupJob: Job? = null
 
     /** The launcher is visible again (`onStart`): theme music may continue. */
     fun onStarted() = audio.onStarted(true)
@@ -1663,18 +1306,10 @@ class XmbViewModel(
     fun onStopped() {
         // Leaving during the intro ends it (and one not decided yet won't start): the video
         // doesn't play on behind another app.
-        if (transient.value.bootPending) bootSkippedEarly = true
-        if (transient.value.boot != null) endBoot(skipped = false, crossfade = false)
+        transitions.onStopped()
         audio.onStarted(false)
-        backupJob?.cancel()
-        backupJob = viewModelScope.launch {
-            delay(BACKUP_DELAY_MS)
-            container.backups.backupIfChanged()
-            publishPortable()
-        }
+        library.onStopped()
     }
-
-    // endregion
 
     fun onAppsChanged() {
         viewModelScope.launch {
@@ -1683,122 +1318,11 @@ class XmbViewModel(
         }
     }
 
-    fun onFolderPicked(uri: Uri?) {
-        uri ?: return
-        val path = container.volumes.treeUriToPath(uri)
-        if (path == null) {
-            toast("That location isn't a local folder")
-            return
-        }
-        settingsStore.update { it.copy(romFolders = (it.romFolders + path).distinct()) }
-        refreshFoldersAndRescan()
-    }
+    /** Settings ▸ Library ▸ Add folder: see [FolderPickers.onFolderPicked]. */
+    fun onFolderPicked(uri: Uri?) = folders.onFolderPicked(uri)
 
-    /**
-     * Storage hot-swap (microSD / USB-OTG mounted or removed). In front: rescan quietly after the
-     * burst of mount broadcasts settles. With a game running: do nothing now, rescan on return.
-     * Navigation state is never touched, and games on a removed volume stay in the library.
-     */
-    fun onVolumeEvent(event: VolumeEvent) {
-        if (!foreground) {
-            volumesChangedInBackground = true
-            return
-        }
-        volumeJob?.cancel()
-        volumeJob = viewModelScope.launch {
-            delay(VOLUME_SETTLE_MS)
-            val before = env.value.mountedRoots.toSet()
-            refreshFolders()
-            val after = env.value.mountedRoots.toSet()
-            val label = { root: String -> volumeLabels[root] ?: root.substringAfterLast('/') }
-            (after - before).firstOrNull()?.let { toast("${label(it)} connected") }
-            (before - after).firstOrNull()?.let { toast("${label(it)} removed — its games are kept") }
-            if (env.value.storageGranted) rescan(quiet = true)
-            // Custom Photo/Video folders on that drive appear or disappear.
-            container.media.refresh()
-            // The Xross folder itself may have been on that drive.
-            syncXrossFolder(firstLoad = false)
-        }
-    }
-
-    /** Last known label per volume root, so a removal can still name the drive. */
-    private val volumeLabels = HashMap<String, String>()
-
-    /** Recomputes mounted volumes and the library's folders (see [LibraryFolders]). */
-    private fun refreshFolders() {
-        val granted = env.value.storageGranted
-        val volumes = container.volumes.volumes()
-        volumes.forEach { volumeLabels[it.root.absolutePath] = it.label }
-        val roots = volumes.map { it.root.absolutePath }
-        val settings = settingsStore.current
-        // Without storage access nothing can be discovered; keep what we know instead of forgetting it.
-        val folders = if (granted) {
-            val plan = LibraryFolders.plan(
-                custom = settings.romFolders,
-                discovered = if (settings.autoDetectFolders) container.volumes.discoverRomFolders().map { it.absolutePath } else emptyList(),
-                knownAuto = settings.knownAutoFolders,
-                mountedRoots = roots,
-                autoDetect = settings.autoDetectFolders,
-                base = baseRomsFolder(settings.baseRomsFolder).absolutePath,
-            )
-            if (plan.knownAuto != settings.knownAutoFolders) settingsStore.update { it.copy(knownAutoFolders = plan.knownAuto) }
-            plan.folders
-        } else {
-            LibraryFolders.plan(
-                settings.romFolders, emptyList(), settings.knownAutoFolders, roots, autoDetect = false,
-                base = baseRomsFolder(settings.baseRomsFolder).absolutePath,
-            ).folders
-        }
-        env.update { it.copy(folders = folders, mountedRoots = roots) }
-    }
-
-    private fun refreshFoldersAndRescan(quiet: Boolean = false) {
-        refreshFolders()
-        rescan(quiet)
-    }
-
-    private fun rescan(quiet: Boolean) {
-        if (!env.value.storageGranted) {
-            fail("Grant All files access first")
-            return
-        }
-        scanJob?.cancel()
-        fingerprints.stop() // resume after the scan, against the updated library
-        scanJob = viewModelScope.launch {
-            val self = coroutineContext[Job]
-            transient.update { it.copy(scanning = true) }
-            try {
-                scan(quiet)
-            } finally {
-                // A newer scan that replaced this one owns the flag now.
-                if (scanJob == null || scanJob === self) transient.update { it.copy(scanning = false) }
-            }
-        }
-    }
-
-    /** One library scan: runs the repository scan (on Dispatchers.IO), then reports and resumes hashing. */
-    private suspend fun scan(quiet: Boolean) {
-        env.update { it.copy(scanStatus = "Scanning…") }
-        val roots = env.value.folders.map { File(it.path) }
-        val started = System.nanoTime()
-        val result = runCatching { container.games.scan(roots) }
-        // A newer scan replaced this one: not a failure, nothing to report.
-        if (result.exceptionOrNull() is CancellationException) return
-        if (BuildConfig.PERF_LOG) {
-            val ms = (System.nanoTime() - started) / 1_000_000
-            android.util.Log.i("XrossScan", "scan ${result.getOrNull() ?: result.exceptionOrNull()} in $ms ms")
-        }
-        val status = result.fold(
-            onSuccess = { "${it.total} games · +${it.added} −${it.removed}" },
-            onFailure = { "Scan failed: ${it.message}" },
-        )
-        env.update { it.copy(scanStatus = status) }
-        if (!quiet || result.isFailure) toast(status)
-        if (foreground) {
-            fingerprints.start(viewModelScope)
-            if (settingsStore.current.scrapeAutomatically) container.scraper.start(viewModelScope)
-        }
-    }
+    /** Storage hot-swap: see [LibraryJobs.onVolumeEvent]. */
+    fun onVolumeEvent(event: VolumeEvent) = library.onVolumeEvent(event)
 
     // endregion
 
@@ -1874,126 +1398,19 @@ class XmbViewModel(
         }
     }
 
-    // region Cold-start intro (2b.5d)
+    // region Cold-start intro and game start (forwarded to [TransitionController])
 
-    private var bootJob: Job? = null
+    fun skipBoot() = transitions.skipBoot()
 
-    /** A key or touch came while the intro was still being decided: it is skipped as soon as it is. */
-    private var bootSkippedEarly = false
+    fun onBootVideoEnded() = transitions.onBootVideoEnded()
 
-    /**
-     * Decides the cold-start intro for the active pack and the settings ([BootSequence]) and starts
-     * it: the boot video (its own sound, theme music held), or the shader ramp or the fade-in under
-     * the `opening` cue. Each ends on its own after its length, at [BootSequence.MAX_MS] at most.
-     */
-    private fun startBoot() {
-        val s = settingsStore.current
-        val pack = container.themes.active.value
-        val look = pack.look(s.themeVariant, category = state.value.categoryId)
-        val user = s.effectOverrides.cosmetics.bootIntro
-        val plan = BootSequence.resolve(
-            BootInputs(
-                coldBoot = true,
-                intro = user ?: look.cosmetics.bootIntro,
-                userChoice = user != null,
-                video = pack.bootVideo,
-                stillMotion = QuickProfile.byName(s.quickProfile).stillMotion,
-                startupSound = s.bootSound,
-                cueVolume = s.cueVolume,
-                waveEnabled = s.waveEnabled,
-            ),
-        ) ?: return
-        val now = android.os.SystemClock.elapsedRealtimeNanos()
-        if (BuildConfig.PERF_LOG) {
-            val sinceStart = android.os.SystemClock.uptimeMillis() - android.os.Process.getStartUptimeMillis()
-            android.util.Log.i("XrossBoot", "start mode=${plan.mode} file=${plan.fileName} early=$bootSkippedEarly after=$sinceStart ms")
-        }
-        if (bootSkippedEarly) {
-            // Skipped before it began: no video, no ramp and no slow fade-in, just the crossfade to the menu.
-            logBoot(plan, skipped = true, atMs = 0)
-            audio.onColdBoot()
-            val quick = BootState(BootPlan(BootMode.FADE), now, ending = true, endedAtNanos = now)
-            transient.update { it.copy(bootPending = false, boot = quick) }
-            bootJob = viewModelScope.launch {
-                delay(BootSequence.CROSSFADE_MS)
-                transient.update { it.copy(boot = null) }
-            }
-            return
-        }
-        if (plan.mode == BootMode.FADE) {
-            transient.update { it.copy(bootPending = false) }
-            logBoot(plan, skipped = false, atMs = 0)
-            audio.onColdBoot()
-            return
-        }
-        transient.update { it.copy(bootPending = false, boot = BootState(plan, now)) }
-        if (plan.mode == BootMode.VIDEO) audio.onBootVideo(true) else audio.onColdBoot()
-        bootJob = viewModelScope.launch {
-            delay(plan.maxMs)
-            endBoot(skipped = false)
-        }
+    private fun launchGame(gameId: Long) {
+        transitions.launchGame(gameId)
     }
 
-    /** A key or a touch during the intro: it crossfades to the menu. */
-    fun skipBoot() {
-        if (transient.value.bootPending) bootSkippedEarly = true
-        else if (transient.value.boot?.ending == false) endBoot(skipped = true)
-    }
-
-    /** The boot video reached its end (or couldn't be played). */
-    fun onBootVideoEnded() {
-        if (transient.value.boot?.ending == false) endBoot(skipped = false)
-    }
-
-    private fun endBoot(skipped: Boolean, crossfade: Boolean = true) {
-        val boot = transient.value.boot ?: return
-        bootJob?.cancel()
-        val now = android.os.SystemClock.elapsedRealtimeNanos()
-        if (!boot.ending) logBoot(boot.plan, skipped, (now - boot.startedAtNanos) / 1_000_000)
-        audio.onBootVideo(false)
-        if (!crossfade) {
-            transient.update { it.copy(boot = null) }
-            return
-        }
-        transient.update { it.copy(boot = boot.copy(ending = true, endedAtNanos = now)) }
-        bootJob = viewModelScope.launch {
-            delay(BootSequence.CROSSFADE_MS)
-            transient.update { it.copy(boot = null) }
-        }
-    }
-
-    private fun logBoot(plan: BootPlan, skipped: Boolean, atMs: Long) {
-        if (BuildConfig.PERF_LOG) android.util.Log.i("XrossBoot", BootSequence.describe(plan, skipped, atMs))
-    }
+    fun onLaunchFailed(message: String) = transitions.onLaunchFailed(message)
 
     // endregion
-
-    private fun launchGame(gameId: Long) = viewModelScope.launch {
-        val game = container.games.get(gameId) ?: return@launch
-        when (val plan = container.launcher.plan(game, settingsStore.current.emulatorChoice[game.platformId])) {
-            is LaunchPlan.Ready -> {
-                container.games.markPlayed(game.id)
-                // Start transition: bloom + start cue, then hand off to the emulator.
-                transient.update { it.copy(booting = game.title) }
-                // Music pauses (to resume on return, or not) and the start cue plays.
-                audio.onGameLaunch()
-                delay(GAMEBOOT_HANDOFF_MS)
-                container.sessions.arm(game.id)
-                emit(UiEffect.Launch(plan))
-                delay(600)
-                transient.update { it.copy(booting = null) }
-            }
-            is LaunchPlan.Failed -> fail(plan.message)
-        }
-    }
-
-    /** The emulator couldn't be started after all (uninstalled meanwhile, refused the URI). */
-    fun onLaunchFailed(message: String) {
-        container.sessions.disarm()
-        audio.onLaunchFailed()
-        transient.update { it.copy(booting = null) }
-        fail(message)
-    }
 
     private fun run(command: Command) {
         when (command) {
@@ -2008,19 +1425,16 @@ class XmbViewModel(
             is Command.ExportThemePack, is Command.ChooseExportScope, Command.ConfirmThemeExport, Command.SwitchToExportedTheme,
             is Command.ShareThemePack, Command.ShareExportedTheme,
             -> check(theme.onCommand(command)) { "ThemeController didn't take $command" }
-            Command.RequestStorageAccess ->
-                if (env.value.storageGranted) toast("Already granted") else emit(UiEffect.RequestStorageAccess)
-            Command.AddFolder -> emit(UiEffect.PickFolder)
-            is Command.RemoveFolder -> {
-                settingsStore.update { it.copy(romFolders = it.romFolders - command.path) }
-                toast("Removed ${command.path.substringAfterLast('/')}")
-                refreshFoldersAndRescan()
-            }
-            Command.Rescan -> refreshFoldersAndRescan()
-            Command.ToggleAutoDetect -> {
-                settingsStore.update { it.copy(autoDetectFolders = !it.autoDetectFolders) }
-                refreshFoldersAndRescan()
-            }
+            // Library work (step 6): the LibraryJobs'.
+            Command.RequestStorageAccess, Command.Rescan, Command.ImportDats, Command.MatchDats, is Command.RemoveDat,
+            Command.ToggleLargeImageHashing, Command.RecheckFingerprints, Command.CycleXrossVolume, Command.BackupNow,
+            Command.ConfirmRestore, Command.RestoreBackup,
+            -> check(library.onCommand(command)) { "LibraryJobs didn't take $command" }
+            // Settings ▸ Library and Media folders (step 6): the FolderPickers'.
+            Command.AddFolder, is Command.RemoveFolder, Command.ToggleAutoDetect, Command.PickBaseRomsFolder,
+            Command.ResetBaseRomsFolder, Command.CreateSystemFolders, Command.PickDatFolder, is Command.AddMediaFolder,
+            is Command.RemoveMediaFolder, is Command.ClearMediaFolders,
+            -> check(folders.onCommand(command)) { "FolderPickers didn't take $command" }
             Command.CycleConfirmLayout -> settingsStore.update {
                 it.copy(confirmLayout = ConfirmLayout.entries[(it.confirmLayout.ordinal + 1) % ConfirmLayout.entries.size])
             }
@@ -2044,7 +1458,6 @@ class XmbViewModel(
             }
             Command.ToggleButtonHints -> settingsStore.update { it.copy(showButtonHints = !it.showButtonHints) }
             is Command.ShowGameInfo -> showGameInfo(command.gameId)
-            Command.ImportDats -> importDats()
             Command.ScrapeNow -> scrapeNow()
             Command.ToggleScrapeAutomatically -> {
                 settingsStore.update { it.copy(scrapeAutomatically = !it.scrapeAutomatically) }
@@ -2104,16 +1517,16 @@ class XmbViewModel(
                 toast("Back to the automatic match")
                 if (container.scraper.isConfigured) rescrape(command.gameId)
             }
-            Command.PickDatFolder -> emit(UiEffect.PickDatFolder)
-            Command.MatchDats -> datWork { container.dats.matchAll().let { "${gamesVerified(it.matched)}" } }
-            is Command.RemoveDat -> datWork {
-                container.dats.remove(command.id)
-                "DAT removed"
-            }
             is Command.CycleEmulator -> cycleEmulator(command.platformId)
             Command.ToggleWave -> settingsStore.update { it.copy(waveEnabled = !it.waveEnabled) }
-            Command.OpenWaveSettings -> openWaveSettings()
-            Command.OpenAvatarStyle -> openAvatarStyle()
+            Command.OpenWaveSettings -> {
+                transient.update { it.copy(optionsMenu = null) }
+                editors.openWave()
+            }
+            Command.OpenAvatarStyle -> {
+                transient.update { it.copy(optionsMenu = null) }
+                editors.openAvatar()
+            }
             Command.OpenRaHub -> ra.openRaHub()
             Command.ToggleSoundEffects -> settingsStore.update { it.copy(soundEffects = !it.soundEffects) }
             is Command.CycleVolume -> setVolume(command.channel, VolumeChannel.next(command.channel.of(settingsStore.current)))
@@ -2124,18 +1537,6 @@ class XmbViewModel(
             is Command.SetMusicUnderSnaps -> settingsStore.update { it.copy(musicUnderSnaps = command.mode) }
             Command.ToggleBootSound -> settingsStore.update { it.copy(bootSound = !it.bootSound) }
             Command.ToggleGameBootSound -> settingsStore.update { it.copy(gameBootSound = !it.gameBootSound) }
-            Command.ToggleLargeImageHashing -> {
-                settingsStore.update { it.copy(hashLargeImages = !it.hashLargeImages) }
-                if (foreground && scanJob?.isActive != true) fingerprints.restart(viewModelScope)
-            }
-            Command.RecheckFingerprints -> {
-                if (!env.value.storageGranted) {
-                    fail("Grant All files access first")
-                } else if (scanJob?.isActive != true) {
-                    fingerprints.restart(viewModelScope)
-                    toast("Checking for files without fingerprints")
-                }
-            }
             Command.OpenHomeSettings -> emit(UiEffect.StartActivity(Intent(Settings.ACTION_HOME_SETTINGS)))
             Command.OpenAndroidSettings -> emit(UiEffect.StartActivity(Intent(Settings.ACTION_SETTINGS)))
             Command.OpenLibrarySettings -> {
@@ -2160,23 +1561,6 @@ class XmbViewModel(
             Command.ToggleResumeMusicAfterGames -> settingsStore.update { it.copy(resumeMusicAfterGames = !it.resumeMusicAfterGames) }
             Command.ToggleVideoLoop -> settingsStore.update { it.copy(videoLoop = !it.videoLoop) }
             Command.ToggleAllGamesFolder -> settingsStore.update { it.copy(allGamesFolder = !it.allGamesFolder) }
-            Command.CycleXrossVolume -> cycleXrossVolume()
-            Command.BackupNow -> viewModelScope.launch {
-                when (val result = container.backups.backupNow()) {
-                    is BackupResult.Done -> {
-                        sounds.play(UiSound.OK)
-                        toast("Library backed up (${countOf(result.info.games, "game")})")
-                    }
-                    is BackupResult.Skipped -> toast(result.reason)
-                    is BackupResult.Failed -> {
-                        sounds.play(UiSound.ERROR)
-                        toast("Backup failed: ${result.reason}")
-                    }
-                }
-                publishPortable()
-            }
-            Command.ConfirmRestore -> confirmRestore()
-            Command.RestoreBackup -> restoreBackup()
             is Command.LaunchApp -> launchApp(command.packageName, command.activityName)
             is Command.HideApp -> {
                 settingsStore.update { it.copy(hiddenApps = it.hiddenApps + command.packageName) }
@@ -2195,9 +1579,7 @@ class XmbViewModel(
             is Command.MoveAppToFolder -> moveAppToFolder(command.packageName, command.folder)
             is Command.NewAppFolder -> {
                 sounds.play(UiSound.OPTION)
-                transient.update {
-                    it.copy(nameEntry = NameEntry("New folder for ${appLabel(command.packageName)}", NamePurpose.NewAppFolder(command.packageName)))
-                }
+                typing.openNameEntry(NameEntry("New folder for ${appLabel(command.packageName)}", NamePurpose.NewAppFolder(command.packageName)))
             }
             Command.GroupEmulators -> {
                 val loose = AppFolders.ungroupedEmulators(container.apps.apps.value, settingsStore.current)
@@ -2213,24 +1595,8 @@ class XmbViewModel(
                 settingsStore.update { it.copy(appFolders = emptyMap()) }
                 toast("App folders removed; the apps are back in Apps")
             }
-            Command.PickBaseRomsFolder -> emit(UiEffect.PickBaseRomsFolder)
-            Command.ResetBaseRomsFolder -> {
-                settingsStore.update { it.copy(baseRomsFolder = "") }
-                toast("Base ROMs folder: ${baseRomsFolder("").absolutePath}")
-                refreshFoldersAndRescan()
-            }
-            Command.CreateSystemFolders -> createSystemFolders()
-            is Command.AddMediaFolder -> emit(UiEffect.PickMediaFolder(command.kind))
-            is Command.RemoveMediaFolder -> {
-                updateMediaFolders(command.kind) { it - command.path }
-                toast("Removed ${command.path.substringAfterLast('/')}")
-            }
-            is Command.ClearMediaFolders -> {
-                updateMediaFolders(command.kind) { emptyList() }
-                toast("${command.kind.label} shows everything again")
-            }
             is Command.LaunchGame -> launchGame(command.gameId)
-            Command.OpenSearch -> transient.update { it.copy(search = SearchState()) }
+            Command.OpenSearch -> typing.openSearch()
             is Command.SetGameEmulator -> viewModelScope.launch {
                 container.games.setEmulatorOverride(command.gameId, command.key)
                 sounds.play(UiSound.OK)
@@ -2282,7 +1648,7 @@ class XmbViewModel(
     // state declared throughout the class (a property declared below it would still be null).
     init {
         container.media.watch(viewModelScope)
-        container.backups.watch()
+        library.watch()
         // Art is named after each game's ROM: keep the index current, then move the old private cache once.
         viewModelScope.launch {
             var migrated = false
@@ -2294,11 +1660,7 @@ class XmbViewModel(
                 }
             }
         }
-        syncMediaFolders(settingsStore.current)
-        viewModelScope.launch { settingsStore.settings.collect(::syncMediaFolders) }
-        viewModelScope.launch {
-            container.backups.status.collect { status -> env.update { it.copy(portable = it.portable.copy(backup = status)) } }
-        }
+        folders.watch()
         viewModelScope.launch {
             settingsStore.settings.collect(audio::onSettingsChanged)
         }
@@ -2308,9 +1670,7 @@ class XmbViewModel(
             media.overlay.map { it is MediaOverlay.VideoPlayback }.distinctUntilChanged().collect(audio::onFullScreenVideo)
         }
         // Keep open search results in step with the library (favorites, playtime, rescans).
-        viewModelScope.launch {
-            tree.collect { if (transient.value.search?.query?.isNotBlank() == true) runSearch(0) }
-        }
+        viewModelScope.launch { tree.collect { typing.onLibraryChanged() } }
         // Background shader failures (compile errors, the watchdog, a crash last time): one toast each.
         viewModelScope.launch { container.shaderHealth.notices.collect { toast(it) } }
         // Theme pack: discover, activate the saved one, and keep sounds and Settings ▸ Theme in step.
@@ -2322,7 +1682,7 @@ class XmbViewModel(
             } finally {
                 // The intro and the startup sound once the pack is in place (01. opening.wav by
                 // default); even if the scan failed, so a cold start never stays black.
-                if (coldBoot) startBoot()
+                if (coldBoot) transitions.startBoot()
             }
         }
         viewModelScope.launch {
@@ -2369,19 +1729,12 @@ class XmbViewModel(
         private val AXIAL_DEADZONES = listOf(0f, 0.1f, 0.2f, 0.3f)
         private const val INFO_PAGE = 5
         private val SLIDESHOW_SECONDS = listOf(3, 5, 10, 20)
-        private const val GAMEBOOT_HANDOFF_MS = 1100L
-        private const val VOLUME_SETTLE_MS = 1200L
-        private const val SEARCH_DEBOUNCE_MS = 140L
-        private const val BACKUP_DELAY_MS = 4_000L
-        private const val RESTART_DELAY_MS = 900L
 
         private fun countOf(n: Int, noun: String) = if (n == 1) "1 $noun" else "$n ${noun}s"
         internal const val NOTHING_PLAYING = "Nothing is playing — choose music in the Music category"
 
         /** All files access on Android 11+, the legacy read permission before that. */
         fun hasStorageAccess(context: Context): Boolean = StorageAccess.canRead(context)
-
-        private fun gamesVerified(n: Int) = if (n == 1) "1 game verified" else "$n games verified"
 
         private fun List<String>.nextOf(value: String): String = this[(indexOf(value) + 1) % size]
 

@@ -9,7 +9,8 @@ history). It is a proposal; decisions and scheduling belong in [`Roadmap.md`](..
 the "Phase 3-prep" slot, are done: the layering test, the nine edges cut, convention plugins and
 the configuration cache, `:core:model` and `:theme:engine` as Kotlin/JVM modules, and the look
 inputs in `ThemeController`. How it was built, where it differs from this proposal and what it did
-not verify: [§10](#10-as-built-phase-3-prep-steps-15). Next is step 6, the ViewModel split.
+not verify: [§10](#10-as-built-phase-3-prep-steps-15). Step 6, the ViewModel split, is done too:
+five controllers came out of `XmbViewModel` ([§11](#11-as-built-step-6-the-viewmodel-split)). Next is step 7, the `XmbEvent` sink.
 
 Related documents: the [developer guide](../DEVELOPMENT.md) (source layout, build and tests), the
 [status dashboard](../STATUS.md) (test and frame-timing evidence) and
@@ -28,6 +29,7 @@ targets that a shared theme engine would serve).
 8. [Other findings](#8-other-findings)
 9. [Action plan](#9-action-plan)
 10. [As built: Phase 3-prep, steps 1–5](#10-as-built-phase-3-prep-steps-15)
+11. [As built: step 6, the ViewModel split](#11-as-built-step-6-the-viewmodel-split)
 
 ## 1. Verdict
 
@@ -294,8 +296,8 @@ strains it:
 | 3 | `build-logic/` convention plugins, configuration cache, parallel builds | Cheap modules from here on | ½ day | — | ✅ §10.1 |
 | 4 | Extract `:core:model` and `:theme:engine` (Kotlin/JVM), with their tests as plain JUnit | Stable engine behind a boundary; faster theme tests; ready for 2b.9 | 3–4 days | 2, 3 | ✅ §10.2 |
 | 5 | Look inputs into `ThemeController` as a `StateFlow<ResolvedLook>` | The cascade testable end to end without Compose | 1 day | 4 | ✅ §10.3 |
-| 6 | Finish the ViewModel split (search, editors, folder pickers, library jobs, boot) | Stops every feature landing in one class; precondition for feature modules | 1–1.5 weeks | — | Next |
-| 7 | `XmbEvent` sink, controller by controller | Smaller signatures; new panels don't touch `MainActivity` | 2 days | 6 | ❌ |
+| 6 | Finish the ViewModel split (search, editors, folder pickers, library jobs, boot) | Stops every feature landing in one class; precondition for feature modules | 1–1.5 weeks | — | ✅ §11 |
+| 7 | `XmbEvent` sink, controller by controller | Smaller signatures; new panels don't touch `MainActivity` | 2 days | 6 | Next |
 | 8 | `CompositionLocal` holders in place of the six singletons | Previews, tests and a second composition stop sharing state | 2 days | — | ❌ |
 | 9 | Per-region state slices (item column, overlays), checked with `palette-perf.sh` | Flat recomposition as `XmbUiState` grows | 2–3 days | 6 | ❌ |
 | 10 | `:core:data` and `:render:gl` | KSP isolation, migration tests alone; shader work out of Compose | 3 days each | 4 | ❌ (`xross.android.library` is ready for them) |
@@ -403,3 +405,70 @@ Activity did.
 builds; on the API 37 emulator `smoke.sh` 12/12 and the theme suite 426/426; `palette-perf.sh`
 0.30–0.59% janky on the second run, which matches 2b.8. Not run: the A55 and the other four device
 suites. Details: [Phase 3-prep evidence §3.38](../phase-3-prep/STATUS.md#s3.38).
+
+## 11. As built: step 6, the ViewModel split
+
+On `refactor/phase3-prep`, 2026-11-15, one controller at a time with the `Host` pattern of §3.
+Each owns its panels' state as its own `StateFlow`, which the view model merges into
+`XmbUiState`; the view model keeps one-line forwards for `MainActivity`, so `XmbScreen` and its
+callbacks are unchanged until step 7.
+
+| Controller | Took from `XmbViewModel` | `Host` | Tests |
+| --- | --- | --- | --- |
+| `EditorController` | Wave settings and Profile customization: input, touch rows and sliders, the custom ring colour prompt and its validation | `toast`, `fail`, `refuse`, `promptText` | `EditorControllerTest`, 6 |
+| `SearchController` | Search (debounced FTS query, stale results dropped, re-query on library changes, hardware keys) and the name keyboard | `activate`, `openOptions`, `submitName` | `SearchControllerTest`, 4, on virtual time with a fake index |
+| `FolderPickers` | The four folder pickers' answers, the ten folder commands (ROM folders and auto-detect, base ROMs folder and its system folders, DAT folder, Photo and Video folders), the `roms/` and `dats/` defaults, and keeping the media library on the settings' folder lists | `toast`, `emit`, `storageGranted`, `refreshFolders`, `refreshFoldersAndRescan`, `importDats` | `FolderPickersTest`, 6, with a fake document provider and a temporary Xross folder |
+| `LibraryJobs` | Storage access, the folder plan and the scan, hot-swap (deferred while a game is in front), fingerprinting and automatic scraping in front, DAT jobs (`datWork`, also used by the scraper lookups), the Xross folder (following it, moving art, another drive), backup after leaving, restore; eleven commands | `toast`, `fail`, `emit`, `showOptions`, `onXrossFolderMoved` | `LibraryJobsTest`, 6 |
+| `TransitionController` | The cold-start intro (deciding it once the saved pack is loaded, skipping it in advance, the video, shader and fade, the crossfade, ending it on leaving) and the game start (bloom and cue, the hand-off to the emulator, a refused launch); the input gate while either is on screen | `fail`, `emit` | `TransitionControllerTest`, 5, with a fake launcher |
+
+* **The Layout panel stays in `ThemeController`.** It edits the pack's layout overrides against the
+  pack's defaults, so it belongs with the theme, not with the two settings editors.
+* **`FolderPickers` picks folders; it doesn't scan.** A changed ROM folder asks the host to rescan
+  and a new DAT folder asks it to import, so the scan, the DAT jobs and the mounted-volume plan
+  (`refreshFolders`) stay for `LibraryJobs`. The I/O dispatcher is a constructor parameter, so the
+  system-folder test runs on virtual time. The wallpaper and theme-import pickers §7.1 listed here
+  were already in `ThemeController`.
+* **`LibraryJobs` owns a `LibraryStatus` flow** (storage access, folders, mounted roots, scan
+  status, the Xross folder and backups, and the scanning and DAT busy flags). The view model's
+  menu snapshot is `combine(env, library.state)`, so `MenuTree` reads the same fields as before
+  and the view model no longer writes them. The lifecycle stays the view model's to call, in the
+  old order: `setForeground`, `refresh`, `resumeBackgroundWork`, `onBackground`, `onStopped`.
+* **What's still in the view model around the library:** the scraper commands (Scrape now,
+  Rescrape, Find match, the account prompts), playtime after a game, and installed apps. They are
+  small, and a `ScrapeController` can take the first group if it grows.
+* **The view model keeps what a typed name does** (`submitName`: an app folder, or the theme export
+  that `ThemeController` finishes). The controller only knows the keyboard and the purpose.
+* **Input order is unchanged**: name entry, Wave settings, Layout, Profile customization, the RA
+  screens, Information, Details, Options, media, search. Each controller has one `on…Action`
+  per panel so the view model can keep that order.
+* **`TransitionController.takesInput()` is the first thing `onAction` asks**, as the three boot and
+  launch checks were. Its clock is a constructor parameter, so the intro's timestamps are fixed in
+  tests.
+* `Transient` lost nine fields (`search`, `nameEntry`, `waveEditor`, `avatarEditor`, `scanning`,
+  `datWork`, `boot`, `bootPending`, `booting`); it now holds the toast, the remap session, the
+  controller family, the Options menu, Information, Details and the theme export flag. The
+  controllers' flows are combined first in a small `Panels` holder so `settled` stays within five
+  inputs. `FolderPickers` and `LibraryJobs` refer to each other through their hosts, so both
+  properties have explicit types.
+* `XmbViewModel.kt` went from 2,393 to 1,747 lines; the five controllers are 172, 200, 186, 516 and
+  225.
+* **What's left in the view model** is the menu itself (navigation, the Options menu, Information,
+  Details, remapping), the scraper commands, the settings toggles in `run`, and the wiring. The
+  41 callbacks on `XmbScreen` are unchanged; step 7 replaces them.
+
+Verified: 970 unit tests (889 in `:app`, 81 in `:theme:engine`), `check` with `lintDebug` 0 errors,
+debug and profiling builds. On the API 37 emulator, after each extraction:
+
+| After | Device suites |
+| --- | --- |
+| `EditorController`, `SearchController` | `smoke.sh` 12/12, theme 426/426, input 11/11 |
+| `FolderPickers` | `smoke.sh` 12/12, library 41/41, media 56/56 |
+| `LibraryJobs` | `smoke.sh` 12/12, library 41/41, integration 9/9 |
+| `TransitionController` | `smoke.sh` 12/12, integration 9/9 (with the RetroArch stub's launch checks), theme 426/426 on the second run* |
+
+\* The first theme run failed one check, "turning the stack on refreshed it live": it waits 10 s
+for a response from the live RetroAchievements API with the debug build's account, and no response
+was logged. The code on that path (`ThemeController` → `RaController.onFriendsWanted`) didn't
+change. The second run passed all 426.
+
+Not run: `palette-perf.sh` (nothing on the draw path changed), the A55 and the other devices.
