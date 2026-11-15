@@ -43,7 +43,7 @@ singletons, imaging, modules) still waits: none of it blocks 2b.8.
 
 | Slice | State |
 |---|---|
-| 2b.8-prep | 🔶 on `refactor/2b8-prep` (2026-11-15): 872 unit tests (852 + 20), `lintDebug` 0 errors, `XmbViewModel` 2,647 → 2,331 lines. **Open:** the theme suite on the API 37 emulator and `palette-perf.sh` before/after. As built: [2b.8-prep notes](#as-built-2b8-prep-2026-11-15) |
+| 2b.8-prep | ✅ on `refactor/2b8-prep` (2026-11-15): 872 unit tests (852 + 20), `lintDebug` 0 errors, `XmbViewModel` 2,647 → 2,331 lines; theme suite **311/312** on the API 37 emulator, the same as `main` (the one fail is 2b.4f's wallpaper toast missed by the screen dump; the wallpaper was saved, drawn and kept across a restart); `palette-perf.sh 3` 0.15–0.71% janky against 0.29–1.50% on `main` (inside the noise and the gate). As built: [2b.8-prep notes](#as-built-2b8-prep-2026-11-15) |
 | 2b.8a | ⬜ |
 | 2b.8b | ⬜ |
 | 2b.8c | ⬜ |
@@ -141,6 +141,13 @@ clipping on the 12 display-matrix configurations, and `palette-perf.sh` is uncha
 | `ThemeController` (27 commands, `onWallpaperPicked`, `onThemeArchivePicked`, the pending import) with a `Host` (toast, fail, refuse, emit, showOptions, components, friendsWanted, photoUri) | `state/ThemeController.kt`; `XmbViewModel` keeps `theme` and forwards |
 | `ThemePackInfo.sourceJson` (from `readManifest`), `LoadedTheme.sourceJson` / `files` | `theme/pack/ThemePackLoader.kt` |
 | A shared stress pack (imports, 2 variants, category and system overrides, rules, every file kind, unused files) | `test/.../StressPack.kt` |
+
+Device checks (2026-11-15, API 37 emulator with `-gpu host`):
+
+| Check | `main` (`762d581`) | `refactor/2b8-prep` |
+|---|---|---|
+| Theme suite | 311/312 (at 2b.7e) | **311/312**: the same fail, "Xross wallpaper set" not on screen when the dump ran; the URI was saved, the picture drawn, kept after a restart and cleared by Reset |
+| `palette-perf.sh 3`, janky (on / off pairs) | 1.49 / 1.50, 0.29 / 0.30, 0.44 / 1.19% | 0.60 / 0.71, 0.15 / 0.29, 0.15 / 0.29% |
 
 Decisions made while building:
 
