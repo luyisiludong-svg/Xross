@@ -407,8 +407,8 @@ class Phase2bFeaturesTest {
         assertEquals(hub, RaHub.onAction(hub, NavAction.UP).state)
         hub = RaHub.onAction(hub, NavAction.DOWN).state
         assertEquals(1, hub.scroll)
-        hub = RaHub.onAction(hub, NavAction.NEXT_CATEGORY).state
-        assertEquals(5, hub.scroll)
+        // L1/R1 move the platform filter since 2b.7e (HubUpgradeTest); with no systems they do nothing.
+        assertEquals(hub, RaHub.onAction(hub, NavAction.NEXT_CATEGORY).state)
         repeat(100) { hub = RaHub.onAction(hub, NavAction.DOWN).state }
         assertEquals(RaHubState.MAX_SCROLL, hub.scroll)
         assertEquals(RaHubEffect.Close, RaHub.onAction(hub, NavAction.BACK).effect)

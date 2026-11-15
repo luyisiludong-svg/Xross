@@ -251,6 +251,7 @@ class XmbViewModel(
             override fun moveCategory(delta: Int) = this@XmbViewModel.moveCategory(delta)
             override fun dismissMenus() = transient.update { it.copy(optionsMenu = null, details = null) }
             override fun components() = this@XmbViewModel.components.value
+            override fun revealGame(gameId: Long) = this@XmbViewModel.revealGame(gameId)
         },
     )
 
@@ -584,6 +585,25 @@ class XmbViewModel(
     fun closeAchievements() = ra.closeAchievements()
 
     fun onAchievementTapped(index: Int) = ra.onAchievementTapped(index)
+
+    fun onAchievementsColumns(columns: Int) = ra.onAchievementsColumns(columns)
+
+    fun onRaHubPillTapped(index: Int) = ra.onRaHubPillTapped(index)
+
+    fun onRaHubRowTapped(index: Int) = ra.onRaHubRowTapped(index)
+
+    /** Games, with the cursor on [gameId] in its system's list (a friend's game from the hub's sidebar). */
+    private fun revealGame(gameId: Long) {
+        viewModelScope.launch {
+            val game = container.games.get(gameId) ?: return@launch
+            val index = categories.indexOfFirst { it.id == Categories.GAMES }
+            val category = categories[index]
+            val path = tree.value.pathToGame(gameId, game.platformId, category.title)
+                ?: return@launch toast("${game.title} isn't listed in Games")
+            nav.update { it.copy(categoryIndex = index).withStack(category.id, path) }
+            sounds.play(UiSound.DRILL_IN)
+        }
+    }
 
     // endregion
 

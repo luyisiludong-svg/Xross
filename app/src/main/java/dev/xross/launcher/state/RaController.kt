@@ -79,6 +79,8 @@ class RaController(
         fun dismissMenus()
         /** The status bar as drawn now: whether the social stack and the avatar are in it (2b.7a, c). */
         fun components(): dev.xross.launcher.theme.pack.ResolvedComponents
+        /** Moves the menu's cursor onto [gameId] in its system's list (the hub's sidebar, 2b.7e). */
+        fun revealGame(gameId: Long)
     }
 
     private val _state = MutableStateFlow(RaState())
@@ -88,6 +90,9 @@ class RaController(
     private var raHubJob: Job? = null
     private var achievementsJob: Job? = null
     private var friendsJob: Job? = null
+
+    /** Badges per row the Achievements grid last measured (the display doesn't change between games). */
+    private var gridColumns = AchievementsViewState.COLUMNS
 
     /** The offline profile cache has been read (see [loadProfile]). */
     private var profileLoaded = false
@@ -354,10 +359,14 @@ class RaController(
 
     // region Social stack (2b.7c)
 
-    /** Something draws friend data: the social stack or the rich telemetry card's strip (2b.7e's sidebar adds to this). */
+    /**
+     * Something draws friend data: the social stack, the rich telemetry card's strip, or the hub's
+     * `FOLLOWING` sidebar while Games ▸ RetroAchievements is open (2b.7e).
+     */
     private fun friendsWanted(components: dev.xross.launcher.theme.pack.ResolvedComponents = host.components()): Boolean =
         components.topLeft == dev.xross.launcher.theme.pack.TopLeftClusterMode.SOCIAL_STACK ||
-            components.telemetry == dev.xross.launcher.theme.pack.TelemetryMode.RICH_CARD
+            components.telemetry == dev.xross.launcher.theme.pack.TelemetryMode.RICH_CARD ||
+            _state.value.raHub != null
 
     /** The stack is in the bar now (see [SocialStack.shows]). */
     fun socialStackShown(): Boolean = SocialStack.shows(host.components(), _state.value.friends)
@@ -458,25 +467,36 @@ class RaController(
 
     // region RetroAchievements dashboard (Games ▸ RetroAchievements)
 
+    /**
+     * Opens the dashboard. A stale profile is fetched (and the friends with it, the sidebar wants
+     * them); a fresh profile with stale friends fetches only the friends, as opening a stale
+     * social stack does. Never while it stays open: only its Primary action fetches again.
+     */
     fun openRaHub() {
         host.dismissMenus()
         _state.update { it.copy(raHub = RaHubState(artVersion = artVersion())) }
         loadRaSummary()
-        if (profiles.current.linked && profiles.isStale()) refreshProfile(quiet = true)
+        if (!profiles.current.linked) return
+        if (profiles.isStale()) refreshProfile(quiet = true) else if (friends.isStale()) refreshFriends()
     }
 
-    /** Library-wide progress from what is cached in the Xross folder; never the network. */
+    /** Library-wide and per-system progress from what is cached in the Xross folder; never the network. */
     private fun loadRaSummary() {
         raHubJob?.cancel()
         raHubJob = scope.launch {
-            val summary = achievements.librarySummary(games.games.first())
-            _state.update { s -> s.copy(raHub = s.raHub?.copy(summary = summary)) }
+            val summary = achievements.hubSummary(games.games.first())
+            _state.update { s -> s.copy(raHub = s.raHub?.let { RaHub.withSummary(it, summary) }) }
         }
     }
 
+    /** The sidebar's rows as drawn now ([HubSidebar.rows]); empty while it is collapsed. */
+    fun hubSidebarRows(): List<SidebarRow> = HubSidebar.rows(_state.value.friends, selfRow(profiles.current))
+
     private fun raHubAction(hub: RaHubState, action: NavAction) {
-        val outcome = RaHub.onAction(hub, action)
-        when (outcome.effect) {
+        val rows = hubSidebarRows()
+        val outcome = RaHub.onAction(hub, action, rows.size)
+        when (val effect = outcome.effect) {
+            is RaHubEffect.OpenFriend -> return openFriendGame(rows.getOrNull(effect.row))
             RaHubEffect.Close -> return closeRaHub()
             RaHubEffect.Primary -> {
                 sounds.play(UiSound.ENTER)
@@ -494,7 +514,54 @@ class RaController(
         if (outcome.state != hub) {
             sounds.play(UiSound.MOVE)
             _state.update { it.copy(raHub = outcome.state) }
+        } else if (action in HUB_EDGES) {
+            // Clamped: L1/R1 at All or at the last system.
+            sounds.play(UiSound.ERROR)
         }
+    }
+
+    /**
+     * Confirm on a sidebar row: the friend's latest game in the library ([HubSidebar.libraryGame]),
+     * with the hub closed and the menu's cursor on it; a toast when the library doesn't have it.
+     */
+    private fun openFriendGame(row: SidebarRow?) {
+        if (row == null || row.self) return sounds.play(UiSound.ERROR)
+        val a = row.activity
+        if (a == null || a.gameId <= 0) {
+            sounds.play(UiSound.ERROR)
+            return host.toast(if (a == null) "${row.user}'s latest game isn't known yet" else "${row.user} hasn't played a game yet")
+        }
+        val byRaId = _state.value.raHub?.summary?.libraryGames.orEmpty()
+        scope.launch {
+            val game = HubSidebar.libraryGame(a, byRaId, games.games.first())
+            if (game == null) {
+                sounds.play(UiSound.ERROR)
+                host.toast("${a.gameTitle.ifEmpty { "That game" }} isn't in your library")
+                return@launch
+            }
+            sounds.play(UiSound.ENTER)
+            raHubJob?.cancel()
+            _state.update { it.copy(raHub = null) }
+            host.revealGame(game.id)
+        }
+    }
+
+    /** Touch: a filter pill. */
+    fun onRaHubPillTapped(index: Int) {
+        val hub = _state.value.raHub ?: return
+        if (index !in hub.pills.indices || index == hub.filter) return
+        sounds.play(UiSound.MOVE)
+        _state.update { it.copy(raHub = hub.copy(filter = index, scroll = 0)) }
+    }
+
+    /** Touch: a sidebar row focuses it; a tap on the focused row opens the friend's game. */
+    fun onRaHubRowTapped(index: Int) {
+        val hub = _state.value.raHub ?: return
+        val rows = hubSidebarRows()
+        if (index !in rows.indices) return
+        if (hub.focus == HubFocus.SIDEBAR && hub.row == index) return openFriendGame(rows[index])
+        sounds.play(UiSound.MOVE)
+        _state.update { it.copy(raHub = hub.copy(focus = HubFocus.SIDEBAR, row = index)) }
     }
 
     fun closeRaHub() {
@@ -521,7 +588,8 @@ class RaController(
                 platform = platform?.name,
                 result = achievements.cached(game),
                 artVersion = artVersion(),
-            )
+                columns = gridColumns,
+            ).settled()
             sounds.play(UiSound.ENTER)
             host.dismissMenus()
             _state.update { it.copy(achievements = view) }
@@ -570,6 +638,14 @@ class RaController(
         }
     }
 
+    /** The grid measured its columns (2b.7e: from the width). */
+    fun onAchievementsColumns(columns: Int) {
+        gridColumns = columns
+        val view = _state.value.achievements ?: return
+        val next = view.withColumns(columns)
+        if (next != view) _state.update { s -> s.copy(achievements = s.achievements?.takeIf { it.gameId == view.gameId }?.withColumns(columns)) }
+    }
+
     /** Touch: tap a badge to show its details. */
     fun onAchievementTapped(index: Int) {
         val view = _state.value.achievements ?: return
@@ -588,6 +664,12 @@ class RaController(
         private const val TELEMETRY_PEEK_MS = 250L
         private const val TELEMETRY_LOAD_MS = 450L
         private val GRID_MOVES = setOf(NavAction.LEFT, NavAction.RIGHT, NavAction.UP, NavAction.DOWN)
+        private val HUB_EDGES = setOf(NavAction.PREV_CATEGORY, NavAction.NEXT_CATEGORY)
+
+        /** The linked user's own sidebar row, once the profile was fetched. */
+        fun selfRow(p: dev.xross.launcher.profile.ProfileState): SidebarRow? = p.profile?.let {
+            SidebarRow(it.username, it.totalPoints, p.avatar, p.avatarVersion, self = true)
+        }
 
         fun failure(result: RaResult): String = when (result) {
             is RaResult.Ok -> ""

@@ -231,6 +231,9 @@ fun XmbScreen(
     onAvatarSlider: (Int, Float) -> Unit = { _, _ -> },
     onCloseAvatarStyle: () -> Unit = {},
     onCloseRaHub: () -> Unit = {},
+    onRaHubPillTap: (Int) -> Unit = {},
+    onRaHubRowTap: (Int) -> Unit = {},
+    onAchievementsColumns: (Int) -> Unit = {},
     /** No input for [ParticleRest.IDLE_AFTER_MS]: the foreground particles rest. */
     particlesIdle: Boolean = false,
     /** A UI filter (2b.4f) couldn't be built: (key, toast text), announced once per key. */
@@ -587,6 +590,9 @@ fun XmbScreen(
             loadArt = loadArt,
             loadBadge = loadBadge,
             onDismiss = onCloseRaHub,
+            friends = state.friends,
+            onPillTap = onRaHubPillTap,
+            onRowTap = onRaHubRowTap,
         )
 
         AchievementsScreen(
@@ -599,6 +605,7 @@ fun XmbScreen(
             loadBadge = loadBadge,
             onBadgeTap = onAchievementTap,
             onDismiss = onCloseAchievements,
+            onColumns = onAchievementsColumns,
         )
 
         WaveSettingsPanel(

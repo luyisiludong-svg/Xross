@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -43,6 +42,8 @@ import androidx.compose.ui.Modifier
 import dev.xross.launcher.theme.pack.FocusFrameStyle
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
@@ -60,6 +61,8 @@ import dev.xross.launcher.profile.RaAchievement
 import dev.xross.launcher.profile.RaGameProgress
 import dev.xross.launcher.profile.RaMatchKind
 import dev.xross.launcher.scrape.ArtKind
+import dev.xross.launcher.state.AchievementsGrid
+import dev.xross.launcher.state.AchievementsLayout
 import dev.xross.launcher.state.AchievementsViewState
 import java.text.NumberFormat
 
@@ -83,6 +86,8 @@ internal fun AchievementsScreen(
     loadBadge: suspend (String, Int) -> ImageBitmap?,
     onBadgeTap: (Int) -> Unit,
     onDismiss: () -> Unit,
+    /** The grid measured how many badges fit across (2b.7e). */
+    onColumns: (Int) -> Unit = {},
 ) {
     var shown by remember { mutableStateOf(view) }
     if (view != null) shown = view
@@ -129,9 +134,9 @@ internal fun AchievementsScreen(
                     is AchievementsState.Ready -> if (r.progress.achievements.isEmpty()) {
                         Message("This game has no achievements yet.", m, Modifier.weight(1f))
                     } else {
-                        BadgeGrid(v, m, pulse, loadBadge, onBadgeTap, Modifier.weight(1f))
+                        BadgeGrid(v, pulse, loadBadge, onBadgeTap, onColumns, Modifier.weight(1f))
                         Spacer(Modifier.height((m.s * 0.02f).dp()))
-                        v.focused?.let { DetailBar(it, m, loadBadge) }
+                        v.focused?.let { Banner(it, m, loadBadge) }
                     }
                 }
                 Spacer(Modifier.height((m.s * 0.015f).dp()))
@@ -175,7 +180,6 @@ private fun Header(v: AchievementsViewState, m: XmbMetrics, loadArt: suspend (St
             )
             val sub = buildList {
                 ready?.let { r ->
-                    add("${NumberFormat.getIntegerInstance().format(r.progress.earnedPoints)} of ${NumberFormat.getIntegerInstance().format(r.progress.totalPoints)} points")
                     if (r.progress.unlockedHardcore > 0) add("${r.progress.unlockedHardcore} hardcore")
                     if (r.matchedBy == RaMatchKind.TITLE) add("matched by title")
                     if (r.offline) add("offline copy")
@@ -184,15 +188,30 @@ private fun Header(v: AchievementsViewState, m: XmbMetrics, loadArt: suspend (St
             if (sub.isNotEmpty()) Text(sub.joinToString("  ·  "), style = shadowed(m.subtitleSize.sp(), color = TextDim), maxLines = 1)
         }
         Spacer(Modifier.width((m.s * 0.03f).dp()))
-        Column(horizontalAlignment = Alignment.End, modifier = Modifier.width((m.width * 0.26f).dp())) {
+        Column(horizontalAlignment = Alignment.End, modifier = Modifier.width((m.width * 0.3f).dp())) {
             val pill = ready?.progress?.consoleName?.takeIf { it.isNotBlank() } ?: v.platform
             pill?.let { Pill(it.uppercase(), (m.subtitleSize * 0.8f).sp()) }
             Spacer(Modifier.height(6.dp))
             if (ready != null) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    TrophyCount(ready.progress.unlocked, ready.progress.total, m.subtitleSize.sp())
+                // "39/151 🏆" large, the points beside it (2b.7e).
+                val n = NumberFormat.getIntegerInstance()
+                val count = "${ready.progress.unlocked}/${ready.progress.total}"
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.semantics(mergeDescendants = true) {
+                        contentDescription = "$count achievements, ${n.format(ready.progress.earnedPoints)} of ${n.format(ready.progress.totalPoints)} points"
+                    },
+                ) {
+                    Text(
+                        "${n.format(ready.progress.earnedPoints)}/${n.format(ready.progress.totalPoints)} pts",
+                        style = shadowed((m.subtitleSize * 0.85f).sp(), color = TextDim, weight = FontWeight.Bold),
+                        maxLines = 1,
+                        softWrap = false,
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    TrophyCount(ready.progress.unlocked, ready.progress.total, (m.titleSize * 1.25f).sp())
                     Spacer(Modifier.width(6.dp))
-                    Image(glyphPainter(dev.xross.launcher.model.GlyphKey.TROPHY), null, colorFilter = ColorFilter.tint(Pastel.Amber), modifier = Modifier.size((m.subtitleSize * 1.1f).dp()))
+                    Image(glyphPainter(dev.xross.launcher.model.GlyphKey.TROPHY), null, colorFilter = ColorFilter.tint(Pastel.Amber), modifier = Modifier.size((m.titleSize * 1.15f).dp()))
                 }
                 Spacer(Modifier.height(5.dp))
                 ProgressBar(ready.progress.completion, height = (m.s * 0.014f).dp().coerceAtLeast(6.dp))
@@ -204,41 +223,44 @@ private fun Header(v: AchievementsViewState, m: XmbMetrics, loadArt: suspend (St
 
 private fun percent(p: RaGameProgress): String = "${Math.round(p.completion * 100)}% complete"
 
+/**
+ * Exactly [AchievementsViewState.ROWS] rows of badges, as many across as the width takes
+ * ([AchievementsLayout]); the view's [AchievementsViewState.top] row is the first shown, so the
+ * grid scrolls a row at a time as the focus crosses its top or bottom row.
+ */
 @Composable
 private fun BadgeGrid(
     v: AchievementsViewState,
-    m: XmbMetrics,
     pulse: () -> Float,
     loadBadge: suspend (String, Int) -> ImageBitmap?,
     onBadgeTap: (Int) -> Unit,
+    onColumns: (Int) -> Unit,
     modifier: Modifier,
 ) {
     val list = v.achievements
     val grid = rememberLazyGridState()
-    // Keep the focused badge's row in view.
-    LaunchedEffect(v.index) {
-        val info = grid.layoutInfo
-        val visible = info.visibleItemsInfo
-        if (visible.isEmpty() || v.index < visible.first().index || v.index > visible.last().index) {
-            grid.animateScrollToItem((v.index - AchievementsViewState.COLUMNS).coerceAtLeast(0))
-        } else if (v.index >= visible.last().index - AchievementsViewState.COLUMNS + 1 && visible.last().index < list.lastIndex) {
-            grid.animateScrollToItem((v.index - AchievementsViewState.COLUMNS * 2).coerceAtLeast(0))
-        }
-    }
     androidx.compose.foundation.layout.BoxWithConstraints(modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
-        // Cells as large as fit two and a half rows (wide screens) or the full width (tall ones).
-        val cols = AchievementsViewState.COLUMNS
         val gap = 10.dp
-        val byWidth = (maxWidth - 12.dp - gap * (cols - 1)) / cols
-        val byHeight = (maxHeight - 16.dp - gap * 2) / 2.5f
-        val cell = minOf(byWidth, byHeight).coerceAtLeast(36.dp)
+        // Room for the focused badge's lift (12%) and bloom at the edges.
+        val pad = 10.dp
+        val (cols, cellValue) = AchievementsLayout.fit((maxWidth - pad * 2).value, (maxHeight - pad * 2).value, gap.value)
+        val cell = cellValue.dp
+        LaunchedEffect(cols) { onColumns(cols) }
+        // The state's columns lag the first measure by a frame; lay out by what fits now.
+        val top = if (v.columns == cols) v.top else v.copy(columns = cols).settled().top
+        LaunchedEffect(top, cols) {
+            if (grid.firstVisibleItemIndex != top * cols) grid.animateScrollToItem(top * cols)
+        }
         val badgePx = with(LocalDensity.current) { cell.roundToPx() }
         LazyVerticalGrid(
             columns = GridCells.Fixed(cols),
             state = grid,
             horizontalArrangement = Arrangement.spacedBy(gap),
             verticalArrangement = Arrangement.spacedBy(gap),
-            modifier = Modifier.width(cell * cols + gap * (cols - 1) + 12.dp).fillMaxHeight().padding(horizontal = 6.dp, vertical = 8.dp),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(pad),
+            modifier = Modifier
+                .width(cell * cols + gap * (cols - 1) + pad * 2)
+                .height(cell * AchievementsViewState.ROWS + gap * (AchievementsViewState.ROWS - 1) + pad * 2),
         ) {
             itemsIndexed(list, key = { _, a -> a.id }) { i, a ->
                 BadgeCell(a, focused = i == v.index, pulse = pulse, px = badgePx, loadBadge = loadBadge, onTap = { onBadgeTap(i) })
@@ -320,22 +342,35 @@ private fun BadgeCell(
     }
 }
 
+/**
+ * The focused badge's details as a glossy banner (2b.7e): the pack's surface with a sheen over its
+ * top half, the badge, title and description, then the points, hardcore or softcore and the
+ * unlock date, or "Locked".
+ */
 @Composable
-private fun DetailBar(a: RaAchievement, m: XmbMetrics, loadBadge: suspend (String, Int) -> ImageBitmap?) {
+private fun Banner(a: RaAchievement, m: XmbMetrics, loadBadge: suspend (String, Int) -> ImageBitmap?) {
     val density = LocalDensity.current
     fun Float.dp() = with(density) { this@dp.toDp() }
     fun Float.sp() = with(density) { this@sp.toSp() }
     val px = (m.s * 0.12f).toInt()
     val image by produceState<ImageBitmap?>(null, a.badgeName, px) { value = loadBadge(a.badgeName, px) }
-    val shape = RoundedCornerShape(16.dp)
+    val shape = RoundedCornerShape(18.dp)
+    val status = AchievementsGrid.status(a)
+    val date = a.unlockDate?.let { GameDateFormat.short(it) }
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .clip(shape)
-            .background(Brush.verticalGradient(listOf(Color(0x40FFFFFF), Color(0x1AFFFFFF))))
-            .border(1.dp, Color(0x40FFFFFF), shape)
-            .padding(12.dp),
+            .semantics(mergeDescendants = true) {
+                contentDescription = listOfNotNull(a.title, a.description.ifBlank { null }, "${a.points} points", status, date).joinToString(", ")
+            }
+            .xrossSurface(shape, borderAlpha = 0.7f)
+            .drawBehind {
+                // Over the surface, under the text. The gloss: a soft white sheen fading out across the top half, and a bright rim line.
+                drawRect(Brush.verticalGradient(0f to Color.White.copy(alpha = 0.2f), 0.5f to Color.White.copy(alpha = 0.04f), 0.5001f to Color.Transparent), size = size)
+                drawLine(Color.White.copy(alpha = 0.45f), androidx.compose.ui.geometry.Offset(size.height * 0.4f, 1.5f), androidx.compose.ui.geometry.Offset(size.width - size.height * 0.4f, 1.5f), strokeWidth = 1.5f)
+            }
+            .padding(horizontal = 16.dp, vertical = 12.dp),
     ) {
         BadgeThumb(image, a.unlocked, (m.s * 0.12f).dp())
         Spacer(Modifier.width(14.dp))
@@ -345,15 +380,15 @@ private fun DetailBar(a: RaAchievement, m: XmbMetrics, loadBadge: suspend (Strin
         }
         Spacer(Modifier.width(14.dp))
         Column(horizontalAlignment = Alignment.End) {
-            Pill("${a.points} PTS", (m.subtitleSize * 0.85f).sp())
+            Pill("${a.points} PTS", (m.subtitleSize * 0.85f).sp(), color = Pastel.Amber)
             Spacer(Modifier.height(6.dp))
-            val (label, color) = when {
-                a.hardcore -> "HARDCORE" to Pastel.Amber
-                a.unlocked -> "SOFTCORE" to Pastel.Sky
-                else -> "LOCKED" to Color(0xB3FFFFFF)
+            val color = when {
+                a.hardcore -> Pastel.Amber
+                a.unlocked -> Pastel.Sky
+                else -> Color(0xB3FFFFFF)
             }
-            Text(label, style = shadowed((m.subtitleSize * 0.9f).sp(), color = color, weight = FontWeight.Bold))
-            a.unlockDate?.let { Text(GameDateFormat.short(it), style = shadowed((m.subtitleSize * 0.8f).sp(), color = TextDim)) }
+            Text(status, style = shadowed((m.subtitleSize * 0.9f).sp(), color = color, weight = FontWeight.Bold))
+            date?.let { Text(it, style = shadowed((m.subtitleSize * 0.8f).sp(), color = TextDim)) }
         }
     }
 }

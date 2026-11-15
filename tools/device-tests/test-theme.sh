@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Theme suite (281 checks): Settings ▸ Theme and its folders (theme color, wave and avatar panels,
+# Theme suite (312 checks): Settings ▸ Theme and its folders (theme color, wave and avatar panels,
 # platform folders, surface style, the 2b.4f effect rows, Pick custom wallpaper, Reset to theme
 # defaults), quick profiles (OLED, Y2K, E-Ink), color layers (adaptive colors,
 # circadian curve, battery tint and charging pulse through `dumpsys battery`), the Sound section,
@@ -15,7 +15,9 @@
 # a status-bar ticker and off, each button-glyph set in the hints, Search and the HUD, and title
 # badges on a scraped game, an unscraped one and an app; 2b.7c: the social stack's collapse cases,
 # its cached friends and badge offline, the panel by keys and touch; 2b.7d: the achievement badge
-# off, compact and as the rich card, offline without its friend strip, online with it).
+# off, compact and as the rich card, offline without its friend strip, online with it), and the
+# RetroAchievements hub (2b.7e: the Achievements header, three rows of badges on all 12 display-matrix
+# configurations, the banner; the L1/R1 platform filter, the FOLLOWING sidebar and Confirm on a friend).
 #
 #   tools/device-tests/test-theme.sh
 #
@@ -25,7 +27,7 @@
 # The battery override is always reset at exit, even after Ctrl-C.
 set -u
 . "$(dirname "$0")/lib/harness.sh"
-suite_begin theme 281
+suite_begin theme 312
 
 setup_base_env
 setup_theme_fixtures
@@ -1409,6 +1411,208 @@ if command -v sqlite3 >/dev/null && adb shell run-as "$PKG" true 2>/dev/null; th
   await_flat '"telemetryMode":null' && ok "Theme pack hands the badge back (null)" || bad "telemetryMode not reset"
 else
   skip 22 "the telemetry checks need sqlite3 on the host and a debuggable build"
+fi
+
+section "RetroAchievements hub (2b.7e)"
+# Options ▸ Achievements: the "30 / 120" header with its points, exactly three rows of badges (the
+# columns from the width, on every display-matrix configuration), scrolling a row at a time, the
+# glossy banner ("…, SOFTCORE, <date>" or "Locked"). Games ▸ RetroAchievements: L1/R1 filter pills
+# (All, SNES, GBA), the FOLLOWING sidebar by points with the user's own row, Confirm on a friend's
+# game. All offline with the fake account: Chrono Trigger (SNES, game 228) has 120 achievements
+# saved, 30 unlocked; Golden Sun (GBA, game 515) 6 of 6.
+seed_hub() { # saved progress for Chrono Trigger and Golden Sun, every badge on disk
+  local db d
+  db=$(tmpdir db-hub); d=$(tmpdir ra-hub)
+  for f in xross.db xross.db-wal xross.db-shm; do adb exec-out run-as "$PKG" cat "databases/$f" > "$db/$f" 2>/dev/null; done
+  [ -s "$db/xross.db-wal" ] || rm -f "$db/xross.db-wal" "$db/xross.db-shm"
+  sqlite3 -separator ' ' "$db/xross.db" "SELECT fileName, uuid, sizeBytes, lastModified FROM games WHERE fileName LIKE 'Chrono Trigger%' OR fileName LIKE 'Golden Sun%'" > "$d/games.txt"
+  [ "$(wc -l < "$d/games.txt")" -eq 2 ] || return 1
+  python3 - "$d" <<'PY'
+import json, os, struct, sys, zlib
+d = sys.argv[1]
+matches = {}
+for line in open(os.path.join(d, "games.txt")):
+    name, uuid, size, mod = line.rsplit(" ", 3)
+    ra = 228 if name.startswith("Chrono") else 515
+    matches[uuid] = {"raId": ra, "kind": "HASH", "size": int(size), "modified": int(mod), "listVersion": 2}
+json.dump(matches, open(os.path.join(d, "matches.json"), "w"))
+def game(ra, title, console, n, unlocked):
+    ach = []
+    for i in range(1, n + 1):
+        a = {"id": ra * 1000 + i, "title": "Hub %d-%d" % (ra, i), "description": "Smoke achievement %d" % i, "points": 5,
+             "badgeName": "8%03d%03d" % (ra % 1000, i), "displayOrder": i}
+        if i <= unlocked:
+            a["unlockedAt"] = "2026-11-%02d 10:%02d:00" % (1 + i % 28, i % 60)
+            if i % 3 == 0: a["unlockedHardcoreAt"] = a["unlockedAt"]
+        ach.append(a)
+    json.dump({"gameId": ra, "title": title, "consoleName": console, "achievements": ach}, open(os.path.join(d, "game-%d.json" % ra), "w"))
+    return [a["badgeName"] for a in ach]
+names = game(228, "Chrono Trigger", "SNES", 120, 30) + game(515, "Golden Sun", "Game Boy Advance", 6, 6)
+def png(path, rgb):  # a 16 × 16 solid square
+    raw = b"".join(b"\0" + bytes(rgb) * 16 for _ in range(16))
+    chunk = lambda t, b: struct.pack(">I", len(b)) + t + b + struct.pack(">I", zlib.crc32(t + b) & 0xFFFFFFFF)
+    open(path, "wb").write(b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", 16, 16, 8, 2, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b""))
+os.makedirs(os.path.join(d, "badges"), exist_ok=True)
+for i, n in enumerate(names): png(os.path.join(d, "badges", n + ".png"), (40 + i % 200, 220 - i % 200, 120))
+PY
+  adb shell mkdir -p /sdcard/Xross/data/ra /sdcard/Xross/media/ra
+  adb shell rm -rf /sdcard/Xross/media/ra/badges
+  adb push "$d/matches.json" "$d/game-228.json" "$d/game-515.json" /sdcard/Xross/data/ra/ >/dev/null
+  adb push "$d/badges" /sdcard/Xross/media/ra/ >/dev/null
+}
+# Alice (900 points) and Bob (50) last played Chrono Trigger and Golden Sun, Erin (300) a game
+# not in the library; the user (SmokeUser) has 100. Fetched just now: nothing is stale.
+seed_hub_friends() {
+  local d now act=""; d=$(tmpdir ra-hub-friends); now=$(now_ms)
+  for f in "Alice 01ALICE 900 228 Chrono_Trigger" "Bob 01BOB 50 515 Golden_Sun" "Erin 01ERIN 300 77 Sonic_Spinball"; do
+    read -r u id pts g t <<<"$f"
+    act="$act${act:+,}\"$id\":{\"user\":\"$u\",\"ulid\":\"$id\",\"points\":$pts,\"gameId\":$g,\"gameTitle\":\"${t//_/ }\",\"lastPlayed\":\"2026-11-14 10:00:00\",\"lastSeen\":\"2026-11-14 10:00:00\",\"fetchedAtMs\":$now}"
+  done
+  printf '{"version":1,"owner":"SmokeUser","followingFetchedAtMs":%s,"following":[%s],"total":3,"activity":{%s},"seen":{},"stackOpenedAtMs":%s}' \
+    "$now" '{"user":"Alice","ulid":"01ALICE","points":900},{"user":"Bob","ulid":"01BOB","points":50},{"user":"Erin","ulid":"01ERIN","points":300}' "$act" "$now" > "$d/friends.json"
+  adb push "$d/friends.json" /sdcard/Xross/data/ra/friends.json >/dev/null
+}
+# Badge cells on screen: "<title> <left> <top> <right> <bottom>", one per drawn badge (its image's content-desc).
+badge_cells() {
+  xml | grep -oE 'content-desc="Hub [0-9]+-[0-9]+"[^>]*bounds="\[[0-9]+,[0-9]+\]\[[0-9]+,[0-9]+\]"' \
+    | sed -E 's/content-desc="([^"]*)".*bounds="\[([0-9]+),([0-9]+)\]\[([0-9]+),([0-9]+)\]"/\1 \2 \3 \4 \5/' | tr -d '\r'
+}
+# Each cell with its row number: rows by the cells' centres (the focused badge is lifted, scaled 12%
+# about its centre, so its top differs), a new row where the centres jump by more than 8 px.
+badge_rows() {
+  badge_cells | awk '{print ($4 + $6) / 2, $3, $1, $2}' | sort -k1,1n -k2,2n \
+    | awk 'NR == 1 || $1 - last > 8 { row++ } { last = $1; print row, $2, $3, $4 }' | sort -k1,1n -k2,2n
+}
+grid_rows() { badge_rows | awk '{print $1}' | sort -un | wc -l | tr -d ' '; }
+grid_cols() { badge_rows | awk '{print $1}' | uniq -c | sort -rn | head -1 | awk '{print $1}'; }
+first_badge() { badge_rows | head -1 | awk '{print $3, $4}'; }
+screen_size() { xml | grep -oE 'bounds="\[0,0\]\[[0-9]+,[0-9]+\]"' | head -1 | grep -oE '[0-9]+,[0-9]+\]"$' | tr -d ']"' | tr ',' ' '; }
+banner_desc() { descs | grep -oE 'content-desc="Hub [^"]*, [0-9]+ points, [^"]*"' | head -1 | sed 's/content-desc="//; s/"$//'; }
+await_grid() { for _ in $(seq 12); do [ "$(grid_rows)" -gt 0 ] && return 0; pause 0.5; done; return 1; }
+game_row() { # game_row <system folder index in All Games> <row>: cursor on that game
+  home; all_games "$(collections_above)"; [ "$1" -gt 0 ] && press DPAD_DOWN "$1"; key KEYCODE_DPAD_CENTER; [ "$2" -gt 0 ] && press DPAD_DOWN "$2"; pause 0.5
+}
+open_achievements() { key KEYCODE_BUTTON_Y; press DPAD_DOWN 2 KEYCODE_DPAD_CENTER; await_grid; }
+open_hub() { home; press DPAD_DOWN 6 KEYCODE_DPAD_CENTER; pause 1.5; }
+pill_selected() { descs | grep -o 'Platform filter: [^",]*, selected' | sed 's/Platform filter: //; s/, selected//'; }
+sidebar_order() { xml | grep -oE 'content-desc="[A-Za-z]+( \(you\))?, [0-9,]+ points' | sed -E 's/content-desc="//; s/ \(you\)//; s/, [0-9,]+ points//' | tr '\n' ' ' | sed 's/ $//'; }
+
+if command -v sqlite3 >/dev/null && adb shell run-as "$PKG" true 2>/dev/null; then
+  adb shell am force-stop "$PKG"
+  adb shell cmd connectivity airplane-mode enable
+  link_fake_account
+  start_app
+  if seed_hub; then
+    seed_hub_friends
+    adb shell am force-stop "$PKG"
+    adb logcat -c
+    start_app
+    # SNES is the first system in All Games, Chrono Trigger its first game; GBA the second, Golden Sun its only one.
+    game_row 0 0
+    open_achievements
+    expect_line "30 / 120" "the header counts 30 / 120"
+    expect_line "150/600 pts" "the points sit beside the count"
+    rows=$(grid_rows); cols=$(grid_cols)
+    [ "$rows" = 3 ] && ok "the grid shows exactly three rows ($cols across)" || { bad "grid rows: $rows"; show "$(badge_cells)"; }
+    [ "$cols" -ge 4 ] && [ "$(badge_cells | wc -l | tr -d ' ')" -eq $((cols * 3)) ] && ok "three full rows of $cols badges" || bad "cells: $(badge_cells | wc -l) for $cols columns"
+    b=$(banner_desc)
+    grep -qE '^Hub 228-[0-9]+, Smoke achievement [0-9]+, 5 points, (SOFTCORE|HARDCORE), ' <<<"$b" && ok "the banner reads title, description, points, mode and date ($b)" || bad "banner: '$b'"
+    shot hub-achievements
+    before=$(first_badge)
+    press DPAD_DOWN 2
+    [ "$(first_badge)" = "$before" ] && ok "Down within the three rows doesn't scroll" || bad "scrolled early: '$(first_badge)' vs '$before'"
+    key KEYCODE_DPAD_DOWN; pause 0.6
+    after=$(first_badge)
+    [ "$after" != "$before" ] && [ "$(grid_rows)" = 3 ] && ok "crossing the bottom row scrolls one row, still three ($before → $after)" || bad "no row scroll: '$after'"
+    press BUTTON_R1 12; pause 0.8
+    b=$(banner_desc)
+    grep -qE ', 5 points, Locked$' <<<"$b" && ok "a locked badge's banner says Locked" || bad "locked banner: '$b'"
+    [ "$(grid_rows)" = 3 ] && ok "at the last row the grid still shows three rows" || bad "last rows: $(grid_rows)"
+    key KEYCODE_BACK
+    game_row 1 0
+    open_achievements
+    [ "$(grid_rows)" = 1 ] && [ "$(badge_cells | wc -l | tr -d ' ')" = 6 ] && ok "Golden Sun's six badges fit one row" || { bad "Golden Sun grid: $(grid_rows) rows"; show "$(badge_cells)"; }
+    expect_line "6 / 6" "Golden Sun counts 6 / 6"
+    key KEYCODE_BACK
+
+    # Three rows on every display-matrix configuration (sizes and densities from display-matrix.sh).
+    game_row 0 0
+    open_achievements
+    fails=""
+    while read -r name size dpi; do
+      [ -n "$name" ] || continue
+      adb shell wm size "$size" </dev/null; adb shell wm density "$dpi" </dev/null; pause 2.5 </dev/null
+      r=$(grid_rows </dev/null); c=$(grid_cols </dev/null)
+      read -r w h <<<"$(screen_size </dev/null)"
+      clipped=$(badge_cells </dev/null | awk -v W="$w" -v H="$h" '$3 < 0 || $4 < 0 || $5 > W || $6 > H' | wc -l | tr -d ' ')
+      [ "$r" = 3 ] && [ "$clipped" = 0 ] || fails="$fails $name($r rows, $c cols, $clipped clipped)"
+      echo "       $name ($w × $h): $r rows × $c"
+    done <<'CFG'
+4:3-retro 640x480 160
+4:3 1024x768 240
+5:3 800x480 160
+1:1 720x720 240
+3:2 1080x720 240
+16:9-small 1334x750 280
+16:9-FHD 1920x1080 320
+16:10 2560x1600 320
+20:9-phone 2400x1080 420
+21:9 2560x1080 400
+4K-TV 3840x2160 640
+portrait-phone 1080x2400 420
+CFG
+    adb shell wm size reset; adb shell wm density reset; pause 2
+    [ -z "$fails" ] && ok "three rows, none clipped, on all 12 display-matrix configurations" || bad "display matrix:$fails"
+    key KEYCODE_BACK
+
+    # The hub: L1/R1 move the platform filter, clamped; the sidebar by points.
+    open_hub
+    expect "FOLLOWING" "the hub shows the FOLLOWING sidebar"
+    [ "$(sidebar_order)" = "Alice Erin SmokeUser Bob" ] && ok "followed users by points, the user's own row in place" || bad "sidebar order: '$(sidebar_order)'"
+    [ "$(pill_selected)" = "All" ] && ok "the filter starts on All" || bad "filter: '$(pill_selected)'"
+    expect "180 of 630 points" "All counts both games"
+    key KEYCODE_BUTTON_L1
+    [ "$(pill_selected)" = "All" ] && ok "L1 at All stays (clamped)" || bad "L1 moved: '$(pill_selected)'"
+    key KEYCODE_BUTTON_R1
+    [ "$(pill_selected)" = "SNES" ] && ok "R1 selects SNES" || bad "R1: '$(pill_selected)'"
+    expect "150 of 600 points" "SNES counts Chrono Trigger only"
+    key KEYCODE_BUTTON_R1
+    [ "$(pill_selected)" = "GBA" ] && ok "R1 selects GBA" || bad "R1: '$(pill_selected)'"
+    expect "30 of 30 points" "GBA counts Golden Sun only"
+    expect "Golden Sun" "GBA's mastery showcase has Golden Sun"
+    key KEYCODE_BUTTON_R1
+    [ "$(pill_selected)" = "GBA" ] && ok "R1 at the last system stays (clamped)" || bad "R1 past the end: '$(pill_selected)'"
+    shot hub-filter
+    # Into the sidebar: Alice (Chrono Trigger, in the library), Erin (not), Bob (Golden Sun).
+    key KEYCODE_DPAD_RIGHT
+    expect "Open game" "Right moves into the sidebar"
+    key KEYCODE_DPAD_DOWN KEYCODE_DPAD_CENTER
+    expect "Sonic Spinball isn't in your library" "Confirm on a game the library hasn't says so"
+    key KEYCODE_DPAD_LEFT
+    expect "Following" "Left goes back to the dashboard"
+    key KEYCODE_DPAD_RIGHT KEYCODE_DPAD_UP KEYCODE_DPAD_CENTER
+    pause 1
+    expect_not "FOLLOWING" "Confirm on Alice closes the hub"
+    expect "Chrono Trigger" "the menu lands on Chrono Trigger in the SNES list"
+    [ "$(ra_log)" = "" ] && ok "the hub fetched no friends (nothing stale)" || bad "friends fetched: $(ra_log)"
+    # The cache deleted: the sidebar collapses.
+    adb shell am force-stop "$PKG"
+    adb shell rm -f /sdcard/Xross/data/ra/friends.json
+    start_app
+    open_hub
+    expect_not "FOLLOWING" "offline without a cache, the sidebar collapses"
+    expect_no_line "Following" "…and the hints drop its Right"
+    key KEYCODE_BACK
+  else
+    bad "no Chrono Trigger and Golden Sun in the library to seed"
+  fi
+  adb shell am force-stop "$PKG"
+  unlink_fake_account
+  adb shell rm -rf /sdcard/Xross/data/ra/friends.json /sdcard/Xross/data/ra/matches.json /sdcard/Xross/data/ra/game-228.json /sdcard/Xross/data/ra/game-515.json /sdcard/Xross/media/ra/badges
+  adb shell cmd connectivity airplane-mode disable
+  start_app
+else
+  skip 27 "the hub checks need sqlite3 on the host and a debuggable build"
 fi
 
 suite_end

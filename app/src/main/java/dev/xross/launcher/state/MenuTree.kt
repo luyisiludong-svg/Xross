@@ -206,6 +206,26 @@ class MenuTree(private val s: MenuSnapshot) {
         else -> emptyList()
     }
 
+    /**
+     * The Games stack that ends with the cursor on [gameId] in its system's list: the root (on
+     * the system's folder, or on All Games when that folder is on), All Games, then the system.
+     * Null when the game isn't listed (hidden, removed). For the hub sidebar's Confirm (2b.7e).
+     */
+    fun pathToGame(gameId: Long, platformId: String, rootTitle: String): List<Frame>? {
+        val key = PLATFORM_PREFIX + platformId
+        val index = list(key).indexOfFirst { (it.action as? NodeAction.LaunchGame)?.gameId == gameId }
+        if (index < 0) return null
+        val rootKey = Categories.rootKey(Categories.GAMES)
+        val root = list(rootKey)
+        val title = PlatformRegistry.byId(platformId)?.name ?: platformId
+        val direct = root.indexOfFirst { it.id == key }
+        if (direct >= 0) return listOf(Frame(rootKey, rootTitle, direct), Frame(key, title, index))
+        val all = root.indexOfFirst { it.id == ALL_GAMES }
+        val inAll = list(ALL_GAMES).indexOfFirst { it.id == key }
+        if (all < 0 || inAll < 0) return null
+        return listOf(Frame(rootKey, rootTitle, all), Frame(ALL_GAMES, "All Games", inAll), Frame(key, title, index))
+    }
+
     /** Rows for search results: the same game rows (action, Options menu) as the library lists. */
     fun gameNodes(games: List<GameEntity>): List<XmbNode> = games.map { gameNode(it, showPlatform = true) }
 
