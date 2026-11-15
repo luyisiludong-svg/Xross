@@ -944,6 +944,7 @@ class MenuTree(private val s: MenuSnapshot) {
         folder(DISPLAY_EFFECTS, "Effects", GlyphKey.DISPLAY, profiled(ProfileField.SURFACE, surfaceSummary())),
         folder(DISPLAY_INTRO, "Intro and transitions", GlyphKey.DISPLAY, introSummary()),
         folder(DISPLAY_COMPONENTS, "Components", GlyphKey.DISPLAY, componentsSummary()),
+        layoutRow(),
         folder(DISPLAY_MENU, "Menu and profile", GlyphKey.USERS, "Profile customization, button hints, platform folders"),
         resetThemeRow(),
         setting(
@@ -1199,6 +1200,13 @@ class MenuTree(private val s: MenuSnapshot) {
     private fun effectShown(slot: dev.xross.launcher.theme.pack.EffectSlot): String {
         val own = s.settings.effectOverrides[slot]
         return if (own.isEmpty()) slot.packLabel(s.themes.packLook(s.settings.themeVariant), s.themes.packBootVideo) else slot.label(own)
+    }
+
+    /** Settings ▸ Theme ▸ Layout (2b.8a): opens the panel; the subtitle lists what the user set over the pack. */
+    private fun layoutRow(): XmbNode {
+        val own = LayoutEditor.summary(s.settings.layoutOverrides)
+        val summary = own.ifEmpty { "From ${s.themes.activeName} · Crosshair, UI scale, list spacing, focused scale" }
+        return setting("disp:layout", "Layout", summary, GlyphKey.DISPLAY, Command.OpenLayoutSettings)
     }
 
     /** Reset to theme defaults: what it would clear, or that nothing is overridden. */

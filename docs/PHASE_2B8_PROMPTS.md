@@ -44,7 +44,7 @@ singletons, imaging, modules) still waits: none of it blocks 2b.8.
 | Slice | State |
 |---|---|
 | 2b.8-prep | ✅ on `refactor/2b8-prep` (2026-11-15): 872 unit tests (852 + 20), `lintDebug` 0 errors, `XmbViewModel` 2,647 → 2,331 lines; theme suite **311/312** on the API 37 emulator, the same as `main` (the one fail is 2b.4f's wallpaper toast missed by the screen dump; the wallpaper was saved, drawn and kept across a restart); `palette-perf.sh 3` 0.15–0.71% janky against 0.29–1.50% on `main` (inside the noise and the gate). As built: [2b.8-prep notes](#as-built-2b8-prep-2026-11-15) |
-| 2b.8a | ⬜ |
+| 2b.8a | ✅ on `feat/theme-2b8` (2026-11-15): 886 unit tests (872 + 14), `lintDebug` 0 errors; theme suite **348/351** on the API 37 emulator, all 39 new checks passing (new 39-check "Layout mixer (2b.8a)" section); `display-matrix.sh` 12/12 with both extremes; `palette-perf.sh 3` 0.29–0.45% janky with a non-default layout against 0.44–0.75% without. **Open:** the A55 (a held D-pad on UI scale). As built: [2b.8a notes](#as-built-2b8a-2026-11-15) |
 | 2b.8b | ⬜ |
 | 2b.8c | ⬜ |
 
@@ -228,6 +228,62 @@ Decisions made while building:
   stays within the 0–1.5% janky gate (profiling build).
 - On the A55 at 120 Hz: the same, plus Reset to theme defaults clears the layout.
 ```
+
+### As built (2b.8a, 2026-11-15)
+
+| Piece | Where |
+|---|---|
+| `LayoutOverrides` (`preset`, `uiScale`, `itemSpacingDp`, `focusedScale`; `normalized`, `applyTo`, `count`) and `LenientLayoutOverrides` (drops a value of the wrong type before decoding) | `theme/pack/Layout.kt` |
+| `display.layout` ↔ `XrossSettings.layoutOverrides` | `config/ConfigFiles.kt`, `data/SettingsStore.kt` |
+| `UserLook.layout`: Reset, its summary ("Clears 2 layout values, 1 effect") and 2b.8b's export read it | `theme/pack/UserLook.kt` |
+| Cascade: `profile.layout(user.layout.applyTo(look.layout ?: pack.layout))` | `theme/ThemeLookResolver.kt` |
+| `LayoutEditor` (rows, steps, values, sliders, the row's summary), pure | `state/LayoutEditor.kt` |
+| `Command.OpenLayoutSettings`, the panel's state (`layoutEditor`) and input in `ThemeController`; `XmbViewModel` forwards | `state/ThemeController.kt`, `state/XmbViewModel.kt` |
+| Settings ▸ Theme ▸ **Layout** (after Components) | `state/MenuTree.kt` `layoutRow()` |
+| `LayoutSettingsPanel` (100% UI scale, bottom-right, no fade); `animatedLayout` springs the crosshair, spacing and focused scale | `ui/LayoutSettingsPanel.kt`, `ui/XmbScreen.kt` |
+| Device: "Layout mixer (2b.8a)" (39 checks) in the theme suite; `display-matrix.sh … layout-min` / `layout-max`; `PERF_LAYOUT` for `palette-perf.sh`; `layout-perf.sh` | `tools/device-tests/` |
+
+Device checks (2026-11-15, API 37 emulator with `-gpu host`, 2400×1080):
+
+| Check | Result |
+|---|---|
+| Theme suite | **348/351**: the new section 39/39 (the menu moved to each preset, grew at 110%, shrank at 50%, re-spaced for Spacious and Tight, stayed undimmed). The fails: 2b.4f's wallpaper toast missed by the dump (as on `main`), and two 2b.7a volume checks that ran with the emulator's music volume already at 0, so Volume Down changed nothing; by hand with the volume up, the step (`volume=2#2`) and the muted glyph (`volume=0#9`) both showed. The first run (342/351) found the tap-outside layer hiding the menu from the accessibility tree |
+| `display-matrix.sh layout-min` (Modern widescreen, 50%) and `layout-max` (PSP centre, 150%) | **12/12 each**: 0 clipped texts, 0 status-bar collisions, a whole neighbour category on each side; janky 0–1.20% |
+| `palette-perf.sh 3`, janky (on / off pairs) | pack's layout 0.75 / 0.44, 0.44 / 0.59, 0.59 / 0.44%; `PERF_LAYOUT` (PSP centre, 130%, 20 dp, 1.10×) 0.29 / 0.45, 0.30 / 0.44, 0.30 / 0.44% |
+| `layout-perf.sh 3`: 21 presses each, janky | list 2.94, 2.27, 3.03%; UI scale 2.78, 1.17, 0.56%; crosshair + spacing 0.94, 2.44, 1.41% |
+
+Decisions made while building:
+
+- **The defaults above were kept:** the four rows, presets only (no custom crosshair), the panel
+  at 100% UI scale.
+- **"Theme pack" is each row's left end.** Right from it steps up from the pack's own value (100%
+  → 110%), Left past the smallest value (50%, Tight, 1.00×, Classic PS3) goes back to it, and both
+  ends hold, so a held key stops instead of wrapping. Confirm on a value row puts that row back to
+  the pack; Confirm on Reset layout clears the panel. A hand-edited value off the grid (`1.23`)
+  steps to the next one.
+- **The UI scale snaps; the crosshair, spacing and focused scale spring** with the motion profile
+  (a snap under INSTANT). Springing the UI scale too laid every text on screen out again at a new
+  size each frame: 2.9–3.1% janky (13% on a cold first round) against 1.4–2.3% for the same presses
+  on the list. Snapped, it is 0.6–2.8% against 2.2–3.1% over two runs. Any layout change springs this way,
+  including a rule's (battery, clock) and a pack switch.
+- **No tap-outside clickable layer.** A clickable node over the whole screen hides everything under
+  it from the accessibility tree, the menu included; the panel closes on a plain tap gesture
+  instead, and screen readers (and the suite) still read the menu behind it.
+- **The menu's button hints hide while the panel is open** (it sits in their corner with its own),
+  and so does the mini player. The panel reads the pack's layout for "Theme pack · …" from the
+  pack's base, not the open category's rules.
+- **A held key can't be measured on this emulator.** It isn't rooted (`sendevent` refused), the
+  console's `event send` doesn't reach the virtio keyboard, and `input keyevent --duration` gives
+  one or two repeats. `layout-perf.sh` sends presses back to back from one shell instead (one every
+  ~150–250 ms) and measures the list with the same presses; both sit around the 1.5% gate because
+  every `input` process costs frames, and the layout rows are no worse than the list. The real
+  held-key gate is for the A55 with a gamepad.
+- **Order of Reset's summary:** layout values come first ("Clears 2 layout values, 1 effect").
+- **Branch:** `feat/theme-2b8` was cut from `refactor/2b8-prep` (not yet merged into `main`), so
+  merging the prep branch first leaves only 2b.8a's commits on it.
+
+Open: the A55 at 120 Hz (a held D-pad on UI scale through a gamepad, and Reset to theme defaults
+clearing the layout).
 
 ---
 

@@ -220,6 +220,9 @@ fun XmbScreen(
     onWaveRowTap: (Int) -> Unit = {},
     onWaveSlider: (Int, Float) -> Unit = { _, _ -> },
     onCloseWaveSettings: () -> Unit = {},
+    onLayoutRowTap: (Int) -> Unit = {},
+    onLayoutSlider: (Int, Float) -> Unit = { _, _ -> },
+    onCloseLayoutSettings: () -> Unit = {},
     onAchievementTap: (Int) -> Unit = {},
     onCloseAchievements: () -> Unit = {},
     onDetailsAchievements: () -> Unit = {},
@@ -245,8 +248,10 @@ fun XmbScreen(
 ) {
     val palette = rememberActivePalette(state.theme, (LocalThemeLook.current ?: LocalThemePack.current?.look())?.palette)
     // The pack's layout with the context rules that hold and the quick profile's motion (MainActivity).
-    val layout = LocalThemeLayout.current ?: LocalThemePack.current?.layout ?: ThemeLayout.DEFAULT
-    val motion = layout.motion
+    val targetLayout = LocalThemeLayout.current ?: LocalThemePack.current?.layout ?: ThemeLayout.DEFAULT
+    val motion = targetLayout.motion
+    // A new crosshair, spacing or focus (the Layout panel, 2b.8a, or a rule) springs there.
+    val layout = animatedLayout(targetLayout, motion)
 
     // Slow "breathing" glow shared by everything that is focused. It settles and holds still while
     // the screen rests (LocalUiIdle), so an untouched home screen draws no frames for it. Only the
@@ -366,7 +371,7 @@ fun XmbScreen(
             state.details != null || state.optionsMenu != null || state.info != null ||
             state.profileCard != null || state.remap != null || state.booting != null ||
             state.waveEditor != null || state.achievements != null ||
-            state.avatarEditor != null || state.raHub != null
+            state.avatarEditor != null || state.raHub != null || state.layoutEditor != null
 
         Box(Modifier.fillMaxSize().graphicsLayer { alpha = menuAlpha }) {
         CategoryBar(
@@ -463,7 +468,8 @@ fun XmbScreen(
                 .onSizeChanged { hintsHeightPx = it.height },
         ) {
             BusyIndicator(busy = state.busy, size = (m.subtitleSize * 1.5f).dp())
-            if (state.showButtonHints) ButtonHints(state, m.subtitleSize.sp(), Modifier)
+            // The Layout panel sits in this corner with its own hints.
+            if (state.showButtonHints && state.layoutEditor == null) ButtonHints(state, m.subtitleSize.sp(), Modifier)
         }
         }
 
@@ -621,6 +627,20 @@ fun XmbScreen(
             onDismiss = onCloseWaveSettings,
         )
 
+        LayoutSettingsPanel(
+            editor = state.layoutEditor,
+            user = state.settings.layoutOverrides,
+            pack = LocalThemePack.current?.layout ?: ThemeLayout.DEFAULT,
+            // At 100% UI scale, so the panel holds still while the menu behind it scales.
+            m = remember(m.width, m.height) { XmbMetrics(m.width, m.height) },
+            pulse = { pulse },
+            confirmGlyph = if (state.confirm == ConfirmLayout.EAST) state.glyphs.east else state.glyphs.south,
+            backGlyph = if (state.confirm == ConfirmLayout.EAST) state.glyphs.south else state.glyphs.east,
+            onRowTap = onLayoutRowTap,
+            onSlider = onLayoutSlider,
+            onDismiss = onCloseLayoutSettings,
+        )
+
         AvatarStylePanel(
             editor = state.avatarEditor,
             style = state.settings.avatarStyle,
@@ -665,6 +685,23 @@ fun XmbScreen(
             )
         }
     }
+}
+
+/**
+ * [target] with its crosshair, row spacing and focused scale springing to new values with
+ * [motion] (a snap under INSTANT); everything else as [target]. At rest it is [target] itself.
+ * The UI scale snaps: springing it would lay every text on screen out again at a new size each
+ * frame, which drops frames while a key is held on the Layout panel's UI scale row.
+ */
+@Composable
+private fun animatedLayout(target: ThemeLayout, motion: Motion): ThemeLayout {
+    val spec = motion.nav<Float>()
+    val x by animateFloatAsState(target.crosshairX, spec, label = "crosshairX")
+    val y by animateFloatAsState(target.crosshairY, spec, label = "crosshairY")
+    val spacing by animateFloatAsState(target.itemSpacingDp, spec, label = "itemSpacing")
+    val focus by animateFloatAsState(target.focusedScale, spec, label = "focusedScale")
+    val settled = x == target.crosshairX && y == target.crosshairY && spacing == target.itemSpacingDp && focus == target.focusedScale
+    return if (settled) target else target.copy(crosshairX = x, crosshairY = y, itemSpacingDp = spacing, focusedScale = focus)
 }
 
 // region Category bar

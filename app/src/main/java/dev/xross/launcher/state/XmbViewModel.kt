@@ -134,6 +134,8 @@ data class XmbUiState(
     val settings: dev.xross.launcher.data.XrossSettings = dev.xross.launcher.data.XrossSettings(),
     /** Settings ▸ Theme ▸ Wave settings while it is open. */
     val waveEditor: WaveEditorState? = null,
+    /** Settings ▸ Theme ▸ Layout while it is open (2b.8a); the menu stays in full view behind it. */
+    val layoutEditor: LayoutEditorState? = null,
     /** A game's Achievements screen while it is open. */
     val achievements: AchievementsViewState? = null,
     /** The unlock toast on screen (it never takes input). */
@@ -273,6 +275,7 @@ class XmbViewModel(
             override fun components() = this@XmbViewModel.components.value
             override fun friendsWanted(components: dev.xross.launcher.theme.pack.ResolvedComponents) = ra.onFriendsWanted(components = components)
             override fun photoUri(photoId: Long) = container.media.library.value.photos.firstOrNull { it.id == photoId }?.uri
+            override fun dismissOptions() = transient.update { it.copy(optionsMenu = null) }
         },
     )
 
@@ -366,14 +369,17 @@ class XmbViewModel(
 
     private data class Settled(
         val transient: Transient,
+        val layoutEditor: LayoutEditorState?,
         val settings: dev.xross.launcher.data.XrossSettings,
         val overlay: MediaOverlay?,
         val profile: dev.xross.launcher.profile.ProfileState,
         val ra: RaState,
     )
 
-    private val settled = combine(transient, settingsStore.settings, media.overlay, container.profiles.state, ra.state) { tr, st, ov, pr, r ->
-        Settled(tr, st, ov, pr, r)
+    private val settled = combine(
+        combine(transient, theme.layoutEditor, ::Pair), settingsStore.settings, media.overlay, container.profiles.state, ra.state,
+    ) { (tr, le), st, ov, pr, r ->
+        Settled(tr, le, st, ov, pr, r)
     }
 
     /** The components' `glyphOverride` (2b.7b): which labels the hints draw. */
@@ -419,6 +425,7 @@ class XmbViewModel(
             socialPanel = sd.ra.socialPanel,
             settings = settings,
             waveEditor = tr.waveEditor,
+            layoutEditor = sd.layoutEditor,
             achievements = sd.ra.achievements,
             unlockToast = sd.ra.unlockToast,
             avatarEditor = tr.avatarEditor,
@@ -515,6 +522,7 @@ class XmbViewModel(
         transient.value.nameEntry?.let { return nameEntryAction(it, action) }
         if (action == NavAction.MEDIA) return toggleMediaControls()
         transient.value.waveEditor?.let { return waveEditorAction(it, action) }
+        if (theme.onLayoutAction(action)) return
         transient.value.avatarEditor?.let { return avatarEditorAction(it, action) }
         if (ra.onScreenAction(action)) return
         transient.value.info?.let { return infoAction(it, action) }
@@ -564,6 +572,7 @@ class XmbViewModel(
                 infoJob?.cancel()
                 detailsJob?.cancel()
                 ra.dismissAll()
+                theme.dismissLayoutSettings()
                 transient.update {
                     it.copy(optionsMenu = null, info = null, details = null, waveEditor = null, avatarEditor = null)
                 }
@@ -635,6 +644,14 @@ class XmbViewModel(
 
     /** The picked `.xtheme`: see [ThemeController.onThemeArchivePicked]. */
     fun onThemeArchivePicked(uri: Uri?) = theme.onThemeArchivePicked(uri)
+
+    // Settings ▸ Theme ▸ Layout (2b.8a): forwarded to [ThemeController].
+
+    fun closeLayoutSettings() = theme.closeLayoutSettings()
+
+    fun onLayoutRowTapped(index: Int) = theme.onLayoutRowTapped(index)
+
+    fun onLayoutSliderChanged(index: Int, fraction: Float) = theme.onLayoutSliderChanged(index, fraction)
 
     private fun openWaveSettings() {
         transient.update { it.copy(waveEditor = WaveEditorState(), optionsMenu = null) }
@@ -1943,7 +1960,7 @@ class XmbViewModel(
             is Command.SetColorSwitch, Command.CycleSurfaceStyle, is Command.SetXrossWallpaper, Command.ResetXrossWallpaper,
             Command.PickXrossWallpaper, is Command.SetStatusSlots, is Command.EditStatusSlot, is Command.CycleComponent,
             is Command.SetComponent, is Command.SetBadgePills, is Command.ToggleBadgePill, is Command.CycleEffect,
-            is Command.SetEffect, Command.ResetThemeDefaults,
+            is Command.SetEffect, Command.ResetThemeDefaults, Command.OpenLayoutSettings,
             -> check(theme.onCommand(command)) { "ThemeController didn't take $command" }
             Command.RequestStorageAccess ->
                 if (env.value.storageGranted) toast("Already granted") else emit(UiEffect.RequestStorageAccess)

@@ -54,6 +54,8 @@ sealed interface Command {
     data class CycleEmulator(val platformId: String) : Command
     data object ToggleWave : Command
     data object OpenWaveSettings : Command
+    /** Settings ▸ Theme ▸ Layout (2b.8a): the crosshair, UI scale, spacing and focus panel. */
+    data object OpenLayoutSettings : Command
     /** Settings ▸ Theme ▸ Profile customization: the avatar's ring and glow. */
     data object OpenAvatarStyle : Command
     /** Games ▸ RetroAchievements: the profile dashboard. */

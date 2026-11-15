@@ -3,6 +3,7 @@ package dev.xross.launcher
 import dev.xross.launcher.data.XrossSettings
 import dev.xross.launcher.theme.pack.ComponentOverrides
 import dev.xross.launcher.theme.pack.EffectOverrides
+import dev.xross.launcher.theme.pack.LayoutOverrides
 import dev.xross.launcher.theme.pack.ThemeDefaults
 import dev.xross.launcher.theme.pack.UserLook
 import org.junit.Assert.assertEquals
@@ -20,6 +21,7 @@ class UserLookTest {
     private val rows: List<Pair<UserLook, String>> = listOf(
         UserLook(effects = EffectOverrides(shaderPreset = "BOKEH")) to "1 effect",
         UserLook(components = ComponentOverrides(clockFormat = "H24")) to "1 component",
+        UserLook(layout = LayoutOverrides(uiScale = 1.2f)) to "1 layout value",
         UserLook(surfaceStyle = "OLED_TRUE_BLACK") to "surface",
         UserLook(customWallpaper = "content://media/external/images/1") to "wallpaper",
         UserLook(adaptiveGamePalette = false) to "1 color layer",
@@ -63,6 +65,7 @@ class UserLookTest {
         val all = UserLook(
             effects = EffectOverrides(shaderPreset = "CRT", focusFrameStyle = "GOLD_BEZEL", iconMask = "NONE"),
             components = ComponentOverrides(clockFormat = "H24", batteryMode = "PERCENT"),
+            layout = LayoutOverrides(preset = "PSP_CENTER", itemSpacingDp = 6f),
             surfaceStyle = "EINK_HIGH_CONTRAST",
             customWallpaper = "/sdcard/Pictures/bg.png",
             adaptiveGamePalette = false,
@@ -71,7 +74,18 @@ class UserLookTest {
         )
         val s = all.writeTo(XrossSettings(themePack = "neon", themeVariant = "night", quickProfile = "OLED_NIGHT", theme = "PACK"))
         assertEquals(all, UserLook.of(s))
-        assertEquals(listOf("3 effects", "2 components", "surface", "3 color layers", "wallpaper"), all.changes())
+        assertEquals(listOf("2 layout values", "3 effects", "2 components", "surface", "3 color layers", "wallpaper"), all.changes())
+    }
+
+    /** 2b.8a: the Reset row's summary leads with the layout values ("Clears 2 layout values, 1 effect"). */
+    @Test
+    fun layoutCountsInChangesAndReset() {
+        val s = UserLook(layout = LayoutOverrides(preset = "MODERN_WIDESCREEN", focusedScale = 1.1f), effects = EffectOverrides(iconMask = "CIRCLE"))
+            .writeTo(XrossSettings(themePack = "neon"))
+        assertEquals(listOf("2 layout values", "1 effect"), UserLook.of(s).changes())
+        val r = ThemeDefaults.reset(s)
+        assertEquals(LayoutOverrides.NONE, r.layoutOverrides)
+        assertEquals("neon", r.themePack)
     }
 
     @Test

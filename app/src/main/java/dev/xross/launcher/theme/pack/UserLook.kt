@@ -18,6 +18,8 @@ data class UserLook(
     val effects: EffectOverrides = EffectOverrides.NONE,
     /** Settings ▸ Theme ▸ Components picks (2b.7a); null values follow the pack. */
     val components: ComponentOverrides = ComponentOverrides.NONE,
+    /** Settings ▸ Theme ▸ Layout picks (2b.8a); null values follow the pack. */
+    val layout: LayoutOverrides = LayoutOverrides.NONE,
     /** Settings ▸ Theme ▸ Surface style; blank follows the look. */
     val surfaceStyle: String = "",
     /** Xross's own wallpaper (a photo URI or file path); blank uses the pack's. */
@@ -34,6 +36,7 @@ data class UserLook(
     fun writeTo(s: XrossSettings): XrossSettings = s.copy(
         effectOverrides = effects,
         componentOverrides = components,
+        layoutOverrides = layout,
         surfaceStyle = surfaceStyle,
         customWallpaper = customWallpaper,
         adaptiveGamePalette = adaptiveGamePalette,
@@ -42,10 +45,11 @@ data class UserLook(
     )
 
     /**
-     * What is set, one phrase per kind, in Reset's order: "3 effects", "1 component", "surface",
-     * "2 color layers", "wallpaper". Empty for [NONE].
+     * What is set, one phrase per kind, in Reset's order: "2 layout values", "3 effects",
+     * "1 component", "surface", "2 color layers", "wallpaper". Empty for [NONE].
      */
     fun changes(): List<String> = buildList {
+        if (layout.count > 0) add(countOf(layout.count, "layout value"))
         val fx = EffectSlot.entries.count { effects[it].isNotEmpty() }
         if (fx > 0) add(countOf(fx, "effect"))
         if (components.count > 0) add(countOf(components.count, "component"))
@@ -63,6 +67,7 @@ data class UserLook(
         fun of(s: XrossSettings): UserLook = UserLook(
             effects = s.effectOverrides,
             components = s.componentOverrides,
+            layout = s.layoutOverrides,
             surfaceStyle = s.surfaceStyle,
             customWallpaper = s.customWallpaper,
             adaptiveGamePalette = s.adaptiveGamePalette,

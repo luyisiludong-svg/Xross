@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Theme suite (312 checks): Settings ▸ Theme and its folders (theme color, wave and avatar panels,
+# Theme suite (351 checks): Settings ▸ Theme and its folders (theme color, wave and avatar panels,
 # platform folders, surface style, the 2b.4f effect rows, Pick custom wallpaper, Reset to theme
 # defaults), quick profiles (OLED, Y2K, E-Ink), color layers (adaptive colors,
 # circadian curve, battery tint and charging pulse through `dumpsys battery`), the Sound section,
@@ -17,7 +17,9 @@
 # its cached friends and badge offline, the panel by keys and touch; 2b.7d: the achievement badge
 # off, compact and as the rich card, offline without its friend strip, online with it), and the
 # RetroAchievements hub (2b.7e: the Achievements header, three rows of badges on all 12 display-matrix
-# configurations, the banner; the L1/R1 platform filter, the FOLLOWING sidebar and Confirm on a friend).
+# configurations, the banner; the L1/R1 platform filter, the FOLLOWING sidebar and Confirm on a friend),
+# and the Layout mixer (2b.8a: each crosshair preset, UI scale, list spacing and focused scale moving
+# the menu while the panel is open, the ends held, a restart, Reset layout and Reset to theme defaults).
 #
 #   tools/device-tests/test-theme.sh
 #
@@ -27,7 +29,7 @@
 # The battery override is always reset at exit, even after Ctrl-C.
 set -u
 . "$(dirname "$0")/lib/harness.sh"
-suite_begin theme 312
+suite_begin theme 351
 
 setup_base_env
 setup_theme_fixtures
@@ -36,7 +38,7 @@ start_app
 category 0
 
 # Settings ▸ Theme (the fourth Settings folder) with the Default pack: Theme pack, Quick profile,
-# then the folders Colors, Background, Effects, Intro and transitions, Components, Menu and profile, then
+# then the folders Colors, Background, Effects, Intro and transitions, Components, the Layout row, Menu and profile, then
 # Reset to theme defaults and Import theme (.xtheme)…. A pack with variants adds Theme variant
 # below Theme pack. Back out of a folder lands on that folder's row.
 section "Settings"
@@ -64,10 +66,10 @@ expect "6" "Ribbon lines slider moves"
 key KEYCODE_BACK
 expect "1.1× · 6 lines" "Wave settings row summarizes the new values"
 settings_has '"waveSpeed": 1.1' && ok "wave uniforms are saved to settings.json" || bad "waveSpeed not in settings.json"
-# Menu and profile (four folders below Background): Profile customization, Button hints,
+# Menu and profile (five rows below Background, past Layout): Profile customization, Button hints,
 # Platform folders.
 key KEYCODE_BACK
-press DPAD_DOWN 4 KEYCODE_DPAD_CENTER
+press DPAD_DOWN 5 KEYCODE_DPAD_CENTER
 expect "glow on" "Profile customization row summarizes the avatar style"
 # Panel rows: Border color, Custom color…, Border width, Glow, Glow speed, Glow intensity, Reset.
 key KEYCODE_DPAD_CENTER
@@ -86,10 +88,10 @@ key KEYCODE_DPAD_CENTER
 expect "At the top of Games (classic)" "Platform folders toggles to the classic layout"
 key KEYCODE_DPAD_CENTER
 expect "Inside All Games" "Platform folders toggles back"
-# Effects (three folders above Menu and profile): Surface style, UI filter (experimental), Focus
+# Effects (four rows above Menu and profile): Surface style, UI filter (experimental), Focus
 # frame style, Ambient particles, App icon mask.
 key KEYCODE_BACK
-press DPAD_UP 3 KEYCODE_DPAD_CENTER
+press DPAD_UP 4 KEYCODE_DPAD_CENTER
 expect "Theme pack (Flat glass)" "Surface style follows the theme pack (Flat glass)"
 key KEYCODE_DPAD_CENTER KEYCODE_DPAD_CENTER
 expect "Y2K glossy bezel" "Surface style cycles through the presets"
@@ -525,7 +527,7 @@ adb logcat -d -s XrossWallpaper:I | grep -q "wallpaper=custom .*opaque=true" \
 category 0
 press DPAD_DOWN 3 KEYCODE_DPAD_CENTER
 top_list
-press DPAD_DOWN 8
+press DPAD_DOWN 9
 expect "Clears 6 effects" "Reset to theme defaults says what it would clear"
 adb logcat -c
 key KEYCODE_DPAD_CENTER
@@ -921,7 +923,7 @@ expect "Theme" "Up at the top of Settings stays in the list without an avatar"
 # Reset to theme defaults hands the components back to the pack.
 press DPAD_DOWN 3 KEYCODE_DPAD_CENTER
 top_list
-press DPAD_DOWN 8
+press DPAD_DOWN 9
 expect "2 components" "Reset to theme defaults counts the components"
 key KEYCODE_DPAD_CENTER
 await_flat '"statusBarLeft":null,"statusBarRight":null' && ok "Reset clears display.components" || bad "components left in settings.json"
@@ -1614,5 +1616,138 @@ CFG
 else
   skip 27 "the hub checks need sqlite3 on the host and a debuggable build"
 fi
+
+section "Layout mixer (2b.8a)"
+# Settings ▸ Theme ▸ Layout (the row after Components) opens a panel in the bottom-right corner:
+# Crosshair, UI scale, List spacing, Focused scale, Reset layout. The menu stays in full view
+# behind it (no fade: its texts stay in the accessibility tree, which leaves transparent nodes
+# out) and moves with every step. The Default pack's own layout: 22% × 25%, 100%, 12 dp, 1.32×.
+lshot() { if [ -n "${XROSS_SHOTS:-}" ]; then mkdir -p "$XROSS_SHOTS"; adb exec-out screencap -p > "$XROSS_SHOTS/layout-$1.png"; fi; }
+bounds() { # bounds <text>: "x1 y1 x2 y2" of the first element with exactly that text
+  xml | grep -oE "text=\"$1\"[^>]*bounds=\"\[[-0-9]+,[-0-9]+\]\[[-0-9]+,[-0-9]+\]\"" | head -1 \
+    | grep -oE 'bounds="[^"]*"' | grep -oE '[-0-9]+' | tr '\n' ' '
+}
+left_of() { set -- $(bounds "$1"); echo "${1:-0}"; }
+top_of() { set -- $(bounds "$1"); echo "${2:-0}"; }
+height_of() { set -- $(bounds "$1"); echo $(( ${4:-0} - ${2:-0} )); }
+pitch() { echo $(( $(top_of "Reset to theme defaults") - $(top_of "Menu and profile") )); }
+luma() { # mean brightness (0–255) of the left 55% of the screen: the menu beside the panel
+  adb exec-out screencap > "$XT_TMP/layout.raw"
+  python3 -I - "$XT_TMP/layout.raw" <<'PY'
+import struct, sys
+b = open(sys.argv[1], "rb").read()
+w, h = struct.unpack_from("<II", b, 0)
+off = len(b) - w * h * 4
+tot = n = 0
+for y in range(int(h * 0.08), int(h * 0.92), 4):
+    row = off + y * w * 4
+    for x in range(0, int(w * 0.55), 4):
+        p = row + x * 4
+        tot += b[p] * 3 + b[p + 1] * 6 + b[p + 2]
+        n += 10
+print(tot // n)
+PY
+}
+open_layout_row() { category 0; press DPAD_DOWN 3 KEYCODE_DPAD_CENTER; top_list; press DPAD_DOWN 7; }
+step_ok() { # step_ok <key> <value shown> <settings.json text> <description>
+  key "KEYCODE_DPAD_$1"; pause 0.6
+  if screen | grep -qF -- "$2" && settings_has "$3"; then ok "$4"; else bad "$4 — '$2' / '$3' not there"; fi
+}
+
+open_layout_row
+expect "From Default · Crosshair, UI scale, list spacing, focused scale" "Settings ▸ Theme ▸ Layout follows the pack and says what it sets"
+before=$(luma)
+key KEYCODE_DPAD_CENTER
+pause 1
+expect "The menu behind moves as you adjust" "the Layout panel opens"
+expect "Theme pack · 22% × 25%" "Crosshair shows the Default pack's anchor"
+expect "Theme pack · 100%" "UI scale shows the pack's 100%"
+expect "Theme pack · Standard (12 dp)" "List spacing shows the pack's Standard"
+expect "Theme pack · 1.32×" "Focused scale shows the pack's 1.32×"
+expect_line "Components" "the menu stays in view behind the panel"
+open_luma=$(luma)
+[ "$open_luma" -ge $(( before * 85 / 100 )) ] && ok "the menu isn't dimmed behind the panel ($before → $open_luma)" \
+  || bad "the menu dims behind the panel ($before → $open_luma)"
+lshot pack
+x0=$(left_of "Components"); y0=$(top_of "Components")
+step_ok RIGHT "Classic PS3" '"preset": "CLASSIC_PS3"' "Right picks Classic PS3 and saves it"
+x1=$(left_of "Components"); y1=$(top_of "Components")
+[ "$x1" -gt "$x0" ] && [ "$y1" -gt "$y0" ] && ok "the menu moves to the Classic PS3 crosshair while the panel is open ($x0,$y0 → $x1,$y1)" \
+  || bad "the menu didn't move for Classic PS3 ($x0,$y0 → $x1,$y1)"
+lshot classic-ps3
+step_ok RIGHT "PSP centre" '"preset": "PSP_CENTER"' "Right again: PSP centre"
+x2=$(left_of "Components")
+[ "$x2" -gt "$x1" ] && ok "PSP centre moves the column right ($x1 → $x2)" || bad "PSP centre didn't move the column ($x1 → $x2)"
+lshot psp-centre
+step_ok RIGHT "Modern widescreen" '"preset": "MODERN_WIDESCREEN"' "Right again: Modern widescreen"
+y3=$(top_of "Components")
+[ "$y3" -lt "$y1" ] && ok "Modern widescreen raises the bar ($y1 → $y3)" || bad "Modern widescreen didn't raise the bar ($y1 → $y3)"
+lshot modern-widescreen
+step_ok RIGHT "Modern widescreen" '"preset": "MODERN_WIDESCREEN"' "Right at the last preset holds"
+key KEYCODE_DPAD_CENTER; pause 0.6
+expect "Theme pack · 22% × 25%" "Confirm puts the crosshair back to the pack's"
+[ "$(top_of "Components")" = "$y0" ] && ok "…and the menu back where it was" || bad "the menu isn't back at $y0 ($(top_of "Components"))"
+# UI scale: the pack is the left end, 150% the right one.
+key KEYCODE_DPAD_DOWN
+h0=$(height_of "Components")
+step_ok RIGHT "110%" '"uiScale": 1.1' "UI scale steps from the pack's 100% to 110%"
+h1=$(height_of "Components")
+[ "$h1" -gt "$h0" ] && ok "the menu's text grows behind the panel ($h0 → $h1 px)" || bad "the menu didn't scale ($h0 → $h1 px)"
+press DPAD_RIGHT 6
+pause 0.6
+expect_line "150%" "UI scale holds at 150%"
+settings_has '"uiScale": 1.5' && ok "150% is saved" || bad "uiScale 1.5 not in settings.json"
+lshot scale-150
+press DPAD_LEFT 10
+pause 0.6
+expect_line "50%" "UI scale steps down to 50%"
+h2=$(height_of "Components")
+[ "$h2" -lt "$h0" ] && ok "50% shrinks the menu ($h0 → $h2 px)" || bad "50% didn't shrink the menu ($h0 → $h2 px)"
+lshot scale-50
+step_ok LEFT "Theme pack · 100%" '"uiScale": null' "Left below 50% is the pack's again"
+# List spacing: Tight, Standard, Spacious; the row pitch follows.
+key KEYCODE_DPAD_DOWN
+p0=$(pitch)
+step_ok RIGHT "Spacious (20 dp)" '"itemSpacingDp": 20' "List spacing steps to Spacious"
+p1=$(pitch)
+[ "$p1" -gt "$p0" ] && ok "Spacious opens the rows up ($p0 → $p1 px)" || bad "Spacious didn't change the pitch ($p0 → $p1 px)"
+lshot spacious
+key KEYCODE_DPAD_LEFT
+step_ok LEFT "Tight (6 dp)" '"itemSpacingDp": 6' "…and down to Tight"
+p2=$(pitch)
+[ "$p2" -lt "$p0" ] && ok "Tight closes the rows up ($p0 → $p2 px)" || bad "Tight didn't change the pitch ($p0 → $p2 px)"
+lshot tight
+# Focused scale: 1.00×–1.35×.
+key KEYCODE_DPAD_DOWN
+step_ok RIGHT "1.35×" '"focusedScale": 1.35' "Focused scale steps to 1.35×"
+lshot focus-135
+press DPAD_LEFT 7
+pause 0.6
+expect "1.00×" "Focused scale steps down to 1.00×"
+settings_has '"focusedScale": 1.0' && ok "1.00× is saved" || bad "focusedScale 1.0 not in settings.json"
+lshot focus-100
+key KEYCODE_BACK
+pause 0.6
+expect_not "The menu behind moves as you adjust" "Back closes the panel"
+expect "Spacing Tight (6 dp) · Focused 1.00×" "the Layout row lists what is overridden"
+adb shell am force-stop "$PKG"
+start_app
+open_layout_row
+expect "Spacing Tight (6 dp) · Focused 1.00×" "the layout is kept after a restart"
+# Reset layout clears the panel's values only.
+key KEYCODE_DPAD_CENTER
+press DPAD_DOWN 4
+expect "2 values" "Reset layout counts what it clears"
+key KEYCODE_DPAD_CENTER; pause 0.6
+expect "Nothing set" "Reset layout clears the panel"
+settings_has '"itemSpacingDp": null' && settings_has '"focusedScale": null' && ok "Reset layout clears display.layout" || bad "layout values left in settings.json"
+# Reset to theme defaults counts and clears the layout too.
+press DPAD_UP 4
+key KEYCODE_DPAD_RIGHT KEYCODE_DPAD_DOWN KEYCODE_DPAD_RIGHT KEYCODE_BACK
+press DPAD_DOWN 2
+expect "Clears 2 layout values" "Reset to theme defaults counts the layout values"
+key KEYCODE_DPAD_CENTER
+for _ in $(seq 10); do settings_has '"preset": null' && break; pause 0.5; done
+settings_has '"preset": null' && settings_has '"uiScale": null' && ok "Reset to theme defaults clears display.layout" || bad "layout values left after Reset"
 
 suite_end

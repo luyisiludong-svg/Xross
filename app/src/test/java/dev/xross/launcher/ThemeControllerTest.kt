@@ -172,6 +172,8 @@ class ThemeControllerTest {
         override fun components() = ResolvedComponents.DEFAULT
         override fun friendsWanted(components: ResolvedComponents) { friends += components }
         override fun photoUri(photoId: Long) = photos[photoId]
+        var optionsDismissed = 0
+        override fun dismissOptions() { optionsDismissed++ }
     }
 
     private val scope = MainScope()
@@ -215,7 +217,7 @@ class ThemeControllerTest {
             Command.SetStatusSlots(StatusSide.RIGHT, null), Command.EditStatusSlot(StatusSide.RIGHT, CLOCK, SlotEdit.LATER),
             Command.CycleComponent(ComponentRow.CLOCK), Command.SetComponent(ComponentRow.CLOCK, null), Command.SetBadgePills(null),
             Command.ToggleBadgePill(YEAR), Command.CycleEffect(EffectSlot.SHADER), Command.SetEffect(EffectSlot.SHADER, ""),
-            Command.ResetThemeDefaults,
+            Command.ResetThemeDefaults, Command.OpenLayoutSettings,
         )
         theirs.forEach { assertTrue("$it", c.onCommand(it)) }
         idle()

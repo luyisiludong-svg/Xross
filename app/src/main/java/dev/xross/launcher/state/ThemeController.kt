@@ -9,6 +9,7 @@ import dev.xross.launcher.audio.UiSounds
 import dev.xross.launcher.data.CredentialStore
 import dev.xross.launcher.data.SettingsStore
 import dev.xross.launcher.data.XrossSettings
+import dev.xross.launcher.input.NavAction
 import dev.xross.launcher.storage.XrossEnvironment
 import dev.xross.launcher.theme.PACK_THEME
 import dev.xross.launcher.theme.QuickProfile
@@ -18,6 +19,7 @@ import dev.xross.launcher.theme.pack.BadgePill
 import dev.xross.launcher.theme.pack.ComponentRow
 import dev.xross.launcher.theme.pack.EffectSlot
 import dev.xross.launcher.theme.pack.InstallResult
+import dev.xross.launcher.theme.pack.LayoutOverrides
 import dev.xross.launcher.theme.pack.ResolvedComponents
 import dev.xross.launcher.theme.pack.StagedTheme
 import dev.xross.launcher.theme.pack.StatusSide
@@ -30,6 +32,9 @@ import dev.xross.launcher.theme.pack.ThemeRuntime
 import dev.xross.launcher.theme.pack.TopLeftClusterMode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -37,9 +42,9 @@ import java.io.File
 /**
  * Settings ▸ Theme, split out of [XmbViewModel] (Architecture Assessment #6, Phase 2b.8-prep):
  * theme pack, variant, colour theme, quick profile, colour switches, surface style, effects,
- * components (status slots, badge pills), the Xross wallpaper, the `.xtheme` import with its
+ * components (status slots, badge pills), the Layout panel (2b.8a), the Xross wallpaper, the `.xtheme` import with its
  * pending Replace / Keep both, and Reset to theme defaults. The view model owns one of these and
- * hands it every [Command] first ([onCommand]); 2b.8's layout mixer and export add theirs here.
+ * hands it every theme [Command] ([onCommand]). The Layout panel (2b.8a) lives here too; 2b.8b's export adds its commands.
  */
 class ThemeController(
     private val context: Context,
@@ -68,7 +73,14 @@ class ThemeController(
         fun friendsWanted(components: ResolvedComponents)
         /** A Photo item's URI, for Set as Xross wallpaper. */
         fun photoUri(photoId: Long): Uri?
+        /** Closes the Options menu (a panel opens in its place). */
+        fun dismissOptions()
     }
+
+    private val _layoutEditor = MutableStateFlow<LayoutEditorState?>(null)
+
+    /** Settings ▸ Theme ▸ Layout while it is open (2b.8a). */
+    val layoutEditor: StateFlow<LayoutEditorState?> = _layoutEditor.asStateFlow()
 
     /** Runs [command] when it is a theme command; false hands it back to the view model. */
     fun onCommand(command: Command): Boolean {
@@ -170,6 +182,7 @@ class ThemeController(
             is Command.CycleEffect -> setEffect(command.slot, command.slot.next(settings.current.effectOverrides[command.slot]))
             is Command.SetEffect -> setEffect(command.slot, command.value)
             Command.ResetThemeDefaults -> resetThemeDefaults()
+            Command.OpenLayoutSettings -> openLayoutSettings()
             else -> return false
         }
         return true
@@ -236,6 +249,73 @@ class ThemeController(
             releaseWallpaperGrant(before.customWallpaper)
             host.toast("Back to ${themes.active.value.info.name}'s own look")
         }
+    }
+
+    // endregion
+
+    // region Layout mixer (2b.8a)
+
+    private fun openLayoutSettings() {
+        host.dismissOptions()
+        _layoutEditor.value = LayoutEditorState()
+    }
+
+    /** Input while the Layout panel is open; false when it isn't. */
+    fun onLayoutAction(action: NavAction): Boolean {
+        val editor = _layoutEditor.value ?: return false
+        applyLayoutOutcome(editor, LayoutEditor.onAction(editor, action, settings.current.layoutOverrides, themes.active.value.layout))
+        return true
+    }
+
+    private fun applyLayoutOutcome(before: LayoutEditorState, outcome: LayoutEditorOutcome) {
+        when {
+            outcome.close -> return closeLayoutSettings()
+            outcome.blocked -> host.refuse()
+            outcome.overrides != null -> {
+                saveLayout(outcome.overrides)
+                sounds.play(UiSound.MOVE)
+            }
+            outcome.state != before -> sounds.play(UiSound.MOVE)
+        }
+        if (outcome.state != before) _layoutEditor.value = outcome.state
+    }
+
+    /** Each step is saved at once: the cascade re-resolves and the menu behind the panel moves. */
+    private fun saveLayout(overrides: LayoutOverrides) {
+        settings.update { it.copy(layoutOverrides = overrides.normalized()) }
+    }
+
+    fun closeLayoutSettings() {
+        if (_layoutEditor.value != null) {
+            sounds.play(UiSound.BACK)
+            _layoutEditor.value = null
+        }
+    }
+
+    /** Something else took the screen (Now Playing): close without a sound. */
+    fun dismissLayoutSettings() {
+        _layoutEditor.value = null
+    }
+
+    /** Touch: tap a row to focus it; tapping the focused row acts like Confirm. */
+    fun onLayoutRowTapped(index: Int) {
+        val editor = _layoutEditor.value ?: return
+        if (index == editor.index) {
+            onLayoutAction(NavAction.CONFIRM)
+        } else if (index in LayoutEditor.rows.indices) {
+            sounds.play(UiSound.MOVE)
+            _layoutEditor.value = editor.copy(index = index)
+        }
+    }
+
+    /** Touch: a slider dragged or tapped at [fraction] of its track. */
+    fun onLayoutSliderChanged(index: Int, fraction: Float) {
+        val editor = _layoutEditor.value ?: return
+        val row = LayoutEditor.rows.getOrNull(index) ?: return
+        if (editor.index != index) _layoutEditor.value = editor.copy(index = index)
+        val user = settings.current.layoutOverrides
+        val next = LayoutEditor.setFraction(row, user, fraction)
+        if (next != user) saveLayout(next)
     }
 
     // endregion

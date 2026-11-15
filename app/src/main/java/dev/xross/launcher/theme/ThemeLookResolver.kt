@@ -22,7 +22,7 @@ data class LookInputs(
     val system: String? = null,
     val battery: BatteryLevel? = null,
     val minuteOfDay: Int? = null,
-    /** Everything the user set over the pack (effects, surface, colour layers, components): [UserLook.of]. */
+    /** Everything the user set over the pack (effects, surface, colour layers, layout, components): [UserLook.of]. */
     val user: UserLook = UserLook.NONE,
     val profile: QuickProfile = QuickProfile.NONE,
 )
@@ -49,7 +49,8 @@ data class ResolvedLook(
  *     override → context rules (battery, clock) ([LoadedTheme.look]);
  *  2. the user's Settings ▸ Theme picks ([LookInputs.user]): effects, surface style, colour layers;
  *  3. the quick profile, over everything it lists in [QuickProfile.fields] and nothing else;
- *  4. the layout the look and profile give;
+ *  4. the layout: the look's (pack, its rules' patches), the user's `display.layout` over it in
+ *     every context (2b.8a), then the profile's motion;
  *  5. the components ([LoadedTheme.components]): Default pack, pack, variant, the user's
  *     `display.components`. Category and system overrides, rules and quick profiles don't touch it.
  * Pure: no Android or Compose state, so the whole cascade is unit tested.
@@ -62,7 +63,7 @@ object ThemeLookResolver {
         val surface = p.surface?.let { i.pack.surfaces[it.name] } ?: i.pack.surfaceFor(look, u.surfaceStyle)
         return ResolvedLook(
             look = look,
-            layout = p.layout(look.layout ?: i.pack.layout),
+            layout = p.layout(u.layout.applyTo(look.layout ?: i.pack.layout)),
             surface = surface,
             switches = ColorSwitches.resolve(look.flags, u.circadianCurve, u.batteryTint, u.adaptiveGamePalette, p),
             profile = p,

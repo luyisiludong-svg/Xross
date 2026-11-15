@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Full device regression: every suite in sequence, each from a fresh app reset, then one summary.
-# 429 checks: library 41, theme 312, media 56, input 11, integration 9.
+# 468 checks: library 41, theme 351, media 56, input 11, integration 9.
 #
 #   ./gradlew :app:installDebug :emulator-stub:installRetroarchDebug
 #   tools/device-tests/run-all.sh                    # all suites (same as smoke.sh --all)

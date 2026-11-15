@@ -88,6 +88,12 @@ data class SettingsFile(
          * `statusBarLeft`, `statusBarRight`, `batteryMode`, `clockFormat`, …; null = the pack's.
          */
         val components: dev.xross.launcher.theme.pack.ComponentOverrides = D.componentOverrides,
+        /**
+         * Overrides of the pack's layout (Settings ▸ Theme ▸ Layout, 2b.8a): `preset` (a crosshair
+         * preset), `uiScale` 0.5–1.5, `itemSpacingDp` 0–32, `focusedScale` 1.00–1.35; null = the pack's.
+         */
+        @Serializable(with = dev.xross.launcher.theme.pack.LenientLayoutOverrides::class)
+        val layout: dev.xross.launcher.theme.pack.LayoutOverrides = D.layoutOverrides,
         /** NONE, OLED_TRUE_BLACK, Y2K_CYBER_PASTEL or MONOCHROME_EINK. */
         val quickProfile: String = D.quickProfile,
         /** Colors from the focused game's art; null = the theme pack's choice (on by default). */
@@ -262,6 +268,7 @@ object ConfigCodec {
             customWallpaper = s.customWallpaper,
             effects = s.effectOverrides,
             components = s.componentOverrides,
+            layout = s.layoutOverrides,
             quickProfile = s.quickProfile,
             adaptiveGamePalette = s.adaptiveGamePalette,
             circadianCurve = s.circadianCurve,
@@ -316,6 +323,7 @@ object ConfigCodec {
         customWallpaper = f.display.customWallpaper.trim().take(MAX_WALLPAPER_CHARS),
         effectOverrides = f.display.effects.normalized(),
         componentOverrides = f.display.components.normalized(),
+        layoutOverrides = f.display.layout.normalized(),
         quickProfile = dev.xross.launcher.theme.QuickProfile.normalize(f.display.quickProfile),
         adaptiveGamePalette = f.display.adaptiveGamePalette,
         circadianCurve = f.display.circadianCurve,
