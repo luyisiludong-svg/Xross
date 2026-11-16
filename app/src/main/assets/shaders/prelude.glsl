@@ -20,4 +20,11 @@ uniform float uTransition;   // 1.0 right after a category switch, easing back t
 uniform sampler2D uPrev;     // last frame's output; sample at gl_FragCoord.xy / uResolution
 uniform float uFrameDt;      // seconds since the last frame, 0.1 at most
 uniform float uFresh;        // 1.0 when uPrev holds no usable history, else 0.0
+// Field pass (optional): a shader that reads uField is drawn twice per frame. First with
+// uPass = 0 into a texture of ceil(uResolution / 4) texels (gl_FragCoord is then a texel, write
+// whatever the second pass needs), then with uPass = 1 at full size, where uField holds that
+// result (RGBA8; texelFetch reads one texel exactly, texture() blends neighbours bilinearly).
+// For work shared by a block of pixels.
+uniform sampler2D uField;
+uniform int uPass;           // 0: the field pass, 1: the full-size pass (always 1 without uField)
 out vec4 fragColor;

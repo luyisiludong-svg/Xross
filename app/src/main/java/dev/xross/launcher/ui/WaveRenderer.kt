@@ -195,6 +195,8 @@ class WaveRenderer(
     private val filterPass = ScreenFilterPass()
     /** Last frame's picture for a program that reads `uPrev`; see [render]. */
     private val feedback = FeedbackTargets()
+    /** The low-resolution first pass of a program that reads `uField`; see [render]. */
+    private val field = FieldTarget()
     /** The program and time of the last frame drawn through [feedback], to tell when its history is stale. */
     private var feedbackKey: String? = null
     private var feedbackNs = 0L
@@ -244,6 +246,7 @@ class WaveRenderer(
         lastReport = null
         feedback.forget()
         feedbackKey = null
+        field.forget()
         val extensions = GLES30.glGetString(GLES30.GL_EXTENSIONS).orEmpty()
         parallel = "GL_KHR_parallel_shader_compile" in extensions
         timer = GpuTimer(extensions)
@@ -492,6 +495,7 @@ class WaveRenderer(
             feedback.release()
             feedbackKey = null
         }
+        if (next?.usesField != true && field.allocated) field.release()
         if (prev != null && prev !== next) {
             val gone = prev.spec.key !in (synced?.keys ?: emptySet()) && prev.spec.key != ShaderLibrary.WAVE_KEY
             if (gone) programs.remove(prev.spec.key)
@@ -569,11 +573,20 @@ class WaveRenderer(
     private fun method() = if (timer?.supported == true) "timer query" else "glFinish"
 
     /**
-     * One frame of [program] on screen. A program that reads `uPrev` draws into the feedback target
+     * One frame of [program] on screen. A program that reads `uField` first draws its field pass at
+     * a quarter of the size per axis (`uPass` = 0). A program that reads `uPrev` draws into the feedback target
      * with last frame's picture bound, then is blitted to the screen (so the watchdog times both).
      * A still frame has no history to build on: it is drawn directly with `uFresh` = 1.
      */
     private fun render(program: GlProgram, p: WaveParams, still: Boolean, now: Long) {
+        // The field pass first (still frames need it too); unit 1 holds it for the full-size pass.
+        if (program.usesField && field.ensure(width, height)) {
+            field.bindForPass()
+            drawCall(program, p, still, fresh = true, pass = 0)
+            GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
+            GLES30.glViewport(0, 0, width, height)
+            field.bindForSampling()
+        }
         if (!program.usesFeedback || still) {
             drawCall(program, p, still, fresh = true)
             return
@@ -592,8 +605,10 @@ class WaveRenderer(
         feedbackNs = now
     }
 
-    private fun drawCall(program: GlProgram, p: WaveParams, still: Boolean, fresh: Boolean) {
+    private fun drawCall(program: GlProgram, p: WaveParams, still: Boolean, fresh: Boolean, pass: Int = 1) {
         GLES30.glUseProgram(program.handle)
+        GLES30.glUniform1i(program.uPass, pass)
+        GLES30.glUniform1i(program.uField, 1)
         GLES30.glUniform1i(program.uPrev, 0)
         GLES30.glUniform1f(program.uFrameDt, frameDt)
         GLES30.glUniform1f(program.uFresh, if (fresh) 1f else 0f)

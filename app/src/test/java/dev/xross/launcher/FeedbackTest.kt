@@ -1,13 +1,14 @@
 package dev.xross.launcher
 
 import dev.xross.launcher.ui.FeedbackPolicy
+import dev.xross.launcher.ui.FieldPolicy
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 
-/** Ping-pong feedback for background programs that read `uPrev`. */
+/** Ping-pong feedback (`uPrev`) and the low-resolution field pass (`uField`) of background programs. */
 class FeedbackTest {
     private val ms = 1_000_000L
 
@@ -46,6 +47,29 @@ class FeedbackTest {
         assertTrue(File(dir, "black_hole.frag").readText().contains("texture(uPrev"))
         for (f in listOf("wave.frag", "starfield.frag", "bokeh.frag", "crt.frag", "ascii_matrix.frag")) {
             assertFalse("$f stays stateless", File(dir, f).readText().contains("uPrev"))
+        }
+    }
+
+    @Test fun theFieldPassOptsInByUseAndCoversOneTexelPerCell() {
+        assertTrue(FieldPolicy.wants(1))
+        assertFalse(FieldPolicy.wants(-1))
+        // ceil(px / 4): the render size the A55 uses (1280x576), and odd sizes round up.
+        assertEquals(320, FieldPolicy.size(1280))
+        assertEquals(144, FieldPolicy.size(576))
+        assertEquals(1, FieldPolicy.size(1))
+        assertEquals(2, FieldPolicy.size(5))
+        // Cells are at least 6x8 pixels, so the field always has a texel for every cell.
+        for (w in listOf(320, 1280, 1281, 2400)) assertTrue(FieldPolicy.size(w) >= (w + 5) / 6)
+    }
+
+    @Test fun onlyBlackHoleUsesTheFieldPass() {
+        val dir = File("src/main/assets/shaders")
+        val prelude = File(dir, "prelude.glsl").readText()
+        assertTrue(prelude.contains("uniform sampler2D uField;"))
+        assertTrue(prelude.contains("uniform int uPass;"))
+        assertTrue(File(dir, "black_hole.frag").readText().contains("texelFetch(uField"))
+        for (f in listOf("wave.frag", "starfield.frag", "bokeh.frag", "crt.frag", "ascii_matrix.frag")) {
+            assertFalse("$f stays one pass", File(dir, f).readText().contains("uField"))
         }
     }
 }
