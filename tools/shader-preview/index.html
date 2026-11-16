@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shader Preview</title>
+<style>
+  :root { --bg: #0b0b0d; --fg: #d8d8dc; --dim: #808088; --line: #2a2a30; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 13px/1.4 ui-monospace, Menlo, monospace; }
+  main { padding: 12px 16px; display: grid; gap: 10px; }
+  canvas { width: 100%; max-width: 1280px; aspect-ratio: var(--ar, 1280 / 576); background: #000; display: block; image-rendering: pixelated; }
+  .bar { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
+  label { color: var(--dim); display: inline-flex; gap: 6px; align-items: center; }
+  input[type=text] { width: 34em; max-width: 90vw; background: #15151a; color: var(--fg); border: 1px solid var(--line); padding: 3px 6px; font: inherit; }
+  button { background: #1c1c22; color: var(--fg); border: 1px solid var(--line); padding: 3px 10px; font: inherit; cursor: pointer; }
+  #log { white-space: pre-wrap; color: #ff8a7a; margin: 0; }
+  #stat { color: var(--dim); }
+</style>
+</head>
+<body>
+<main>
+  <!--
+    Desktop preview of an Xross background shader, mirroring WaveRenderer: the prelude goes in
+    front unless the file starts with #version, a shader reading uField gets the two-pass field
+    pipeline (ceil(res / 4) RGBA8 texture), and one reading uPrev gets RGBA8 feedback. Serve from a
+    folder above both this repo and the pack, e.g. `python3 -m http.server` in the projects folder,
+    then open tools/shader-preview/?frag=<path to .frag relative to this page>.
+    Timings here say nothing about a phone: measure on the A55 (docs/SHADER_GUIDE.md §6).
+  -->
+  <canvas id="c"></canvas>
+  <div class="bar">
+    <label>frag <input id="frag" type="text"></label>
+    <button id="load">Load</button>
+    <label>theme.json <input id="theme" type="text" style="width:22em"></label>
+  </div>
+  <div class="bar">
+    <button id="play">Pause</button>
+    <button id="restart">Restart</button>
+    <label>t <input id="t" type="range" min="0" max="30" step="0.01" value="0" style="width:260px"></label>
+    <span id="tv">0.00 s</span>
+    <button id="trans">Category switch</button>
+    <label>bass <input id="bass" type="range" min="0" max="1" step="0.01" value="0"></label>
+    <button id="beat">Beat</button>
+    <label>size <select id="size">
+      <option value="1280x576">1280×576 (A55 landscape)</option>
+      <option value="576x1280">576×1280 (portrait)</option>
+      <option value="1280x720">1280×720</option>
+    </select></label>
+    <label><input id="rest" type="checkbox"> 20 fps (at rest)</label>
+  </div>
+  <div id="stat"></div>
+  <pre id="log"></pre>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const params = new URLSearchParams(location.search);
+$('frag').value = params.get('frag') || '';
+$('theme').value = params.get('theme') || '';
+if (params.get('t')) $('t').value = params.get('t');
+
+const canvas = $('c');
+const gl = canvas.getContext('webgl2', { antialias: false, preserveDrawingBuffer: true });
+if (!gl) $('log').textContent = 'WebGL2 is not available.';
+
+const VERT = `#version 300 es
+void main() {
+  vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2));
+  gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
+}`;
+const BLIT = `#version 300 es
+precision highp float;
+uniform sampler2D uSrc; uniform vec2 uSize; out vec4 o;
+void main() { o = texture(uSrc, gl_FragCoord.xy / uSize); }`;
+
+function compile(type, src, offset) {
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src);
+  gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+    const log = gl.getShaderInfoLog(s).replace(/(ERROR: \d+:)(\d+)/g, (m, a, n) => a + (Number(n) - offset));
+    throw new Error(log);
+  }
+  return s;
+}
+function link(fs, offset) {
+  const p = gl.createProgram();
+  gl.attachShader(p, compile(gl.VERTEX_SHADER, VERT, 0));
+  gl.attachShader(p, compile(gl.FRAGMENT_SHADER, fs, offset));
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  return p;
+}
+function target(w, h) {
+  const tex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+  for (const [k, v] of [[gl.TEXTURE_MIN_FILTER, gl.LINEAR], [gl.TEXTURE_MAG_FILTER, gl.LINEAR],
+                        [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]])
+    gl.texParameteri(gl.TEXTURE_2D, k, v);
+  const fb = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+  return { tex, fb, w, h };
+}
+function hexColor(s, fallback) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(s || '');
+  if (!m) return fallback;
+  const n = parseInt(m[1], 16);
+  return [(n >> 16 & 255) / 255, (n >> 8 & 255) / 255, (n & 255) / 255, 1];
+}
+
+let prog = null, blit = null, loc = {}, field = null, fb = [null, null], usesField = false, usesPrev = false;
+let W = 1280, H = 576, fresh = true;
+let palette = { top: [0.10, 0.10, 0.14, 1], bottom: [0.02, 0.02, 0.03, 1], accent: [0.6, 0.8, 1, 1], glow: [1, 0.6, 0.2, 1] };
+let time = Number($('t').value), playing = !params.has('t'), last = performance.now(), lastDraw = 0;
+let transition = 0, beat = 0;
+
+async function loadTheme() {
+  const path = $('theme').value.trim();
+  if (!path) return;
+  try {
+    const th = await (await fetch(path)).json();
+    const pal = th.palette || {};
+    const canvasC = hexColor(pal.canvas, null);
+    if (canvasC) { palette.top = canvasC; palette.bottom = canvasC.map((v, i) => i < 3 ? v * 0.35 : 1); }
+    palette.glow = hexColor(pal.accent, palette.glow);
+    palette.accent = hexColor(pal.accentSecondary, palette.glow);
+  } catch (e) { $('log').textContent = 'theme.json: ' + e.message; }
+}
+
+async function load() {
+  $('log').textContent = '';
+  const path = $('frag').value.trim();
+  if (!path) { $('log').textContent = 'Give a ?frag= path.'; return; }
+  try {
+    const [user, prelude] = await Promise.all([
+      fetch(path).then(r => { if (!r.ok) throw new Error(path + ': ' + r.status); return r.text(); }),
+      fetch('../../app/src/main/assets/shaders/prelude.glsl').then(r => r.text()),
+    ]);
+    await loadTheme();
+    const own = /^\s*#version/.test(user);
+    // The prelude ends without a newline-terminated line count we can trust; count it.
+    const preludeLines = own ? 0 : prelude.split('\n').length - (prelude.endsWith('\n') ? 1 : 0);
+    const src = own ? user : prelude + (prelude.endsWith('\n') ? '' : '\n') + user;
+    prog = link(src, preludeLines);
+    blit = blit || link(BLIT, 0);
+    loc = {};
+    for (const n of ['uTime', 'uResolution', 'uColorTop', 'uColorBottom', 'uAccent', 'uGlow', 'uBatteryLevel',
+                     'uAudioBass', 'uAudioBeat', 'uTransition', 'uPrev', 'uFrameDt', 'uFresh', 'uField', 'uPass'])
+      loc[n] = gl.getUniformLocation(prog, n);
+    usesField = loc.uField !== null;
+    usesPrev = loc.uPrev !== null;
+    resize();
+    $('stat').textContent = `${path} — ${usesField ? 'field pass' : 'one pass'}${usesPrev ? ' + feedback' : ''}`;
+  } catch (e) {
+    prog = null;
+    $('log').textContent = e.message;
+  }
+}
+
+function resize() {
+  [W, H] = $('size').value.split('x').map(Number);
+  canvas.width = W; canvas.height = H;
+  canvas.style.setProperty('--ar', `${W} / ${H}`);
+  canvas.style.maxWidth = W > H ? '1280px' : '460px';
+  field = usesField ? target(Math.ceil(W / 4), Math.ceil(H / 4)) : null;
+  fb = usesPrev ? [target(W, H), target(W, H)] : [target(W, H), null];
+  fresh = true;
+}
+
+function setUniforms(dt) {
+  gl.uniform1f(loc.uTime, time % 10000);
+  gl.uniform2f(loc.uResolution, W, H);
+  gl.uniform4fv(loc.uColorTop, palette.top);
+  gl.uniform4fv(loc.uColorBottom, palette.bottom);
+  gl.uniform4fv(loc.uAccent, palette.accent);
+  gl.uniform4fv(loc.uGlow, palette.glow);
+  gl.uniform1f(loc.uBatteryLevel, 1);
+  gl.uniform1f(loc.uAudioBass, Number($('bass').value));
+  gl.uniform1f(loc.uAudioBeat, beat > 0 ? 1 : 0);
+  gl.uniform1f(loc.uTransition, transition);
+  gl.uniform1f(loc.uFrameDt, Math.min(dt, 0.1));
+  gl.uniform1f(loc.uFresh, fresh ? 1 : 0);
+}
+
+function frame(now) {
+  requestAnimationFrame(frame);
+  const minGap = $('rest').checked ? 1000 / 20 : 1000 / 61;
+  if (now - lastDraw < minGap) return;
+  const dt = (now - last) / 1000;
+  last = now; lastDraw = now;
+  if (playing) { time += dt; $('t').value = time; }
+  if (dt > 0.5) fresh = true;
+  transition = Math.max(0, transition - dt);   // ~1 s ease, as on the device
+  beat = Math.max(0, beat - dt);
+  $('tv').textContent = time.toFixed(2) + ' s';
+  draw(dt);
+}
+
+function draw(dt) {
+  if (!prog) return;
+
+  gl.useProgram(prog);
+  gl.bindVertexArray(null);
+  setUniforms(dt);
+  if (usesField) {
+    // Unbind last frame's field first: WebGL refuses a draw that samples its own target.
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, field.fb);
+    gl.viewport(0, 0, field.w, field.h);
+    gl.uniform1i(loc.uPass, 0);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, field.tex);
+    gl.uniform1i(loc.uField, 1);
+  }
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, usesPrev ? fb[1].tex : null);
+  if (usesPrev) gl.uniform1i(loc.uPrev, 0);
+  gl.uniform1i(loc.uPass, 1);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fb[0].fb);
+  gl.viewport(0, 0, W, H);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+  gl.useProgram(blit);
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, fb[0].tex);
+  gl.uniform1i(gl.getUniformLocation(blit, 'uSrc'), 0);
+  gl.uniform2f(gl.getUniformLocation(blit, 'uSize'), W, H);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  if (usesPrev) fb.reverse();
+  fresh = false;
+}
+
+// For scripted captures (works while the tab is hidden and animation frames are paused):
+// renderAt(seconds, { transition, bass }) draws that moment once and resolves to a PNG blob.
+window.renderAt = async (t, opts = {}) => {
+  playing = false;
+  time = t; transition = opts.transition || 0; fresh = true;
+  if (opts.bass !== undefined) $('bass').value = opts.bass;
+  draw(1 / 60);
+  return new Promise(r => canvas.toBlob(r, 'image/png'));
+};
+
+$('load').onclick = load;
+$('play').onclick = () => { playing = !playing; $('play').textContent = playing ? 'Pause' : 'Play'; last = performance.now(); };
+$('restart').onclick = () => { time = 0; fresh = true; };
+$('t').oninput = () => { time = Number($('t').value); fresh = true; };
+$('trans').onclick = () => { transition = 1; };
+$('beat').onclick = () => { beat = 0.1; };
+$('size').onchange = resize;
+if (gl) { load(); requestAnimationFrame(frame); }
+</script>
+</body>
+</html>

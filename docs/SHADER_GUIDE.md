@@ -170,8 +170,15 @@ Reference costs on the Galaxy A55, profiling build, watchdog p90 (§3.39):
   `cat app/src/main/assets/shaders/prelude.glsl shader.frag > /tmp/x.frag && glslangValidator -S frag /tmp/x.frag`.
 * **Pick it:** Settings ▸ Theme ▸ Background shader, or `display.effects.shaderPreset` in
   `Xross/config/settings.json` (picked up on the next start).
-* **Look:** the emulator must run with `-gpu host`; its default software GL renders shaders far too
-  slowly to judge anything.
+* **Look on the desktop:** [`tools/shader-preview/`](../tools/shader-preview/index.html) runs a
+  shader in the browser the way `WaveRenderer` does (prelude, field pass, feedback, the uniforms;
+  a time slider, a category-switch button, bass, portrait). Serve a folder above both this repo and
+  the pack, e.g. `python3 -m http.server` in the parent folder, and open
+  `tools/shader-preview/?frag=<path to the .frag>&theme=<path to theme.json>`. Paths are relative
+  to the page. `renderAt(seconds)` in the console draws one moment and returns a PNG blob. It shows
+  the look only; its speed says nothing about a phone.
+* **Look on the emulator:** it must run with `-gpu host`; its default software GL renders shaders
+  far too slowly to judge anything.
 * **Cost:** only on a real device and the `profiling` build. It logs under `XrossShader`:
 
   ```
