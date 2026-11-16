@@ -189,8 +189,8 @@ Reference costs on the Galaxy A55, profiling build, watchdog p90 (§3.39):
 ## 7. `BLACK_HOLE`, a worked example
 
 A Gargantua-style black hole (Interstellar) ray traced through curved space and drawn only with
-letters and symbols, in the style of JIN2's ASCII "Black Hole" (@jin_22ee). The code is Xross's
-own; JIN2's is free for personal use only. The physics follows James, von Tunzelmann, Franklin and
+letters and symbols. It is original work: the look comes from the physics and from the techniques
+below, nothing is taken from another artwork. The physics follows James, von Tunzelmann, Franklin and
 Thorne, *Gravitational lensing by spinning black holes in astrophysics, and in the movie
 Interstellar* (Class. Quantum Grav. 32, 2015).
 
@@ -205,14 +205,19 @@ impact parameter b = 3√3 ≈ 5.196.
    `STEP · r`.
 2. **The disk.** Thin, in the y = 0 plane, from Gargantua's innermost stable orbit (Kerr spin
    a = 0.6 M: r = 3.83 M) out to `ROUT`. Gas on Keplerian orbits (Ω = r^-1.5), thin-disk flux
-   F ∝ r⁻³ (1 − √(r_in/r)), temperature T ∝ F^¼.
+   F ∝ r⁻³ (1 − √(r_in/r)), temperature T ∝ F^¼. Its texture is value noise on (orbit phase, log r),
+   carried round at each radius's own rate, so differential rotation shears it into streaks.
 3. **Redshift.** Each hit is shifted by g = √(1 − 3/r) / (1 − Ω L), gravity and Doppler together
    (L is the photon's angular momentum about the disk axis): observed T' = gT, intensity g⁴I.
    The film removed the Doppler side-to-side difference; `BEAMING` keeps part of it.
-4. **The sky.** Rays that escape read a starfield and a dust lane in their final direction, so the
+4. **The sky.** Rays that escape read a starfield and a clumpy dust band in their final direction, so the
    sky is lensed too. Rays near b = 3√3 add a soft halo of glyphs round the shadow: the photon ring.
-5. **Glyphs.** Brightness picks a denser glyph (`. , :` → `- + =` → `* x o` → `% $ 8` → `# @ B`)
-   and a hotter colour.
+5. **Glyphs and colour.** Brightness indexes a 15-glyph ramp ordered by lit dots
+   (`. , - ; : + x = * o % & 8 # @`). Colour is blackbody: each stop of `heatColor()` is a Planck
+   spectrum at 1700–7500 K through the CIE 1931 observer.
+6. **Hot spots.** Three blobs of plasma (the orbiting hot-spot model of Broderick & Loeb 2006, used
+   for Sgr A* flares) flare up at random radii, orbit, shear into arcs and fade; lensing carries
+   them over the shadow.
 
 The light bending is Schwarzschild (no spin); only the disk's inner edge uses Gargantua's spin,
 which changes little at a = 0.6.
@@ -235,7 +240,7 @@ All in [`black_hole.frag`](../app/src/main/assets/shaders/black_hole.frag).
 | `FOCAL` | 1.75 | zoom: higher makes the hole and the disk bigger together |
 | `ROUT` | 27.0 | outer edge of the disk, in M: lower makes the hole bigger relative to the disk |
 | `CAM_R` | 60.0 | camera distance; mostly leave it and use `FOCAL` |
-| `ROLL` | 0.30 | camera roll in radians (~17°): the disk's diagonal lean; 0 is level |
+| `ROLL` | 0.27 | camera roll in radians (~15°): the disk's diagonal lean; 0 is level |
 | `el` in `camera()` | 7.5° ± 3.5° | how far above the disk plane the camera sits, and its slow sway; higher opens the disk up |
 | `az` in `camera()` | 0.011 rad/s | the slow drift round the hole (moves the lensed stars) |
 
@@ -244,8 +249,8 @@ All in [`black_hole.frag`](../app/src/main/assets/shaders/black_hole.frag).
 | Value | Now | Effect |
 | --- | --- | --- |
 | `ROWS` | 72.0 | rows of characters; cells are never smaller than 6×8 render pixels |
-| `G[]` | 18 glyphs | the 5×7 bitmaps, one 5-bit row each |
-| `pools[]` in `main()` | 5 tiers × 3 | which glyphs each brightness tier uses |
+| `G[]` | 15 glyphs | the 5×7 bitmaps, one 5-bit row each, sparsest first |
+| ramp index in `main()` | `level^0.8 · 15`, ±1.1 dither | how brightness maps onto the ramp, and how much neighbouring cells vary |
 
 **Brightness and colour**
 
@@ -253,7 +258,7 @@ All in [`black_hole.frag`](../app/src/main/assets/shaders/black_hole.frag).
 | --- | --- | --- |
 | `exposure` in `fieldPass()` | 2.9 | overall brightness of the disk before glyphs are picked |
 | `BEAMING` | 0.45 | how much brighter and bluer the approaching side is (1 physical, 0 as in the film) |
-| `heatColor()` `c0`…`c5` | deep red → white-gold → blue-white | the colour ramp |
+| `heatColor()` `c0`…`c5` | 1700 K → 5200 K → 7500 K | the blackbody colour ramp |
 | shoulder in `main()` | 0.65, peak 0.95 | where highlights start to roll off and their ceiling |
 | `diskEmission()` `edge` | fades over 0.5 M inside, 9 M outside | how softly the disk starts and ends |
 
@@ -265,7 +270,7 @@ All in [`black_hole.frag`](../app/src/main/assets/shaders/black_hole.frag).
 | `BLOOM_SPREAD` | 0.9 | its reach in cells (each tap blends 2×2 more) |
 | `cellLight` hue in `wideBloom()` | `heat · 0.7` | how much deeper orange the bloom is than the letters |
 | `GLOW` | 0.24 | tight glow from a blur of last frame; keep it below ~0.4 |
-| `TRAIL` | 0.55 | share of last frame kept after 1/30 s; higher gives longer trails |
+| `PERSIST` | 0.04 s | half-life of last frame's light; higher gives longer afterglow |
 
 **Motion**
 
@@ -273,12 +278,12 @@ All in [`black_hole.frag`](../app/src/main/assets/shaders/black_hole.frag).
 | --- | --- | --- |
 | `SPIN` | 7.5 | orbital time per second: how fast the gas streaks turn |
 | `FLOW_PERIOD` | 18.0 | how often the streak texture re-seeds so the shear never winds it up |
-| spark radii `rc` | 9, 14, 20 M | where the three orbiting lights ride |
-| spark speed | `SPIN · 2.4` | their speed (each still Keplerian relative to the others) |
-| comet shape | head 0.12, tail 1.0 rad | head sharpness and tail length |
+| `gasTexture()` | 7 / 16 / 2 cells round, 10 / 23 / 48 per unit log r | streak size: the last octave is the thin ringlets |
+| `SPOT_LIFE` | 8 s | a hot spot's life from flare-up to fade (radius 8–20 M, picked at random each life) |
+| `SPOT_RATE` | 2.4 | hot spots' orbital clock relative to `SPIN` (still Keplerian, so they shear) |
 | `glint` | 0.9 rad/s | the light chasing round the photon ring |
-| `pulse` | 1.6, width 1.4 M | the ring of light a category switch sends through the disk |
-| `diskOn` | 2.5 → 6.5 s | when the disk lights up after a cold start (the ring draws in 0.4 → 2.8 s) |
+| `pulse` | 6 · u(1 − u), width 0.09 in log r | the wave of gas a category switch sends spiralling in from the rim |
+| `lit` in `fieldPass()` | 0.5 → 6.5 s | how fast the disk ignites from its inner edge outward after a cold start (the photon ring fades in over 0.5 → 3.5 s) |
 | audio | `0.35 · uAudioBass`, `0.12 · uAudioBeat` | how much music brightens it |
 
 **Accuracy and cost**
