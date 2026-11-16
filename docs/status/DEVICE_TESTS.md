@@ -64,3 +64,53 @@ error message.
 `test-theme.sh` passed 88 of 88 alone right after an emulator reboot. `run-all.sh` passed **171 of
 171** twice, and the quick smoke 12 of 12 both times. After each run the battery was back to its
 own state and no test file was left in `/sdcard`. On the Galaxy A55: [§3.21](../phase-2b/2b.3/STATUS.md#s3.21).
+
+## Fast screen reads with the UI reader (2026-11-16)
+
+The full regression had grown to about 50 minutes. Timing the adb calls on the API 37 emulator
+showed a `uiautomator dump` at ~2.0–2.3 s (a new app_process, then a 1 s idle wait) against
+0.03–0.13 s for key events, logcat reads and screencaps. About one dump in three also came back
+empty. `tools/ui-reader` (Gradle `:ui-reader`, test-only) is an instrumentation started with
+`am instrument -w` in the background on the device. It keeps one UiAutomation session and
+answers `GET /dump` on the abstract socket `xross-uireader` (`adb forward tcp:0`). The XML is
+`uiautomator dump`'s, ported from AOSP's AccessibilityNodeInfoDumper (`NAF` included, its
+child-label check looking at invisible children too): on the Settings root and the Games root it
+matched byte for byte.
+
+`lib/harness.sh` starts the reader in `suite_begin` and stops it in teardown. `dump()` keeps the
+XML on the host (`ui_xml`), and the suites' three direct `cat /sdcard/xross-ui.xml` reads now use
+it. Because reads are ~25× faster, `expect`, `expect_any`, `expect_line` and `expect_desc` poll to
+a 7 s deadline instead of three tries, and `expect_not` / `expect_no_line` poll up to 3 s for
+the text to go. The display-matrix check in the hub section read the grid once 2.5 s after each
+`wm size` change, so it caught a relayout (4 rows on 20:9) that the slow dump used to hide; it now
+waits up to ~6 s for three rows before measuring.
+
+| Suite | Before (earlier notes) | With the reader (2026-11-16) |
+| --- | --- | --- |
+| `smoke.sh` | 26–27 s | 11 s, 12/12 |
+| library | 124 s | 44 s, 41/41 |
+| theme | ~30 min | 1,798 s, 425/426 (the display-matrix relayout, fixed above); alone after the fix, 1,815 s, 425/426 (the known "no live refresh" rerun fail: `Xross/data/ra/friends.json` outlives `pm clear`) |
+| media | — | 158 s, 56/56 |
+| input | 43 s | 17 s, 11/11 |
+| integration | 34–37 s | 23 s, 9/9 |
+| `run-all.sh` | ~50 min | 34 m 9 s, 542/543 |
+
+Where the theme suite's 30 minutes go (timestamped run): Export (2b.8b) 774 s and Share (2b.8c)
+216 s, the RetroAchievements hub 143 s, boot intro 93 s, the four Components sections 78–92 s
+each, Theme packs 76 s, the rest under 50 s each. Each Export/Share look comparison (`xshots`) is
+~42 s: an app restart, then 8 places at ~2.4 s of navigation and a 1.5 s settle each; the pixel
+diff itself is 0.2 s. `run-all.sh` and `smoke.sh` now declare the real total, 543 checks.
+
+**Overlap trimmed from the theme suite (2026-11-16): 426 → 416 checks, 1,815 s → 1,190 s,
+416/416.** Each removed check repeated a unit test, at a device-side cost:
+
+| Removed | Kept on the device | Covered by |
+| --- | --- | --- |
+| 7 of the 10 Export/Share look comparisons (Default's current look, the stress pack whole with Ember, its three variant-only exports, both Share re-imports): 14 of 18 eight-screen captures, ~42 s each | The built-in Default pack whole (APK assets), the stress pack's current look (overrides and rules flattened), the picked-wallpaper export (a real read grant); every export still runs and its written files are checked | `ThemeExportTest`, `ThemeRoundTripTest` (every scope, and archives), `LookExporterTest` |
+| 9 of the hub's 12 display-matrix sizes | 4:3 retro 640×480, 20:9 phone, portrait | `HubUpgradeTest.gridColumnsFollowTheWidthAndCellsFitExactlyThreeRows`; `display-matrix.sh` walks all 12 |
+| 2 of 5 launch curtains (FADE_BLACK, BLOOM) | The pack's IRIS, the user's FLASH over it, E-Ink's black | `BootSequenceTest` (names, shapes and timing, the cascade) |
+| The avatar HUD cycle for the battery-first order | The default order and the one with a left cluster | The same `hud_cycle`; the battery-first order's positions are still checked |
+
+Export now takes 388 s (was 774). `run-all.sh` declares 533 checks; estimated at ~24 min
+(the other suites unchanged from the run above).
+

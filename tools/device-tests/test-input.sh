@@ -54,7 +54,7 @@ section "Touch"
 home # Games root: Search, All Games, RetroAchievements
 # Swipes are placed relative to the screen (root node bounds from the accessibility dump).
 dump
-read -r SW SH < <(adb shell cat /sdcard/xross-ui.xml | grep -o 'bounds="\[0,0\]\[[0-9]*,[0-9]*\]"' | head -1 | sed 's/.*\]\[\([0-9]*\),\([0-9]*\)\]"/\1 \2/')
+read -r SW SH < <(ui_xml | grep -o 'bounds="\[0,0\]\[[0-9]*,[0-9]*\]"' | head -1 | sed 's/.*\]\[\([0-9]*\),\([0-9]*\)\]"/\1 \2/')
 SW=${SW:-2400}; SH=${SH:-1080}
 adb shell input swipe $((SW * 58 / 100)) $((SH * 55 / 100)) $((SW * 30 / 100)) $((SH * 55 / 100)) 200
 pause 0.6

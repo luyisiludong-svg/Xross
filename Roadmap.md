@@ -451,6 +451,15 @@ back as it was: move its row back to its phase table and put it back into §6.
 | **2b.6** Haptic profiles (Off, Subtle Click, Crisp Snap, Deep Thud) on category switch, list moves, errors and unlock toasts, with controller rumble where supported | Phase 2b, after 2b.5 | 2026-11-15 | The owner turns rumble off while navigating menus, so menu haptics would stay off; an afterthought, not a need | §4.3 (architecture row), Appendix A.9, A.11 (`HapticProfile`), A.12 (`haptics` key, which nothing reads), A.13 |
 | On-screen controller overlay: opacity, haptics, size, position snapping | Phase 2 (Beta) | 2026-11-15 | Xross targets devices with physical controls, and touch parity (swipe, drag, tap) already covers the menus | This row |
 
+### 4.9 Developer tooling
+
+Work on the build and test tools, not on a milestone. Pick it up when the device regression gets
+in the way again.
+
+| Item | Notes |
+| --- | --- |
+| Split the theme device suite into shards and run them in parallel (proposed 2026-11-16) | **Why:** `run-all.sh` is ~24 min after the UI reader and the theme-overlap trim ([DEVICE_TESTS](docs/status/DEVICE_TESTS.md)), and `test-theme.sh` (416 checks, ~20 min) is most of it. Splitting it across two emulators would bring a full run to ~10–12 min. **Blocker:** its sections share helpers and leftover state (Share uses Export's `display_set`/`xshots`/`open_export`; 2b.7d and the hub use 2b.7c's account and `ra_log` helpers; most use 2b.7a's `xml`/`descs`/`shot`). **Steps:** (1) move the cross-section helpers into a sourced `tools/device-tests/lib/theme-helpers.sh`, and have each section set up its own preconditions (fixtures, packs, `settings.json` through `display_set`); (2) split into 2–3 suites of about equal time. Last section times: Export 388 s, Components 2b.7a 118 s, 2b.7d 87 s, 2b.7b 83 s, RA hub 76 s, Theme packs 70 s, Boot intro 66 s, 2b.7c 62 s, the rest under ~50 s. The `suite_begin` counts must still add up to 416, with `TOTAL_CHECKS=533` in `run-all.sh`; (3) add a parallel mode to `run-all.sh` (for example `XROSS_SERIALS="emulator-5554 emulator-5556"`), giving each child its own `ANDROID_SERIAL` (bare `adb` and the UI reader's `adb forward tcp:0` already work per device) and its own log, with one summary table. Clean `/sdcard/Xross/data/ra/friends.json` in setup, since it survives `pm clear` and breaks 2b.7c's "no live refresh" check on reruns. **Done when** each shard passes alone with the same checks, and a two-emulator `run-all.sh` takes about as long as its slowest shard |
+
 ---
 
 ## 5. Scope changes and decisions

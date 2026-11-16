@@ -36,12 +36,56 @@ section() { echo "== $1"; }
 
 pause() { adb shell sleep "${1:-0.4}"; }
 key() { adb shell input keyevent "$@"; pause; }
-dump() { adb shell uiautomator dump /sdcard/xross-ui.xml >/dev/null 2>&1; }
+
+# Screen reads. With the UI reader (tools/ui-reader, `./gradlew :ui-reader:installDebug`) a read
+# is one HTTP request to a UiAutomation session that stays open, ~0.1 s; without it, a fresh
+# `uiautomator dump`, ~2 s. Either way dump() leaves the window's XML in $UI_XML on the host and
+# ui_xml prints it. The reader waits for XROSS_UI_IDLE_MS (default 300) without accessibility
+# events before it reads, as `uiautomator dump` waits for 1 s; XROSS_UI_READER=0 turns it off.
+UI_READER=dev.xross.uireader
+UI_PORT=
+UI_XML=
+reader_url() { printf 'http://127.0.0.1:%s/%s' "$UI_PORT" "$1"; }
+reader_stop() {
+  [ -n "$UI_PORT" ] && curl -s -m 2 "$(reader_url quit)" >/dev/null 2>&1
+  adb shell am force-stop "$UI_READER" >/dev/null 2>&1
+  [ -n "$UI_PORT" ] && adb forward --remove "tcp:$UI_PORT" >/dev/null 2>&1
+  UI_PORT=
+}
+reader_start() {
+  [ "${XROSS_UI_READER:-1}" = 0 ] && { echo "== Screen reads: uiautomator dump (XROSS_UI_READER=0)"; return 1; }
+  command -v curl >/dev/null || { echo "== Screen reads: uiautomator dump (no curl)"; return 1; }
+  adb shell pm path "$UI_READER" >/dev/null 2>&1 \
+    || { echo "== Screen reads: uiautomator dump (faster: ./gradlew :ui-reader:installDebug)"; return 1; }
+  adb shell am force-stop "$UI_READER" >/dev/null 2>&1
+  # -w keeps the UiAutomation connection; nohup and & on the device so it outlives this adb call.
+  adb shell "nohup am instrument -w $UI_READER/.UiReader >/dev/null 2>&1 &"
+  UI_PORT=$(adb forward tcp:0 localabstract:xross-uireader | tr -d '\r')
+  for _ in $(seq 20); do
+    [ "$(curl -s -m 1 "$(reader_url ping)" 2>/dev/null)" = ok ] && { echo "== Screen reads: UI reader (port $UI_PORT)"; return 0; }
+    sleep 0.25
+  done
+  echo "== Screen reads: uiautomator dump (the UI reader didn't answer)"
+  reader_stop
+  return 1
+}
+dump() {
+  if [ -n "$UI_PORT" ]; then
+    curl -s -f -m 8 -o "$UI_XML" "$(reader_url "dump?idle=${XROSS_UI_IDLE_MS:-300}&timeout=3000")" && return
+    # 503 (no active window yet) leaves an empty read, like an empty uiautomator tree.
+    if [ "$(curl -s -m 1 "$(reader_url ping)" 2>/dev/null)" = ok ]; then : > "$UI_XML"; return; fi
+    echo "  (the UI reader stopped answering: back to uiautomator dump)"
+    reader_stop
+  fi
+  adb shell uiautomator dump /sdcard/xross-ui.xml >/dev/null 2>&1
+  adb shell cat /sdcard/xross-ui.xml > "$UI_XML"
+}
+ui_xml() { cat "$UI_XML"; }
 ui() {
   dump
-  adb shell cat /sdcard/xross-ui.xml | grep -o 'text="[^"]*"' | sed 's/^text="//; s/"$//'
+  ui_xml | grep -o 'text="[^"]*"' | sed 's/^text="//; s/"$//'
 }
-# uiautomator occasionally returns an empty tree mid-animation, so read until it has text.
+# A read can come back empty mid-animation, so read until it has text.
 screen() {
   local s
   for _ in 1 2 3 4; do
@@ -51,46 +95,67 @@ screen() {
   done
 }
 show() { grep -v '^[[:space:]]*$' <<<"$1" | sed 's/^/       | /' | head -"${2:-12}"; }
+# The expect family polls until the screen matches or XROSS_EXPECT_S (default 7) has passed: about
+# the window three uiautomator reads gave, whichever reader is in use. The negative checks poll
+# for the text to go (up to 3 s), as the old 1 s idle wait let a fading screen settle.
+expect_deadline=0
+poll_begin() { expect_deadline=$((SECONDS + ${1:-${XROSS_EXPECT_S:-7}})); }
+poll_more() { [ "$SECONDS" -lt "$expect_deadline" ] && pause 0.3; }
 expect() { # expect <text> <description>
-  local s
-  for _ in 1 2 3; do
+  local s; poll_begin
+  while :; do
     s=$(screen)
     if grep -qF -- "$1" <<<"$s"; then ok "$2"; return; fi
-    pause 0.5
+    poll_more || break
   done
   bad "$2 — '$1' not on screen"; show "$s"
 }
 expect_any() { # expect_any <text> <text> <description>: either text (e.g. linked or not)
-  local s
-  for _ in 1 2 3; do
+  local s; poll_begin
+  while :; do
     s=$(screen)
     if grep -qF -e "$1" -e "$2" <<<"$s"; then ok "$3"; return; fi
-    pause 0.5
+    poll_more || break
   done
   bad "$3 — neither '$1' nor '$2' on screen"; show "$s"
 }
 # expect_line <text> <description>: <text> is a whole line on screen (not part of a longer one).
 expect_line() {
-  local s
-  for _ in 1 2 3; do
+  local s; poll_begin
+  while :; do
     s=$(screen)
     if grep -qxF -- "$1" <<<"$s"; then ok "$2"; return; fi
-    pause 0.5
+    poll_more || break
   done
   bad "$2 — line '$1' not on screen"; show "$s"
 }
 expect_no_line() {
-  local s; s=$(screen)
-  if grep -qxF -- "$1" <<<"$s"; then bad "$2 — line '$1' unexpectedly on screen"; else ok "$2"; fi
+  local s; poll_begin 3
+  while :; do
+    s=$(screen)
+    grep -qxF -- "$1" <<<"$s" || { ok "$2"; return; }
+    poll_more || break
+  done
+  bad "$2 — line '$1' unexpectedly on screen"
 }
 # expect_desc <content-desc> <description>: an element described as <content-desc> (icons, glyphs).
 expect_desc() {
-  dump
-  if adb shell cat /sdcard/xross-ui.xml | grep -qF "content-desc=\"$1\""; then ok "$2"; else bad "$2 — no element described '$1'"; fi
+  poll_begin
+  while :; do
+    dump
+    ui_xml | grep -qF "content-desc=\"$1\"" && { ok "$2"; return; }
+    poll_more || break
+  done
+  bad "$2 — no element described '$1'"
 }
 expect_not() {
-  local s; s=$(screen)
-  if grep -qF -- "$1" <<<"$s"; then bad "$2 — '$1' unexpectedly on screen"; else ok "$2"; fi
+  local s; poll_begin 3
+  while :; do
+    s=$(screen)
+    grep -qF -- "$1" <<<"$s" || { ok "$2"; return; }
+    poll_more || break
+  done
+  bad "$2 — '$1' unexpectedly on screen"
 }
 settings_has() { adb shell cat /sdcard/Xross/config/settings.json | grep -q -- "$1"; }
 music_state() { adb shell dumpsys media_session | grep -o "state=PlaybackState {state=[A-Z]*" | head -1 | sed 's/.*state=//'; }
@@ -255,6 +320,7 @@ teardown() {
   [ -n "$XT_STARTED" ] || exit "$rc"
   adb shell dumpsys battery reset >/dev/null 2>&1
   adb shell am force-stop "$STUB" >/dev/null 2>&1
+  reader_stop
   [ -n "$XT_TMP" ] && rm -rf "$XT_TMP"
   if [ "${XROSS_KEEP_FIXTURES:-0}" != 1 ]; then
     remove_theme_fixtures >/dev/null 2>&1
@@ -276,6 +342,9 @@ suite_begin() { # suite_begin <name> <checks in this suite>
   XT_STARTED=1
   trap teardown EXIT
   trap on_signal INT TERM
+  UI_XML="$XT_TMP/ui.xml"
+  : > "$UI_XML"
+  reader_start
   SECONDS=0
 }
 
