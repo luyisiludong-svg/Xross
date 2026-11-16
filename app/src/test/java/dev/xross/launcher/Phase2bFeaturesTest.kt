@@ -48,6 +48,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import dev.xross.launcher.state.TextPrompt
 import dev.xross.launcher.state.XmbNode
+import dev.xross.launcher.state.XmbEvent
 
 /**
  * Phase 2b.1: avatar style settings, playtime subtitles, Details paging, the avatar mini-HUD's
@@ -197,7 +198,7 @@ class Phase2bFeaturesTest {
         vm.press(NavAction.RIGHT) // Border color: next preset
         assertEquals(AvatarColorPreset.NEON_CYAN.hex, container.settings.current.avatarStyle.borderColorHex)
         assertEquals(AvatarColorPreset.NEON_CYAN.hex, vm.state.value.settings.avatarStyle.borderColorHex)
-        vm.onAvatarSliderChanged(AvatarRow.WIDTH.ordinal, 1f)
+        vm.onEvent(XmbEvent.Editor.AvatarSlider(AvatarRow.WIDTH.ordinal, 1f))
         idle()
         assertEquals(6f, container.settings.current.avatarStyle.borderWidthDp, 0f)
         assertEquals(AvatarRow.WIDTH.ordinal, vm.state.value.avatarEditor!!.index)

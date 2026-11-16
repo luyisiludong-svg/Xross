@@ -112,11 +112,15 @@ app/src/main/java/dev/xross/launcher/   :app
   profile/  RetroAchievementsClient, ProfileRepository, AchievementsRepository, RaGames, BadgeImages
   state/    MenuTree, MediaMenus, Navigation (NavState), OptionsMenu, Search, NameEntry, AppFolders, RemapSession,
             GameInfo, GameDetails, MediaOverlayController, AchievementsView, ProfileCard, RaHub,
-            AvatarEditor, WaveEditor, MiniPlayerLine, LibraryFolders, XmbViewModel
+            AvatarEditor, WaveEditor, MiniPlayerLine, LibraryFolders, XmbViewModel; the controllers
+            beside it (ThemeController, RaController, EditorController, SearchController,
+            FolderPickers, LibraryJobs, TransitionController); XmbEvent, the one input type
+            (XmbViewModel.onEvent hands each group to its owner)
   ui/       XmbScreen, GameTile, MediaScreens, SearchOverlay, OptionsPanel, InfoPanel, DetailsScreen,
             SnapLayer, FocusBackdrop, BusyIndicator, StatusBar, AvatarHud, ProfileAvatar, UserCard,
             AchievementsScreen, RaHubScreen, UnlockToast, MiniPlayerCard, AvatarStylePanel,
-            WaveSettingsPanel, Frosted, WaveBackground + WaveRenderer (GLSL), Glyphs
+            WaveSettingsPanel, Frosted, WaveBackground + WaveRenderer (GLSL), Glyphs; ScreenSignal
+            (what XmbScreen reports to the Activity: backdrop cover, UI filter errors, crosshair X)
   state/LookFlow  the theme cascade's inputs as flows; ThemeController resolves them (StateFlow<ResolvedLook>)
   theme/    the engine's Android adapters: AndroidPackPlatform (assets, VectorIcon/BitmapIcon,
             TypefaceFont, the ThemePackLoader(assets, …) factory), SvgIcon, ThemeWatcher,

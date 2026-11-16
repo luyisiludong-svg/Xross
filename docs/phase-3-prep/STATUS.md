@@ -1,8 +1,11 @@
 # Phase 3-prep — evidence
 
-Module boundaries before any Phase 3 feature branch: steps 1–5 of the
+Module boundaries before any Phase 3 feature branch: steps 1–7 of the
 [architecture assessment](../design/ARCHITECTURE_ASSESSMENT.md#9-action-plan). What was built and
-why: [§10 there](../design/ARCHITECTURE_ASSESSMENT.md#10-as-built-phase-3-prep-steps-15).
+why: [§10](../design/ARCHITECTURE_ASSESSMENT.md#10-as-built-phase-3-prep-steps-15) (steps 1–5),
+[§11](../design/ARCHITECTURE_ASSESSMENT.md#11-as-built-step-6-the-viewmodel-split) (step 6, whose
+device runs are listed there) and
+[§12](../design/ARCHITECTURE_ASSESSMENT.md#12-as-built-step-7-the-xmbevent-sink) (step 7) there.
 
 Section numbers continue the original `docs/STATUS.md` numbering; the
 [status dashboard](../STATUS.md) maps every number to its file.
@@ -83,3 +86,57 @@ range as `STARFIELD` (0–4). GPU busy 55–60%, against 36–37% for `STARFIELD
 
 **Not verified:** a long run for heat and battery, idle (20 fps) pacing, portrait, other GPUs, and
 the device test suites (nothing outside the background renderer changed).
+
+<a id="s3.40"></a>
+
+## 3.40 Phase 3-prep, step 7: the `XmbEvent` sink (2026-11-16)
+
+On `refactor/phase3-prep`. What was built: [assessment §12](../design/ARCHITECTURE_ASSESSMENT.md#12-as-built-step-7-the-xmbevent-sink).
+`XmbScreen`'s 41 `on…` callbacks became one `onEvent: (XmbEvent) -> Unit`, with each event group
+handled by its owner, plus one `onSignal: (ScreenSignal) -> Unit` for the three reports only the
+Activity acts on.
+
+**Host:** 980 unit tests pass, 0 failures (4 opt-in live tests skip): 899 in `:app`, 81 in
+`:theme:engine`. New: `XmbEventTest` (3, through the real view model). `./gradlew check
+assembleDebug assembleProfiling` passes: `lintDebug` 0 errors, `ArchitectureTest` (the new types
+keep `ui` → `state`), configuration cache reused.
+
+**Device (API 37 emulator, host GPU), debug build with the RetroArch stub:**
+
+| Suite | Result | Note |
+| --- | --- | --- |
+| `smoke.sh` | 12/12 | |
+| library | 41/41 | |
+| media | 56/56 | |
+| input | 11/11 | touch swipes and drag, now `XmbEvent.Nav` |
+| integration | 9/9 | 7/9 in `run-all.sh`, when the emulator resolved no host names (below) |
+| theme | 424/426 (second run); 425/426 in `run-all.sh` | see below |
+
+* **The emulator had no DNS for the first run.** It had a network but `ping retroachievements.org`
+  said unknown host, so the checks that wait for the live RetroAchievements API failed: the avatar
+  HUD and the dashboard (integration, "Offline", "Refreshing…") and the theme suite's live refresh.
+  Restarted with `-dns-server 8.8.8.8,1.1.1.1` ([`HARDWARE_TESTING.md`](../HARDWARE_TESTING.md)
+  §2a), integration passed 9/9 (its first run straight after the cold boot failed on timing, 4/9;
+  the next passed).
+* **Theme, "a picked picture becomes the Xross wallpaper"** missed its toast in the screen dump on
+  the second run: the 2b.4f check that also fails on `main` from time to time (§3.38).
+* **Theme, "turning the stack on refreshed it live"** failed on both runs, also with DNS working.
+  It waits 10 s for the `XrossRa` log line after the Components row is set to Social stack; the
+  line was empty. The path (a key on the row → `ThemeController` → `RaController.onFriendsWanted`)
+  doesn't go through the event sink and is unchanged, and it failed once during step 6 too (the
+  assessment's §11). By hand, the same account refreshed live in 4 s at startup
+  (`friends=0 activity=0 calls=1`). **The build before this change (`dd7d116`) fails it
+  the same way** on the same emulator (theme 425/426, this check the only fail), so it predates
+  step 7. **Cause: the check, not the app.** `friends.json` lives in the Xross folder, which
+  `pm clear` leaves, so a cache that an earlier run fetched for the `.env` account was still fresh
+  (an hour) and turning the stack on rightly fetched nothing. Fixed in `3dbbab1` on
+  `fix/friends-live-refresh` (the check removes the file and restarts Xross first); it passed on two
+  theme runs in a row there.
+
+**Frame timing (profiling build), `palette-perf.sh 2`:** janky (frame deadline) 0.15–0.44% on three
+of four passes, p99 17 ms; the first pass after the install (adaptive on) 1.52%, p99 48 ms, the
+same first-pass pattern as §3.38 (2.12%). The touch lambdas built from `onEvent` cost nothing
+measurable.
+
+**Not verified:** the Galaxy A55 and other real devices; touch on a real screen (the suites tap and
+swipe through `adb shell input`).

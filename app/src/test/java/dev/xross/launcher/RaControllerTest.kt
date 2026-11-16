@@ -27,6 +27,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import dev.xross.launcher.profile.RaResult
 import dev.xross.launcher.state.HubFocus
+import dev.xross.launcher.state.XmbEvent
 import dev.xross.launcher.theme.pack.ResolvedComponents
 
 /**
@@ -85,11 +86,11 @@ class RaControllerTest {
         assertNull(vm.state.value.profileCard)
 
         // Touch: a tap on the avatar expands the HUD, a tap outside it collapses it again.
-        vm.onAvatarTapped()
+        vm.onEvent(XmbEvent.Ra.AvatarTap)
         idle()
         assertTrue(vm.state.value.avatarFocused)
         assertNull(vm.state.value.profileCard)
-        vm.closeAvatarHud()
+        vm.onEvent(XmbEvent.Ra.CloseAvatarHud)
         idle()
         assertFalse(vm.state.value.avatarFocused)
 
@@ -99,7 +100,7 @@ class RaControllerTest {
         assertNotNull(vm.state.value.profileCard)
         assertFalse(vm.state.value.avatarFocused)
         assertFalse(vm.state.value.profile.linked)
-        vm.onProfileCardButtonTapped(1) // Close (unlinked: Link account…, Close)
+        vm.onEvent(XmbEvent.Ra.ProfileCardButtonTap(1)) // Close (unlinked: Link account…, Close)
         idle()
         assertNull(vm.state.value.profileCard)
     }

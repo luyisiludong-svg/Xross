@@ -341,6 +341,15 @@ class ThemeController(
         settings.update { it.copy(layoutOverrides = overrides.normalized()) }
     }
 
+    /** A touch on the Layout panel. */
+    fun onEvent(event: XmbEvent.Layout) {
+        when (event) {
+            is XmbEvent.Layout.RowTap -> onLayoutRowTapped(event.index)
+            is XmbEvent.Layout.Slider -> onLayoutSliderChanged(event.index, event.fraction)
+            XmbEvent.Layout.Close -> closeLayoutSettings()
+        }
+    }
+
     fun closeLayoutSettings() {
         if (_layoutEditor.value != null) {
             sounds.play(UiSound.BACK)

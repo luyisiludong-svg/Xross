@@ -142,6 +142,14 @@ class TransitionController(
         }
     }
 
+    /** The boot overlay: skipped by a touch, or its video ended. */
+    fun onEvent(event: XmbEvent.Boot) {
+        when (event) {
+            XmbEvent.Boot.Skip -> skipBoot()
+            XmbEvent.Boot.VideoEnded -> onBootVideoEnded()
+        }
+    }
+
     /** A key or a touch during the intro: it crossfades to the menu. */
     fun skipBoot() {
         if (_state.value.bootPending) bootSkippedEarly = true

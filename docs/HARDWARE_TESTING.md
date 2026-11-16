@@ -71,6 +71,14 @@ seeds its own fixtures, so any of them runs on its own and in any order.
   the stub and deletes what it put on the device: `/sdcard/ROMs`, the `XrossSmoke` media folders,
   the smoke theme packs and `.xtheme` files, hero art and the UI dump. `XROSS_KEEP_FIXTURES=1`
   keeps them for debugging. Xross's previous `Xross/config` stays in `/sdcard/Xross-smoke-backup/`.
+- **The emulator needs working DNS for the RetroAchievements checks.** The integration suite's
+  avatar HUD and dashboard checks and the theme suite's social-stack refresh wait for the live RA
+  API with the debug build's `.env` account. On 2026-11-16 an emulator had a network but resolved
+  no names (`adb shell ping retroachievements.org`: unknown host), and those three checks failed
+  showing "Offline" or "Refreshing…". Start it with an explicit resolver:
+  `emulator -avd Medium_Phone_API_37.0 -no-snapshot-load -gpu host -dns-server 8.8.8.8,1.1.1.1`.
+  The first suite right after a cold boot can also fail on timing; run it again before suspecting
+  the code.
 - **On a phone with its own media** the Photo and Music checks fail by design: they expect the
   seeded `XrossSmoke` files to be the only media.
 - Frame timing has its own scripts (`palette-perf.sh`, `display-matrix.sh`, §5); they need the

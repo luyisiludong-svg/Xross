@@ -42,9 +42,11 @@ import dev.xross.launcher.state.InactivityTracker
 import dev.xross.launcher.state.MediaOverlay
 import dev.xross.launcher.state.UiEffect
 import dev.xross.launcher.storage.VolumeMonitor
+import dev.xross.launcher.state.XmbEvent
 import dev.xross.launcher.state.XmbViewModel
 import dev.xross.launcher.theme.XrossTheme
 import dev.xross.launcher.theme.rememberActivePalette
+import dev.xross.launcher.ui.ScreenSignal
 import dev.xross.launcher.ui.XmbScreen
 import kotlinx.coroutines.launch
 import dev.xross.launcher.theme.pack.typeface
@@ -340,33 +342,21 @@ class MainActivity : ComponentActivity() {
                     media = viewModel.media,
                     music = container.music,
                     statusBar = viewModel.statusBar,
-                    onAction = viewModel::onAction,
-                    onCategoryTap = viewModel::onCategoryTapped,
-                    onItemTap = viewModel::onItemTapped,
-                    onCancelRemap = viewModel::cancelRemap,
-                    onItemLongPress = viewModel::onItemLongPressed,
-                    onOptionTap = viewModel::onOptionTapped,
-                    onCloseOptions = viewModel::closeOptions,
-                    onSearchKeyTap = viewModel::onSearchKeyTapped,
-                    onSearchResultTap = viewModel::onSearchResultTapped,
-                    onNameKeyTap = viewModel::onNameKeyTapped,
-                    onInfoRowTap = viewModel::onInfoRowTapped,
-                    onCloseInfo = viewModel::closeInfo,
+                    onEvent = viewModel::onEvent,
+                    onSignal = { signal ->
+                        when (signal) {
+                            is ScreenSignal.BackdropCover -> backdropCovers = signal.covers
+                            is ScreenSignal.UiFilterError -> container.shaderHealth.notice(signal.key, signal.text)
+                            is ScreenSignal.CrosshairX -> container.sounds.setCrosshair(signal.x)
+                        }
+                    },
                     snap = container.snaps,
                     videoFile = { uuid ->
                         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                             container.assets.file(uuid, ArtKind.VIDEO)
                         }
                     },
-                    onPlayDetails = { viewModel.onAction(NavAction.CONFIRM) },
-                    onCloseDetails = viewModel::closeDetails,
-                    onAvatarTap = viewModel::onAvatarTapped,
-                    onProfileCardButtonTap = viewModel::onProfileCardButtonTapped,
-                    onCloseProfileCard = viewModel::closeProfileCard,
-                    onMiniPlayerTap = viewModel::onMiniPlayerTapped,
-                    onMiniPlayerLongPress = viewModel::onMiniPlayerLongPressed,
                     loadBadge = { name, px -> badgeImages.load(name, px) },
-                    onBackdropCoverChanged = { backdropCovers = it },
                     wallpaper = androidx.compose.runtime.remember(state.settings.customWallpaper, pack, look) {
                         WallpaperSource.resolve(state.settings.customWallpaper, pack, look)
                     },
@@ -374,28 +364,7 @@ class MainActivity : ComponentActivity() {
                         WallpaperSource.packWallpaper(pack, look)
                     },
                     loadWallpaper = { source, px -> container.wallpapers.load(source, px) },
-                    onWaveRowTap = viewModel::onWaveRowTapped,
-                    onLayoutRowTap = viewModel::onLayoutRowTapped,
-                    onLayoutSlider = viewModel::onLayoutSliderChanged,
-                    onCloseLayoutSettings = viewModel::closeLayoutSettings,
-                    onWaveSlider = viewModel::onWaveSliderChanged,
-                    onCloseWaveSettings = viewModel::closeWaveSettings,
-                    onAchievementTap = viewModel::onAchievementTapped,
-                    onCloseAchievements = viewModel::closeAchievements,
-                    onDetailsAchievements = viewModel::onDetailsAchievementsTapped,
-                    onCloseAvatarHud = viewModel::closeAvatarHud,
-                    onSocialTap = viewModel::onSocialStackTapped,
-                    onCloseSocialPanel = viewModel::closeSocialPanel,
-                    onAvatarRowTap = viewModel::onAvatarRowTapped,
-                    onAvatarSlider = viewModel::onAvatarSliderChanged,
-                    onCloseAvatarStyle = viewModel::closeAvatarStyle,
-                    onCloseRaHub = viewModel::closeRaHub,
-                    onRaHubPillTap = viewModel::onRaHubPillTapped,
-                    onRaHubRowTap = viewModel::onRaHubRowTapped,
-                    onAchievementsColumns = viewModel::onAchievementsColumns,
                     particlesIdle = particlesIdle,
-                    onUiFilterError = container.shaderHealth::notice,
-                    onCrosshairX = container.sounds::setCrosshair,
                     reveal = { bootReveal.menu },
                 )
                 }
@@ -404,8 +373,8 @@ class MainActivity : ComponentActivity() {
                     boot = state.boot,
                     pending = state.bootPending,
                     videoVolume = container.audio.cueVolume,
-                    onSkip = viewModel::skipBoot,
-                    onVideoEnded = viewModel::onBootVideoEnded,
+                    onSkip = { viewModel.onEvent(XmbEvent.Boot.Skip) },
+                    onVideoEnded = { viewModel.onEvent(XmbEvent.Boot.VideoEnded) },
                     onCovering = { bootCovers = it },
                 )
             }

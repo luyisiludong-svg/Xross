@@ -218,6 +218,24 @@ class RaController(
         if (profiles.current.linked && profiles.isStale()) refreshProfile(quiet = true)
     }
 
+    /** A touch on one of the RetroAchievements screens. */
+    fun onEvent(event: XmbEvent.Ra) {
+        when (event) {
+            XmbEvent.Ra.AvatarTap -> onAvatarTapped()
+            XmbEvent.Ra.CloseAvatarHud -> closeAvatarHud()
+            is XmbEvent.Ra.ProfileCardButtonTap -> onProfileCardButtonTapped(event.index)
+            XmbEvent.Ra.CloseProfileCard -> closeProfileCard()
+            XmbEvent.Ra.SocialTap -> onSocialStackTapped()
+            XmbEvent.Ra.CloseSocialPanel -> closeSocialPanel()
+            is XmbEvent.Ra.HubPillTap -> onRaHubPillTapped(event.index)
+            is XmbEvent.Ra.HubRowTap -> onRaHubRowTapped(event.index)
+            XmbEvent.Ra.CloseHub -> closeRaHub()
+            is XmbEvent.Ra.AchievementTap -> onAchievementTapped(event.index)
+            is XmbEvent.Ra.AchievementsColumns -> onAchievementsColumns(event.columns)
+            XmbEvent.Ra.CloseAchievements -> closeAchievements()
+        }
+    }
+
     /** Collapses the mini-HUD back into the avatar (Back, Down, or a tap outside it). */
     fun closeAvatarHud() {
         if (_state.value.avatarFocused) {

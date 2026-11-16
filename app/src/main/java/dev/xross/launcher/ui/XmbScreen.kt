@@ -111,6 +111,7 @@ import dev.xross.launcher.state.NodeIcon
 import dev.xross.launcher.state.RemapSession
 import dev.xross.launcher.state.XmbCategory
 import dev.xross.launcher.state.XmbNode
+import dev.xross.launcher.state.XmbEvent
 import dev.xross.launcher.state.XmbUiState
 import dev.xross.launcher.media.SnapPlayer
 import dev.xross.launcher.model.ArtKind
@@ -198,61 +199,20 @@ fun XmbScreen(
     music: MusicPlayer,
     /** The status bar's own slice; only the bar collects it. */
     statusBar: kotlinx.coroutines.flow.StateFlow<StatusBarState>,
-    onAction: (NavAction) -> Unit,
-    onCategoryTap: (Int) -> Unit,
-    onItemTap: (Int) -> Unit,
-    onCancelRemap: () -> Unit,
-    onItemLongPress: (Int) -> Unit = {},
-    onOptionTap: (Int) -> Unit = {},
-    onCloseOptions: () -> Unit = {},
-    onSearchKeyTap: (Int, Int) -> Unit = { _, _ -> },
-    onSearchResultTap: (Int) -> Unit = {},
-    onNameKeyTap: (Int, Int) -> Unit = { _, _ -> },
-    onInfoRowTap: (Int) -> Unit = {},
-    onCloseInfo: () -> Unit = {},
+    /** Every touch and swipe: see [XmbEvent]. */
+    onEvent: (XmbEvent) -> Unit,
+    /** What the screen reports about its own drawing and layout: see [ScreenSignal]. */
+    onSignal: (ScreenSignal) -> Unit = {},
     snap: SnapPlayer? = null,
     videoFile: suspend (String) -> java.io.File? = { null },
-    onPlayDetails: () -> Unit = {},
-    onCloseDetails: () -> Unit = {},
-    onAvatarTap: () -> Unit = {},
-    onProfileCardButtonTap: (Int) -> Unit = {},
-    onCloseProfileCard: () -> Unit = {},
-    onMiniPlayerTap: () -> Unit = {},
-    onMiniPlayerLongPress: () -> Unit = {},
     loadBadge: suspend (String, Int) -> ImageBitmap? = { _, _ -> null },
-    /** Opaque hero art, a video snap or an opaque wallpaper covers the screen: the wave can stop rendering. */
-    onBackdropCoverChanged: (Boolean) -> Unit = {},
     /** The wallpaper behind the menu (the user's Xross wallpaper or the pack's); null: none. */
     wallpaper: WallpaperSource? = null,
     /** The pack's wallpaper, shown when [wallpaper] (the user's) can't be read. */
     packWallpaper: WallpaperSource? = null,
     loadWallpaper: suspend (WallpaperSource, Int) -> Wallpaper? = { _, _ -> null },
-    onWaveRowTap: (Int) -> Unit = {},
-    onWaveSlider: (Int, Float) -> Unit = { _, _ -> },
-    onCloseWaveSettings: () -> Unit = {},
-    onLayoutRowTap: (Int) -> Unit = {},
-    onLayoutSlider: (Int, Float) -> Unit = { _, _ -> },
-    onCloseLayoutSettings: () -> Unit = {},
-    onAchievementTap: (Int) -> Unit = {},
-    onCloseAchievements: () -> Unit = {},
-    onDetailsAchievements: () -> Unit = {},
-    onCloseAvatarHud: () -> Unit = {},
-    /** Touch: the social stack (2b.7c) opens or closes its panel; a tap outside the panel closes it. */
-    onSocialTap: () -> Unit = {},
-    onCloseSocialPanel: () -> Unit = {},
-    onAvatarRowTap: (Int) -> Unit = {},
-    onAvatarSlider: (Int, Float) -> Unit = { _, _ -> },
-    onCloseAvatarStyle: () -> Unit = {},
-    onCloseRaHub: () -> Unit = {},
-    onRaHubPillTap: (Int) -> Unit = {},
-    onRaHubRowTap: (Int) -> Unit = {},
-    onAchievementsColumns: (Int) -> Unit = {},
     /** No input for [ParticleRest.IDLE_AFTER_MS]: the foreground particles rest. */
     particlesIdle: Boolean = false,
-    /** A UI filter (2b.4f) couldn't be built: (key, toast text), announced once per key. */
-    onUiFilterError: (String, String) -> Unit = { _, _ -> },
-    /** The crosshair's X over the screen width (0–1) as laid out, for panning the UI sounds (2b.5a). */
-    onCrosshairX: (Float) -> Unit = {},
     /** The menu's alpha on a cold start ([BootReveal.menu], 2b.5d): the fade-in, or 1 under the boot video. */
     reveal: () -> Float = { 1f },
 ) {
@@ -280,16 +240,16 @@ fun XmbScreen(
     BoxWithConstraints(
         Modifier
             .fillMaxSize()
-            .uiFilter(filterRef, filterSource, started, idle, filterStill, onUiFilterError)
+            .uiFilter(filterRef, filterSource, started, idle, filterStill) { key, text -> onSignal(ScreenSignal.UiFilterError(key, text)) }
             .graphicsLayer { alpha = reveal() }
             .frostHost()
-            .swipeNavigation(onAction),
+            .swipeNavigation { onEvent(XmbEvent.Nav(it)) },
     ) {
         val m = remember(constraints.maxWidth, constraints.maxHeight, layout) {
             XmbMetrics(constraints.maxWidth.toFloat(), constraints.maxHeight.toFloat(), layout)
         }
-        val reportCrosshair by rememberUpdatedState(onCrosshairX)
-        LaunchedEffect(m.anchorX, m.width) { if (m.width > 0f) reportCrosshair(m.anchorX / m.width) }
+        val signal by rememberUpdatedState(onSignal)
+        LaunchedEffect(m.anchorX, m.width) { if (m.width > 0f) signal(ScreenSignal.CrosshairX(m.anchorX / m.width)) }
         val density = LocalDensity.current
         fun Float.sp(): TextUnit = with(density) { this@sp.toSp() }
         fun Float.dp(): Dp = with(density) { this@dp.toDp() }
@@ -359,8 +319,7 @@ fun XmbScreen(
             AmbientParticles(particlePreset, particleState, Color(palette.glow), stillMotion)
         }
         val covers = heroCovers || videoCovers || wallpaperCovers
-        val reportCover by rememberUpdatedState(onBackdropCoverChanged)
-        LaunchedEffect(covers) { reportCover(covers) }
+        LaunchedEffect(covers) { signal(ScreenSignal.BackdropCover(covers)) }
 
         val catPos by animateFloatAsState(state.categoryIndex.toFloat(), motion.nav(), label = "category")
         val depth by animateFloatAsState(state.depth.coerceAtMost(1).toFloat(), motion.nav(), label = "depth")
@@ -394,9 +353,12 @@ fun XmbScreen(
             catPos = { catPos },
             depth = { depth },
             pulse = { pulse },
-            onCategoryTap = onCategoryTap,
+            onCategoryTap = { onEvent(XmbEvent.Menu.CategoryTap(it)) },
         )
-        ItemColumn(state, m, motion, { depth }, { pulse }, loadAppIcon, loadThumb, loadArt, onItemTap, onItemLongPress)
+        ItemColumn(state, m, motion, { depth }, { pulse }, loadAppIcon, loadThumb, loadArt,
+            onItemTap = { onEvent(XmbEvent.Menu.ItemTap(it)) },
+            onItemLongPress = { onEvent(XmbEvent.Menu.ItemLongPress(it)) },
+        )
 
         // (The "now playing" line that used to sit top-left is the floating MiniPlayerCard below.)
 
@@ -422,20 +384,20 @@ fun XmbScreen(
             leftMaxHeight = (m.barY - m.categoryIcon * m.categoryFocusScale / 2 - m.s * 0.04f).coerceAtLeast(0f).dp(),
             ticker = state.nowPlaying.takeIf { components.miniPlayer == MiniPlayerMode.STATUS_TICKER },
             tickerCovered = miniCovered,
-            onTickerTap = onMiniPlayerTap,
-            onTickerLongPress = onMiniPlayerLongPress,
+            onTickerTap = { onEvent(XmbEvent.Menu.MiniPlayerTap) },
+            onTickerLongPress = { onEvent(XmbEvent.Menu.MiniPlayerLongPress) },
             social = if (SocialStack.shows(components, state.friends)) state.friends.friends else emptyList(),
             socialBadge = state.friends.badge,
             socialOpen = state.socialPanel != null,
             socialGlow = state.settings.avatarStyle.glowEnabled,
-            onSocialTap = onSocialTap,
+            onSocialTap = { onEvent(XmbEvent.Ra.SocialTap) },
         )
         state.socialPanel?.let { panel ->
             // A tap anywhere outside the panel closes it.
             Box(
                 Modifier
                     .fillMaxSize()
-                    .clickable(remember { MutableInteractionSource() }, indication = null, onClick = onCloseSocialPanel),
+                    .clickable(remember { MutableInteractionSource() }, indication = null, onClick = { onEvent(XmbEvent.Ra.CloseSocialPanel) }),
             )
             SocialPanel(
                 friends = state.friends,
@@ -452,7 +414,7 @@ fun XmbScreen(
             Box(
                 Modifier
                     .fillMaxSize()
-                    .clickable(remember { MutableInteractionSource() }, indication = null, onClick = onCloseAvatarHud),
+                    .clickable(remember { MutableInteractionSource() }, indication = null, onClick = { onEvent(XmbEvent.Ra.CloseAvatarHud) }),
             )
         }
         if (components.avatar) AvatarHud(
@@ -465,7 +427,7 @@ fun XmbScreen(
             confirmGlyph = if (state.confirm == ConfirmLayout.EAST) state.glyphs.east else state.glyphs.south,
             backGlyph = if (state.confirm == ConfirmLayout.EAST) state.glyphs.south else state.glyphs.east,
             optionsGlyph = state.glyphs.north,
-            onAvatarTap = onAvatarTap,
+            onAvatarTap = { onEvent(XmbEvent.Ra.AvatarTap) },
             loadBadge = loadBadge,
             modifier = Modifier.align(Alignment.TopEnd).padding(top = statusTop, end = statusEnd),
         )
@@ -500,8 +462,8 @@ fun XmbScreen(
                 nowPlaying = state.nowPlaying,
                 covered = miniCovered,
                 loadThumb = loadThumb,
-                onClick = onMiniPlayerTap,
-                onLongClick = onMiniPlayerLongPress,
+                onClick = { onEvent(XmbEvent.Menu.MiniPlayerTap) },
+                onLongClick = { onEvent(XmbEvent.Menu.MiniPlayerLongPress) },
                 mode = components.miniPlayer,
             )
             // telemetryMode (2b.7d): nothing, the compact pill or the rich card; the mini player's
@@ -535,7 +497,7 @@ fun XmbScreen(
                 pulse = { pulse },
                 glyphs = state.glyphs,
                 confirm = state.confirm,
-                onKeyTap = onNameKeyTap,
+                onKeyTap = { row, column -> onEvent(XmbEvent.Typing.NameKeyTap(row, column)) },
             )
         }
 
@@ -546,8 +508,8 @@ fun XmbScreen(
                 pulse = { pulse },
                 glyphs = state.glyphs,
                 confirm = state.confirm,
-                onKeyTap = onSearchKeyTap,
-                onResultTap = onSearchResultTap,
+                onKeyTap = { row, column -> onEvent(XmbEvent.Typing.SearchKeyTap(row, column)) },
+                onResultTap = { onEvent(XmbEvent.Typing.SearchResultTap(it)) },
             )
         }
 
@@ -557,8 +519,8 @@ fun XmbScreen(
             pulse = { pulse },
             confirmGlyph = if (state.confirm == ConfirmLayout.EAST) state.glyphs.east else state.glyphs.south,
             backGlyph = if (state.confirm == ConfirmLayout.EAST) state.glyphs.south else state.glyphs.east,
-            onTap = onOptionTap,
-            onDismiss = onCloseOptions,
+            onTap = { onEvent(XmbEvent.Menu.OptionTap(it)) },
+            onDismiss = { onEvent(XmbEvent.Menu.CloseOptions) },
         )
 
         DetailsScreen(
@@ -570,17 +532,17 @@ fun XmbScreen(
             optionsGlyph = state.glyphs.north,
             loadArt = loadArt,
             loadBadge = loadBadge,
-            onPlay = onPlayDetails,
-            onAchievements = onDetailsAchievements,
-            onDismiss = onCloseDetails,
+            onPlay = { onEvent(XmbEvent.Menu.PlayDetails) },
+            onAchievements = { onEvent(XmbEvent.Menu.DetailsAchievements) },
+            onDismiss = { onEvent(XmbEvent.Menu.CloseDetails) },
         )
 
         InfoPanel(
             info = state.info,
             m = m,
             backGlyph = if (state.confirm == ConfirmLayout.EAST) state.glyphs.south else state.glyphs.east,
-            onRowTap = onInfoRowTap,
-            onDismiss = onCloseInfo,
+            onRowTap = { onEvent(XmbEvent.Menu.InfoRowTap(it)) },
+            onDismiss = { onEvent(XmbEvent.Menu.CloseInfo) },
         )
 
         UserCard(
@@ -590,8 +552,8 @@ fun XmbScreen(
             pulse = { pulse },
             confirmGlyph = if (state.confirm == ConfirmLayout.EAST) state.glyphs.east else state.glyphs.south,
             backGlyph = if (state.confirm == ConfirmLayout.EAST) state.glyphs.south else state.glyphs.east,
-            onButtonTap = onProfileCardButtonTap,
-            onDismiss = onCloseProfileCard,
+            onButtonTap = { onEvent(XmbEvent.Ra.ProfileCardButtonTap(it)) },
+            onDismiss = { onEvent(XmbEvent.Ra.CloseProfileCard) },
             loadBadge = loadBadge,
             avatarStyle = state.settings.avatarStyle,
         )
@@ -605,10 +567,10 @@ fun XmbScreen(
             backGlyph = if (state.confirm == ConfirmLayout.EAST) state.glyphs.south else state.glyphs.east,
             loadArt = loadArt,
             loadBadge = loadBadge,
-            onDismiss = onCloseRaHub,
+            onDismiss = { onEvent(XmbEvent.Ra.CloseHub) },
             friends = state.friends,
-            onPillTap = onRaHubPillTap,
-            onRowTap = onRaHubRowTap,
+            onPillTap = { onEvent(XmbEvent.Ra.HubPillTap(it)) },
+            onRowTap = { onEvent(XmbEvent.Ra.HubRowTap(it)) },
         )
 
         AchievementsScreen(
@@ -619,9 +581,9 @@ fun XmbScreen(
             optionsGlyph = state.glyphs.north,
             loadArt = loadArt,
             loadBadge = loadBadge,
-            onBadgeTap = onAchievementTap,
-            onDismiss = onCloseAchievements,
-            onColumns = onAchievementsColumns,
+            onBadgeTap = { onEvent(XmbEvent.Ra.AchievementTap(it)) },
+            onDismiss = { onEvent(XmbEvent.Ra.CloseAchievements) },
+            onColumns = { onEvent(XmbEvent.Ra.AchievementsColumns(it)) },
         )
 
         WaveSettingsPanel(
@@ -632,9 +594,9 @@ fun XmbScreen(
             pulse = { pulse },
             confirmGlyph = if (state.confirm == ConfirmLayout.EAST) state.glyphs.east else state.glyphs.south,
             backGlyph = if (state.confirm == ConfirmLayout.EAST) state.glyphs.south else state.glyphs.east,
-            onRowTap = onWaveRowTap,
-            onSlider = onWaveSlider,
-            onDismiss = onCloseWaveSettings,
+            onRowTap = { onEvent(XmbEvent.Editor.WaveRowTap(it)) },
+            onSlider = { index, fraction -> onEvent(XmbEvent.Editor.WaveSlider(index, fraction)) },
+            onDismiss = { onEvent(XmbEvent.Editor.CloseWave) },
         )
 
         LayoutSettingsPanel(
@@ -646,9 +608,9 @@ fun XmbScreen(
             pulse = { pulse },
             confirmGlyph = if (state.confirm == ConfirmLayout.EAST) state.glyphs.east else state.glyphs.south,
             backGlyph = if (state.confirm == ConfirmLayout.EAST) state.glyphs.south else state.glyphs.east,
-            onRowTap = onLayoutRowTap,
-            onSlider = onLayoutSlider,
-            onDismiss = onCloseLayoutSettings,
+            onRowTap = { onEvent(XmbEvent.Layout.RowTap(it)) },
+            onSlider = { index, fraction -> onEvent(XmbEvent.Layout.Slider(index, fraction)) },
+            onDismiss = { onEvent(XmbEvent.Layout.Close) },
         )
 
         AvatarStylePanel(
@@ -659,12 +621,12 @@ fun XmbScreen(
             pulse = { pulse },
             confirmGlyph = if (state.confirm == ConfirmLayout.EAST) state.glyphs.east else state.glyphs.south,
             backGlyph = if (state.confirm == ConfirmLayout.EAST) state.glyphs.south else state.glyphs.east,
-            onRowTap = onAvatarRowTap,
-            onSlider = onAvatarSlider,
-            onDismiss = onCloseAvatarStyle,
+            onRowTap = { onEvent(XmbEvent.Editor.AvatarRowTap(it)) },
+            onSlider = { index, fraction -> onEvent(XmbEvent.Editor.AvatarSlider(index, fraction)) },
+            onDismiss = { onEvent(XmbEvent.Editor.CloseAvatar) },
         )
 
-        state.remap?.let { RemapOverlay(it, m, onCancelRemap) }
+        state.remap?.let { RemapOverlay(it, m) { onEvent(XmbEvent.Menu.CancelRemap) } }
         state.booting?.let { GameBootOverlay(it, palette, m, LocalThemeLook.current?.cosmetics?.curtain ?: LaunchCurtain.BLOOM, LocalStillMotion.current) }
 
         // Unlock toasts: top right under the status bar; drawn only, never focused.

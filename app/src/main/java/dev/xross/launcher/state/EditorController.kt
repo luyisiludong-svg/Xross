@@ -73,6 +73,18 @@ class EditorController(
         if (outcome.state != before) _state.update { it.copy(wave = outcome.state) }
     }
 
+    /** A touch on Wave settings or Profile customization. */
+    fun onEvent(event: XmbEvent.Editor) {
+        when (event) {
+            is XmbEvent.Editor.WaveRowTap -> onWaveRowTapped(event.index)
+            is XmbEvent.Editor.WaveSlider -> onWaveSliderChanged(event.index, event.fraction)
+            XmbEvent.Editor.CloseWave -> closeWave()
+            is XmbEvent.Editor.AvatarRowTap -> onAvatarRowTapped(event.index)
+            is XmbEvent.Editor.AvatarSlider -> onAvatarSliderChanged(event.index, event.fraction)
+            XmbEvent.Editor.CloseAvatar -> closeAvatar()
+        }
+    }
+
     fun closeWave() {
         if (_state.value.wave != null) {
             sounds.play(UiSound.BACK)

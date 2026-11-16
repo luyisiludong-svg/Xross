@@ -105,6 +105,15 @@ class SearchController(
     /** Details paged to [index] of the results: the cursor follows, so Back lands on that game. */
     fun focusResult(index: Int) = _state.update { it.copy(search = it.search?.copy(resultIndex = index)) }
 
+    /** A touch on the search or name keyboard, or on a search result. */
+    fun onEvent(event: XmbEvent.Typing) {
+        when (event) {
+            is XmbEvent.Typing.SearchKeyTap -> onSearchKeyTapped(event.row, event.column)
+            is XmbEvent.Typing.SearchResultTap -> onSearchResultTapped(event.index)
+            is XmbEvent.Typing.NameKeyTap -> onNameKeyTapped(event.row, event.column)
+        }
+    }
+
     /** Touch: tap a key to type it. */
     fun onSearchKeyTapped(row: Int, column: Int) {
         val search = _state.value.search ?: return

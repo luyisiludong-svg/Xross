@@ -10,7 +10,9 @@ the "Phase 3-prep" slot, are done: the layering test, the nine edges cut, conven
 the configuration cache, `:core:model` and `:theme:engine` as Kotlin/JVM modules, and the look
 inputs in `ThemeController`. How it was built, where it differs from this proposal and what it did
 not verify: [§10](#10-as-built-phase-3-prep-steps-15). Step 6, the ViewModel split, is done too:
-five controllers came out of `XmbViewModel` ([§11](#11-as-built-step-6-the-viewmodel-split)). Next is step 7, the `XmbEvent` sink.
+five controllers came out of `XmbViewModel` ([§11](#11-as-built-step-6-the-viewmodel-split)).
+Step 7 is done (2026-11-16): one `XmbEvent` sink replaces `XmbScreen`'s 41 callbacks
+([§12](#12-as-built-step-7-the-xmbevent-sink)). Next is step 8, the `CompositionLocal` holders.
 
 Related documents: the [developer guide](../DEVELOPMENT.md) (source layout, build and tests), the
 [status dashboard](../STATUS.md) (test and frame-timing evidence) and
@@ -30,6 +32,7 @@ targets that a shared theme engine would serve).
 9. [Action plan](#9-action-plan)
 10. [As built: Phase 3-prep, steps 1–5](#10-as-built-phase-3-prep-steps-15)
 11. [As built: step 6, the ViewModel split](#11-as-built-step-6-the-viewmodel-split)
+12. [As built: step 7, the `XmbEvent` sink](#12-as-built-step-7-the-xmbevent-sink)
 
 ## 1. Verdict
 
@@ -252,7 +255,7 @@ strains it:
    name entry), `EditorController` (wave, avatar and layout editors), `FolderPickers` (ROM, DAT,
    media folders, wallpaper and theme import), `LibraryJobs` (scan, DATs, volume events, backup),
    and boot and launch transitions.
-2. **One event type.** A sealed `XmbEvent` (with `NavAction` as one case) and a single
+2. ✅ **One event type** (done, §12). A sealed `XmbEvent` (with `NavAction` as one case) and a single
    `onEvent: (XmbEvent) -> Unit` replace the 41 callbacks on `XmbScreen`. Each controller handles
    its own subset, so a new panel adds a case, not a parameter on `XmbScreen` and a lambda in
    `MainActivity`. Do it controller by controller, after each extraction.
@@ -297,8 +300,8 @@ strains it:
 | 4 | Extract `:core:model` and `:theme:engine` (Kotlin/JVM), with their tests as plain JUnit | Stable engine behind a boundary; faster theme tests; ready for 2b.9 | 3–4 days | 2, 3 | ✅ §10.2 |
 | 5 | Look inputs into `ThemeController` as a `StateFlow<ResolvedLook>` | The cascade testable end to end without Compose | 1 day | 4 | ✅ §10.3 |
 | 6 | Finish the ViewModel split (search, editors, folder pickers, library jobs, boot) | Stops every feature landing in one class; precondition for feature modules | 1–1.5 weeks | — | ✅ §11 |
-| 7 | `XmbEvent` sink, controller by controller | Smaller signatures; new panels don't touch `MainActivity` | 2 days | 6 | Next |
-| 8 | `CompositionLocal` holders in place of the six singletons | Previews, tests and a second composition stop sharing state | 2 days | — | ❌ |
+| 7 | `XmbEvent` sink, controller by controller | Smaller signatures; new panels don't touch `MainActivity` | 2 days | 6 | ✅ §12 |
+| 8 | `CompositionLocal` holders in place of the six singletons | Previews, tests and a second composition stop sharing state | 2 days | — | Next |
 | 9 | Per-region state slices (item column, overlays), checked with `palette-perf.sh` | Flat recomposition as `XmbUiState` grows | 2–3 days | 6 | ❌ |
 | 10 | `:core:data` and `:render:gl` | KSP isolation, migration tests alone; shader work out of Compose | 3 days each | 4 | ❌ (`xross.android.library` is ready for them) |
 | 11 | Phase 3 features as `:feature:*` modules from the start; `:feature:ra` as the first extraction | New code born modular | With Phase 3 | 6, 10 | ❌ |
@@ -454,7 +457,7 @@ callbacks are unchanged until step 7.
   225.
 * **What's left in the view model** is the menu itself (navigation, the Options menu, Information,
   Details, remapping), the scraper commands, the settings toggles in `run`, and the wiring. The
-  41 callbacks on `XmbScreen` are unchanged; step 7 replaces them.
+  41 callbacks on `XmbScreen` were unchanged by this step; step 7 replaced them (§12).
 
 Verified: 970 unit tests (889 in `:app`, 81 in `:theme:engine`), `check` with `lintDebug` 0 errors,
 debug and profiling builds. On the API 37 emulator, after each extraction:
@@ -472,3 +475,49 @@ was logged. The code on that path (`ThemeController` → `RaController.onFriends
 change. The second run passed all 426.
 
 Not run: `palette-perf.sh` (nothing on the draw path changed), the A55 and the other devices.
+
+## 12. As built: step 7, the `XmbEvent` sink
+
+On `refactor/phase3-prep`, 2026-11-16. `XmbScreen` took 41 `on…` callbacks; it now takes two.
+
+* **`XmbEvent`** (`state/XmbEvent.kt`) is a sealed interface with one group per owner:
+  `Nav(NavAction)` (swipes, the same path as a key) and `Menu` (13 cases: the category and item
+  columns, Options, Information, Details, remap cancel, the mini player) for the view model;
+  `Typing` for `SearchController` (3), `Editor` for `EditorController` (6), `Layout` for
+  `ThemeController` (3), `Ra` for `RaController` (12) and `Boot` for `TransitionController` (2).
+  `XmbViewModel.onEvent` hands each group to its owner's `onEvent`, which maps the case to the
+  method it already had. Every `when` is exhaustive, so a case without a handler doesn't compile.
+* **The boot overlay uses it too** (`Boot.Skip`, `Boot.VideoEnded`), which the proposal did not
+  list.
+* **Three callbacks were not input, so they are not events.** The backdrop covering the screen
+  (it stops the wave), a UI filter that failed to build, and the crosshair's X for sound panning
+  are the screen reporting on its own drawing and layout, and only the Activity acts on them
+  (`backdropCovers`, `ShaderHealth`, `UiSounds`). They became a second sealed type,
+  `ScreenSignal` (`ui/`), on one `onSignal` parameter. Putting them in `XmbEvent` would have made
+  the view model ignore a group, or reach into the Activity's state.
+* **Leaf composables keep their narrow callbacks.** `OptionsPanel`, `RaHubScreen`,
+  `WaveSettingsPanel` and the rest still take `onRowTap: (Int) -> Unit` and the like; `XmbScreen`
+  builds each from `onEvent` (`{ onEvent(XmbEvent.Ra.HubRowTap(it)) }`). Only the screen knows the
+  event type, so the panels stay reusable and previewable on their own. Compose's strong skipping
+  (on by default with Kotlin 2.2) remembers these lambdas by their captures, so they don't break
+  skipping.
+* **The view model lost its forwards.** The 27 one-line touch forwards to the controllers are
+  gone, and the 12 touch handlers that only `MainActivity` called (`onCategoryTapped`,
+  `onItemTapped`, `onOptionTapped`, …) are now private. Touch still skips
+  `TransitionController.takesInput()`, as it did: the boot overlay covers the menu while the
+  intro runs, so nothing under it can be tapped.
+* **`MediaOverlayController` is still handed over directly** (`media = viewModel.media`); §7.6
+  leaves it for when the media screens are next touched. `music` and the image loaders are data
+  sources, not input, and stay parameters.
+* **Size:** `XmbScreen.kt` 1,831 → 1,793 lines, `MainActivity.kt` 654 → 623, `XmbViewModel.kt`
+  1,746 → 1,722 (with `onEvent` added). `XmbScreen` has 17 parameters, down from 56.
+
+Tests: `XmbEventTest` (3, Robolectric, through the real view model: a swipe takes the key path;
+menu taps move the columns and closing panels that aren't open is harmless; the `Editor` and `Ra`
+groups reach their controllers, and every other group's close is safe with nothing open). Five
+call sites in `MenuNavigationSoundTest`, `Phase2bFeaturesTest` and `RaControllerTest` moved from
+the removed forwards to `onEvent`; the controller tests call the controllers as before.
+
+Verified: 980 unit tests (899 in `:app`, 4 opt-in live tests skipped; 81 in `:theme:engine`),
+`check` with `lintDebug` 0 errors and `ArchitectureTest`, debug and profiling builds. Device
+results: [Phase 3-prep evidence §3.40](../phase-3-prep/STATUS.md#s3.40).

@@ -630,6 +630,42 @@ class XmbViewModel(
 
     // region Input
 
+    /**
+     * Touch and swipe input from `XmbScreen` and the boot overlay. [XmbEvent.Nav] takes the same
+     * path as a key; the menu's own events are handled here, and each other group goes to the
+     * controller that owns it. Touch skips the intro's input gate as it always has: the boot
+     * overlay covers the menu while the intro runs, so nothing under it can be tapped.
+     */
+    fun onEvent(event: XmbEvent) {
+        when (event) {
+            is XmbEvent.Nav -> onAction(event.action)
+            is XmbEvent.Menu -> onMenuEvent(event)
+            is XmbEvent.Typing -> typing.onEvent(event)
+            is XmbEvent.Editor -> editors.onEvent(event)
+            is XmbEvent.Layout -> theme.onEvent(event)
+            is XmbEvent.Ra -> ra.onEvent(event)
+            is XmbEvent.Boot -> transitions.onEvent(event)
+        }
+    }
+
+    private fun onMenuEvent(event: XmbEvent.Menu) {
+        when (event) {
+            is XmbEvent.Menu.CategoryTap -> onCategoryTapped(event.index)
+            is XmbEvent.Menu.ItemTap -> onItemTapped(event.index)
+            is XmbEvent.Menu.ItemLongPress -> onItemLongPressed(event.index)
+            XmbEvent.Menu.CancelRemap -> cancelRemap()
+            is XmbEvent.Menu.OptionTap -> onOptionTapped(event.index)
+            XmbEvent.Menu.CloseOptions -> closeOptions()
+            is XmbEvent.Menu.InfoRowTap -> onInfoRowTapped(event.index)
+            XmbEvent.Menu.CloseInfo -> closeInfo()
+            XmbEvent.Menu.PlayDetails -> onAction(NavAction.CONFIRM)
+            XmbEvent.Menu.DetailsAchievements -> onDetailsAchievementsTapped()
+            XmbEvent.Menu.CloseDetails -> closeDetails()
+            XmbEvent.Menu.MiniPlayerTap -> onMiniPlayerTapped()
+            XmbEvent.Menu.MiniPlayerLongPress -> onMiniPlayerLongPressed()
+        }
+    }
+
     override fun onAction(action: NavAction) {
         // The cold-start intro takes the first key (any key skips it); the menu gets the next one.
         // A key before the intro is decided (the saved pack still loading) skips it in advance.
@@ -700,43 +736,19 @@ class XmbViewModel(
     }
 
     /** Touch: the floating mini player opens the full audio controls. */
-    fun onMiniPlayerTapped() = toggleMediaControls()
+    private fun onMiniPlayerTapped() = toggleMediaControls()
 
     /** Touch: a long press on the mini player plays or pauses without opening anything. */
-    fun onMiniPlayerLongPressed() {
+    private fun onMiniPlayerLongPressed() {
         if (music.state.value.song == null) return
         music.togglePlayPause()
         sounds.play(UiSound.ENTER)
     }
 
-    // region RetroAchievements (forwarded to [RaController])
-
-    fun closeAvatarHud() = ra.closeAvatarHud()
-
-    fun onAvatarTapped() = ra.onAvatarTapped()
-
-    fun onSocialStackTapped() = ra.onSocialStackTapped()
-
-    fun closeSocialPanel() = ra.closeSocialPanel()
-
-    fun closeProfileCard() = ra.closeProfileCard()
-
-    fun onProfileCardButtonTapped(index: Int) = ra.onProfileCardButtonTapped(index)
+    // region RetroAchievements (touch goes to [RaController] through [onEvent])
 
     /** Answer from the link dialog; see [RaController.onRetroAchievementsEntered]. */
     fun onRetroAchievementsEntered(user: String, key: String) = ra.onRetroAchievementsEntered(user, key)
-
-    fun closeRaHub() = ra.closeRaHub()
-
-    fun closeAchievements() = ra.closeAchievements()
-
-    fun onAchievementTapped(index: Int) = ra.onAchievementTapped(index)
-
-    fun onAchievementsColumns(columns: Int) = ra.onAchievementsColumns(columns)
-
-    fun onRaHubPillTapped(index: Int) = ra.onRaHubPillTapped(index)
-
-    fun onRaHubRowTapped(index: Int) = ra.onRaHubRowTapped(index)
 
     /** Games, with the cursor on [gameId] in its system's list (a friend's game from the hub's sidebar). */
     private fun revealGame(gameId: Long) {
@@ -764,32 +776,6 @@ class XmbViewModel(
     /** The document created for a shared theme: see [ThemeController.onThemeArchiveCreated]. */
     fun onThemeArchiveCreated(uri: Uri?) = theme.onThemeArchiveCreated(uri)
 
-    // Settings ▸ Theme ▸ Layout (2b.8a): forwarded to [ThemeController].
-
-    fun closeLayoutSettings() = theme.closeLayoutSettings()
-
-    fun onLayoutRowTapped(index: Int) = theme.onLayoutRowTapped(index)
-
-    fun onLayoutSliderChanged(index: Int, fraction: Float) = theme.onLayoutSliderChanged(index, fraction)
-
-    // Settings ▸ Theme ▸ Wave settings: forwarded to [EditorController].
-
-    fun closeWaveSettings() = editors.closeWave()
-
-    fun onWaveRowTapped(index: Int) = editors.onWaveRowTapped(index)
-
-    fun onWaveSliderChanged(index: Int, fraction: Float) = editors.onWaveSliderChanged(index, fraction)
-
-    // endregion
-
-    // region Profile customization (avatar ring and glow; forwarded to [EditorController])
-
-    fun closeAvatarStyle() = editors.closeAvatar()
-
-    fun onAvatarRowTapped(index: Int) = editors.onAvatarRowTapped(index)
-
-    fun onAvatarSliderChanged(index: Int, fraction: Float) = editors.onAvatarSliderChanged(index, fraction)
-
     // endregion
 
     // region Search
@@ -797,10 +783,6 @@ class XmbViewModel(
     // Forwarded to [SearchController].
 
     fun closeSearch() = typing.closeSearch()
-
-    fun onSearchKeyTapped(row: Int, column: Int) = typing.onSearchKeyTapped(row, column)
-
-    fun onSearchResultTapped(index: Int) = typing.onSearchResultTapped(index)
 
     // endregion
 
@@ -852,7 +834,7 @@ class XmbViewModel(
         }
     }
 
-    fun closeOptions() {
+    private fun closeOptions() {
         if (transient.value.optionsMenu != null) {
             sounds.play(UiSound.BACK)
             transient.update { it.copy(optionsMenu = null) }
@@ -860,13 +842,13 @@ class XmbViewModel(
     }
 
     /** Touch: tap a row to focus it, tap again (or tap the focused row) to select. */
-    fun onOptionTapped(index: Int) {
+    private fun onOptionTapped(index: Int) {
         val menu = transient.value.optionsMenu ?: return
         if (index == menu.current.index) selectOption(menu) else transient.update { it.copy(optionsMenu = menu.moveTo(index)) }
     }
 
     /** Touch: long-press an item to open its Options menu. */
-    fun onItemLongPressed(index: Int) {
+    private fun onItemLongPressed(index: Int) {
         val ui = current()
         if (index != ui.focusedIndex) moveCursor(index - ui.focusedIndex)
         current().focused?.let(::openOptions)
@@ -1027,7 +1009,7 @@ class XmbViewModel(
     }
 
     /** Touch: the achievements summary on Details. */
-    fun onDetailsAchievementsTapped() {
+    private fun onDetailsAchievementsTapped() {
         val details = transient.value.details ?: return
         if (details.achievementsSupported) ra.showAchievements(details.gameId)
     }
@@ -1054,7 +1036,7 @@ class XmbViewModel(
         }
     }
 
-    fun closeDetails() {
+    private fun closeDetails() {
         detailsJob?.cancel()
         if (transient.value.details != null) {
             sounds.play(UiSound.BACK)
@@ -1127,7 +1109,7 @@ class XmbViewModel(
         }
     }
 
-    fun closeInfo() {
+    private fun closeInfo() {
         infoJob?.cancel()
         if (transient.value.info != null) {
             sounds.play(UiSound.BACK)
@@ -1136,7 +1118,7 @@ class XmbViewModel(
     }
 
     /** Touch: tap a row to highlight it. */
-    fun onInfoRowTapped(index: Int) {
+    private fun onInfoRowTapped(index: Int) {
         val info = transient.value.info ?: return
         transient.update { it.copy(info = info.moveTo(index)) }
     }
@@ -1183,7 +1165,7 @@ class XmbViewModel(
         transient.update { it.copy(family = family) }
     }
 
-    fun cancelRemap() {
+    private fun cancelRemap() {
         if (transient.value.remap != null) {
             transient.update { it.copy(remap = null) }
             sounds.play(UiSound.BACK)
@@ -1191,7 +1173,7 @@ class XmbViewModel(
         }
     }
 
-    fun onCategoryTapped(index: Int) {
+    private fun onCategoryTapped(index: Int) {
         if (index == nav.value.categoryIndex) {
             val category = categories[index]
             if (nav.value.stack(category.id, category.title).size > 1) sounds.play(UiSound.DRILL_OUT)
@@ -1201,7 +1183,7 @@ class XmbViewModel(
         }
     }
 
-    fun onItemTapped(index: Int) {
+    private fun onItemTapped(index: Int) {
         val ui = current()
         if (index == ui.focusedIndex) ui.focused?.let(::activate) else moveCursor(index - ui.focusedIndex)
     }
@@ -1284,8 +1266,6 @@ class XmbViewModel(
     }
 
     fun closeNameEntry() = typing.closeNameEntry()
-
-    fun onNameKeyTapped(row: Int, column: Int) = typing.onNameKeyTapped(row, column)
 
     // endregion
 
@@ -1398,11 +1378,7 @@ class XmbViewModel(
         }
     }
 
-    // region Cold-start intro and game start (forwarded to [TransitionController])
-
-    fun skipBoot() = transitions.skipBoot()
-
-    fun onBootVideoEnded() = transitions.onBootVideoEnded()
+    // region Game start (forwarded to [TransitionController]; the intro's touches go through [onEvent])
 
     private fun launchGame(gameId: Long) {
         transitions.launchGame(gameId)
