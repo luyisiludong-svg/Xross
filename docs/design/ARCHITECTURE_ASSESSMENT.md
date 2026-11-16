@@ -14,7 +14,12 @@ five controllers came out of `XmbViewModel` ([§11](#11-as-built-step-6-the-view
 Step 7 is done (2026-11-16): one `XmbEvent` sink replaces `XmbScreen`'s 41 callbacks
 ([§12](#12-as-built-step-7-the-xmbevent-sink)). Step 8 is done too: the global snapshot-state
 objects are now holders provided per composition root
-([§13](#13-as-built-step-8-the-compositionlocal-holders)). Next is step 9, per-region state slices.
+([§13](#13-as-built-step-8-the-compositionlocal-holders)).
+
+**Next (reviewed 2026-11-16):** the A55 pass on this branch (no device suite has run there since
+step 1, and step 8 changed the draw path), then the merge to `main`. Steps 9 and 10 are no longer
+scheduled on their own: step 9 waits for a measurement that shows a cost, and step 10 comes with
+the first Phase 3 feature module ([§14](#14-review-after-step-8-are-steps-9-and-10-still-needed)).
 
 Related documents: the [developer guide](../DEVELOPMENT.md) (source layout, build and tests), the
 [status dashboard](../STATUS.md) (test and frame-timing evidence) and
@@ -36,6 +41,7 @@ targets that a shared theme engine would serve).
 11. [As built: step 6, the ViewModel split](#11-as-built-step-6-the-viewmodel-split)
 12. [As built: step 7, the `XmbEvent` sink](#12-as-built-step-7-the-xmbevent-sink)
 13. [As built: step 8, the `CompositionLocal` holders](#13-as-built-step-8-the-compositionlocal-holders)
+14. [Review after step 8: are steps 9 and 10 still needed?](#14-review-after-step-8-are-steps-9-and-10-still-needed)
 
 ## 1. Verdict
 
@@ -264,7 +270,8 @@ strains it:
    `MainActivity`. Do it controller by controller, after each extraction.
 3. **Per-region state.** `StatusBarState` showed the way in 2b.7-prep. Do the same for the item
    column and the overlays, so a toast or a Now Playing change doesn't run the item column's code.
-   Measure with `palette-perf.sh` before and after.
+   Measure with `palette-perf.sh` before and after. (After step 8 this waits for a measurement
+   that shows a cost; §14.)
 4. ✅ **Move the look inputs out of `setContent`** (done, §10). `ThemeLookResolver.resolve` is pure, but the
    settled system, the battery and minute rule filters and `UserLook.of(settings)` are still
    assembled with `remember` in `MainActivity`. Moving them into `ThemeController` as a
@@ -305,8 +312,8 @@ strains it:
 | 6 | Finish the ViewModel split (search, editors, folder pickers, library jobs, boot) | Stops every feature landing in one class; precondition for feature modules | 1–1.5 weeks | — | ✅ §11 |
 | 7 | `XmbEvent` sink, controller by controller | Smaller signatures; new panels don't touch `MainActivity` | 2 days | 6 | ✅ §12 |
 | 8 | `CompositionLocal` holders in place of the six singletons | Previews, tests and a second composition stop sharing state | 2 days | — | ✅ §13 |
-| 9 | Per-region state slices (item column, overlays), checked with `palette-perf.sh` | Flat recomposition as `XmbUiState` grows | 2–3 days | 6 | Next |
-| 10 | `:core:data` and `:render:gl` | KSP isolation, migration tests alone; shader work out of Compose | 3 days each | 4 | ❌ (`xross.android.library` is ready for them) |
+| 9 | Per-region state slices (item column, overlays), checked with `palette-perf.sh` | Flat recomposition as `XmbUiState` grows | 2–3 days (a narrow `ItemColumn` input: hours) | 6 | ⏸ on a measurement (§14) |
+| 10 | `:core:data` and `:render:gl` | KSP isolation, migration tests alone; shader work out of Compose | About 1 day each (`xross.android.library` is ready) | 4 | ⏸ `:core:data` with the first `:feature:*` module, `:render:gl` with a desktop preview or 2b.9 (§14) |
 | 11 | Phase 3 features as `:feature:*` modules from the start; `:feature:ra` as the first extraction | New code born modular | With Phase 3 | 6, 10 | ❌ |
 | 12 | `ui/` subpackages, `imaging/` with one cache budget, mirrored test packages | Findability; predictable memory on 3–4 GB handhelds | 2 days | Alongside 4–10 | ◐ the engine's tests mirror its packages |
 | 13 | Decide KMP for `:theme:engine` (or a generated JSON Schema) | Only needed if the Web Studio runs the engine in the browser | 1 week if KMP | When 2b.9 starts | ❌ |
@@ -314,6 +321,8 @@ strains it:
 **Suggested slot:** steps 1–5 as a "2b.10-prep" or "Phase 3-prep" slice (about 1.5 weeks)
 before any Phase 3 feature branch, then 6–9 interleaved one controller at a time with the
 hardware pass, which doesn't touch the same code. Steps 10–13 follow the work that needs them.
+(As it went: 1–8 landed on `refactor/phase3-prep` by 2026-11-16, and 9 moved behind a
+measurement; §14.)
 
 ## 10. As built: Phase 3-prep, steps 1–5
 
@@ -581,3 +590,46 @@ emulator: `smoke.sh` 12/12 and the theme suite 426/426. This step changes the dr
 0.30%; off 0.30, 0.59, 0.44%), the same as 2b.8 and §10.4. Not run: the A55 and the other device
 suites.
 
+## 14. Review after step 8: are steps 9 and 10 still needed?
+
+On 2026-11-16, with steps 1–8 on `refactor/phase3-prep`. Neither step pays off yet, so neither
+gets a slot of its own.
+
+**Where the refactor stands.** Against the 2b.8 baseline in §2:
+
+| Measure | After 2b.8 | After step 8 |
+| --- | ---: | ---: |
+| `XmbScreen` parameters / callbacks | 56 / 41 | 17 / 2 (`onEvent`, `onSignal`) |
+| `XmbViewModel.kt` | 2,359 lines | 1,722, plus five controllers |
+| `MainActivity.kt` | 655 lines | 633 |
+| Reverse package edges | 9 | 0, held by `ArchitectureTest` |
+| Gradle modules | `:app` | `:app`, `:core:model`, `:theme:engine` |
+| Objects holding snapshot state | 4 | 0, held by `ArchitectureTest` |
+| `XmbUiState` fields | 42 | 42 |
+
+The branch is 10 commits and 212 files ahead of `main`, and none of its device suites has run on
+the A55. Step 8 changed the draw path (`xrossSurface` as three `Modifier.Node`s), so that pass
+comes before the merge.
+
+**Step 9: wait for a measurement.** The cost is real in principle: `XmbScreen` hands the whole
+`XmbUiState` to `ItemColumn`, so any field that changes (a toast, Now Playing, scraper progress
+sampled every 500 ms) gives it a new instance and recomposes the item column, about twice a second
+while a scrape runs. But nothing shows it costing frames: `palette-perf.sh` is at 0.29–0.59% janky,
+the same as 2b.8, and the signature growth that made it look urgent was fixed by step 7. Count the
+item column's recompositions during a scrape on the A55 (Layout Inspector, or a `SideEffect`
+counter) before doing anything. If that shows a cost, the first fix is narrow: pass `ItemColumn`
+only what it reads (items, focus, depth, glyphs), a matter of hours. Separate `StateFlow`s per
+region come only if that is not enough.
+
+**Step 10: with the work that needs it.** `:core:data` would isolate Room's KSP, but Room is 8
+files and about 680 lines and a full `:app` compile is about 15 s, so the build gain is small; the
+`data` ↔ `config` cycle it was meant to end is already cut. What does need it is step 11: a
+`:feature:portal` or `:feature:ftps` module can't reach settings or the database while they live in
+`:app`. Split `:core:data` out as part of the first feature module. `:render:gl` is three files
+(`GlShaders`, `WaveRenderer`, `WaveBackground`, about 1,500 lines) and `validateShaders` already runs
+in `check`; it waits for a desktop preview or 2b.9, its only other user. With `xross.android.library`
+in place, each is about a day of moving files.
+
+**Order from here:** the A55 pass, the merge to `main`, then Phase 3 with Portal or FTPS as the first
+`:feature:*` module and `:core:data` beside it. Step 12 (`ui/` subpackages, `imaging/`) follows
+the files as they are touched.
