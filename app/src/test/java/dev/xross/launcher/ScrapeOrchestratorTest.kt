@@ -7,7 +7,7 @@ import dev.xross.launcher.data.GameEntity
 import dev.xross.launcher.data.GameHashEntity
 import dev.xross.launcher.data.GameMetadataEntity
 import dev.xross.launcher.data.XrossDatabase
-import dev.xross.launcher.scrape.ArtKind
+import dev.xross.launcher.model.ArtKind
 import dev.xross.launcher.scrape.AssetCache
 import dev.xross.launcher.scrape.DownloadResult
 import dev.xross.launcher.scrape.ProviderId
@@ -35,6 +35,8 @@ import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import java.io.File
+import dev.xross.launcher.storage.FileHash
+import dev.xross.launcher.storage.SkipReason
 
 @RunWith(RobolectricTestRunner::class)
 class ScrapeOrchestratorTest {
@@ -175,7 +177,7 @@ class ScrapeOrchestratorTest {
         val seen = Scripted(ProviderId.SCREENSCRAPER, { ProviderResult.NotFound })
         orchestrator(AssetCache(tmp.newFolder("a")), seen).scrapeOne(game.id)
         val request = seen.seen.single()
-        val expected = dev.xross.launcher.storage.FileHash.of(zip, Long.MAX_VALUE)!!
+        val expected = FileHash.of(zip, Long.MAX_VALUE)!!
         assertEquals(expected.crc32, request.crc32)
         assertEquals(expected.sha1, request.sha1)
         assertEquals("1941.zip", request.fileName)
@@ -187,7 +189,7 @@ class ScrapeOrchestratorTest {
     @Test fun filesSkippedAsTooLargeAreScrapedByName() = runBlocking {
         db.games().insertAll(listOf(GameEntity(path = "/r/3ds/zelda.cci", platformId = "n3ds", title = "Zelda", fileName = "zelda.cci", sizeBytes = 1L shl 31, lastModified = 1)))
         val game = db.games().getAll().single()
-        db.hashes().upsert(GameHashEntity.from(game, Fingerprint.skipped(dev.xross.launcher.storage.SkipReason.LARGE)))
+        db.hashes().upsert(GameHashEntity.from(game, Fingerprint.skipped(SkipReason.LARGE)))
         val seen = Scripted(ProviderId.SCREENSCRAPER, { ProviderResult.NotFound })
         assertEquals(ScrapeStatus.NOT_FOUND, orchestrator(AssetCache(tmp.newFolder("a")), seen).scrapeOne(game.id))
         assertFalse(seen.seen.single().hasHash)

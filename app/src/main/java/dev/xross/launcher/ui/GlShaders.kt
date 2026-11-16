@@ -6,6 +6,7 @@ import dev.xross.launcher.theme.shader.ProgramState
 import dev.xross.launcher.theme.shader.ShaderSpec
 import dev.xross.launcher.theme.shader.ShaderSources
 import dev.xross.launcher.theme.shader.ShaderStatus
+import dev.xross.launcher.theme.pack.BackgroundFilter
 
 /**
  * One background program on the GL thread (2b.4a). [begin] hands the source to the driver and
@@ -42,6 +43,17 @@ internal class GlProgram(val spec: ShaderSpec) {
     var uBright = -1; var uLines = -1; var uTurb = -1; var uThick = -1
     /** CRT's own: render pixels per dp (2b.4f). */
     var uPxPerDp = -1
+    /** Feedback: last frame's picture, seconds since it, 1.0 when there is none. */
+    var uPrev = -1; var uFrameDt = -1; var uFresh = -1
+
+    /** Reads `uPrev`, so it is drawn through [FeedbackTargets]. */
+    val usesFeedback: Boolean get() = FeedbackPolicy.wants(uPrev)
+
+    /** Field pass: its own low-resolution first pass, and which pass is drawing. */
+    var uField = -1; var uPass = -1
+
+    /** Reads `uField`, so each frame first draws its [FieldTarget]. */
+    val usesField: Boolean get() = FieldPolicy.wants(uField)
 
     fun fail(cause: ShaderStatus.Cause, error: String) {
         this.cause = cause
@@ -107,6 +119,8 @@ internal class GlProgram(val spec: ShaderSpec) {
         uTransition = loc("uTransition"); uTravel = loc("uTravel")
         uBright = loc("uBright"); uLines = loc("uLines"); uTurb = loc("uTurb"); uThick = loc("uThick")
         uPxPerDp = loc("uPxPerDp")
+        uPrev = loc("uPrev"); uFrameDt = loc("uFrameDt"); uFresh = loc("uFresh")
+        uField = loc("uField"); uPass = loc("uPass")
         state = ProgramState.READY
         return null
     }
@@ -174,7 +188,7 @@ internal class ScreenFilterPass {
         uStrength = GLES30.glGetUniformLocation(program, "uStrength")
     }
 
-    fun draw(filter: dev.xross.launcher.theme.pack.BackgroundFilter, width: Int, height: Int, pxPerDp: Float, strength: Float = 1f) {
+    fun draw(filter: BackgroundFilter, width: Int, height: Int, pxPerDp: Float, strength: Float = 1f) {
         if (handle == 0) return
         val mode = mode(filter)
         if (mode == 0) return
@@ -191,11 +205,11 @@ internal class ScreenFilterPass {
 
     companion object {
         /** `uMode` of [filter]: 0 none, 1 scanlines, 2 CRT, 3 LCD grid (as in the shader). */
-        fun mode(filter: dev.xross.launcher.theme.pack.BackgroundFilter): Int = when (filter) {
-            dev.xross.launcher.theme.pack.BackgroundFilter.NONE -> 0
-            dev.xross.launcher.theme.pack.BackgroundFilter.SCANLINES -> 1
-            dev.xross.launcher.theme.pack.BackgroundFilter.CRT -> 2
-            dev.xross.launcher.theme.pack.BackgroundFilter.LCD_GRID -> 3
+        fun mode(filter: BackgroundFilter): Int = when (filter) {
+            BackgroundFilter.NONE -> 0
+            BackgroundFilter.SCANLINES -> 1
+            BackgroundFilter.CRT -> 2
+            BackgroundFilter.LCD_GRID -> 3
         }
 
         /** The shader's `pitch(dp, minPx)`: [dp] in whole render pixels, at least [minPx]. */
@@ -280,4 +294,208 @@ internal class GpuTimer(extensions: String) {
         const val GL_TIME_ELAPSED_EXT = 0x88BF
         const val GL_GPU_DISJOINT_EXT = 0x8FBB
     }
+}
+
+/**
+ * Last frame's picture for programs that read `uPrev` (ping-pong feedback): two RGBA8 textures at
+ * the surface size that take turns. Each frame the program draws into [target] while sampling
+ * [source], then [present] blits it to the screen and the roles swap. Allocated only while such a
+ * program is on screen (~2 × 4 bytes per render pixel), freed when it leaves.
+ */
+internal class FeedbackTargets {
+    private val tex = IntArray(2)
+    private val fbo = IntArray(2)
+    private var cur = 0
+    var width = 0
+        private set
+    var height = 0
+        private set
+
+    val allocated: Boolean get() = fbo[0] != 0
+
+    /** (Re)allocates at [w]×[h], cleared to black; true when it did (the history is gone). */
+    fun ensure(w: Int, h: Int): Boolean {
+        if (allocated && w == width && h == height) return false
+        release()
+        GLES30.glGenTextures(2, tex, 0)
+        GLES30.glGenFramebuffers(2, fbo, 0)
+        for (i in 0..1) {
+            GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, tex[i])
+            GLES30.glTexImage2D(GLES30.GL_TEXTURE_2D, 0, GLES30.GL_RGBA8, w, h, 0, GLES30.GL_RGBA, GLES30.GL_UNSIGNED_BYTE, null)
+            GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MIN_FILTER, GLES30.GL_LINEAR)
+            GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MAG_FILTER, GLES30.GL_LINEAR)
+            GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_S, GLES30.GL_CLAMP_TO_EDGE)
+            GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_T, GLES30.GL_CLAMP_TO_EDGE)
+            GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, fbo[i])
+            GLES30.glFramebufferTexture2D(GLES30.GL_FRAMEBUFFER, GLES30.GL_COLOR_ATTACHMENT0, GLES30.GL_TEXTURE_2D, tex[i], 0)
+        }
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, 0)
+        val complete = GLES30.glCheckFramebufferStatus(GLES30.GL_FRAMEBUFFER) == GLES30.GL_FRAMEBUFFER_COMPLETE
+        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
+        if (!complete) {
+            android.util.Log.e("XrossShader", "feedback framebuffer incomplete at ${w}x$h; drawing without it")
+            release()
+            return false
+        }
+        width = w
+        height = h
+        clear()
+        return true
+    }
+
+    /** Both pictures to black: the next frame starts without history. */
+    fun clear() {
+        if (!allocated) return
+        GLES30.glClearColor(0f, 0f, 0f, 1f)
+        for (i in 0..1) {
+            GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, fbo[i])
+            GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT)
+        }
+        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
+    }
+
+    /** Binds this frame's render target and puts last frame's picture on texture unit 0. */
+    fun bind() {
+        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, fbo[cur])
+        GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, tex[1 - cur])
+    }
+
+    /** Copies this frame to the screen (framebuffer 0, left bound) and swaps the roles. */
+    fun present() {
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, 0) // never sample the texture being written next frame
+        GLES30.glBindFramebuffer(GLES30.GL_READ_FRAMEBUFFER, fbo[cur])
+        GLES30.glBindFramebuffer(GLES30.GL_DRAW_FRAMEBUFFER, 0)
+        GLES30.glBlitFramebuffer(0, 0, width, height, 0, 0, width, height, GLES30.GL_COLOR_BUFFER_BIT, GLES30.GL_NEAREST)
+        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
+        cur = 1 - cur
+    }
+
+    /** Frees the textures (the context must be current). */
+    fun release() {
+        if (fbo[0] != 0) GLES30.glDeleteFramebuffers(2, fbo, 0)
+        if (tex[0] != 0) GLES30.glDeleteTextures(2, tex, 0)
+        forget()
+    }
+
+    /** The context died with its handles: drop them without GL calls. */
+    fun forget() {
+        fbo.fill(0)
+        tex.fill(0)
+        width = 0
+        height = 0
+        cur = 0
+    }
+}
+
+/**
+ * When feedback history may be trusted (pure, so the rules are unit tested). A program opts in by
+ * using `uniform sampler2D uPrev` (the driver gives an unused uniform no location).
+ */
+internal object FeedbackPolicy {
+    /** A gap longer than this (paused, covered, a hitch) means last frame's picture is stale. */
+    const val MAX_GAP_NS = 500_000_000L
+
+    /** `uFrameDt`'s ceiling, so a long frame never fades a trail to nothing in one step. */
+    const val MAX_DT_S = 0.1f
+
+    fun wants(uPrevLocation: Int): Boolean = uPrevLocation >= 0
+
+    /**
+     * Start without history: a different program from the last feedback frame, new targets (a
+     * resize or a lost context), or too long since the last feedback frame.
+     */
+    fun fresh(lastKey: String?, key: String, reallocated: Boolean, lastNs: Long, nowNs: Long): Boolean =
+        reallocated || lastKey != key || lastNs == 0L || nowNs - lastNs > MAX_GAP_NS
+
+    /** `uFrameDt`: seconds since the last frame, clamped to (0, [MAX_DT_S]]; 1/60 for the first. */
+    fun frameDt(dtSeconds: Float): Float = if (dtSeconds <= 0f) 1f / 60f else dtSeconds.coerceAtMost(MAX_DT_S)
+}
+
+/**
+ * A program's own low-resolution first pass (`uniform sampler2D uField`): one RGBA8 texture at
+ * [FieldPolicy.size] of the surface, drawn with `uPass` = 0, then sampled (unit 1; linear, so
+ * texture() blends texels while texelFetch reads one exactly) by
+ * the full-size pass with `uPass` = 1. For work that is the same across a block of pixels, such
+ * as one light ray per character cell. Allocated only while such a program shows.
+ */
+internal class FieldTarget {
+    private val tex = IntArray(1)
+    private val fbo = IntArray(1)
+    var width = 0
+        private set
+    var height = 0
+        private set
+
+    val allocated: Boolean get() = fbo[0] != 0
+
+    /** Allocates for a [w]×[h] surface; false when the driver refused it. */
+    fun ensure(w: Int, h: Int): Boolean {
+        val fw = FieldPolicy.size(w)
+        val fh = FieldPolicy.size(h)
+        if (allocated && fw == width && fh == height) return true
+        release()
+        GLES30.glGenTextures(1, tex, 0)
+        GLES30.glGenFramebuffers(1, fbo, 0)
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, tex[0])
+        GLES30.glTexImage2D(GLES30.GL_TEXTURE_2D, 0, GLES30.GL_RGBA8, fw, fh, 0, GLES30.GL_RGBA, GLES30.GL_UNSIGNED_BYTE, null)
+        // Linear: texture() blends neighbouring texels (cheap blurs); texelFetch still reads one exactly.
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MIN_FILTER, GLES30.GL_LINEAR)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MAG_FILTER, GLES30.GL_LINEAR)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_S, GLES30.GL_CLAMP_TO_EDGE)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_T, GLES30.GL_CLAMP_TO_EDGE)
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, 0)
+        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, fbo[0])
+        GLES30.glFramebufferTexture2D(GLES30.GL_FRAMEBUFFER, GLES30.GL_COLOR_ATTACHMENT0, GLES30.GL_TEXTURE_2D, tex[0], 0)
+        val complete = GLES30.glCheckFramebufferStatus(GLES30.GL_FRAMEBUFFER) == GLES30.GL_FRAMEBUFFER_COMPLETE
+        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
+        if (!complete) {
+            android.util.Log.e("XrossShader", "field framebuffer incomplete at ${fw}x$fh")
+            release()
+            return false
+        }
+        width = fw
+        height = fh
+        return true
+    }
+
+    /** Renders into the field: binds its framebuffer and viewport (the texture must not be bound). */
+    fun bindForPass() {
+        GLES30.glActiveTexture(GLES30.GL_TEXTURE1)
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, 0)
+        GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
+        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, fbo[0])
+        GLES30.glViewport(0, 0, width, height)
+    }
+
+    /** Puts the field on texture unit 1 for the full-size pass. */
+    fun bindForSampling() {
+        GLES30.glActiveTexture(GLES30.GL_TEXTURE1)
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, tex[0])
+        GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
+    }
+
+    fun release() {
+        if (fbo[0] != 0) GLES30.glDeleteFramebuffers(1, fbo, 0)
+        if (tex[0] != 0) GLES30.glDeleteTextures(1, tex, 0)
+        forget()
+    }
+
+    fun forget() {
+        fbo[0] = 0
+        tex[0] = 0
+        width = 0
+        height = 0
+    }
+}
+
+/** The field pass's contract (pure, unit tested). */
+internal object FieldPolicy {
+    /** Surface pixels per field texel along each axis. */
+    const val DIVISOR = 4
+
+    fun wants(uFieldLocation: Int): Boolean = uFieldLocation >= 0
+
+    /** Field texels along an axis of [px] surface pixels: ceil(px / [DIVISOR]), at least 1. */
+    fun size(px: Int): Int = maxOf(1, (px + DIVISOR - 1) / DIVISOR)
 }

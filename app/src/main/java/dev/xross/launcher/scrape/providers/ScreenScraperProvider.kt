@@ -1,7 +1,7 @@
 package dev.xross.launcher.scrape.providers
 
 import dev.xross.launcher.data.dat.DatNames
-import dev.xross.launcher.scrape.ArtKind
+import dev.xross.launcher.model.ArtKind
 import dev.xross.launcher.scrape.AssetCache
 import dev.xross.launcher.scrape.HttpClient
 import dev.xross.launcher.scrape.HttpResponse
@@ -22,6 +22,7 @@ import org.json.JSONException
 import org.json.JSONObject
 import java.io.IOException
 import java.net.URLEncoder
+import dev.xross.launcher.scrape.HtmlText
 
 /** Developer credentials (per application) and the user's own account (optional, raises quotas). */
 data class ScreenScraperCredentials(
@@ -386,7 +387,7 @@ class ScreenScraperProvider(
          * else the first value present.
          */
         internal fun localized(raw: Any?, preferred: List<String>, keyField: String): String? = when (raw) {
-            is String -> raw.ifBlank { null }?.let(dev.xross.launcher.scrape.HtmlText::decode)
+            is String -> raw.ifBlank { null }?.let(HtmlText::decode)
             is JSONArray -> {
                 val entries = (0 until raw.length()).mapNotNull { raw.optJSONObject(it) }
                     .mapNotNull { e -> textOf(e.opt("text"))?.let { e.optString(keyField) to it } }
@@ -401,8 +402,8 @@ class ScreenScraperProvider(
 
         /** `{"text": "…"}` or a plain string. */
         internal fun textOf(raw: Any?): String? = when (raw) {
-            is String -> raw.trim().ifEmpty { null }?.let(dev.xross.launcher.scrape.HtmlText::decode)
-            is JSONObject -> raw.optString("text").trim().ifEmpty { null }?.let(dev.xross.launcher.scrape.HtmlText::decode)
+            is String -> raw.trim().ifEmpty { null }?.let(HtmlText::decode)
+            is JSONObject -> raw.optString("text").trim().ifEmpty { null }?.let(HtmlText::decode)
             is Number -> raw.toString()
             else -> null
         }

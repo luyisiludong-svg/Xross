@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application android:label="Xross UI reader" android:hasCode="true" />
+    <!-- Self-targeted: started with `am instrument -w dev.xross.uireader/.UiReader` (without -w
+         there is no UiAutomation), it only reads the screen and never touches another app's
+         process. tools/device-tests/lib/harness.sh starts and stops it. -->
+    <instrumentation
+        android:name=".UiReader"
+        android:targetPackage="dev.xross.uireader"
+        android:label="Xross UI reader" />
+</manifest>

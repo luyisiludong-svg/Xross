@@ -66,7 +66,7 @@ import dev.xross.launcher.profile.ProfileState
 import dev.xross.launcher.profile.RaBadge
 import dev.xross.launcher.profile.RaLibrarySummary
 import dev.xross.launcher.profile.RaMasteredGame
-import dev.xross.launcher.scrape.ArtKind
+import dev.xross.launcher.model.ArtKind
 import dev.xross.launcher.model.GlyphKey
 import dev.xross.launcher.profile.FriendsState
 import dev.xross.launcher.state.HubFocus

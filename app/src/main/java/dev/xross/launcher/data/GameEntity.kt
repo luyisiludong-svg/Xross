@@ -27,7 +27,7 @@ data class GameEntity(
     val playCount: Int = 0,
     /** Total time played, accumulated from launcher-measured sessions. */
     @ColumnInfo(defaultValue = "0") val playTimeMs: Long = 0,
-    /** Per-game emulator ([dev.xross.launcher.storage.EmulatorOption.key]); null = platform default. */
+    /** Per-game emulator ([dev.xross.launcher.model.EmulatorOption.key]); null = platform default. */
     val emulatorOverride: String? = null,
     /** Title derived from the file name by the scanner; what [title] falls back to. */
     @ColumnInfo(defaultValue = "") val fileTitle: String = title,

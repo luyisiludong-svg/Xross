@@ -1,4 +1,6 @@
 pluginManagement {
+    // Convention plugins: xross.jvm.library, xross.android.library.
+    includeBuild("build-logic")
     repositories {
         google()
         mavenCentral()
@@ -15,6 +17,13 @@ dependencyResolutionManagement {
 rootProject.name = "Xross"
 include(":app")
 
+// Platform-free layers (docs/design/ARCHITECTURE_ASSESSMENT.md §5): plain Kotlin/JVM.
+include(":core:model")
+include(":theme:engine")
+
 // Test-only emulator stand-ins (see tools/emulator-stub/build.gradle.kts).
 include(":emulator-stub")
 project(":emulator-stub").projectDir = file("tools/emulator-stub")
+// Test-only fast screen reader for the device tests (see tools/ui-reader/build.gradle.kts).
+include(":ui-reader")
+project(":ui-reader").projectDir = file("tools/ui-reader")

@@ -13,7 +13,7 @@ import dev.xross.launcher.state.MediaFolderKind
 import dev.xross.launcher.state.MenuSnapshot
 import dev.xross.launcher.state.MenuTree
 import dev.xross.launcher.state.NodeAction
-import dev.xross.launcher.storage.PlatformRegistry
+import dev.xross.launcher.model.PlatformRegistry
 import dev.xross.launcher.storage.SystemFolders
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertArrayEquals

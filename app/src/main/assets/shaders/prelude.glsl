@@ -14,4 +14,17 @@ uniform float uBatteryLevel; // 0.0 empty .. 1.0 full (1.0 where unknown)
 uniform float uAudioBass;    // 0.0 .. 1.0 bass energy of Xross's music, as heard (0.0 with none or paused)
 uniform float uAudioBeat;    // 1.0 for ~100 ms from a beat, else 0.0
 uniform float uTransition;   // 1.0 right after a category switch, easing back to 0.0 in ~1 s
+// Feedback (optional): a shader that reads uPrev gets last frame's picture (RGBA8, the render
+// size, linear filtering, clamped). Fade it per second with uFrameDt, and ignore it where
+// uFresh is 1.0 (first frame, after a pause or resize, and in still/E-Ink mode).
+uniform sampler2D uPrev;     // last frame's output; sample at gl_FragCoord.xy / uResolution
+uniform float uFrameDt;      // seconds since the last frame, 0.1 at most
+uniform float uFresh;        // 1.0 when uPrev holds no usable history, else 0.0
+// Field pass (optional): a shader that reads uField is drawn twice per frame. First with
+// uPass = 0 into a texture of ceil(uResolution / 4) texels (gl_FragCoord is then a texel, write
+// whatever the second pass needs), then with uPass = 1 at full size, where uField holds that
+// result (RGBA8; texelFetch reads one texel exactly, texture() blends neighbours bilinearly).
+// For work shared by a block of pixels.
+uniform sampler2D uField;
+uniform int uPass;           // 0: the field pass, 1: the full-size pass (always 1 without uField)
 out vec4 fragColor;

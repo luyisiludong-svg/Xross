@@ -9,6 +9,7 @@ import java.io.RandomAccessFile
 import java.security.MessageDigest
 import java.util.zip.CRC32
 import java.util.zip.ZipFile
+import dev.xross.launcher.model.Platform
 
 /** How a fingerprint was obtained. */
 enum class HashSource {

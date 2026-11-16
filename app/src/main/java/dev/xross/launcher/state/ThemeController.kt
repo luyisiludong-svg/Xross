@@ -39,7 +39,7 @@ import dev.xross.launcher.theme.pack.StatusSide
 import dev.xross.launcher.theme.pack.StatusSlot
 import dev.xross.launcher.theme.pack.TelemetryMode
 import dev.xross.launcher.theme.pack.ThemeArchive
-import dev.xross.launcher.theme.pack.ThemeDefaults
+import dev.xross.launcher.data.ThemeDefaults
 import dev.xross.launcher.theme.pack.ThemePackLoader
 import dev.xross.launcher.theme.pack.ThemeRuntime
 import dev.xross.launcher.theme.pack.TopLeftClusterMode
@@ -51,6 +51,19 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import dev.xross.launcher.data.of
+import dev.xross.launcher.data.writeTo
+import dev.xross.launcher.platform.AgslSupport
+import dev.xross.launcher.theme.WaveTint
+import dev.xross.launcher.theme.BatteryLevel
+import dev.xross.launcher.theme.ResolvedLook
+import dev.xross.launcher.theme.ThemeLookResolver
+import dev.xross.launcher.theme.minuteOfDay
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
+import java.time.LocalTime
 
 /**
  * Settings ▸ Theme, split out of [XmbViewModel] (Architecture Assessment #6, Phase 2b.8-prep):
@@ -98,6 +111,25 @@ class ThemeController(
 
     /** Settings ▸ Theme ▸ Layout while it is open (2b.8a). */
     val layoutEditor: StateFlow<LayoutEditorState?> = _layoutEditor.asStateFlow()
+
+    /**
+     * The look the menu draws with (Architecture Assessment §7.4): the whole cascade
+     * ([ThemeLookResolver]) over the active pack, the settings, the menu's [focus] and the
+     * [battery], settled by [LookFlow] (the focused system after its rest delay, battery and clock
+     * only when the pack's rules read them). The Activity collects this one value. Call it once:
+     * each call starts its own collection in [scope].
+     */
+    fun resolvedLook(
+        focus: StateFlow<LookFocus>,
+        battery: StateFlow<BatteryLevel?>,
+        clock: () -> LocalTime = LocalTime::now,
+    ): StateFlow<ResolvedLook> {
+        val first = LookFlow.of(themes.active.value, settings.current, focus.value, battery.value, minuteOfDay(clock()))
+        return LookFlow.inputs(themes.active, settings.settings, focus, battery, clock)
+            .map(ThemeLookResolver::resolve)
+            .distinctUntilChanged()
+            .stateIn(scope, SharingStarted.Eagerly, ThemeLookResolver.resolve(first))
+    }
 
     /** Runs [command] when it is a theme command; false hands it back to the view model. */
     fun onCommand(command: Command): Boolean {
@@ -309,6 +341,15 @@ class ThemeController(
         settings.update { it.copy(layoutOverrides = overrides.normalized()) }
     }
 
+    /** A touch on the Layout panel. */
+    fun onEvent(event: XmbEvent.Layout) {
+        when (event) {
+            is XmbEvent.Layout.RowTap -> onLayoutRowTapped(event.index)
+            is XmbEvent.Layout.Slider -> onLayoutSliderChanged(event.index, event.fraction)
+            XmbEvent.Layout.Close -> closeLayoutSettings()
+        }
+    }
+
     fun closeLayoutSettings() {
         if (_layoutEditor.value != null) {
             sounds.play(UiSound.BACK)
@@ -380,7 +421,7 @@ class ThemeController(
         val v = settings.current.effectOverrides[slot]
         val note = when {
             slot == EffectSlot.UI_FILTER && v.isNotEmpty() && v != "NONE" &&
-                !dev.xross.launcher.ui.UiFilterSupport.supported() -> "UI filters need Android 13 or later"
+                !AgslSupport.supported() -> "UI filters need Android 13 or later"
             slot == EffectSlot.SHADER && !settings.current.waveEnabled -> "Turn Wave background on to see it"
             slot == EffectSlot.BOOT_INTRO -> "Shown on the next cold start"
             else -> null
@@ -682,7 +723,7 @@ class ThemeController(
                         themeVariant = "",
                         theme = if (loaded.look().palette != null) PACK_THEME else s.theme,
                         // The tint's colors are the pack's palette now.
-                        waveTint = dev.xross.launcher.theme.WaveTint.THEME.name,
+                        waveTint = WaveTint.THEME.name,
                     )
                 }
             }

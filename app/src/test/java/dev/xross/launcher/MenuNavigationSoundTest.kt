@@ -7,6 +7,7 @@ import dev.xross.launcher.audio.UiSound
 import dev.xross.launcher.input.NavAction
 import dev.xross.launcher.state.Categories
 import dev.xross.launcher.state.XmbViewModel
+import dev.xross.launcher.state.XmbEvent
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -78,7 +79,7 @@ class MenuNavigationSoundTest {
         press(NavAction.PREV_CATEGORY, times = 6)
         press(NavAction.CONFIRM)
         played.clear()
-        vm.onCategoryTapped(vm.state.value.categoryIndex)
+        vm.onEvent(XmbEvent.Menu.CategoryTap(vm.state.value.categoryIndex))
         idle()
         assertEquals(listOf(UiSound.DRILL_OUT), played.map { it.first })
         assertTrue(vm.state.value.breadcrumb.isEmpty())

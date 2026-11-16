@@ -2,7 +2,7 @@ package dev.xross.launcher.state
 
 import dev.xross.launcher.model.GlyphKey
 import dev.xross.launcher.audio.AudioMixer
-import dev.xross.launcher.audio.MusicUnderSnaps
+import dev.xross.launcher.data.MusicUnderSnaps
 import dev.xross.launcher.audio.VolumeChannel
 import dev.xross.launcher.data.AppEntry
 import dev.xross.launcher.data.GameEntity
@@ -11,13 +11,46 @@ import dev.xross.launcher.input.ConfirmLayout
 import dev.xross.launcher.input.ControllerKey
 import dev.xross.launcher.launch.EmulatorRegistry
 import dev.xross.launcher.launch.GameLauncher
-import dev.xross.launcher.storage.EmulatorOption
-import dev.xross.launcher.storage.Platform
-import dev.xross.launcher.storage.PlatformRegistry
+import dev.xross.launcher.model.EmulatorOption
+import dev.xross.launcher.model.Platform
+import dev.xross.launcher.model.PlatformRegistry
 import dev.xross.launcher.storage.StorageVolumes
 import dev.xross.launcher.theme.ProfileField
 import dev.xross.launcher.theme.XrossTheme
 import java.util.Locale
+import dev.xross.launcher.data.of
+import dev.xross.launcher.theme.pack.UserLook
+import dev.xross.launcher.data.BackupInfo
+import dev.xross.launcher.data.BackupStatus
+import dev.xross.launcher.data.DatSummary
+import dev.xross.launcher.data.FingerprintStats
+import dev.xross.launcher.data.GameMetadataEntity
+import dev.xross.launcher.media.MediaLibrary
+import dev.xross.launcher.media.NowPlaying
+import dev.xross.launcher.model.ArtKind
+import dev.xross.launcher.platform.AgslSupport
+import dev.xross.launcher.profile.RaConsoles
+import dev.xross.launcher.scrape.ScrapeProgress
+import dev.xross.launcher.scrape.ScrapeStatus
+import dev.xross.launcher.theme.AvatarColorPreset
+import dev.xross.launcher.theme.PACK_THEME
+import dev.xross.launcher.theme.QuickProfile
+import dev.xross.launcher.theme.WaveTint
+import dev.xross.launcher.theme.pack.BadgePill
+import dev.xross.launcher.theme.pack.BootIntro
+import dev.xross.launcher.theme.pack.ColorFlags
+import dev.xross.launcher.theme.pack.ComponentOverrides
+import dev.xross.launcher.theme.pack.ComponentRow
+import dev.xross.launcher.theme.pack.ComponentsPatch
+import dev.xross.launcher.theme.pack.EffectSlot
+import dev.xross.launcher.theme.pack.MiniPlayerMode
+import dev.xross.launcher.theme.pack.ResolvedComponents
+import dev.xross.launcher.theme.pack.StatusSide
+import dev.xross.launcher.theme.pack.StatusSlot
+import dev.xross.launcher.theme.pack.TelemetryMode
+import dev.xross.launcher.theme.pack.ThemeLook
+import dev.xross.launcher.theme.pack.ThemePackLoader
+import dev.xross.launcher.theme.pack.TopLeftClusterMode
 
 data class FolderEntry(
     val path: String,
@@ -30,7 +63,7 @@ data class FolderEntry(
 
 /** Live fingerprinting status; kept out of [MenuSnapshot] so progress never rebuilds game lists. */
 data class FingerprintStatus(
-    val stats: dev.xross.launcher.data.FingerprintStats? = null,
+    val stats: FingerprintStats? = null,
     /** Title being fingerprinted right now, or null when idle. */
     val current: String? = null,
 )
@@ -45,13 +78,13 @@ data class MenuSnapshot(
     val folders: List<FolderEntry> = emptyList(),
     val scanStatus: String? = null,
     val versionName: String = "",
-    val media: dev.xross.launcher.media.MediaLibrary = dev.xross.launcher.media.MediaLibrary(),
+    val media: MediaLibrary = MediaLibrary(),
     /** Roots of mounted volumes; empty means "unknown", in which case nothing is marked offline. */
     val mountedRoots: List<String> = emptyList(),
     /** Imported DATs with their match counts. */
-    val dats: List<dev.xross.launcher.data.DatSummary> = emptyList(),
+    val dats: List<DatSummary> = emptyList(),
     /** gameId → DAT match, scraped fields and overrides. */
-    val metadata: Map<Long, dev.xross.launcher.data.GameMetadataEntity> = emptyMap(),
+    val metadata: Map<Long, GameMetadataEntity> = emptyMap(),
     /** Folder DATs are imported from (resolved from the setting). */
     val datFolder: String = "",
     /** Which metadata services can run. */
@@ -69,8 +102,8 @@ data class MenuSnapshot(
 /** What Settings ▸ Theme shows about theme packs. */
 data class ThemeSetup(
     /** (id, name) of every pack, Default first. */
-    val packs: List<Pair<String, String>> = listOf(dev.xross.launcher.theme.pack.ThemePackLoader.DEFAULT_ID to "Default"),
-    val activeId: String = dev.xross.launcher.theme.pack.ThemePackLoader.DEFAULT_ID,
+    val packs: List<Pair<String, String>> = listOf(ThemePackLoader.DEFAULT_ID to "Default"),
+    val activeId: String = ThemePackLoader.DEFAULT_ID,
     val activeName: String = "Default",
     val activeAuthor: String = "",
     /** The active pack brings its own colors (the "Theme pack" color option). */
@@ -86,7 +119,7 @@ data class ThemeSetup(
     /** (id, name) of the active pack's variants; empty hides Theme variant. */
     val variants: List<Pair<String, String>> = emptyList(),
     /** The active pack's own circadian, battery-tint and adaptive-palette switches. */
-    val packFlags: dev.xross.launcher.theme.pack.ColorFlags = dev.xross.launcher.theme.pack.ColorFlags.NONE,
+    val packFlags: ColorFlags = ColorFlags.NONE,
     /** The active pack brings a wallpaper (`wallpaper.png` or `effects.wallpaperPath`). */
     val packWallpaper: Boolean = false,
     /** The active pack brings ambient music (`bgm.ogg` / `bgm.mp3`); filled in by Phase 2b.5c, which plays it. */
@@ -97,22 +130,22 @@ data class ThemeSetup(
      * The pack's own look per variant id ("" = its base), no category open, before the user's
      * picks (2b.4f): what the effect rows call "Theme pack (…)".
      */
-    val looks: Map<String, dev.xross.launcher.theme.pack.ThemeLook> = emptyMap(),
+    val looks: Map<String, ThemeLook> = emptyMap(),
     /** The pack's `components` per variant id ("" = its base), before the user's (2b.7a). */
-    val components: Map<String, dev.xross.launcher.theme.pack.ComponentsPatch> = emptyMap(),
+    val components: Map<String, ComponentsPatch> = emptyMap(),
     /** Logo paths the pack could read (`components.logo`). */
     val logos: Set<String> = emptySet(),
 ) {
     /** The components of [variant] (else the base), with the user's [user] layer on top. */
     fun components(
         variant: String,
-        user: dev.xross.launcher.theme.pack.ComponentOverrides = dev.xross.launcher.theme.pack.ComponentOverrides.NONE,
-    ): dev.xross.launcher.theme.pack.ResolvedComponents =
-        (components[variant] ?: components[""] ?: dev.xross.launcher.theme.pack.ComponentsPatch.NONE).over(user.patch.takeUnless { user.empty }).resolve()
+        user: ComponentOverrides = ComponentOverrides.NONE,
+    ): ResolvedComponents =
+        (components[variant] ?: components[""] ?: ComponentsPatch.NONE).over(user.patch.takeUnless { user.empty }).resolve()
 
     /** The look of [variant], else the base look, else a plain default. */
-    fun packLook(variant: String): dev.xross.launcher.theme.pack.ThemeLook =
-        looks[variant] ?: looks[""] ?: dev.xross.launcher.theme.pack.ThemeLook(palette = null, surfaceId = packSurface)
+    fun packLook(variant: String): ThemeLook =
+        looks[variant] ?: looks[""] ?: ThemeLook(palette = null, surfaceId = packSurface)
 }
 
 /** What Settings ▸ Accounts shows (public profile data only, never the Web API key). */
@@ -129,11 +162,11 @@ data class PortableSetup(
     val root: String = "",
     /** False while the folder is in app storage because shared storage can't be written yet. */
     val portable: Boolean = false,
-    val backup: dev.xross.launcher.data.BackupStatus = dev.xross.launcher.data.BackupStatus(),
+    val backup: BackupStatus = BackupStatus(),
     /** The snapshot currently in `Xross/data/`, if any. */
-    val backupOnDisk: dev.xross.launcher.data.BackupInfo? = null,
+    val backupOnDisk: BackupInfo? = null,
     /** Set on a clean install when the Xross folder holds a backup with games. */
-    val restorable: dev.xross.launcher.data.BackupInfo? = null,
+    val restorable: BackupInfo? = null,
 )
 
 /** What the Metadata settings need to know about service accounts (never the secrets). */
@@ -162,7 +195,7 @@ class MenuTree(private val s: MenuSnapshot) {
     val media by lazy { MediaMenus(s.media, s.storageGranted) }
 
     /** Music root with the live Now Playing row. Not cached. */
-    fun musicRoot(now: dev.xross.launcher.media.NowPlaying): List<XmbNode> = media.musicRoot(now)
+    fun musicRoot(now: NowPlaying): List<XmbNode> = media.musicRoot(now)
 
     /** Lists are memoized: a tree is rebuilt only when the snapshot changes, not per keypress. */
     fun list(key: String): List<XmbNode> = cache.getOrPut(key) { build(key) }
@@ -174,7 +207,7 @@ class MenuTree(private val s: MenuSnapshot) {
         key == Categories.rootKey(Categories.SETTINGS) -> settingsRoot()
         key == Categories.rootKey(Categories.PHOTO) -> media.photoRoot()
         key == Categories.rootKey(Categories.VIDEO) -> media.videoRoot()
-        key == Categories.rootKey(Categories.MUSIC) -> media.musicRoot(dev.xross.launcher.media.NowPlaying())
+        key == Categories.rootKey(Categories.MUSIC) -> media.musicRoot(NowPlaying())
         media.handles(key) -> media.list(key)
         key == RECENT -> s.games.filter { it.lastPlayed != null }
             .sortedByDescending { it.lastPlayed }.take(30).map { gameNode(it, showPlatform = true) }
@@ -185,7 +218,7 @@ class MenuTree(private val s: MenuSnapshot) {
             gamesByPlatform[key.removePrefix(PLATFORM_PREFIX)].orEmpty().map { gameNode(it, showPlatform = false) }
         key == LIBRARY -> librarySettings()
         key == DATS -> datSettings()
-        key == METADATA -> metadataSettings(dev.xross.launcher.scrape.ScrapeProgress())
+        key == METADATA -> metadataSettings(ScrapeProgress())
         key == CONTROLS -> controlSettings()
         key == EMULATORS -> emulatorSettings()
         key == DISPLAY -> displaySettings()
@@ -313,7 +346,7 @@ class MenuTree(private val s: MenuSnapshot) {
         val meta = s.metadata[game.id]
         // Title badges (2b.7b): a listed SYSTEM or PLAYTIME pill takes its part out of the subtitle.
         val pills = shownComponents.pills
-        val systemPill = dev.xross.launcher.theme.pack.BadgePill.SYSTEM in pills
+        val systemPill = BadgePill.SYSTEM in pills
         val parts = buildList {
             if (isOffline(game.path)) add("Not connected")
             if (game.favorite) add("★")
@@ -323,7 +356,7 @@ class MenuTree(private val s: MenuSnapshot) {
             val ext = game.fileName.substringAfterLast('.', "").uppercase(Locale.ROOT)
             if (!((showPlatform || systemPill) && ext == platform?.shortName?.uppercase(Locale.ROOT))) add(ext)
             // Tracked playtime where the file size used to be (the size is in Information).
-            if (dev.xross.launcher.theme.pack.BadgePill.PLAYTIME !in pills) add(playtimeSubtitle(game.playTimeMs))
+            if (BadgePill.PLAYTIME !in pills) add(playtimeSubtitle(game.playTimeMs))
         }
         return XmbNode(
             id = "game:${game.id}",
@@ -343,7 +376,7 @@ class MenuTree(private val s: MenuSnapshot) {
     private fun gameIcon(game: GameEntity, platform: Platform?): NodeIcon {
         val glyph = if (platform?.isDiscBased == true || game.isDiscImage()) GlyphKey.GAME_DISC else GlyphKey.GAME_CART
         val meta = s.metadata[game.id]
-        val scraped = meta?.scrapeStatus == dev.xross.launcher.scrape.ScrapeStatus.OK.name
+        val scraped = meta?.scrapeStatus == ScrapeStatus.OK.name
         return NodeIcon.Tile(game.uuid, game.title, glyph, if (scraped) meta?.scrapedAt ?: 0L else 0L, scraped)
     }
 
@@ -351,7 +384,7 @@ class MenuTree(private val s: MenuSnapshot) {
     private fun gameMenu(game: GameEntity, platform: Platform?): List<MenuOption> = buildList {
         add(MenuOption("Play", command = Command.LaunchGame(game.id)))
         add(MenuOption("Details", detail = "Box art, description and release info", command = Command.ShowDetails(game.id)))
-        if (dev.xross.launcher.profile.RaConsoles.of(game.platformId) != null) {
+        if (RaConsoles.of(game.platformId) != null) {
             add(
                 MenuOption(
                     "Achievements",
@@ -760,7 +793,7 @@ class MenuTree(private val s: MenuSnapshot) {
     }
 
     /** Settings ▸ Library ▸ Metadata & artwork, with the live scrape progress. Not cached. */
-    fun metadataSettings(progress: dev.xross.launcher.scrape.ScrapeProgress): List<XmbNode> = buildList {
+    fun metadataSettings(progress: ScrapeProgress): List<XmbNode> = buildList {
         val st = s.settings
         val setup = s.scraperSetup
         val now = when {
@@ -919,7 +952,7 @@ class MenuTree(private val s: MenuSnapshot) {
 
     private fun avatarSummary(): String {
         val a = s.settings.avatarStyle
-        val color = dev.xross.launcher.theme.AvatarColorPreset.of(a.borderColorHex)?.label ?: a.borderColorHex
+        val color = AvatarColorPreset.of(a.borderColorHex)?.label ?: a.borderColorHex
         return "$color ring · ${formatDecimal(a.borderWidthDp)} dp · glow " + if (a.glowEnabled) "on" else "off"
     }
 
@@ -992,14 +1025,14 @@ class MenuTree(private val s: MenuSnapshot) {
             GlyphKey.DISPLAY, Command.OpenWaveSettings,
         ),
         wallpaperRow(),
-        effectRow(dev.xross.launcher.theme.pack.EffectSlot.SHADER),
-        effectRow(dev.xross.launcher.theme.pack.EffectSlot.BACKGROUND_FILTER),
+        effectRow(EffectSlot.SHADER),
+        effectRow(EffectSlot.BACKGROUND_FILTER),
     )
 
     /** Settings ▸ Theme ▸ Effects: surfaces and what is drawn over the menu. */
     private fun effectSettings() = listOf(
         setting("disp:surface", "Surface style", profiled(ProfileField.SURFACE, surfaceSummary()), GlyphKey.DISPLAY, Command.CycleSurfaceStyle),
-    ) + dev.xross.launcher.theme.pack.EffectSlot.entries
+    ) + EffectSlot.entries
         .filter { it !in BACKGROUND_SLOTS && it !in INTRO_SLOTS }
         .map(::effectRow)
 
@@ -1024,16 +1057,16 @@ class MenuTree(private val s: MenuSnapshot) {
      * achievement badge (2b.7d).
      */
     private fun componentSettings() = listOf(
-        statusSlotsRow(dev.xross.launcher.theme.pack.StatusSide.LEFT),
-        statusSlotsRow(dev.xross.launcher.theme.pack.StatusSide.RIGHT),
-        componentRow(dev.xross.launcher.theme.pack.ComponentRow.BATTERY),
-        componentRow(dev.xross.launcher.theme.pack.ComponentRow.CLOCK),
-        componentRow(dev.xross.launcher.theme.pack.ComponentRow.MINI_PLAYER),
-        componentRow(dev.xross.launcher.theme.pack.ComponentRow.GLYPHS),
+        statusSlotsRow(StatusSide.LEFT),
+        statusSlotsRow(StatusSide.RIGHT),
+        componentRow(ComponentRow.BATTERY),
+        componentRow(ComponentRow.CLOCK),
+        componentRow(ComponentRow.MINI_PLAYER),
+        componentRow(ComponentRow.GLYPHS),
         badgePillsRow(),
         // After the earlier slices' rows, so those keep their places.
-        componentRow(dev.xross.launcher.theme.pack.ComponentRow.TOP_LEFT),
-        componentRow(dev.xross.launcher.theme.pack.ComponentRow.TELEMETRY),
+        componentRow(ComponentRow.TOP_LEFT),
+        componentRow(ComponentRow.TELEMETRY),
     )
 
     /** Title badges: Confirm and Options both open the list of badges to turn on and off. */
@@ -1054,19 +1087,19 @@ class MenuTree(private val s: MenuSnapshot) {
     private fun componentsSummary(): String {
         val c = shownComponents
         val left = if (c.left.isEmpty()) "" else "Left: ${ComponentMenus.summary(c.left)} · "
-        return left + "Right: ${ComponentMenus.summary(c.right)} · " + dev.xross.launcher.theme.pack.ComponentRow.BATTERY.label(c.battery.name)
+        return left + "Right: ${ComponentMenus.summary(c.right)} · " + ComponentRow.BATTERY.label(c.battery.name)
     }
 
     /** Status bar left / right: Confirm and Options both open the slot list (add, remove, reorder). */
-    private fun statusSlotsRow(side: dev.xross.launcher.theme.pack.StatusSide): XmbNode {
+    private fun statusSlotsRow(side: StatusSide): XmbNode {
         val user = s.settings.componentOverrides
-        val userSet = (if (side == dev.xross.launcher.theme.pack.StatusSide.LEFT) user.statusBarLeft else user.statusBarRight) != null
+        val userSet = (if (side == StatusSide.LEFT) user.statusBarLeft else user.statusBarRight) != null
         val slots = ComponentMenus.slots(shownComponents, side)
-        val where = if (side == dev.xross.launcher.theme.pack.StatusSide.LEFT) "Top-left" else "Top-right; the avatar stays last"
+        val where = if (side == StatusSide.LEFT) "Top-left" else "Top-right; the avatar stays last"
         val shown = ComponentMenus.summary(slots) + if (userSet) "" else " (theme pack)"
         return XmbNode(
             id = "disp:comp:" + side.name.lowercase(Locale.ROOT),
-            title = if (side == dev.xross.launcher.theme.pack.StatusSide.LEFT) "Status bar left" else "Status bar right",
+            title = if (side == StatusSide.LEFT) "Status bar left" else "Status bar right",
             subtitle = "$shown · $where",
             icon = NodeIcon.Glyph(GlyphKey.DISPLAY),
             action = NodeAction.Run(Command.ShowOptions),
@@ -1075,29 +1108,29 @@ class MenuTree(private val s: MenuSnapshot) {
     }
 
     /** Battery display and Clock format: Confirm cycles "Theme pack (…)" then each choice; Options lists them all. */
-    private fun componentRow(row: dev.xross.launcher.theme.pack.ComponentRow): XmbNode {
+    private fun componentRow(row: ComponentRow): XmbNode {
         val own = s.settings.componentOverrides[row]
         val shown = if (own == null) row.packLabel(packComponents) else row.label(own)
         val note = when (row) {
-            dev.xross.launcher.theme.pack.ComponentRow.TOP_LEFT -> when {
-                shownComponents.topLeft != dev.xross.launcher.theme.pack.TopLeftClusterMode.SOCIAL_STACK -> "Friends you follow on RetroAchievements, after the left slots"
+            ComponentRow.TOP_LEFT -> when {
+                shownComponents.topLeft != TopLeftClusterMode.SOCIAL_STACK -> "Friends you follow on RetroAchievements, after the left slots"
                 !s.accounts.retroAchievementsLinked -> "Needs a RetroAchievements account (Settings ▸ Accounts)"
                 else -> "Friends you follow, newest activity first"
             }
-            dev.xross.launcher.theme.pack.ComponentRow.BATTERY ->
-                if (!shownComponents.shows(dev.xross.launcher.theme.pack.StatusSlot.BATTERY)) "Battery isn't in the status bar" else "Time to full shows the percentage unless charging"
-            dev.xross.launcher.theme.pack.ComponentRow.CLOCK ->
-                if (!shownComponents.shows(dev.xross.launcher.theme.pack.StatusSlot.CLOCK)) "Clock isn't in the status bar" else "Date and time in the status bar"
-            dev.xross.launcher.theme.pack.ComponentRow.MINI_PLAYER -> when (shownComponents.miniPlayer) {
-                dev.xross.launcher.theme.pack.MiniPlayerMode.OFF -> "Music still plays; the notification controls it"
-                dev.xross.launcher.theme.pack.MiniPlayerMode.STATUS_TICKER -> "One line before the avatar"
-                dev.xross.launcher.theme.pack.MiniPlayerMode.FLOATING_CARD -> "What plays, above the hints"
+            ComponentRow.BATTERY ->
+                if (!shownComponents.shows(StatusSlot.BATTERY)) "Battery isn't in the status bar" else "Time to full shows the percentage unless charging"
+            ComponentRow.CLOCK ->
+                if (!shownComponents.shows(StatusSlot.CLOCK)) "Clock isn't in the status bar" else "Date and time in the status bar"
+            ComponentRow.MINI_PLAYER -> when (shownComponents.miniPlayer) {
+                MiniPlayerMode.OFF -> "Music still plays; the notification controls it"
+                MiniPlayerMode.STATUS_TICKER -> "One line before the avatar"
+                MiniPlayerMode.FLOATING_CARD -> "What plays, above the hints"
             }
-            dev.xross.launcher.theme.pack.ComponentRow.GLYPHS -> "Labels only: Confirm follows your controller"
-            dev.xross.launcher.theme.pack.ComponentRow.TELEMETRY -> when {
-                shownComponents.telemetry == dev.xross.launcher.theme.pack.TelemetryMode.OFF -> "No RetroAchievements badge on games"
+            ComponentRow.GLYPHS -> "Labels only: Confirm follows your controller"
+            ComponentRow.TELEMETRY -> when {
+                shownComponents.telemetry == TelemetryMode.OFF -> "No RetroAchievements badge on games"
                 !s.accounts.retroAchievementsLinked -> "Needs a RetroAchievements account (Settings ▸ Accounts)"
-                shownComponents.telemetry == dev.xross.launcher.theme.pack.TelemetryMode.RICH_CARD ->
+                shownComponents.telemetry == TelemetryMode.RICH_CARD ->
                     "Newest unlocks and friends who played it, above the hints"
                 else -> "The focused game's unlocks and points, above the hints"
             }
@@ -1134,7 +1167,7 @@ class MenuTree(private val s: MenuSnapshot) {
         ),
     )
 
-    private val activeProfile by lazy { dev.xross.launcher.theme.QuickProfile.byName(s.settings.quickProfile) }
+    private val activeProfile by lazy { QuickProfile.byName(s.settings.quickProfile) }
 
     /**
      * [own] (the user's value), or, when the quick profile takes [field] over, that it does and
@@ -1148,7 +1181,7 @@ class MenuTree(private val s: MenuSnapshot) {
 
     /** "Wave on · Theme pack (Wave)", "Wave off · a picture you chose". */
     private fun backgroundSummary(): String = buildString {
-        append(if (s.settings.waveEnabled) "Wave on · " + effectShown(dev.xross.launcher.theme.pack.EffectSlot.SHADER) else "Wave off")
+        append(if (s.settings.waveEnabled) "Wave on · " + effectShown(EffectSlot.SHADER) else "Wave off")
         when {
             s.settings.customWallpaper.isNotBlank() -> append(" · a picture you chose")
             s.themes.packWallpaper -> append(" · theme wallpaper")
@@ -1160,7 +1193,7 @@ class MenuTree(private val s: MenuSnapshot) {
         val current = s.settings.theme
         val options = buildList {
             if (s.themes.packPalette) {
-                add(MenuOption("Theme pack", detail = s.themes.activeName, command = Command.SetTheme(dev.xross.launcher.theme.PACK_THEME), selected = current == dev.xross.launcher.theme.PACK_THEME))
+                add(MenuOption("Theme pack", detail = s.themes.activeName, command = Command.SetTheme(PACK_THEME), selected = current == PACK_THEME))
             }
             for (t in XrossTheme.entries) {
                 add(MenuOption(t.label, detail = if (t.dynamic) "Changes every month" else null, command = Command.SetTheme(t.name), selected = current == t.name))
@@ -1181,25 +1214,25 @@ class MenuTree(private val s: MenuSnapshot) {
      * style, Ambient particles, App icon mask. Confirm cycles "Theme pack (…)" then each choice;
      * Options lists them all. Saved as `display.effects` in settings.json.
      */
-    private fun effectRow(slot: dev.xross.launcher.theme.pack.EffectSlot): XmbNode {
+    private fun effectRow(slot: EffectSlot): XmbNode {
         val own = s.settings.effectOverrides[slot]
         val look = s.themes.packLook(s.settings.themeVariant)
         val shown = effectShown(slot)
         val note = when (slot) {
-            dev.xross.launcher.theme.pack.EffectSlot.SHADER -> if (s.settings.waveEnabled) "Behind the menu" else "Wave background is off"
-            dev.xross.launcher.theme.pack.EffectSlot.BACKGROUND_FILTER -> "Over the background only"
-            dev.xross.launcher.theme.pack.EffectSlot.UI_FILTER ->
-                if (dev.xross.launcher.ui.UiFilterSupport.supported()) "Over the whole menu" else "Needs Android 13"
-            dev.xross.launcher.theme.pack.EffectSlot.FOCUS_FRAME -> "Around the focused item"
-            dev.xross.launcher.theme.pack.EffectSlot.PARTICLES -> "Over the art, resting when idle"
-            dev.xross.launcher.theme.pack.EffectSlot.ICON_MASK -> "Installed apps' icons"
-            dev.xross.launcher.theme.pack.EffectSlot.BOOT_INTRO -> when {
+            EffectSlot.SHADER -> if (s.settings.waveEnabled) "Behind the menu" else "Wave background is off"
+            EffectSlot.BACKGROUND_FILTER -> "Over the background only"
+            EffectSlot.UI_FILTER ->
+                if (AgslSupport.supported()) "Over the whole menu" else "Needs Android 13"
+            EffectSlot.FOCUS_FRAME -> "Around the focused item"
+            EffectSlot.PARTICLES -> "Over the art, resting when idle"
+            EffectSlot.ICON_MASK -> "Installed apps' icons"
+            EffectSlot.BOOT_INTRO -> when {
                 activeProfile.stillMotion -> "Off in ${activeProfile.label}"
                 !s.settings.bootSound || s.settings.cueVolume <= 0f -> "Off while the startup sound is off"
-                own == dev.xross.launcher.theme.pack.BootIntro.VIDEO.name && !s.themes.packBootVideo -> "This pack has no boot video"
+                own == BootIntro.VIDEO.name && !s.themes.packBootVideo -> "This pack has no boot video"
                 else -> "On a cold start; any button skips it"
             }
-            dev.xross.launcher.theme.pack.EffectSlot.LAUNCH_CURTAIN ->
+            EffectSlot.LAUNCH_CURTAIN ->
                 if (activeProfile.stillMotion) "Plain black in ${activeProfile.label}" else "Before a game starts"
         }
         val id = "disp:fx:" + slot.name.lowercase(Locale.ROOT)
@@ -1218,7 +1251,7 @@ class MenuTree(private val s: MenuSnapshot) {
     }
 
     /** "Theme pack (Wave)" when [slot] follows the pack, else the user's choice. */
-    private fun effectShown(slot: dev.xross.launcher.theme.pack.EffectSlot): String {
+    private fun effectShown(slot: EffectSlot): String {
         val own = s.settings.effectOverrides[slot]
         return if (own.isEmpty()) slot.packLabel(s.themes.packLook(s.settings.themeVariant), s.themes.packBootVideo) else slot.label(own)
     }
@@ -1232,7 +1265,7 @@ class MenuTree(private val s: MenuSnapshot) {
 
     /** Reset to theme defaults: what it would clear, or that nothing is overridden. */
     private fun resetThemeRow(): XmbNode {
-        val changed = dev.xross.launcher.theme.pack.UserLook.of(s.settings).changes()
+        val changed = UserLook.of(s.settings).changes()
         val summary = if (changed.isEmpty()) "Nothing overrides ${s.themes.activeName}" else "Clears " + changed.joinToString(", ")
         return setting("disp:reset", "Reset to theme defaults", summary, GlyphKey.DISPLAY, Command.ResetThemeDefaults)
     }
@@ -1283,22 +1316,22 @@ class MenuTree(private val s: MenuSnapshot) {
 
     /** Quick profile: a built-in look over the theme; its Options list every profile. */
     private fun quickProfileRow(): XmbNode {
-        val active = dev.xross.launcher.theme.QuickProfile.byName(s.settings.quickProfile)
+        val active = QuickProfile.byName(s.settings.quickProfile)
         val note = when (active) {
-            dev.xross.launcher.theme.QuickProfile.NONE -> "The theme's own look"
-            dev.xross.launcher.theme.QuickProfile.OLED_TRUE_BLACK -> "Pure black, glowing outlines"
-            dev.xross.launcher.theme.QuickProfile.Y2K_CYBER_PASTEL -> "Lavender, lilac and strawberry, glossy bezels"
-            dev.xross.launcher.theme.QuickProfile.MONOCHROME_EINK -> "Black and white, no motion"
+            QuickProfile.NONE -> "The theme's own look"
+            QuickProfile.OLED_TRUE_BLACK -> "Pure black, glowing outlines"
+            QuickProfile.Y2K_CYBER_PASTEL -> "Lavender, lilac and strawberry, glossy bezels"
+            QuickProfile.MONOCHROME_EINK -> "Black and white, no motion"
         }
         // Say what the profile takes over, so the rows it overrides aren't a surprise.
         val takes = active.fields.joinToString(", ") { it.label }
         return XmbNode(
             id = "disp:profile",
             title = "Quick profile",
-            subtitle = if (active == dev.xross.launcher.theme.QuickProfile.NONE) "None · $note" else "${active.label} · $note · sets $takes",
+            subtitle = if (active == QuickProfile.NONE) "None · $note" else "${active.label} · $note · sets $takes",
             icon = NodeIcon.Glyph(GlyphKey.DISPLAY),
             action = NodeAction.Run(Command.CycleQuickProfile),
-            menu = dev.xross.launcher.theme.QuickProfile.entries.map { p ->
+            menu = QuickProfile.entries.map { p ->
                 MenuOption(p.label, command = Command.SetQuickProfile(p.name), selected = p == active)
             },
         )
@@ -1496,7 +1529,7 @@ class MenuTree(private val s: MenuSnapshot) {
         if (theme.dynamic) "${theme.label} · changes every month" else theme.label
 
     private fun themeColorLabel(): String =
-        if (s.settings.theme == dev.xross.launcher.theme.PACK_THEME && s.themes.packPalette) {
+        if (s.settings.theme == PACK_THEME && s.themes.packPalette) {
             "Theme pack · ${s.themes.activeName}"
         } else {
             themeLabel(XrossTheme.byName(s.settings.theme))
@@ -1513,7 +1546,7 @@ class MenuTree(private val s: MenuSnapshot) {
 
     private fun waveSummary(): String {
         val st = s.settings
-        val tint = dev.xross.launcher.theme.WaveTint.byName(st.waveTint).label
+        val tint = WaveTint.byName(st.waveTint).label
         return "${formatDecimal(st.waveSpeed)}× · ${st.waveLineCount} lines · $tint"
     }
 
@@ -1547,7 +1580,7 @@ class MenuTree(private val s: MenuSnapshot) {
         const val METADATA = "settings:metadata"
 
         /** Row icons prefer the box, then a capsule. */
-        val ICON_ART = listOf(dev.xross.launcher.scrape.ArtKind.BOX_3D, dev.xross.launcher.scrape.ArtKind.BOX_2D, dev.xross.launcher.scrape.ArtKind.GRID)
+        val ICON_ART = listOf(ArtKind.BOX_3D, ArtKind.BOX_2D, ArtKind.GRID)
 
         val REGIONS = listOf("us", "eu", "jp", "wor")
         val REGION_LABELS = mapOf("us" to "USA", "eu" to "Europe", "jp" to "Japan", "wor" to "World")
@@ -1567,10 +1600,10 @@ class MenuTree(private val s: MenuSnapshot) {
         const val DISPLAY_COMPONENTS = "settings:display:components"
 
         /** The effect rows in Settings ▸ Theme ▸ Background; the rest of the 2b.4f rows are in Effects. */
-        private val BACKGROUND_SLOTS = setOf(dev.xross.launcher.theme.pack.EffectSlot.SHADER, dev.xross.launcher.theme.pack.EffectSlot.BACKGROUND_FILTER)
+        private val BACKGROUND_SLOTS = setOf(EffectSlot.SHADER, EffectSlot.BACKGROUND_FILTER)
 
         /** The effect rows in Settings ▸ Theme ▸ Intro and transitions (2b.5d). */
-        private val INTRO_SLOTS = listOf(dev.xross.launcher.theme.pack.EffectSlot.BOOT_INTRO, dev.xross.launcher.theme.pack.EffectSlot.LAUNCH_CURTAIN)
+        private val INTRO_SLOTS = listOf(EffectSlot.BOOT_INTRO, EffectSlot.LAUNCH_CURTAIN)
 
         /** Settings ▸ Theme and its folders, top level first. */
         val THEME_LISTS = listOf(DISPLAY, DISPLAY_COLORS, DISPLAY_BACKGROUND, DISPLAY_EFFECTS, DISPLAY_INTRO, DISPLAY_COMPONENTS, DISPLAY_MENU)

@@ -60,11 +60,12 @@ import dev.xross.launcher.profile.AchievementsState
 import dev.xross.launcher.profile.RaAchievement
 import dev.xross.launcher.profile.RaGameProgress
 import dev.xross.launcher.profile.RaMatchKind
-import dev.xross.launcher.scrape.ArtKind
+import dev.xross.launcher.model.ArtKind
 import dev.xross.launcher.state.AchievementsGrid
 import dev.xross.launcher.state.AchievementsLayout
 import dev.xross.launcher.state.AchievementsViewState
 import java.text.NumberFormat
+import dev.xross.launcher.model.GlyphKey
 
 /** Locked badges: greyscale and dimmed. */
 internal val LockedBadgeFilter = ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(0f) })
@@ -168,7 +169,7 @@ private fun Header(v: AchievementsViewState, m: XmbMetrics, loadArt: suspend (St
             contentAlignment = Alignment.Center,
         ) {
             art?.let { Image(it, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()) }
-                ?: Image(glyphPainter(dev.xross.launcher.model.GlyphKey.TROPHY), null, modifier = Modifier.fillMaxSize().padding(10.dp))
+                ?: Image(glyphPainter(GlyphKey.TROPHY), null, modifier = Modifier.fillMaxSize().padding(10.dp))
         }
         Spacer(Modifier.width((m.s * 0.03f).dp()))
         Column(Modifier.weight(1f)) {
@@ -211,7 +212,7 @@ private fun Header(v: AchievementsViewState, m: XmbMetrics, loadArt: suspend (St
                     Spacer(Modifier.width(10.dp))
                     TrophyCount(ready.progress.unlocked, ready.progress.total, (m.titleSize * 1.25f).sp())
                     Spacer(Modifier.width(6.dp))
-                    Image(glyphPainter(dev.xross.launcher.model.GlyphKey.TROPHY), null, colorFilter = ColorFilter.tint(Pastel.Amber), modifier = Modifier.size((m.titleSize * 1.15f).dp()))
+                    Image(glyphPainter(GlyphKey.TROPHY), null, colorFilter = ColorFilter.tint(Pastel.Amber), modifier = Modifier.size((m.titleSize * 1.15f).dp()))
                 }
                 Spacer(Modifier.height(5.dp))
                 ProgressBar(ready.progress.completion, height = (m.s * 0.014f).dp().coerceAtLeast(6.dp))
@@ -283,6 +284,7 @@ private fun BadgeCell(
     val shape = RoundedCornerShape(12.dp)
     // The theme's focus frame (2b.4d): the amber bloom (breathing or steady), a hard shadow or a gold bezel.
     val frame = LocalFocusFrame.current
+    val accent = LocalThemeAccent.current
     val bloom = frame.style == FocusFrameStyle.BREATHING_HALO || frame.style == FocusFrameStyle.STATIC_NEON
     Box(
         Modifier
@@ -303,7 +305,7 @@ private fun BadgeCell(
                         radius = size.minDimension * 0.85f,
                     )
                 } else {
-                    drawPlateFrame(frame, lift, 12.dp.toPx())
+                    drawPlateFrame(frame, accent, lift, 12.dp.toPx())
                 }
             }
             .clip(shape)

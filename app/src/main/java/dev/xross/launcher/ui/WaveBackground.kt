@@ -23,6 +23,11 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlin.math.roundToInt
+import dev.xross.launcher.media.energy.AudioLevels
+import dev.xross.launcher.theme.shader.ShaderHealth
+import dev.xross.launcher.theme.shader.ShaderLibrary
+import dev.xross.launcher.theme.topColor
+import dev.xross.launcher.theme.bottomColor
 
 /**
  * GL wave background. The render loop stops whenever the activity is paused (screen off,
@@ -44,10 +49,10 @@ fun WaveBackground(
     idle: Boolean = false,
     /** Still-motion profile (E-Ink): one frame per change of [params], no render loop at all. */
     frozen: Boolean = false,
-    shaders: dev.xross.launcher.theme.shader.ShaderLibrary = dev.xross.launcher.theme.shader.ShaderLibrary.DEFAULT,
-    health: dev.xross.launcher.theme.shader.ShaderHealth? = null,
+    shaders: ShaderLibrary = ShaderLibrary.DEFAULT,
+    health: ShaderHealth? = null,
     /** Music levels for `uAudioBass` / `uAudioBeat` (2b.4b); null binds 0. */
-    audio: dev.xross.launcher.media.energy.AudioLevels? = null,
+    audio: AudioLevels? = null,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current

@@ -1,7 +1,7 @@
 # Project Xross — Implementation Status
 
 The status dashboard: where each phase stands against [`project_scope.md`](../project_scope.md),
-as of **2026-11-15** (`main` at `64b6f79`, after Phase 2b.8). The evidence behind it (test runs,
+as of **2026-11-16** (`main` at `64b6f79`, after Phase 2b.8; Phase 3-prep on `refactor/phase3-prep`). The evidence behind it (test runs,
 device passes, frame timings, bugs found and fixed) lives next to each phase, in the files listed
 under [Where the evidence is](#where-the-evidence-is). Plans, the backlog and the order of work
 are in [`Roadmap.md`](../Roadmap.md).
@@ -20,10 +20,15 @@ Legend: ✅ done and verified · ◐ partial · ❌ not started · 🧊 iced · 
 | Phase 1b — alpha hardening | ◐ features done; real-handheld testing and a Baseline Profile remain | [Phase 1](phase-1/README.md) |
 | Phase 2 — Beta: metadata, media hub, portable folder, library organization | ◐ done apart from the iced on-screen controller; scrapers and RetroAchievements live-verified on the Galaxy A55 | [Phase 2](phase-2/README.md) |
 | Phase 2b — customization engine (Theme 2.0) | ✅ Theme 2.0 complete: 2b.1–2b.5, 2b.7, 2b.8 in `main`; 2b.6 🧊; 2b.9 (Web Theme Studio) not started; A55 passes open for 2b.7e and 2b.8 | [Phase 2b](phase-2b/README.md) |
+| Phase 3-prep — module boundaries | ✅ 🧪 steps 1–7 of the architecture assessment on `refactor/phase3-prep`: `:core:model`, `:theme:engine` (Kotlin/JVM), build-logic, the look resolved in `ThemeController`, five more controllers out of `XmbViewModel`, one `XmbEvent` sink for `XmbScreen` | [Phase 3-prep](phase-3-prep/STATUS.md) |
 | Phase 3 — release candidate | ◐ RetroAchievements linking, User Card, achievement lists and unlock toasts done and live; hot-swap and live resolution change done; dual screen, docking, Portal and FTPS not started | [Phase 2 evidence §3.12–§3.14](phase-2/STATUS.md#s3.12) |
 | Phase 4 — v1.0 | ◐ app triage and performance work started | [Performance](status/PERFORMANCE.md) |
 
-**Verification (2026-11-15):** 932 JVM/Robolectric unit tests pass (4 opt-in tests that call the
+**Verification (2026-11-16, Phase 3-prep step 7):** 980 unit tests pass (899 JVM/Robolectric in
+`:app`, 81 plain JUnit in `:theme:engine`); on the API 37 emulator smoke 12/12, library 41/41,
+media 56/56, input 11/11, integration 9/9 and theme 424/426
+([§3.40](phase-3-prep/STATUS.md#s3.40)). Steps 1–5: theme 426 of 426
+([§3.38](phase-3-prep/STATUS.md#s3.38)). **After Phase 2b.8:** 932 JVM/Robolectric unit tests pass (4 opt-in tests that call the
 real services skip by default), `lintDebug` 0 errors. On the API 37 emulator the theme suite
 passes 425 of 426 (the one fail is 2b.4f's wallpaper toast missed by the screen dump), behind a
 12-check quick `smoke.sh` and a `run-all.sh` runner over the five suites
@@ -54,10 +59,13 @@ commits and older notes still resolve here.
 | — | Phase 2b.5 (as-built notes) | [`phase-2b/2b.5/PROMPTS.md`](phase-2b/2b.5/PROMPTS.md) |
 | 3.29–3.34 | Phase 2b.7a–e and the A55 pass | [`phase-2b/2b.7/STATUS.md`](phase-2b/2b.7/STATUS.md) |
 | 3.35–3.37 | Phase 2b.8a–c | [`phase-2b/2b.8/STATUS.md`](phase-2b/2b.8/STATUS.md) |
+| 3.38 | Phase 3-prep: layering, modules, the look in `ThemeController` | [`phase-3-prep/STATUS.md`](phase-3-prep/STATUS.md) |
+| 3.39 | `BLACK_HOLE` background, feedback and field passes, on the A55 | [`phase-3-prep/STATUS.md`](phase-3-prep/STATUS.md#s3.39) |
+| 3.40 | Phase 3-prep step 7: the `XmbEvent` sink | [`phase-3-prep/STATUS.md`](phase-3-prep/STATUS.md#s3.40) |
 | 4.1–4.3 | Display matrix, animation and stutter, scope targets | [`status/PERFORMANCE.md`](status/PERFORMANCE.md) |
 
 New evidence goes into the phase's own `STATUS.md` (a new phase gets a new folder), numbered on
-from §3.37; this dashboard only gets its summary row and index entry updated.
+from §3.40; this dashboard only gets its summary row and index entry updated.
 
 ---
 

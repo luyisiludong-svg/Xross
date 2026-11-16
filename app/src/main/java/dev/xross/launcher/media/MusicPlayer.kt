@@ -17,6 +17,7 @@ import androidx.media3.session.SessionToken
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import dev.xross.launcher.audio.MusicOutput
 
 /** What the UI shows about music; position is read separately (see [MusicPlayer.positionMs]). */
 data class NowPlaying(
@@ -37,7 +38,7 @@ data class NowPlaying(
  * `uAudioBass` / `uAudioBeat` (2b.4b): Xross's own music only, no `RECORD_AUDIO`.
  */
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
-class MusicPlayer(private val context: Context) : dev.xross.launcher.audio.MusicOutput {
+class MusicPlayer(private val context: Context) : MusicOutput {
     val energy = MusicEnergy()
 
     val player: ExoPlayer = ExoPlayer.Builder(context, EnergyRenderersFactory(context, energy))

@@ -1,5 +1,7 @@
 package dev.xross.launcher.audio
 
+import dev.xross.launcher.data.MusicUnderSnaps
+
 /** What the theme music player is doing (2b.5c). */
 enum class BgmState {
     /** Not playing; the next start begins at position 0. */

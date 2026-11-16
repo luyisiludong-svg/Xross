@@ -21,6 +21,10 @@ import dev.xross.launcher.theme.QuickProfile
 import dev.xross.launcher.theme.ThemePalette
 import dev.xross.launcher.theme.rememberMinuteOfDay
 import kotlinx.coroutines.flow.StateFlow
+import dev.xross.launcher.media.energy.AudioLevels
+import dev.xross.launcher.theme.pack.BackgroundFilter
+import dev.xross.launcher.theme.shader.ShaderHealth
+import dev.xross.launcher.theme.shader.ShaderLibrary
 
 /**
  * The wave background with the color layers above the theme (Appendix A.4, A.7): the quick
@@ -44,15 +48,15 @@ fun AdaptiveWave(
     paused: Boolean,
     idle: Boolean,
     /** The active pack's programs, compiled ahead of time, and the key of the one the look shows. */
-    shaders: dev.xross.launcher.theme.shader.ShaderLibrary = dev.xross.launcher.theme.shader.ShaderLibrary.DEFAULT,
-    shader: String = dev.xross.launcher.theme.shader.ShaderLibrary.WAVE_KEY,
+    shaders: ShaderLibrary = ShaderLibrary.DEFAULT,
+    shader: String = ShaderLibrary.WAVE_KEY,
     /** Open category id, for `uTransition`. */
     category: String? = null,
-    health: dev.xross.launcher.theme.shader.ShaderHealth? = null,
+    health: ShaderHealth? = null,
     /** The music player's levels for the audio-reactive uniforms. */
-    audio: dev.xross.launcher.media.energy.AudioLevels? = null,
+    audio: AudioLevels? = null,
     /** The GL-side filter over the background (2b.4f). */
-    filter: dev.xross.launcher.theme.pack.BackgroundFilter = dev.xross.launcher.theme.pack.BackgroundFilter.NONE,
+    filter: BackgroundFilter = BackgroundFilter.NONE,
     /** The cold-start shader intro while it plays (2b.5d). */
     intro: WaveIntro? = null,
 ) {
@@ -109,13 +113,14 @@ fun AdaptiveWave(
         (switches.batteryTint && (BatteryTint.low(ambient.battery) || ambient.battery?.charging == true))
     val halo = if (colored) Color(palette.glow) else Color.White
     val still = profile.stillMotion
-    LaunchedEffect(halo, still) {
-        ThemeAccent.haloTarget = halo
-        if (still) ThemeAccent.halo.snapTo(halo) else ThemeAccent.halo.animateTo(halo, tween(ThemeAccent.MORPH_MS))
+    val accent = LocalThemeAccent.current
+    LaunchedEffect(accent, halo, still) {
+        accent.haloTarget = halo
+        if (still) accent.halo.snapTo(halo) else accent.halo.animateTo(halo, tween(ThemeAccent.MORPH_MS))
     }
     val mix = if (shownArt != null) ADAPTIVE_AVATAR_MIX else 0f
-    LaunchedEffect(mix, still) {
-        if (still) ThemeAccent.adaptiveMix.snapTo(mix) else ThemeAccent.adaptiveMix.animateTo(mix, tween(ThemeAccent.MORPH_MS))
+    LaunchedEffect(accent, mix, still) {
+        if (still) accent.adaptiveMix.snapTo(mix) else accent.adaptiveMix.animateTo(mix, tween(ThemeAccent.MORPH_MS))
     }
 }
 

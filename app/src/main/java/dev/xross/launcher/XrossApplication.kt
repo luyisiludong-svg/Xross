@@ -2,6 +2,7 @@ package dev.xross.launcher
 
 import android.app.Application
 import android.content.ComponentCallbacks2
+import dev.xross.launcher.ui.FrostCache
 
 class XrossApplication : Application() {
     lateinit var container: AppContainer
@@ -28,7 +29,7 @@ class XrossApplication : Application() {
         super.onTrimMemory(level)
         if (level >= ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN) {
             container.art.trim()
-            dev.xross.launcher.ui.FrostedBackdrop.trim()
+            FrostCache.trim()
             container.wallpapers.trim()
         }
         if (level >= ComponentCallbacks2.TRIM_MEMORY_BACKGROUND) container.apps.trimIcons()

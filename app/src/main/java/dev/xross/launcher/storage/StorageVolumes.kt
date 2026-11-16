@@ -8,6 +8,7 @@ import android.os.storage.StorageManager
 import android.os.storage.StorageVolume
 import android.provider.DocumentsContract
 import java.io.File
+import dev.xross.launcher.model.normalizeFolderName
 
 /** A mounted storage volume: internal storage, a microSD card or a USB-OTG drive. */
 data class VolumeInfo(

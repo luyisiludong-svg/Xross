@@ -1,5 +1,7 @@
 package dev.xross.launcher.audio
 
+import dev.xross.launcher.theme.pack.BgmTrack
+
 /**
  * What [AudioDirector] needs from Xross's music player ([dev.xross.launcher.media.MusicPlayer]):
  * its level and the pauses Xross makes on its own (for a game, for a video snap). Each "paused
@@ -49,7 +51,7 @@ interface BgmOutput {
      * Moves to [state] at [volume] for [track] (null: the look has none, release the player),
      * fading over [fadeMs]. A different [track] while playing crossfades over [BgmPolicy.FADE_IN_MS].
      */
-    fun apply(track: dev.xross.launcher.theme.pack.BgmTrack?, state: BgmState, volume: Float, fadeMs: Long)
+    fun apply(track: BgmTrack?, state: BgmState, volume: Float, fadeMs: Long)
 
     /** Theme music players actually playing now (two during a crossfade), for [PlaybackCensus]. */
     val activePlayers: Int

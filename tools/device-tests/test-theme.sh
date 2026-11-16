@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Theme suite (426 checks): Settings ▸ Theme and its folders (theme color, wave and avatar panels,
+# Theme suite (416 checks): Settings ▸ Theme and its folders (theme color, wave and avatar panels,
 # platform folders, surface style, the 2b.4f effect rows, Pick custom wallpaper, Reset to theme
 # defaults), quick profiles (OLED, Y2K, E-Ink), color layers (adaptive colors,
 # circadian curve, battery tint and charging pulse through `dumpsys battery`), the Sound section,
@@ -10,21 +10,22 @@
 # game-art palette (hero PNGs, scraped flags patched into the database, extraction cache, debounce),
 # and the cold-start intro and launch curtains (2b.5d: a generated boot.mp4, the shader ramp, E-Ink,
 # each curtain on a stub launch), and Settings ▸ Theme ▸ Components (2b.7a: battery modes on and off
-# the charger, clock formats, three slot orders with the avatar HUD, network in airplane mode,
+# the charger, clock formats, three slot orders (the avatar HUD over two), network in airplane mode,
 # the system volume, the avatar left out, a minute tick at rest; 2b.7b: the mini player as a card,
 # a status-bar ticker and off, each button-glyph set in the hints, Search and the HUD, and title
 # badges on a scraped game, an unscraped one and an app; 2b.7c: the social stack's collapse cases,
 # its cached friends and badge offline, the panel by keys and touch; 2b.7d: the achievement badge
 # off, compact and as the rich card, offline without its friend strip, online with it), and the
-# RetroAchievements hub (2b.7e: the Achievements header, three rows of badges on all 12 display-matrix
+# RetroAchievements hub (2b.7e: the Achievements header, three rows of badges on three display-matrix
 # configurations, the banner; the L1/R1 platform filter, the FOLLOWING sidebar and Confirm on a friend),
 # and the Layout mixer (2b.8a: each crosshair preset, UI scale, list spacing and focused scale moving
 # the menu while the panel is open, the ends held, a restart, Reset layout and Reset to theme defaults),
 # and Export theme (2b.8b: the built-in Default pack whole and as a current look, a pack with variants,
-# overrides and rules whole, per variant and as a current look, and a picked wallpaper copied in; each
-# compared before and after Switch to by screenshots and logged colours in 8 places), and Share as
-# .xtheme (2b.8c: the built-in Default pack whole and a current-look export, each saved through the
-# create-document picker, imported back and compared the same way).
+# overrides and rules whole, per variant and as a current look, and a picked wallpaper copied in; the
+# built-in pack, the pack's current look and the wallpaper export compared before and after Switch
+# to by screenshots and logged colours in 8 places), and Share as .xtheme (2b.8c: the built-in
+# Default pack whole and a current-look export, each saved through the create-document picker and
+# imported back).
 #
 #   tools/device-tests/test-theme.sh
 #
@@ -34,7 +35,7 @@
 # The battery override is always reset at exit, even after Ctrl-C.
 set -u
 . "$(dirname "$0")/lib/harness.sh"
-suite_begin theme 426
+suite_begin theme 416
 
 setup_base_env
 setup_theme_fixtures
@@ -369,7 +370,7 @@ media_scan
 # tap_attr <attr="value">: tap the first on-screen node with that attribute (needs a fresh dump).
 tap_attr() {
   local b
-  b=$(adb shell cat /sdcard/xross-ui.xml | grep -o "$1[^>]*bounds=\"[^\"]*\"" | grep -o 'bounds="[^"]*"' | head -1)
+  b=$(ui_xml | grep -o "$1[^>]*bounds=\"[^\"]*\"" | grep -o 'bounds="[^"]*"' | head -1)
   [ -n "$b" ] || return 1
   read -r x1 y1 x2 y2 <<<"$(sed 's/bounds="//; s/"//; s/\]\[/ /; s/[][]//g; s/,/ /g' <<<"$b")"
   adb shell input tap $(((x1 + x2) / 2)) $(((y1 + y2) / 2))
@@ -692,16 +693,16 @@ if has_stub; then
     pause 2
     adb shell am force-stop "$STUB"
   }
+  # The pack's curtain, the user's over it, and E-Ink's. Every curtain's name, shape and timing
+  # and the pack-then-user cascade are BootSequenceTest's; one user pick shows the cascade here.
   curtain_launch IRIS "the pack's IRIS curtain on a stub launch"
-  for c in FLASH FADE_BLACK BLOOM; do
-    set_json launchCurtain "$c"
-    curtain_launch "$c" "Launch curtain ▸ $c"
-  done
+  set_json launchCurtain FLASH
+  curtain_launch FLASH "Launch curtain ▸ FLASH over the pack's IRIS"
   set_json quickProfile MONOCHROME_EINK
   curtain_launch BLACK "E-Ink snaps the curtain to black"
   set_json quickProfile NONE
 else
-  skip 5 "install the RetroArch stub (./gradlew :emulator-stub:installRetroarchDebug)"
+  skip 3 "install the RetroArch stub (./gradlew :emulator-stub:installRetroarchDebug)"
 fi
 set_json launchCurtain ""
 set_json bootIntro ""
@@ -722,7 +723,7 @@ await_flat() { # await_flat <text in settings.json without spaces>
   for _ in $(seq 10); do flat_settings | grep -qF -- "$1" && return 0; pause 0.5; done
   return 1
 }
-xml() { dump; adb shell cat /sdcard/xross-ui.xml; }
+xml() { dump; ui_xml; }
 has_desc() { xml | grep -qF "content-desc=\"$1"; }
 descs() { xml | grep -o 'content-desc="[^"]\{1,\}"' | sort; }
 # The clock's and the gauge's bounds: the HUD's expansion must never move them.
@@ -836,7 +837,8 @@ expect "Move left" "the list reopens on the clock's moves"
 key KEYCODE_BACK KEYCODE_BACK
 bx=$(x_of '[0-9]{1,3}%'); cx=$(x_of '[0-9]{1,2}/[0-9]{1,2}  [^"]*')
 [ -n "$bx" ] && [ -n "$cx" ] && [ "$bx" -lt "$cx" ] && ok "the battery now draws left of the clock" || bad "slot order on screen (battery x=$bx, clock x=$cx)"
-hud_cycle "Battery first" battery-first
+# (No HUD cycle for this order: a reordered right cluster fades like the default one; the next
+# order, with a left cluster as well, is the one that differs.)
 
 # Third order: Status bar left ▸ Add ▸ Network, then Add ▸ Volume.
 open_components
@@ -1543,13 +1545,17 @@ if command -v sqlite3 >/dev/null && adb shell run-as "$PKG" true 2>/dev/null; th
     expect_line "6 / 6" "Golden Sun counts 6 / 6"
     key KEYCODE_BACK
 
-    # Three rows on every display-matrix configuration (sizes and densities from display-matrix.sh).
+    # Three rows on three display-matrix configurations (sizes and densities from display-matrix.sh):
+    # the smallest, the 20:9 phone and portrait. HubUpgradeTest holds the columns-and-rows math on
+    # every width; display-matrix.sh walks all 12 for frame timing.
     game_row 0 0
     open_achievements
     fails=""
     while read -r name size dpi; do
       [ -n "$name" ] || continue
       adb shell wm size "$size" </dev/null; adb shell wm density "$dpi" </dev/null; pause 2.5 </dev/null
+      # The grid relayouts for a while after the resize: give it up to ~6 s to reach three rows.
+      for _ in $(seq 10); do [ "$(grid_rows </dev/null)" = 3 ] && break; pause 0.3 </dev/null; done
       r=$(grid_rows </dev/null); c=$(grid_cols </dev/null)
       read -r w h <<<"$(screen_size </dev/null)"
       clipped=$(badge_cells </dev/null | awk -v W="$w" -v H="$h" '$3 < 0 || $4 < 0 || $5 > W || $6 > H' | wc -l | tr -d ' ')
@@ -1557,20 +1563,11 @@ if command -v sqlite3 >/dev/null && adb shell run-as "$PKG" true 2>/dev/null; th
       echo "       $name ($w × $h): $r rows × $c"
     done <<'CFG'
 4:3-retro 640x480 160
-4:3 1024x768 240
-5:3 800x480 160
-1:1 720x720 240
-3:2 1080x720 240
-16:9-small 1334x750 280
-16:9-FHD 1920x1080 320
-16:10 2560x1600 320
 20:9-phone 2400x1080 420
-21:9 2560x1080 400
-4K-TV 3840x2160 640
 portrait-phone 1080x2400 420
 CFG
     adb shell wm size reset; adb shell wm density reset; pause 2
-    [ -z "$fails" ] && ok "three rows, none clipped, on all 12 display-matrix configurations" || bad "display matrix:$fails"
+    [ -z "$fails" ] && ok "three rows, none clipped, on 3 display-matrix configurations (4:3 retro, 20:9 phone, portrait)" || bad "display matrix:$fails"
     key KEYCODE_BACK
 
     # The hub: L1/R1 move the platform filter, clamped; the sidebar by points.
@@ -1758,10 +1755,13 @@ settings_has '"preset": null' && settings_has '"uiScale": null' && ok "Reset to 
 
 section "Export (2b.8b)"
 # Settings ▸ Theme ▸ Export theme… (the row after Reset to theme defaults) writes a new pack into
-# Xross/themes in one of three scopes; Switch to <name> then changes nothing on screen. Each check
-# compares screenshots of the same places before and after (the wave off, so only the breathing
-# focus halo moves: under 1% of the pixels) and the colours, effects and cosmetics the debug build
-# logs there.
+# Xross/themes in one of three scopes; Switch to <name> then changes nothing on screen. Three
+# exports are compared end to end by screenshots of the same places before and after (the wave off,
+# so only the breathing focus halo moves: under 1% of the pixels) and the colours, effects and
+# cosmetics the debug build logs there: the built-in pack (read from the APK assets), the current
+# look of a pack with variants, overrides and rules (the hardest flattening), and a picked
+# wallpaper (a real read grant). Every other scope is held to the same look by ThemeExportTest,
+# ThemeRoundTripTest and LookExporterTest; here it only runs the flow and checks what is written.
 display_set() { # display_set <python over d, settings.json's display block>: written with Xross stopped
   adb shell am force-stop "$PKG"
   adb shell cat /sdcard/Xross/config/settings.json > "$XT_TMP/settings.json"
@@ -1856,7 +1856,6 @@ same_look def defpack "the exported Default pack looks the same as the built-in 
 
 # The Default pack's current look: effects, components, layout and a colour theme baked in.
 display_set 'd["themePack"] = "default"; d["theme"] = "CRIMSON"; d["effects"] = {"focusFrameStyle": "GOLD_BEZEL", "iconMask": "CIRCLE", "backgroundFilter": "SCANLINES"}; d["components"] = {"batteryMode": "PERCENTAGE", "statusBarRight": ["BATTERY", "CLOCK", "AVATAR"]}; d["layout"] = {"preset": "PSP_CENTER", "uiScale": 1.1, "itemSpacingDp": 20}; d["surfaceStyle"] = "Y2K_GLOSSY_BEZEL"'
-xshots mine
 open_export
 press DPAD_DOWN 1
 expect "With your picks: 3 layout values, 3 effects, 2 components, surface" "Current look lists the user's picks"
@@ -1864,8 +1863,6 @@ export_as 0 "Default (my look)"
 switch_to "Default (my look)"
 [ "$(display_get theme)" = '"PACK"' ] && [ "$(display_get effects | grep -c GOLD)" = 0 ] && [ "$(display_get surfaceStyle)" = '""' ] \
   && ok "Switch to a current look uses its colours and clears the user layer" || bad "after Switch to: theme $(display_get theme), effects $(display_get effects)"
-xshots minepack
-same_look mine minepack "the current-look export of Default with effects, components, layout and Crimson looks the same"
 
 # A pack with variants, overrides and rules: the whole pack, each variant and the current look.
 xs=$(tmpdir export_stress)
@@ -1892,7 +1889,6 @@ cat > "$xs/export_stress/theme.json" <<'JSON'
 JSON
 adb push "$xs/export_stress" /sdcard/Xross/themes/ >/dev/null
 display_set 'd["themePack"] = "export_stress"; d["themeVariant"] = "ember"; d["theme"] = "PACK"; d["effects"] = {}; d["components"] = {}; d["layout"] = {}; d["surfaceStyle"] = ""'
-xshots ember
 open_export
 expect "Export Stress, 2 variants" "a pack with variants: the whole pack counts them"
 expect "Base look only" "…a row for its base look"
@@ -1902,20 +1898,15 @@ open_export
 export_as 0 "Export Stress"
 switch_to "Export Stress"
 [ "$(display_get themeVariant)" = '"ember"' ] && ok "Switch to a whole pack keeps the variant" || bad "themeVariant is $(display_get themeVariant)"
-xshots emberwhole
-same_look ember emberwhole "the whole-pack export with Ember selected looks the same"
 adb shell ls /sdcard/Xross/themes/export-stress/wallpapers/ember.png >/dev/null 2>&1 && ok "…and carries the variant's wallpaper" || bad "ember.png not copied"
 row=1
 for v in "" ember mono; do
   display_set "d['themePack'] = 'export_stress'; d['themeVariant'] = '$v'"
-  xshots "v$row"
   case "$v" in "") name="Base look" ;; ember) name="Ember" ;; *) name="Mono" ;; esac
   open_export
   export_as "$row" "Export Stress · $name"
   switch_to "Export Stress · $name"
   [ "$(display_get themeVariant)" = '""' ] && ok "Switch to $name only starts on its base look" || bad "themeVariant is $(display_get themeVariant)"
-  xshots "v$row-pack"
-  same_look "v$row" "v$row-pack" "the $name-only export looks the same as the pack with $name"
   row=$((row + 1))
 done
 display_set 'd["themePack"] = "export_stress"; d["themeVariant"] = "mono"; d["theme"] = "EMERALD"; d["effects"] = {"focusFrameStyle": "GOLD_BEZEL", "backgroundFilter": "LCD_GRID"}; d["layout"] = {"preset": "MODERN_WIDESCREEN", "focusedScale": 1.1}; d["components"] = {"batteryMode": "BOTH", "statusBarLeft": ["CLOCK"]}; d["surfaceStyle"] = "OLED_TRUE_BLACK"'
@@ -1966,8 +1957,8 @@ display_set 'd["themePack"] = "default"; d["wave"] = True'
 section "Share (2b.8c)"
 # Share as .xtheme… writes a pack into one file through the system's create-document picker: the
 # built-in Default pack whole from the Theme pack row, and a current-look export from its saved menu.
-# Each file is imported back (Import theme (.xtheme)…) and compared with what was on screen before,
-# by screenshots and logged colours in the same 8 places as the Export section.
+# Each file is imported back (Import theme (.xtheme)…). That an archive loads to the same look is
+# ThemeRoundTripTest's (every scope, and a folder shared as it is); Export compares the screens.
 # save_doc <file name>: Save in the create-document picker (it opens on Downloads), then wait for the
 # file. The landscape keyboard can cover the picker; its Enter saves too.
 save_doc() {
@@ -1991,7 +1982,6 @@ import_doc() {
 }
 adb shell rm -rf /sdcard/Download/default-pack.xtheme /sdcard/Download/default-my-look.xtheme /sdcard/Xross/themes/default-pack /sdcard/Xross/themes/default-my-look
 display_set 'd.update({"wave": False, "themePack": "default", "themeVariant": "", "theme": "LAVENDER", "effects": {}, "components": {}, "layout": {}, "surfaceStyle": "", "customWallpaper": "", "adaptiveGamePalette": None, "circadianCurve": None, "batteryTint": None, "quickProfile": "NONE", "waveTint": "THEME"})'
-xshots shdef
 # The Theme pack row's Options ▸ Share as .xtheme… (the last row) ▸ Default ▸ Whole pack.
 category 0; press DPAD_DOWN 3 KEYCODE_DPAD_CENTER; top_list
 key KEYCODE_BUTTON_Y
@@ -2017,12 +2007,9 @@ media_scan
 import_doc default-pack.xtheme
 for _ in $(seq 16); do settings_has '"themePack": "default-pack"' && break; pause 0.5; done
 settings_has '"themePack": "default-pack"' && ok "the shared file imports back as default-pack and is applied" || bad "default-pack isn't active"
-xshots shdefcopy
-same_look shdef shdefcopy "the re-imported Default pack looks the same as the built-in one"
 
 # A current look, exported, shared from the saved menu, its folder deleted, imported back.
 display_set 'd["themePack"] = "default"; d["theme"] = "CRIMSON"; d["effects"] = {"focusFrameStyle": "GOLD_BEZEL", "iconMask": "CIRCLE", "backgroundFilter": "SCANLINES"}; d["components"] = {"batteryMode": "PERCENTAGE", "statusBarRight": ["BATTERY", "CLOCK", "AVATAR"]}; d["layout"] = {"preset": "PSP_CENTER", "uiScale": 1.1, "itemSpacingDp": 20}; d["surfaceStyle"] = "Y2K_GLOSSY_BEZEL"'
-xshots shmine
 open_export
 export_as 1 "Default (my look)"
 press DPAD_DOWN 2
@@ -2034,10 +2021,6 @@ media_scan
 import_doc default-my-look.xtheme
 for _ in $(seq 16); do adb shell ls /sdcard/Xross/themes/default-my-look/theme.json >/dev/null 2>&1 && break; pause 0.5; done
 adb shell ls /sdcard/Xross/themes/default-my-look/theme.json >/dev/null 2>&1 && ok "the deleted export comes back from its file" || bad "default-my-look not re-imported"
-# As Switch to does: the picks are in the pack, so the user layer is cleared.
-display_set 'd.update({"themePack": "default-my-look", "themeVariant": "", "theme": "PACK", "effects": {}, "components": {}, "layout": {}, "surfaceStyle": "", "waveTint": "THEME"})'
-xshots shminecopy
-same_look shmine shminecopy "the re-imported current look looks the same as before the export"
 adb shell rm -rf /sdcard/Download/default-pack.xtheme /sdcard/Download/default-my-look.xtheme /sdcard/Xross/themes/default-pack /sdcard/Xross/themes/default-my-look
 display_set 'd["themePack"] = "default"; d["wave"] = True'
 

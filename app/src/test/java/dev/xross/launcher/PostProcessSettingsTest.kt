@@ -16,7 +16,7 @@ import dev.xross.launcher.theme.pack.EffectSlot
 import dev.xross.launcher.theme.pack.FocusFrameStyle
 import dev.xross.launcher.theme.pack.IconMask
 import dev.xross.launcher.theme.pack.ParticlePreset
-import dev.xross.launcher.theme.pack.ThemeDefaults
+import dev.xross.launcher.data.ThemeDefaults
 import dev.xross.launcher.theme.pack.ThemeLook
 import dev.xross.launcher.theme.pack.ThemeManifest
 import dev.xross.launcher.theme.pack.ThemePackLoader
@@ -309,7 +309,8 @@ class PostProcessSettingsTest {
     @Test fun rowsCycleThePackFirstThenEachChoice() {
         assertEquals("WAVE", EffectSlot.SHADER.next(""))
         assertEquals("CRT", EffectSlot.SHADER.next("STARFIELD"))
-        assertEquals("", EffectSlot.SHADER.next("CRT"))
+        assertEquals("BLACK_HOLE", EffectSlot.SHADER.next("CRT"))
+        assertEquals("", EffectSlot.SHADER.next("BLACK_HOLE"))
         assertEquals("SNOW", EffectSlot.PARTICLES.next("none"))
         assertEquals("System", EffectSlot.ICON_MASK.label("NONE"))
         assertEquals("Matrix", EffectSlot.SHADER.label("ASCII_MATRIX"))

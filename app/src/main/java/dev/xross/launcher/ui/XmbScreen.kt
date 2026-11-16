@@ -111,9 +111,10 @@ import dev.xross.launcher.state.NodeIcon
 import dev.xross.launcher.state.RemapSession
 import dev.xross.launcher.state.XmbCategory
 import dev.xross.launcher.state.XmbNode
+import dev.xross.launcher.state.XmbEvent
 import dev.xross.launcher.state.XmbUiState
 import dev.xross.launcher.media.SnapPlayer
-import dev.xross.launcher.scrape.ArtKind
+import dev.xross.launcher.model.ArtKind
 import dev.xross.launcher.theme.ThemePalette
 import dev.xross.launcher.theme.XrossTheme
 import dev.xross.launcher.theme.rememberActivePalette
@@ -128,6 +129,16 @@ import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.min
 import kotlin.math.roundToInt
+import dev.xross.launcher.state.SocialStack
+import dev.xross.launcher.state.StatusBarState
+import dev.xross.launcher.theme.WallpaperSource
+import dev.xross.launcher.theme.pack.Cosmetics
+import dev.xross.launcher.theme.pack.ParticlePreset
+import dev.xross.launcher.theme.pack.UiFilter
+import dev.xross.launcher.theme.pack.UiFilterRef
+import dev.xross.launcher.theme.pack.nav
+import dev.xross.launcher.theme.pack.tween
+import dev.xross.launcher.theme.glowColor
 
 internal val TextBright = Color(0xFFFFFFFF)
 internal val TextDim = Color(0xD9FFFFFF)
@@ -187,62 +198,21 @@ fun XmbScreen(
     media: MediaOverlayController,
     music: MusicPlayer,
     /** The status bar's own slice; only the bar collects it. */
-    statusBar: kotlinx.coroutines.flow.StateFlow<dev.xross.launcher.state.StatusBarState>,
-    onAction: (NavAction) -> Unit,
-    onCategoryTap: (Int) -> Unit,
-    onItemTap: (Int) -> Unit,
-    onCancelRemap: () -> Unit,
-    onItemLongPress: (Int) -> Unit = {},
-    onOptionTap: (Int) -> Unit = {},
-    onCloseOptions: () -> Unit = {},
-    onSearchKeyTap: (Int, Int) -> Unit = { _, _ -> },
-    onSearchResultTap: (Int) -> Unit = {},
-    onNameKeyTap: (Int, Int) -> Unit = { _, _ -> },
-    onInfoRowTap: (Int) -> Unit = {},
-    onCloseInfo: () -> Unit = {},
+    statusBar: kotlinx.coroutines.flow.StateFlow<StatusBarState>,
+    /** Every touch and swipe: see [XmbEvent]. */
+    onEvent: (XmbEvent) -> Unit,
+    /** What the screen reports about its own drawing and layout: see [ScreenSignal]. */
+    onSignal: (ScreenSignal) -> Unit = {},
     snap: SnapPlayer? = null,
     videoFile: suspend (String) -> java.io.File? = { null },
-    onPlayDetails: () -> Unit = {},
-    onCloseDetails: () -> Unit = {},
-    onAvatarTap: () -> Unit = {},
-    onProfileCardButtonTap: (Int) -> Unit = {},
-    onCloseProfileCard: () -> Unit = {},
-    onMiniPlayerTap: () -> Unit = {},
-    onMiniPlayerLongPress: () -> Unit = {},
     loadBadge: suspend (String, Int) -> ImageBitmap? = { _, _ -> null },
-    /** Opaque hero art, a video snap or an opaque wallpaper covers the screen: the wave can stop rendering. */
-    onBackdropCoverChanged: (Boolean) -> Unit = {},
     /** The wallpaper behind the menu (the user's Xross wallpaper or the pack's); null: none. */
-    wallpaper: dev.xross.launcher.theme.WallpaperSource? = null,
+    wallpaper: WallpaperSource? = null,
     /** The pack's wallpaper, shown when [wallpaper] (the user's) can't be read. */
-    packWallpaper: dev.xross.launcher.theme.WallpaperSource? = null,
-    loadWallpaper: suspend (dev.xross.launcher.theme.WallpaperSource, Int) -> Wallpaper? = { _, _ -> null },
-    onWaveRowTap: (Int) -> Unit = {},
-    onWaveSlider: (Int, Float) -> Unit = { _, _ -> },
-    onCloseWaveSettings: () -> Unit = {},
-    onLayoutRowTap: (Int) -> Unit = {},
-    onLayoutSlider: (Int, Float) -> Unit = { _, _ -> },
-    onCloseLayoutSettings: () -> Unit = {},
-    onAchievementTap: (Int) -> Unit = {},
-    onCloseAchievements: () -> Unit = {},
-    onDetailsAchievements: () -> Unit = {},
-    onCloseAvatarHud: () -> Unit = {},
-    /** Touch: the social stack (2b.7c) opens or closes its panel; a tap outside the panel closes it. */
-    onSocialTap: () -> Unit = {},
-    onCloseSocialPanel: () -> Unit = {},
-    onAvatarRowTap: (Int) -> Unit = {},
-    onAvatarSlider: (Int, Float) -> Unit = { _, _ -> },
-    onCloseAvatarStyle: () -> Unit = {},
-    onCloseRaHub: () -> Unit = {},
-    onRaHubPillTap: (Int) -> Unit = {},
-    onRaHubRowTap: (Int) -> Unit = {},
-    onAchievementsColumns: (Int) -> Unit = {},
+    packWallpaper: WallpaperSource? = null,
+    loadWallpaper: suspend (WallpaperSource, Int) -> Wallpaper? = { _, _ -> null },
     /** No input for [ParticleRest.IDLE_AFTER_MS]: the foreground particles rest. */
     particlesIdle: Boolean = false,
-    /** A UI filter (2b.4f) couldn't be built: (key, toast text), announced once per key. */
-    onUiFilterError: (String, String) -> Unit = { _, _ -> },
-    /** The crosshair's X over the screen width (0–1) as laid out, for panning the UI sounds (2b.5a). */
-    onCrosshairX: (Float) -> Unit = {},
     /** The menu's alpha on a cold start ([BootReveal.menu], 2b.5d): the fade-in, or 1 under the boot video. */
     reveal: () -> Float = { 1f },
 ) {
@@ -262,24 +232,24 @@ fun XmbScreen(
 
     // The experimental UI filter (2b.4f, Android 13+): an AGSL RenderEffect on the whole menu.
     // Static filters never animate; a custom one that reads uTime rests with the screen.
-    val filterRef = LocalThemeLook.current?.cosmetics?.screenFilter ?: dev.xross.launcher.theme.pack.UiFilterRef.OFF
-    val filterSource = filterRef.takeIf { it.filter == dev.xross.launcher.theme.pack.UiFilter.CUSTOM }
+    val filterRef = LocalThemeLook.current?.cosmetics?.screenFilter ?: UiFilterRef.OFF
+    val filterSource = filterRef.takeIf { it.filter == UiFilter.CUSTOM }
         ?.let { LocalThemePack.current?.customUiFilters?.get(it.path) }
     val filterStill = LocalStillMotion.current
 
     BoxWithConstraints(
         Modifier
             .fillMaxSize()
-            .uiFilter(filterRef, filterSource, started, idle, filterStill, onUiFilterError)
+            .uiFilter(filterRef, filterSource, started, idle, filterStill) { key, text -> onSignal(ScreenSignal.UiFilterError(key, text)) }
             .graphicsLayer { alpha = reveal() }
             .frostHost()
-            .swipeNavigation(onAction),
+            .swipeNavigation { onEvent(XmbEvent.Nav(it)) },
     ) {
         val m = remember(constraints.maxWidth, constraints.maxHeight, layout) {
             XmbMetrics(constraints.maxWidth.toFloat(), constraints.maxHeight.toFloat(), layout)
         }
-        val reportCrosshair by rememberUpdatedState(onCrosshairX)
-        LaunchedEffect(m.anchorX, m.width) { if (m.width > 0f) reportCrosshair(m.anchorX / m.width) }
+        val signal by rememberUpdatedState(onSignal)
+        LaunchedEffect(m.anchorX, m.width) { if (m.width > 0f) signal(ScreenSignal.CrosshairX(m.anchorX / m.width)) }
         val density = LocalDensity.current
         fun Float.sp(): TextUnit = with(density) { this@sp.toSp() }
         fun Float.dp(): Dp = with(density) { this@dp.toDp() }
@@ -330,12 +300,13 @@ fun XmbScreen(
         // Frosted surfaces show blurred art only where a still image is what's behind them:
         // not over a video snap or a media screen.
         val snapOn = snap?.player?.collectAsState()?.value != null
+        val frost = LocalFrostedBackdrop.current
         val frostOff = snapOn || state.overlay != null
-        androidx.compose.runtime.SideEffect { FrostedBackdrop.suppressed = frostOff }
+        androidx.compose.runtime.SideEffect { frost.suppressed = frostOff }
         // Layer 4: ambient particles over the art (2b.4e), hidden under a snap, full-screen media,
         // the wave editor and E-Ink, resting when stopped or after 10 s without input.
-        val particlePreset = (LocalThemeLook.current?.cosmetics ?: dev.xross.launcher.theme.pack.Cosmetics.NONE).particleField
-        if (particlePreset != dev.xross.launcher.theme.pack.ParticlePreset.NONE) {
+        val particlePreset = (LocalThemeLook.current?.cosmetics ?: Cosmetics.NONE).particleField
+        if (particlePreset != ParticlePreset.NONE) {
             val stillMotion = LocalStillMotion.current
             val particleState = ParticleRest.of(
                 preset = particlePreset,
@@ -349,8 +320,7 @@ fun XmbScreen(
             AmbientParticles(particlePreset, particleState, Color(palette.glow), stillMotion)
         }
         val covers = heroCovers || videoCovers || wallpaperCovers
-        val reportCover by rememberUpdatedState(onBackdropCoverChanged)
-        LaunchedEffect(covers) { reportCover(covers) }
+        LaunchedEffect(covers) { signal(ScreenSignal.BackdropCover(covers)) }
 
         val catPos by animateFloatAsState(state.categoryIndex.toFloat(), motion.nav(), label = "category")
         val depth by animateFloatAsState(state.depth.coerceAtMost(1).toFloat(), motion.nav(), label = "depth")
@@ -384,9 +354,12 @@ fun XmbScreen(
             catPos = { catPos },
             depth = { depth },
             pulse = { pulse },
-            onCategoryTap = onCategoryTap,
+            onCategoryTap = { onEvent(XmbEvent.Menu.CategoryTap(it)) },
         )
-        ItemColumn(state, m, motion, { depth }, { pulse }, loadAppIcon, loadThumb, loadArt, onItemTap, onItemLongPress)
+        ItemColumn(state, m, motion, { depth }, { pulse }, loadAppIcon, loadThumb, loadArt,
+            onItemTap = { onEvent(XmbEvent.Menu.ItemTap(it)) },
+            onItemLongPress = { onEvent(XmbEvent.Menu.ItemLongPress(it)) },
+        )
 
         // (The "now playing" line that used to sit top-left is the floating MiniPlayerCard below.)
 
@@ -412,20 +385,20 @@ fun XmbScreen(
             leftMaxHeight = (m.barY - m.categoryIcon * m.categoryFocusScale / 2 - m.s * 0.04f).coerceAtLeast(0f).dp(),
             ticker = state.nowPlaying.takeIf { components.miniPlayer == MiniPlayerMode.STATUS_TICKER },
             tickerCovered = miniCovered,
-            onTickerTap = onMiniPlayerTap,
-            onTickerLongPress = onMiniPlayerLongPress,
-            social = if (dev.xross.launcher.state.SocialStack.shows(components, state.friends)) state.friends.friends else emptyList(),
+            onTickerTap = { onEvent(XmbEvent.Menu.MiniPlayerTap) },
+            onTickerLongPress = { onEvent(XmbEvent.Menu.MiniPlayerLongPress) },
+            social = if (SocialStack.shows(components, state.friends)) state.friends.friends else emptyList(),
             socialBadge = state.friends.badge,
             socialOpen = state.socialPanel != null,
             socialGlow = state.settings.avatarStyle.glowEnabled,
-            onSocialTap = onSocialTap,
+            onSocialTap = { onEvent(XmbEvent.Ra.SocialTap) },
         )
         state.socialPanel?.let { panel ->
             // A tap anywhere outside the panel closes it.
             Box(
                 Modifier
                     .fillMaxSize()
-                    .clickable(remember { MutableInteractionSource() }, indication = null, onClick = onCloseSocialPanel),
+                    .clickable(remember { MutableInteractionSource() }, indication = null, onClick = { onEvent(XmbEvent.Ra.CloseSocialPanel) }),
             )
             SocialPanel(
                 friends = state.friends,
@@ -442,7 +415,7 @@ fun XmbScreen(
             Box(
                 Modifier
                     .fillMaxSize()
-                    .clickable(remember { MutableInteractionSource() }, indication = null, onClick = onCloseAvatarHud),
+                    .clickable(remember { MutableInteractionSource() }, indication = null, onClick = { onEvent(XmbEvent.Ra.CloseAvatarHud) }),
             )
         }
         if (components.avatar) AvatarHud(
@@ -455,7 +428,7 @@ fun XmbScreen(
             confirmGlyph = if (state.confirm == ConfirmLayout.EAST) state.glyphs.east else state.glyphs.south,
             backGlyph = if (state.confirm == ConfirmLayout.EAST) state.glyphs.south else state.glyphs.east,
             optionsGlyph = state.glyphs.north,
-            onAvatarTap = onAvatarTap,
+            onAvatarTap = { onEvent(XmbEvent.Ra.AvatarTap) },
             loadBadge = loadBadge,
             modifier = Modifier.align(Alignment.TopEnd).padding(top = statusTop, end = statusEnd),
         )
@@ -490,8 +463,8 @@ fun XmbScreen(
                 nowPlaying = state.nowPlaying,
                 covered = miniCovered,
                 loadThumb = loadThumb,
-                onClick = onMiniPlayerTap,
-                onLongClick = onMiniPlayerLongPress,
+                onClick = { onEvent(XmbEvent.Menu.MiniPlayerTap) },
+                onLongClick = { onEvent(XmbEvent.Menu.MiniPlayerLongPress) },
                 mode = components.miniPlayer,
             )
             // telemetryMode (2b.7d): nothing, the compact pill or the rich card; the mini player's
@@ -525,7 +498,7 @@ fun XmbScreen(
                 pulse = { pulse },
                 glyphs = state.glyphs,
                 confirm = state.confirm,
-                onKeyTap = onNameKeyTap,
+                onKeyTap = { row, column -> onEvent(XmbEvent.Typing.NameKeyTap(row, column)) },
             )
         }
 
@@ -536,8 +509,8 @@ fun XmbScreen(
                 pulse = { pulse },
                 glyphs = state.glyphs,
                 confirm = state.confirm,
-                onKeyTap = onSearchKeyTap,
-                onResultTap = onSearchResultTap,
+                onKeyTap = { row, column -> onEvent(XmbEvent.Typing.SearchKeyTap(row, column)) },
+                onResultTap = { onEvent(XmbEvent.Typing.SearchResultTap(it)) },
             )
         }
 
@@ -547,8 +520,8 @@ fun XmbScreen(
             pulse = { pulse },
             confirmGlyph = if (state.confirm == ConfirmLayout.EAST) state.glyphs.east else state.glyphs.south,
             backGlyph = if (state.confirm == ConfirmLayout.EAST) state.glyphs.south else state.glyphs.east,
-            onTap = onOptionTap,
-            onDismiss = onCloseOptions,
+            onTap = { onEvent(XmbEvent.Menu.OptionTap(it)) },
+            onDismiss = { onEvent(XmbEvent.Menu.CloseOptions) },
         )
 
         DetailsScreen(
@@ -560,17 +533,17 @@ fun XmbScreen(
             optionsGlyph = state.glyphs.north,
             loadArt = loadArt,
             loadBadge = loadBadge,
-            onPlay = onPlayDetails,
-            onAchievements = onDetailsAchievements,
-            onDismiss = onCloseDetails,
+            onPlay = { onEvent(XmbEvent.Menu.PlayDetails) },
+            onAchievements = { onEvent(XmbEvent.Menu.DetailsAchievements) },
+            onDismiss = { onEvent(XmbEvent.Menu.CloseDetails) },
         )
 
         InfoPanel(
             info = state.info,
             m = m,
             backGlyph = if (state.confirm == ConfirmLayout.EAST) state.glyphs.south else state.glyphs.east,
-            onRowTap = onInfoRowTap,
-            onDismiss = onCloseInfo,
+            onRowTap = { onEvent(XmbEvent.Menu.InfoRowTap(it)) },
+            onDismiss = { onEvent(XmbEvent.Menu.CloseInfo) },
         )
 
         UserCard(
@@ -580,8 +553,8 @@ fun XmbScreen(
             pulse = { pulse },
             confirmGlyph = if (state.confirm == ConfirmLayout.EAST) state.glyphs.east else state.glyphs.south,
             backGlyph = if (state.confirm == ConfirmLayout.EAST) state.glyphs.south else state.glyphs.east,
-            onButtonTap = onProfileCardButtonTap,
-            onDismiss = onCloseProfileCard,
+            onButtonTap = { onEvent(XmbEvent.Ra.ProfileCardButtonTap(it)) },
+            onDismiss = { onEvent(XmbEvent.Ra.CloseProfileCard) },
             loadBadge = loadBadge,
             avatarStyle = state.settings.avatarStyle,
         )
@@ -595,10 +568,10 @@ fun XmbScreen(
             backGlyph = if (state.confirm == ConfirmLayout.EAST) state.glyphs.south else state.glyphs.east,
             loadArt = loadArt,
             loadBadge = loadBadge,
-            onDismiss = onCloseRaHub,
+            onDismiss = { onEvent(XmbEvent.Ra.CloseHub) },
             friends = state.friends,
-            onPillTap = onRaHubPillTap,
-            onRowTap = onRaHubRowTap,
+            onPillTap = { onEvent(XmbEvent.Ra.HubPillTap(it)) },
+            onRowTap = { onEvent(XmbEvent.Ra.HubRowTap(it)) },
         )
 
         AchievementsScreen(
@@ -609,9 +582,9 @@ fun XmbScreen(
             optionsGlyph = state.glyphs.north,
             loadArt = loadArt,
             loadBadge = loadBadge,
-            onBadgeTap = onAchievementTap,
-            onDismiss = onCloseAchievements,
-            onColumns = onAchievementsColumns,
+            onBadgeTap = { onEvent(XmbEvent.Ra.AchievementTap(it)) },
+            onDismiss = { onEvent(XmbEvent.Ra.CloseAchievements) },
+            onColumns = { onEvent(XmbEvent.Ra.AchievementsColumns(it)) },
         )
 
         WaveSettingsPanel(
@@ -622,9 +595,9 @@ fun XmbScreen(
             pulse = { pulse },
             confirmGlyph = if (state.confirm == ConfirmLayout.EAST) state.glyphs.east else state.glyphs.south,
             backGlyph = if (state.confirm == ConfirmLayout.EAST) state.glyphs.south else state.glyphs.east,
-            onRowTap = onWaveRowTap,
-            onSlider = onWaveSlider,
-            onDismiss = onCloseWaveSettings,
+            onRowTap = { onEvent(XmbEvent.Editor.WaveRowTap(it)) },
+            onSlider = { index, fraction -> onEvent(XmbEvent.Editor.WaveSlider(index, fraction)) },
+            onDismiss = { onEvent(XmbEvent.Editor.CloseWave) },
         )
 
         LayoutSettingsPanel(
@@ -636,9 +609,9 @@ fun XmbScreen(
             pulse = { pulse },
             confirmGlyph = if (state.confirm == ConfirmLayout.EAST) state.glyphs.east else state.glyphs.south,
             backGlyph = if (state.confirm == ConfirmLayout.EAST) state.glyphs.south else state.glyphs.east,
-            onRowTap = onLayoutRowTap,
-            onSlider = onLayoutSlider,
-            onDismiss = onCloseLayoutSettings,
+            onRowTap = { onEvent(XmbEvent.Layout.RowTap(it)) },
+            onSlider = { index, fraction -> onEvent(XmbEvent.Layout.Slider(index, fraction)) },
+            onDismiss = { onEvent(XmbEvent.Layout.Close) },
         )
 
         AvatarStylePanel(
@@ -649,12 +622,12 @@ fun XmbScreen(
             pulse = { pulse },
             confirmGlyph = if (state.confirm == ConfirmLayout.EAST) state.glyphs.east else state.glyphs.south,
             backGlyph = if (state.confirm == ConfirmLayout.EAST) state.glyphs.south else state.glyphs.east,
-            onRowTap = onAvatarRowTap,
-            onSlider = onAvatarSlider,
-            onDismiss = onCloseAvatarStyle,
+            onRowTap = { onEvent(XmbEvent.Editor.AvatarRowTap(it)) },
+            onSlider = { index, fraction -> onEvent(XmbEvent.Editor.AvatarSlider(index, fraction)) },
+            onDismiss = { onEvent(XmbEvent.Editor.CloseAvatar) },
         )
 
-        state.remap?.let { RemapOverlay(it, m, onCancelRemap) }
+        state.remap?.let { RemapOverlay(it, m) { onEvent(XmbEvent.Menu.CancelRemap) } }
         state.booting?.let { GameBootOverlay(it, palette, m, LocalThemeLook.current?.cosmetics?.curtain ?: LaunchCurtain.BLOOM, LocalStillMotion.current) }
 
         // Unlock toasts: top right under the status bar; drawn only, never focused.
@@ -778,7 +751,7 @@ private fun CategoryBar(
                 text = category.title,
                 fontSize = labelSp,
                 glow = { pulse() * focus() },
-                fontFamily = ThemeTypography.display ?: ThemeTypography.family,
+                fontFamily = LocalThemeTypography.current.displayOrBody,
                 modifier = Modifier.fadeAlpha { focus() * (1f - depth()) },
             )
         }
@@ -1075,7 +1048,8 @@ private fun SubtitleLine(text: String, pills: List<TitlePill>, size: TextUnit, m
 /** One title badge: the pack's surface at a small radius; figures in the `mono` font. */
 @Composable
 private fun TitlePillChip(pill: TitlePill, size: TextUnit) {
-    val family = if (pill.mono) ThemeTypography.mono ?: ThemeTypography.family else ThemeTypography.family
+    val fonts = LocalThemeTypography.current
+    val family = if (pill.mono) fonts.monoOrBody else fonts.family
     Text(
         pill.text,
         style = shadowed(size, weight = FontWeight.Medium).copy(fontFamily = family, shadow = null),
@@ -1178,6 +1152,7 @@ private fun XmbIcon(
 ) {
     val canBlur = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
     val frame = LocalFocusFrame.current
+    val accent = LocalThemeAccent.current
     val neon = frame.style == FocusFrameStyle.STATIC_NEON
     Box(
         Modifier
@@ -1199,7 +1174,7 @@ private fun XmbIcon(
                         scaleY = if (neon) 1.6f else 1.9f
                     }
                     .drawBehind {
-                        val c = frame.bloomColor() ?: return@drawBehind
+                        val c = frame.bloomColor(accent) ?: return@drawBehind
                         val core = if (neon) 0.6f else 0.42f
                         drawCircle(
                             Brush.radialGradient(
@@ -1307,13 +1282,14 @@ private fun ArtIcon(
             contentAlignment = Alignment.Center,
         ) {
             val frame = LocalFocusFrame.current
+            val accent = LocalThemeAccent.current
             if (frame.style == FocusFrameStyle.BREATHING_HALO || frame.style == FocusFrameStyle.STATIC_NEON) {
                 Box(
                     Modifier
                         .fillMaxSize()
                         .graphicsLayer { alpha = glow(); scaleX = 1.6f; scaleY = 1.6f }
                         .drawBehind {
-                            val c = frame.bloomColor() ?: return@drawBehind
+                            val c = frame.bloomColor(accent) ?: return@drawBehind
                             drawCircle(Brush.radialGradient(0f to c.copy(alpha = 0.3f), 1f to Color.Transparent))
                         },
                 )
@@ -1326,7 +1302,7 @@ private fun ArtIcon(
                 contentScale = ContentScale.Fit,
                 modifier = Modifier
                     .size(size)
-                    .then(if (frame.framesPlates) Modifier.drawBehind { fittedFrame(frame, glow(), image.width, image.height) } else Modifier)
+                    .then(if (frame.framesPlates) Modifier.drawBehind { fittedFrame(frame, accent, glow(), image.width, image.height) } else Modifier)
                     .shadow(6.dp, RoundedCornerShape(3.dp), clip = false),
             )
         }
@@ -1367,13 +1343,14 @@ private fun ThumbIcon(
         contentAlignment = Alignment.Center,
     ) {
         val frame = LocalFocusFrame.current
+        val accent = LocalThemeAccent.current
         if (frame.style == FocusFrameStyle.BREATHING_HALO || frame.style == FocusFrameStyle.STATIC_NEON) {
             Box(
                 Modifier
                     .fillMaxSize()
                     .graphicsLayer { alpha = glow(); scaleX = 1.7f; scaleY = 1.7f }
                     .drawBehind {
-                        val c = frame.bloomColor() ?: return@drawBehind
+                        val c = frame.bloomColor(accent) ?: return@drawBehind
                         drawCircle(Brush.radialGradient(0f to c.copy(alpha = 0.35f), 1f to Color.Transparent))
                     },
             )
@@ -1385,7 +1362,7 @@ private fun ThumbIcon(
             modifier = Modifier
                 .size(width = size * aspect, height = size)
                 .wrapContentSize(unbounded = true)
-                .then(if (frame.framesPlates) Modifier.drawBehind { drawPlateFrame(frame, glow(), 4.dp.toPx()) } else Modifier)
+                .then(if (frame.framesPlates) Modifier.drawBehind { drawPlateFrame(frame, accent, glow(), 4.dp.toPx()) } else Modifier)
                 .shadow(4.dp, RoundedCornerShape(4.dp))
                 .clip(RoundedCornerShape(4.dp))
                 .border(1.dp, Color.White.copy(alpha = 0.85f), RoundedCornerShape(4.dp)),
@@ -1397,13 +1374,13 @@ private fun ThumbIcon(
  * [drawPlateFrame] around an image of [imageW] × [imageH] drawn with [ContentScale.Fit] in this
  * scope (centered), so the frame hugs the art rather than the square slot.
  */
-private fun androidx.compose.ui.graphics.drawscope.DrawScope.fittedFrame(frame: FocusFrame, glow: Float, imageW: Int, imageH: Int) {
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.fittedFrame(frame: FocusFrame, accent: ThemeAccent, glow: Float, imageW: Int, imageH: Int) {
     if (glow <= 0f || imageW <= 0 || imageH <= 0) return
     val k = minOf(size.width / imageW, size.height / imageH)
     val w = imageW * k
     val h = imageH * k
     translate((size.width - w) / 2, (size.height - h) / 2) {
-        drawPlateFrame(frame, glow, 3.dp.toPx(), androidx.compose.ui.geometry.Size(w, h))
+        drawPlateFrame(frame, accent, glow, 3.dp.toPx(), androidx.compose.ui.geometry.Size(w, h))
     }
 }
 
@@ -1467,11 +1444,13 @@ internal fun Modifier.fadeAlpha(alpha: () -> Float): Modifier = graphicsLayer {
     compositingStrategy = CompositingStrategy.ModulateAlpha
 }
 
+@Composable
+@androidx.compose.runtime.ReadOnlyComposable
 internal fun shadowed(size: TextUnit, color: Color = TextBright, weight: FontWeight = FontWeight.Normal) = TextStyle(
     color = color,
     fontSize = size,
     fontWeight = weight,
-    fontFamily = ThemeTypography.family,
+    fontFamily = LocalThemeTypography.current.family,
     shadow = Shadow(DropShadow, Offset(0f, 3f), blurRadius = 6f),
 )
 
@@ -1491,7 +1470,7 @@ internal fun GlowText(
     glow: () -> Float,
     modifier: Modifier = Modifier,
     /** A font role other than body (the category bar uses `display`). */
-    fontFamily: androidx.compose.ui.text.font.FontFamily? = ThemeTypography.family,
+    fontFamily: androidx.compose.ui.text.font.FontFamily? = LocalThemeTypography.current.family,
     overflow: TextOverflowMode = TextOverflowMode.ELLIPSIS,
     marquee: Boolean = false,
 ) {
@@ -1536,7 +1515,7 @@ private fun GlowBloom(
     cut: TextOverflow,
     glow: () -> Float,
 ) {
-    val halo = ThemeAccent.haloTarget
+    val halo = LocalThemeAccent.current.haloTarget
     Text(
         text,
         style = TextStyle(

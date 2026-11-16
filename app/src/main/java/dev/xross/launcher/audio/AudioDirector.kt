@@ -4,6 +4,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import dev.xross.launcher.data.XrossSettings
+import dev.xross.launcher.theme.pack.BgmTrack
 
 /**
  * Applies [AudioMixer]'s rules to Xross's players: UI effects and cues ([UiSounds]), the music
@@ -31,7 +32,7 @@ class AudioDirector(
     private var snap = SnapState.NONE
 
     // Theme music inputs (2b.5c).
-    private var bgmTrack: dev.xross.launcher.theme.pack.BgmTrack? = null
+    private var bgmTrack: BgmTrack? = null
     private var started = false
     private var gameRunning = false
     private var fullScreenVideo = false
@@ -43,7 +44,7 @@ class AudioDirector(
     private var lastBgm: BgmDecision? = null
     /** The last decision the player has acted on audibly: null (or a stop) until it first plays, so its first start fades in. */
     private var heardBgm: BgmDecision? = null
-    private var lastBgmTrack: dev.xross.launcher.theme.pack.BgmTrack? = null
+    private var lastBgmTrack: BgmTrack? = null
 
     init {
         bgm?.onActiveChanged = ::recount
@@ -95,7 +96,7 @@ class AudioDirector(
     }
 
     /** The look's music loop (variant, category, system, rules): null when it has none. */
-    fun onBgmTrack(track: dev.xross.launcher.theme.pack.BgmTrack?) {
+    fun onBgmTrack(track: BgmTrack?) {
         if (track == bgmTrack) return
         bgmTrack = track
         applyBgm()

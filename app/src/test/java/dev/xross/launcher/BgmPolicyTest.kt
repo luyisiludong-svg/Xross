@@ -11,7 +11,7 @@ import dev.xross.launcher.audio.BgmOutput
 import dev.xross.launcher.audio.BgmPolicy
 import dev.xross.launcher.audio.BgmReason
 import dev.xross.launcher.audio.BgmState
-import dev.xross.launcher.audio.MusicUnderSnaps
+import dev.xross.launcher.data.MusicUnderSnaps
 import dev.xross.launcher.audio.PlaybackCensus
 import dev.xross.launcher.audio.SnapState
 import dev.xross.launcher.audio.UiSounds

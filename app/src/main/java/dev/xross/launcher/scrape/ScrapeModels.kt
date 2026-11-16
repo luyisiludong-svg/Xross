@@ -1,5 +1,7 @@
 package dev.xross.launcher.scrape
 
+import dev.xross.launcher.model.ArtKind
+
 /** Metadata services Xross can query. */
 enum class ProviderId(val label: String) {
     HASHEOUS("Hasheous"),

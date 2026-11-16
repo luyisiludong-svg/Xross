@@ -46,6 +46,9 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
+import dev.xross.launcher.state.TextPrompt
+import dev.xross.launcher.state.XmbNode
+import dev.xross.launcher.state.XmbEvent
 
 /**
  * Phase 2b.1: avatar style settings, playtime subtitles, Details paging, the avatar mini-HUD's
@@ -195,16 +198,16 @@ class Phase2bFeaturesTest {
         vm.press(NavAction.RIGHT) // Border color: next preset
         assertEquals(AvatarColorPreset.NEON_CYAN.hex, container.settings.current.avatarStyle.borderColorHex)
         assertEquals(AvatarColorPreset.NEON_CYAN.hex, vm.state.value.settings.avatarStyle.borderColorHex)
-        vm.onAvatarSliderChanged(AvatarRow.WIDTH.ordinal, 1f)
+        vm.onEvent(XmbEvent.Editor.AvatarSlider(AvatarRow.WIDTH.ordinal, 1f))
         idle()
         assertEquals(6f, container.settings.current.avatarStyle.borderWidthDp, 0f)
         assertEquals(AvatarRow.WIDTH.ordinal, vm.state.value.avatarEditor!!.index)
 
         // A custom hex typed in the prompt is validated before it is saved.
-        vm.onTextEntered(dev.xross.launcher.state.TextPrompt.AvatarBorderColor("#00E5FF"), "not-a-color")
+        vm.onTextEntered(TextPrompt.AvatarBorderColor("#00E5FF"), "not-a-color")
         idle()
         assertEquals(AvatarColorPreset.NEON_CYAN.hex, container.settings.current.avatarStyle.borderColorHex)
-        vm.onTextEntered(dev.xross.launcher.state.TextPrompt.AvatarBorderColor("#00E5FF"), "a1b2c3")
+        vm.onTextEntered(TextPrompt.AvatarBorderColor("#00E5FF"), "a1b2c3")
         idle()
         assertEquals("#A1B2C3", container.settings.current.avatarStyle.borderColorHex)
 
@@ -363,7 +366,7 @@ class Phase2bFeaturesTest {
 
     @Test fun telemetryFollowsTheFocusedRow() {
         val game = XmbUiState(
-            items = listOf(dev.xross.launcher.state.XmbNode("game:5", "G", action = NodeAction.LaunchGame(5))),
+            items = listOf(XmbNode("game:5", "G", action = NodeAction.LaunchGame(5))),
             telemetry = GameTelemetry(5, 1, 2, 10, 20),
         )
         assertNotNull(game.focusedTelemetry)

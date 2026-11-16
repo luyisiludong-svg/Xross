@@ -13,7 +13,7 @@ import dev.xross.launcher.profile.RaResult
 import dev.xross.launcher.profile.RetroAchievementsClient
 import dev.xross.launcher.scrape.DownloadResult
 import dev.xross.launcher.scrape.HttpClient
-import dev.xross.launcher.storage.PlatformRegistry
+import dev.xross.launcher.model.PlatformRegistry
 import dev.xross.launcher.storage.XrossEnvironment
 import kotlinx.coroutines.runBlocking
 import org.junit.After

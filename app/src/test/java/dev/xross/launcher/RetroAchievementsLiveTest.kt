@@ -28,6 +28,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import java.io.File
 import java.net.URLEncoder
+import dev.xross.launcher.storage.RomScanner
 
 /**
  * Real calls to RetroAchievements with the account in `.env`. Opt-in and skipped by default:
@@ -102,7 +103,7 @@ class RetroAchievementsLiveTest {
             .filter { it.first.isFile }
         var ready = 0
         for ((sample, platform) in samples) {
-            val title = dev.xross.launcher.storage.RomScanner.cleanTitle(sample.nameWithoutExtension)
+            val title = RomScanner.cleanTitle(sample.nameWithoutExtension)
             val game = GameEntity(path = sample.path, platformId = platform, title = title, fileName = sample.name, sizeBytes = sample.length(), lastModified = sample.lastModified())
             when (val state = achievements.load(game)) {
                 is AchievementsState.Ready -> {

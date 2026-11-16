@@ -15,10 +15,11 @@ import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Test
 import java.io.File
+import dev.xross.launcher.data.dat.DatHeader
 
 class DatParserTest {
 
-    private fun parse(text: String): Pair<dev.xross.launcher.data.dat.DatHeader, List<DatGame>> {
+    private fun parse(text: String): Pair<DatHeader, List<DatGame>> {
         val games = ArrayList<DatGame>()
         val header = DatParser.parse(text.byteInputStream(), "fallback") { games += it }
         return header to games

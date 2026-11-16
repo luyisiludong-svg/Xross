@@ -10,11 +10,16 @@ tech debt and refactoring proposals).
 ## Build and run
 
 ```bash
-./gradlew :app:testDebugUnitTest      # JVM unit tests
+./gradlew test                        # every module's JVM unit tests (:app, :theme:engine)
 ./gradlew :app:installDebug           # build + install on a connected device/emulator
 ./gradlew :app:assembleProfiling      # R8-optimized build for frame timing
-./gradlew check                       # unit tests + validateShaders (glslangValidator)
+./gradlew check                       # unit tests + lintDebug + validateShaders (glslangValidator)
 ```
+
+The build runs modules in parallel and keeps a configuration cache (`gradle.properties`); a build
+file change invalidates it on its own. Shared module setup lives in two convention plugins in
+`build-logic/` (`xross.jvm.library`, `xross.android.library`), so a new module's build file is a
+few lines.
 
 **Credentials:** copy [`.env.example`](../.env.example) to `.env` (git-ignored). The build reads
 ScreenScraper developer credentials from it. Debug builds only also pre-fill your SteamGridDB key,
@@ -28,6 +33,7 @@ several times slower there, so it shows stutter that the optimized build doesn't
 
 ```bash
 ./gradlew :app:testDebugUnitTest                  # JVM + Robolectric tests (live tests skip; count in docs/STATUS.md)
+./gradlew :theme:engine:test                      # the theme engine alone: plain JUnit, about a second
 ./gradlew :app:testDebugUnitTest --tests '*ScreenScraperLiveTest*' -PliveScrape=true   # real API calls, uses .env and localTestMedia/Roms/
 ./gradlew :app:testDebugUnitTest --tests '*RetroAchievementsLiveTest*' -PliveScrape=true
 ./gradlew :app:installDebug :emulator-stub:installRetroarchDebug
@@ -75,10 +81,24 @@ launch intent they receive. Never install them alongside real emulators.
 
 ## Source layout
 
+Three Gradle modules; the package names don't change between them.
+
 ```
-app/src/main/java/dev/xross/launcher/
+core/model/   :core:model (Kotlin/JVM), package dev.xross.launcher.model: pure shared types
+              (GlyphKey/GlyphSet, CategoryIds, Platform/PlatformRegistry, ArtKind, FolderNames)
+theme/engine/ :theme:engine (Kotlin/JVM, depends on :core:model only): the theme engine
+  src/main/kotlin/dev/xross/launcher/theme/
+            XrossTheme palettes, SeasonalPalette, ColorIntelligence (colour pipeline, quick
+            profiles), ThemeLookResolver, WaveStyle, AvatarStyle, Clock, GamePaletteExtractor
+    pack/   ThemeManifest, ThemePackLoader (behind PackPlatform), ThemeRuntime, Layout, Surface,
+            Components, Cosmetics, ContextRules, Variants, SoundRoles, UserLook, LookExporter,
+            ThemeExport, ThemeArchive
+    shader/ shader presets and library, ShaderCanary, FrameBudgetWatchdog
+  src/testFixtures/  StressPack, FilePackPlatform + TestAssets (the Default pack from app/src/main/assets)
+app/src/main/java/dev/xross/launcher/   :app
+  platform/ Android SDK checks (AgslSupport)
   input/    GamepadHandler, KeyMapper, StickTracker, ControllerFamily, ControllerProfiles
-  storage/  Platform (PlatformRegistry), RomScanner, Fingerprinter, FileHashes, StorageVolumes,
+  storage/  RomScanner, Fingerprinter, FileHashes, StorageVolumes,
             VolumeMonitor, XrossPaths, XrossEnvironment (the Xross/ folder), StorageAccess, SystemFolders
   config/   ConfigFiles (settings/controllers/systems JSON), AtomicFiles, ConfigWriter
   data/     Room (GameEntity, GameHashEntity, MetadataEntities, DAOs, XrossDatabase), GameRepository,
@@ -92,15 +112,22 @@ app/src/main/java/dev/xross/launcher/
   profile/  RetroAchievementsClient, ProfileRepository, AchievementsRepository, RaGames, BadgeImages
   state/    MenuTree, MediaMenus, Navigation (NavState), OptionsMenu, Search, NameEntry, AppFolders, RemapSession,
             GameInfo, GameDetails, MediaOverlayController, AchievementsView, ProfileCard, RaHub,
-            AvatarEditor, WaveEditor, MiniPlayerLine, LibraryFolders, XmbViewModel
+            AvatarEditor, WaveEditor, MiniPlayerLine, LibraryFolders, XmbViewModel; the controllers
+            beside it (ThemeController, RaController, EditorController, SearchController,
+            FolderPickers, LibraryJobs, TransitionController); XmbEvent, the one input type
+            (XmbViewModel.onEvent hands each group to its owner)
   ui/       XmbScreen, GameTile, MediaScreens, SearchOverlay, OptionsPanel, InfoPanel, DetailsScreen,
             SnapLayer, FocusBackdrop, BusyIndicator, StatusBar, AvatarHud, ProfileAvatar, UserCard,
             AchievementsScreen, RaHubScreen, UnlockToast, MiniPlayerCard, AvatarStylePanel,
-            WaveSettingsPanel, Frosted, WaveBackground + WaveRenderer (GLSL), Glyphs
-  theme/    XrossTheme palettes, SeasonalPalette (Original theme), WaveStyle, AvatarStyle,
-            pack/ (ThemePackLoader, ThemeManifest, ThemeRuntime, SvgIcon)
+            WaveSettingsPanel, Frosted, WaveBackground + WaveRenderer (GLSL), Glyphs; ScreenSignal
+            (what XmbScreen reports to the Activity: backdrop cover, UI filter errors, crosshair X)
+  state/LookFlow  the theme cascade's inputs as flows; ThemeController resolves them (StateFlow<ResolvedLook>)
+  theme/    the engine's Android adapters: AndroidPackPlatform (assets, VectorIcon/BitmapIcon,
+            TypefaceFont, the ThemePackLoader(assets, …) factory), SvgIcon, ThemeWatcher,
+            ArtSwatches, RememberThemePalette, ComposeColors, MotionSpecs
   audio/    UiSounds (SoundPool effects + streamed boot cues)
 app/schemas/         exported Room schemas (v1–v5) used by the migration tests
+build-logic/         convention plugins (included build)
 Roadmap.md           the plan (status, backlog, specs)
 docs/                user guide, theme specification, implementation status, hardware testing guide,
                      XMB fidelity, feasibility review, ScreenScraper API guide (English)
@@ -111,6 +138,24 @@ tools/icons/         SVG → VectorDrawable converter and icon role map
 tools/emulator-stub/ test-only emulator stand-ins (Gradle module :emulator-stub)
 tools/device-tests/  adb-driven device tests: quick smoke, five suites, run-all.sh, frame timing
 ```
+
+**Package layering.** Gradle keeps `:core:model` and `:theme:engine` from seeing `:app`.
+Inside `:app`, `ArchitectureTest` (a plain JVM unit test, run by `testDebugUnitTest`) reads every
+`dev.xross.launcher` reference in all three modules' main sources, imports and fully qualified
+names alike, and fails on an edge outside the target graph of
+[`design/ARCHITECTURE_ASSESSMENT.md`](design/ARCHITECTURE_ASSESSMENT.md) §5. In short: `model`
+depends on nothing; the theme engine (`theme/`, and its adapters in `:app`) only on `model`;
+`data` and `config` (one persistence layer) may use the engine's types but not the reverse;
+feature packages (`audio`, `launch`, `scrape`, `profile`, `media`) never reach `state` or `ui`;
+`state` never reaches `ui`. It also checks that each module holds only its own packages and that
+`:theme:engine` imports nothing from Android or Compose UI except `@Immutable`. A new top-level
+package has to be added to the test's table. Prefer imports to inline fully qualified names, which
+hide a file's real dependencies.
+
+**The theme engine on other platforms.** `ThemePackLoader` reads folder packs itself and gets the
+bundled assets and the decoding of icons and fonts from a `PackPlatform`: `AndroidPackPlatform`
+in the app, `FilePackPlatform` in the engine's tests. Icons (`ThemeIcon`) and fonts (`ThemeFont`)
+are opaque to the engine. A desktop preview or the Web Studio would add its own platform.
 
 The tree lists the main classes per package; 2b.4 added shader, effect and cache classes to
 `ui/`, `theme/` and `audio/`; see

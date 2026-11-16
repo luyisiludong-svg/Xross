@@ -25,6 +25,10 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
+import dev.xross.launcher.profile.RaResult
+import dev.xross.launcher.state.HubFocus
+import dev.xross.launcher.state.XmbEvent
+import dev.xross.launcher.theme.pack.ResolvedComponents
 
 /**
  * RetroAchievements out of [XmbViewModel] (2b.7-prep): the view model's avatar HUD and dashboard
@@ -82,11 +86,11 @@ class RaControllerTest {
         assertNull(vm.state.value.profileCard)
 
         // Touch: a tap on the avatar expands the HUD, a tap outside it collapses it again.
-        vm.onAvatarTapped()
+        vm.onEvent(XmbEvent.Ra.AvatarTap)
         idle()
         assertTrue(vm.state.value.avatarFocused)
         assertNull(vm.state.value.profileCard)
-        vm.closeAvatarHud()
+        vm.onEvent(XmbEvent.Ra.CloseAvatarHud)
         idle()
         assertFalse(vm.state.value.avatarFocused)
 
@@ -96,7 +100,7 @@ class RaControllerTest {
         assertNotNull(vm.state.value.profileCard)
         assertFalse(vm.state.value.avatarFocused)
         assertFalse(vm.state.value.profile.linked)
-        vm.onProfileCardButtonTapped(1) // Close (unlinked: Link account…, Close)
+        vm.onEvent(XmbEvent.Ra.ProfileCardButtonTap(1)) // Close (unlinked: Link account…, Close)
         idle()
         assertNull(vm.state.value.profileCard)
     }
@@ -145,7 +149,7 @@ class RaControllerTest {
         val prompts = mutableListOf<Pair<String, Boolean>>()
         val moves = mutableListOf<Int>()
         var dismissed = 0
-        var components = dev.xross.launcher.theme.pack.ResolvedComponents.DEFAULT
+        var components = ResolvedComponents.DEFAULT
         override fun components() = components
         override fun toast(message: String) { toasts += message }
         override fun fail(message: String) { toasts += message }
@@ -225,13 +229,13 @@ class RaControllerTest {
         idle()
         assertTrue("Unlinked: no sidebar", ra.hubSidebarRows().isEmpty())
         ra.onScreenAction(NavAction.RIGHT)
-        assertEquals(dev.xross.launcher.state.HubFocus.DASHBOARD, ra.state.value.raHub!!.focus)
+        assertEquals(HubFocus.DASHBOARD, ra.state.value.raHub!!.focus)
         ra.onScreenAction(NavAction.NEXT_CATEGORY)
         assertEquals(0, ra.state.value.raHub!!.scroll)
         ra.onScreenAction(NavAction.DOWN)
         assertEquals(1, ra.state.value.raHub!!.scroll)
         ra.onRaHubRowTapped(0)
-        assertEquals(dev.xross.launcher.state.HubFocus.DASHBOARD, ra.state.value.raHub!!.focus)
+        assertEquals(HubFocus.DASHBOARD, ra.state.value.raHub!!.focus)
         assertTrue(host.revealed.isEmpty())
     }
 
@@ -277,9 +281,9 @@ class RaControllerTest {
     }
 
     @Test fun failureMessagesForEachRefusal() {
-        assertEquals("RetroAchievements refused that Web API key", RaController.failure(dev.xross.launcher.profile.RaResult.InvalidCredentials))
-        assertEquals("No RetroAchievements user by that name", RaController.failure(dev.xross.launcher.profile.RaResult.UserNotFound))
-        assertEquals("offline", RaController.failure(dev.xross.launcher.profile.RaResult.Failed("offline")))
+        assertEquals("RetroAchievements refused that Web API key", RaController.failure(RaResult.InvalidCredentials))
+        assertEquals("No RetroAchievements user by that name", RaController.failure(RaResult.UserNotFound))
+        assertEquals("offline", RaController.failure(RaResult.Failed("offline")))
     }
 
     // endregion

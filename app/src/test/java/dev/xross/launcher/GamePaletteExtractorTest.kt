@@ -3,7 +3,7 @@ package dev.xross.launcher
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
-import dev.xross.launcher.scrape.ArtKind
+import dev.xross.launcher.model.ArtKind
 import dev.xross.launcher.state.GameDetailsState
 import dev.xross.launcher.model.GlyphKey
 import dev.xross.launcher.state.NodeIcon

@@ -10,6 +10,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.io.File
+import dev.xross.launcher.audio.SnapRamp
+import dev.xross.launcher.audio.SnapState
 
 /**
  * Short looping video previews ("snaps") for a focused game.
@@ -26,7 +28,7 @@ import java.io.File
 class SnapPlayer(
     private val context: Context,
     private val volume: () -> Float,
-    private val onState: (dev.xross.launcher.audio.SnapState) -> Unit,
+    private val onState: (SnapState) -> Unit,
 ) {
 
     private val handler = android.os.Handler(android.os.Looper.getMainLooper())
@@ -52,7 +54,7 @@ class SnapPlayer(
             )
             .build()
         p.repeatMode = Player.REPEAT_MODE_ONE
-        // Silent until the first frame is ready, then ramped up (see BackdropTiming.AUDIO_RAMP_MS).
+        // Silent until the first frame is ready, then ramped up (see SnapRamp).
         p.volume = 0f
         p.addListener(object : Player.Listener {
             override fun onRenderedFirstFrame() {
@@ -60,7 +62,7 @@ class SnapPlayer(
                 if (_player.value !== p) return
                 target = volume().coerceIn(0f, 1f)
                 log("audible")
-                onState(dev.xross.launcher.audio.SnapState.AUDIBLE)
+                onState(SnapState.AUDIBLE)
                 startRamp(p)
             }
         })
@@ -68,7 +70,7 @@ class SnapPlayer(
         p.prepare()
         p.playWhenReady = true
         _player.value = p
-        onState(dev.xross.launcher.audio.SnapState.LOADING)
+        onState(SnapState.LOADING)
     }
 
     /** The video snaps volume changed: a playing snap follows (mid-ramp, the ramp heads for it). */
@@ -99,7 +101,7 @@ class SnapPlayer(
             override fun run() {
                 if (_player.value !== p) return
                 val elapsed = android.os.SystemClock.uptimeMillis() - start
-                p.volume = dev.xross.launcher.ui.BackdropTiming.rampVolume(elapsed, target)
+                p.volume = SnapRamp.volume(elapsed, target)
                 if (elapsed < RAMP_MS) handler.postDelayed(this, 16) else ramp = null
             }
         }
@@ -115,10 +117,10 @@ class SnapPlayer(
         _player.value = null
         file = null
         p.release()
-        onState(dev.xross.launcher.audio.SnapState.NONE)
+        onState(SnapState.NONE)
     }
 
     private companion object {
-        const val RAMP_MS = dev.xross.launcher.ui.BackdropTiming.AUDIO_RAMP_MS
+        const val RAMP_MS = SnapRamp.MS
     }
 }

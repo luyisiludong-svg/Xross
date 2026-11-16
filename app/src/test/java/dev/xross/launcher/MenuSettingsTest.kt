@@ -16,6 +16,11 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import dev.xross.launcher.audio.VolumeChannel
+import dev.xross.launcher.data.BackupInfo
+import dev.xross.launcher.data.MusicUnderSnaps
+import dev.xross.launcher.state.FolderEntry
+import dev.xross.launcher.state.PortableSetup
 
 class MenuSettingsTest {
     @Test fun settingsRootListsEverySection() {
@@ -24,15 +29,15 @@ class MenuSettingsTest {
     }
 
     @Test fun systemSettingsShowTheXrossFolderAndBackup() {
-        fun rows(p: dev.xross.launcher.state.PortableSetup) =
+        fun rows(p: PortableSetup) =
             MenuTree(MenuSnapshot(portable = p)).list(MenuTree.SYSTEM).associateBy { it.id }
-        val internal = rows(dev.xross.launcher.state.PortableSetup(root = "/data/user/0/dev.xross.launcher/files/Xross", portable = false))
+        val internal = rows(PortableSetup(root = "/data/user/0/dev.xross.launcher/files/Xross", portable = false))
         assertEquals("In app storage until All files access is granted — press to grant", internal.getValue("sys:folder").subtitle)
         assertTrue(internal.getValue("sys:backup").subtitle!!.startsWith("Needs All files access"))
         assertTrue("sys:restore" !in internal)
 
-        val backup = dev.xross.launcher.data.BackupInfo(java.io.File("/storage/emulated/0/Xross/data/xross.db"), 42, 5, 0L, 1024)
-        val shared = rows(dev.xross.launcher.state.PortableSetup(root = "/storage/emulated/0/Xross", portable = true, backupOnDisk = backup))
+        val backup = BackupInfo(java.io.File("/storage/emulated/0/Xross/data/xross.db"), 42, 5, 0L, 1024)
+        val shared = rows(PortableSetup(root = "/storage/emulated/0/Xross", portable = true, backupOnDisk = backup))
         assertEquals("/storage/emulated/0/Xross · press to use another drive", shared.getValue("sys:folder").subtitle)
         assertEquals(NodeAction.Run(Command.BackupNow), shared.getValue("sys:backup").action)
         assertTrue(shared.getValue("sys:restore").subtitle!!.startsWith("42 games · saved "))
@@ -40,8 +45,8 @@ class MenuSettingsTest {
     }
 
     @Test fun cleanInstallOffersTheBackupInGames() {
-        val backup = dev.xross.launcher.data.BackupInfo(java.io.File("/storage/emulated/0/Xross/data/xross.db"), 3, 5, 0L, 1024)
-        val root = MenuTree(MenuSnapshot(storageGranted = true, portable = dev.xross.launcher.state.PortableSetup(portable = true, restorable = backup)))
+        val backup = BackupInfo(java.io.File("/storage/emulated/0/Xross/data/xross.db"), 3, 5, 0L, 1024)
+        val root = MenuTree(MenuSnapshot(storageGranted = true, portable = PortableSetup(portable = true, restorable = backup)))
             .list("root:games")
         assertEquals(listOf("Restore library backup", "No games found"), root.map { it.title })
         assertEquals("3 games found in the Xross folder", root.first().subtitle)
@@ -82,9 +87,9 @@ class MenuSettingsTest {
         assertEquals("30%", byId.getValue("snd:snaps").subtitle)
         // Confirm steps the volume; Options offer Mute, 50% and 100%, the current one marked.
         val snaps = byId.getValue("snd:snaps")
-        assertEquals(NodeAction.Run(Command.CycleVolume(dev.xross.launcher.audio.VolumeChannel.SNAPS)), snaps.action)
+        assertEquals(NodeAction.Run(Command.CycleVolume(VolumeChannel.SNAPS)), snaps.action)
         assertEquals(listOf("Mute", "50%", "100%"), snaps.menu.map { it.label })
-        assertEquals(Command.SetVolume(dev.xross.launcher.audio.VolumeChannel.SNAPS, 0.5f), snaps.menu[1].command)
+        assertEquals(Command.SetVolume(VolumeChannel.SNAPS, 0.5f), snaps.menu[1].command)
         assertEquals(listOf(false, false, true), byId.getValue("snd:music").menu.map { it.selected })
         assertEquals(listOf(true, false, false), byId.getValue("snd:cues").menu.map { it.selected })
     }
@@ -97,13 +102,13 @@ class MenuSettingsTest {
     }
 
     @Test fun musicDuringSnapsRowCyclesPauseAndLower() {
-        fun row(mode: dev.xross.launcher.audio.MusicUnderSnaps) = MenuTree(MenuSnapshot(settings = XrossSettings(musicUnderSnaps = mode)))
+        fun row(mode: MusicUnderSnaps) = MenuTree(MenuSnapshot(settings = XrossSettings(musicUnderSnaps = mode)))
             .list(MenuTree.SOUND).single { it.id == "snd:undersnaps" }
-        val pause = row(dev.xross.launcher.audio.MusicUnderSnaps.PAUSE)
+        val pause = row(MusicUnderSnaps.PAUSE)
         assertTrue(pause.subtitle!!.startsWith("Pause"))
         assertEquals(NodeAction.Run(Command.CycleMusicUnderSnaps), pause.action)
         assertEquals(listOf("Pause", "Lower"), pause.menu.map { it.label })
-        assertEquals("Lower · Lower to 20% while the snap plays", row(dev.xross.launcher.audio.MusicUnderSnaps.DUCK).subtitle)
+        assertEquals("Lower · Lower to 20% while the snap plays", row(MusicUnderSnaps.DUCK).subtitle)
     }
 
     @Test fun themeSettingShowsThemeLabel() {
@@ -180,8 +185,8 @@ class MenuSettingsTest {
     @Test fun libraryShowsAutoDetectedFoldersAsNotRemovable() {
         val snapshot = MenuSnapshot(
             folders = listOf(
-                dev.xross.launcher.state.FolderEntry("/sdcard/ROMs", autoDetected = true),
-                dev.xross.launcher.state.FolderEntry("/sdcard/Custom", autoDetected = false),
+                FolderEntry("/sdcard/ROMs", autoDetected = true),
+                FolderEntry("/sdcard/Custom", autoDetected = false),
             ),
         )
         val folders = MenuTree(snapshot).list(MenuTree.LIBRARY).filter { it.id.startsWith("lib:folder:") }

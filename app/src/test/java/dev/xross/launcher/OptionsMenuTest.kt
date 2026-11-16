@@ -15,7 +15,7 @@ import dev.xross.launcher.state.MenuSnapshot
 import dev.xross.launcher.state.MenuTree
 import dev.xross.launcher.state.OptionsMenuState
 import dev.xross.launcher.state.OptionsMenuState.Selection
-import dev.xross.launcher.storage.PlatformRegistry
+import dev.xross.launcher.model.PlatformRegistry
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull

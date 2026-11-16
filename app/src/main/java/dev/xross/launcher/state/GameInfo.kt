@@ -8,7 +8,7 @@ import dev.xross.launcher.data.GameHashEntity
 import dev.xross.launcher.data.GameMetadataEntity
 import dev.xross.launcher.data.dat.MatchKind
 import dev.xross.launcher.storage.HashSource
-import dev.xross.launcher.storage.Platform
+import dev.xross.launcher.model.Platform
 import dev.xross.launcher.storage.SkipReason
 import java.text.NumberFormat
 import java.time.Instant

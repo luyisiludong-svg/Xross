@@ -193,6 +193,15 @@ class WaveRenderer(
     private var finishSample = 0
     private var lastReport: ShaderStatus? = null
     private val filterPass = ScreenFilterPass()
+    /** Last frame's picture for a program that reads `uPrev`; see [render]. */
+    private val feedback = FeedbackTargets()
+    /** The low-resolution first pass of a program that reads `uField`; see [render]. */
+    private val field = FieldTarget()
+    /** The program and time of the last frame drawn through [feedback], to tell when its history is stale. */
+    private var feedbackKey: String? = null
+    private var feedbackNs = 0L
+    /** `uFrameDt`: this frame's step, so feedback fades per second, not per frame. */
+    private var frameDt = 1f / 60f
     private var loggedFilter: BackgroundFilter? = null
 
     // Survive a context loss: a verdict is about the program's text on this GPU, not its handle.
@@ -235,6 +244,9 @@ class WaveRenderer(
         active = null
         synced = null
         lastReport = null
+        feedback.forget()
+        feedbackKey = null
+        field.forget()
         val extensions = GLES30.glGetString(GLES30.GL_EXTENSIONS).orEmpty()
         parallel = "GL_KHR_parallel_shader_compile" in extensions
         timer = GpuTimer(extensions)
@@ -280,6 +292,7 @@ class WaveRenderer(
         val p = params
         val still = frozen
         val dt = if (lastFrameNs == 0L) 0f else (now - lastFrameNs) / 1e9f
+        frameDt = FeedbackPolicy.frameDt(dt)
         val k = if (still || !colorsShown || lastFrameNs == 0L) 1f else colorStep(dt)
         easeColor(shownTop, p.topRgb, k)
         easeColor(shownBottom, p.bottomRgb, k)
@@ -478,6 +491,11 @@ class WaveRenderer(
         timer?.reset()
         finishSample = 0
         active = next
+        if (next?.usesFeedback != true && feedback.allocated) {
+            feedback.release()
+            feedbackKey = null
+        }
+        if (next?.usesField != true && field.allocated) field.release()
         if (prev != null && prev !== next) {
             val gone = prev.spec.key !in (synced?.keys ?: emptySet()) && prev.spec.key != ShaderLibrary.WAVE_KEY
             if (gone) programs.remove(prev.spec.key)
@@ -494,30 +512,31 @@ class WaveRenderer(
             canaryFrames = 0
         }
         if (!program.warmed) {
+            // Straight to the screen, never into the feedback history (a 1x1 corner of nothing).
             GLES30.glViewport(0, 0, 1, 1)
-            drawCall(program, p, still)
+            drawCall(program, p, still, fresh = true)
             GLES30.glViewport(0, 0, width, height)
             program.warmed = true
         }
         val measuring = !still && spec.key != ShaderLibrary.WAVE_KEY && spec.key !in verdicts
         if (!measuring) {
-            drawCall(program, p, still)
+            render(program, p, still, now)
         } else {
             val dog = program.watchdog ?: FrameBudgetWatchdog(activeBudgetNs).also { program.watchdog = it }
             val t = timer
             if (t != null && t.supported) {
                 t.collect { ns -> judge(program, dog, ns, now) }
                 val timing = program.state == ProgramState.READY && t.begin()
-                drawCall(program, p, still)
+                render(program, p, still, now)
                 if (timing) t.end()
             } else if (finishSample++ % FINISH_SAMPLE_EVERY == 0) {
                 GLES30.glFinish() // drain earlier work so only this draw is timed
                 val t0 = System.nanoTime()
-                drawCall(program, p, still)
+                render(program, p, still, now)
                 GLES30.glFinish()
                 judge(program, dog, System.nanoTime() - t0, now)
             } else {
-                drawCall(program, p, still)
+                render(program, p, still, now)
             }
         }
         if (canaryKey == spec.key) {
@@ -553,8 +572,46 @@ class WaveRenderer(
 
     private fun method() = if (timer?.supported == true) "timer query" else "glFinish"
 
-    private fun drawCall(program: GlProgram, p: WaveParams, still: Boolean) {
+    /**
+     * One frame of [program] on screen. A program that reads `uField` first draws its field pass at
+     * a quarter of the size per axis (`uPass` = 0). A program that reads `uPrev` draws into the feedback target
+     * with last frame's picture bound, then is blitted to the screen (so the watchdog times both).
+     * A still frame has no history to build on: it is drawn directly with `uFresh` = 1.
+     */
+    private fun render(program: GlProgram, p: WaveParams, still: Boolean, now: Long) {
+        // The field pass first (still frames need it too); unit 1 holds it for the full-size pass.
+        if (program.usesField && field.ensure(width, height)) {
+            field.bindForPass()
+            drawCall(program, p, still, fresh = true, pass = 0)
+            GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
+            GLES30.glViewport(0, 0, width, height)
+            field.bindForSampling()
+        }
+        if (!program.usesFeedback || still) {
+            drawCall(program, p, still, fresh = true)
+            return
+        }
+        val reallocated = feedback.ensure(width, height)
+        if (!feedback.allocated) { // the driver refused the targets: no history, still a frame
+            drawCall(program, p, still, fresh = true)
+            return
+        }
+        val fresh = FeedbackPolicy.fresh(feedbackKey, program.spec.key, reallocated, feedbackNs, now)
+        if (fresh && !reallocated) feedback.clear()
+        feedback.bind()
+        drawCall(program, p, still, fresh)
+        feedback.present()
+        feedbackKey = program.spec.key
+        feedbackNs = now
+    }
+
+    private fun drawCall(program: GlProgram, p: WaveParams, still: Boolean, fresh: Boolean, pass: Int = 1) {
         GLES30.glUseProgram(program.handle)
+        GLES30.glUniform1i(program.uPass, pass)
+        GLES30.glUniform1i(program.uField, 1)
+        GLES30.glUniform1i(program.uPrev, 0)
+        GLES30.glUniform1f(program.uFrameDt, frameDt)
+        GLES30.glUniform1f(program.uFresh, if (fresh) 1f else 0f)
         GLES30.glUniform2f(program.uResolution, width.toFloat(), height.toFloat())
         // Wrap time so float precision never degrades on a launcher that runs for weeks.
         GLES30.glUniform1f(program.uTime, (time % 10_000.0).toFloat())

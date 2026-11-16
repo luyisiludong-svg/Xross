@@ -1,6 +1,6 @@
 package dev.xross.launcher.scrape.providers
 
-import dev.xross.launcher.scrape.ArtKind
+import dev.xross.launcher.model.ArtKind
 import dev.xross.launcher.scrape.AssetCache
 import dev.xross.launcher.scrape.HttpClient
 import dev.xross.launcher.scrape.HttpResponse

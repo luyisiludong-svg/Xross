@@ -236,7 +236,8 @@ live behind the panel and saved in `settings.json` under `display`:
 
 A pack's `shader.frag` can react to music played by Xross's own player through the `uAudioBass` and
 `uAudioBeat` uniforms (no microphone permission); see STATUS [§3.23](phase-2b/2b.4/STATUS.md#s3.23) for how it
-was measured.
+was measured. Writing a shader, the full uniform list, the optional feedback (`uPrev`) and field
+(`uField`) passes and the frame budget are in the [background shader guide](SHADER_GUIDE.md).
 
 ## 7. `settings.json` display keys
 
@@ -388,7 +389,7 @@ instead of being ignored silently, so a typo shows up.
 | --- | --- | --- |
 | `surfaceStyle` | a preset or a surface the pack defines | 2b.2 |
 | `adaptiveGamePalette` | `true` / `false` | 2b.3 |
-| `shaderPreset` (`shader`) | `WAVE`, `ASCII_MATRIX`, `BOKEH`, `STARFIELD`, `CRT`, `CUSTOM` | 2b.4a |
+| `shaderPreset` (`shader`) | `WAVE`, `ASCII_MATRIX`, `BOKEH`, `STARFIELD`, `CRT`, `BLACK_HOLE`, `CUSTOM` | 2b.4a (`BLACK_HOLE` 2026-11-16) |
 | `shaderPath` | a `.frag` in the pack (implies `CUSTOM`) | 2b.4a |
 | `wallpaperPath` (`wallpaper`) | a PNG, JPEG or WebP in the pack, or `none` | 2b.4c |
 | `focusFrameStyle` (`focusFrame`) | `BREATHING_HALO`, `STATIC_NEON`, `HARD_SHADOW`, `GOLD_BEZEL` | 2b.4d |
@@ -478,7 +479,7 @@ Precedence, lowest to highest: Default pack → pack → variant → overrides �
 
 **Settings ▸ Theme** has a row for each of:
 
-* *Background shader* (Wave, Matrix, Bokeh, Starfield, CRT)
+* *Background shader* (Wave, Matrix, Bokeh, Starfield, CRT, Black hole)
 * *Background filter* (Off, Scanlines, CRT grille, LCD grid)
 * *UI filter (experimental)* (Off, Scanlines, Bloom)
 * *Focus frame style* (Breathing halo, Static neon, Hard shadow, Gold bezel)

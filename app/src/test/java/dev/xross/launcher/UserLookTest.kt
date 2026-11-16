@@ -4,12 +4,14 @@ import dev.xross.launcher.data.XrossSettings
 import dev.xross.launcher.theme.pack.ComponentOverrides
 import dev.xross.launcher.theme.pack.EffectOverrides
 import dev.xross.launcher.theme.pack.LayoutOverrides
-import dev.xross.launcher.theme.pack.ThemeDefaults
+import dev.xross.launcher.data.ThemeDefaults
 import dev.xross.launcher.theme.pack.UserLook
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import dev.xross.launcher.data.of
+import dev.xross.launcher.data.writeTo
 
 /** Phase 2b.8-prep: every user-over-pack value in one type, read by the cascade, Reset and its summary. */
 class UserLookTest {

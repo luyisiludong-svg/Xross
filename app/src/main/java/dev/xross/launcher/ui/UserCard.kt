@@ -45,6 +45,8 @@ import dev.xross.launcher.profile.RaProfile
 import dev.xross.launcher.state.ProfileCardState
 import java.text.NumberFormat
 import java.util.Locale
+import dev.xross.launcher.model.GlyphKey
+import dev.xross.launcher.theme.AvatarStyleConfig
 
 /**
  * The User Card: a console-style sheet over the dimmed XMB with the profile picture, rank,
@@ -62,7 +64,7 @@ internal fun UserCard(
     onButtonTap: (Int) -> Unit,
     onDismiss: () -> Unit,
     loadBadge: suspend (String, Int) -> androidx.compose.ui.graphics.ImageBitmap? = { _, _ -> null },
-    avatarStyle: dev.xross.launcher.theme.AvatarStyleConfig? = null,
+    avatarStyle: AvatarStyleConfig? = null,
 ) {
     var shown by remember { mutableStateOf(card) }
     if (card != null) shown = card
@@ -157,7 +159,7 @@ internal fun UserCard(
 }
 
 @Composable
-private fun Header(profile: ProfileState, m: XmbMetrics, avatarStyle: dev.xross.launcher.theme.AvatarStyleConfig?) {
+private fun Header(profile: ProfileState, m: XmbMetrics, avatarStyle: AvatarStyleConfig?) {
     val density = LocalDensity.current
     val number = remember { NumberFormat.getIntegerInstance() }
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -195,7 +197,7 @@ private fun Stats(p: RaProfile, size: TextUnit) {
         Column {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 androidx.compose.foundation.Image(
-                    glyphPainter(dev.xross.launcher.model.GlyphKey.TROPHY),
+                    glyphPainter(GlyphKey.TROPHY),
                     contentDescription = null,
                     colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(Pastel.Amber),
                     modifier = Modifier.height(with(LocalDensity.current) { (size * 1.3f).toDp() }).width(with(LocalDensity.current) { (size * 1.3f).toDp() }),

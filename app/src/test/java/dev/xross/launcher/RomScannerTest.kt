@@ -1,6 +1,6 @@
 package dev.xross.launcher
 
-import dev.xross.launcher.storage.PlatformRegistry
+import dev.xross.launcher.model.PlatformRegistry
 import dev.xross.launcher.storage.RomScanner
 import org.junit.Assert.assertEquals
 import org.junit.Rule

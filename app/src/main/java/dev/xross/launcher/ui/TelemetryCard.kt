@@ -51,7 +51,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import dev.xross.launcher.model.GlyphKey
 import dev.xross.launcher.profile.FriendsState
-import dev.xross.launcher.scrape.ArtKind
+import dev.xross.launcher.model.ArtKind
 import dev.xross.launcher.state.FriendStrip
 import dev.xross.launcher.state.GameTelemetry
 import dev.xross.launcher.state.TelemetryCard
@@ -192,7 +192,7 @@ private fun RichCardBody(
             Spacer(Modifier.width(6.dp))
             Text(
                 progress,
-                style = shadowed(size * 0.92f, weight = FontWeight.Bold).copy(fontFamily = ThemeTypography.mono ?: ThemeTypography.family),
+                style = shadowed(size * 0.92f, weight = FontWeight.Bold).copy(fontFamily = LocalThemeTypography.current.monoOrBody),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )

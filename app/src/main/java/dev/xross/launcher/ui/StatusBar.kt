@@ -55,10 +55,13 @@ import dev.xross.launcher.theme.BatteryLevel
 import dev.xross.launcher.theme.pack.BatteryDisplayMode
 import dev.xross.launcher.theme.pack.ResolvedComponents
 import dev.xross.launcher.theme.pack.StatusSlot
+import dev.xross.launcher.theme.pack.BitmapIcon
 import dev.xross.launcher.theme.pack.ThemeIcon
+import dev.xross.launcher.theme.pack.VectorIcon
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
 import kotlin.math.max
+import dev.xross.launcher.profile.Friend
 
 /** The ticker's fixed width, in status-text heights (about 20 characters). */
 private const val TICKER_WIDTH_EMS = 10f
@@ -97,7 +100,7 @@ fun StatusBar(
     onTickerTap: () -> Unit = {},
     onTickerLongPress: () -> Unit = {},
     /** `topLeftCluster: SOCIAL_STACK` (2b.7c): the friends to stack after the left slots; empty: collapsed. */
-    social: List<dev.xross.launcher.profile.Friend> = emptyList(),
+    social: List<Friend> = emptyList(),
     /** The stack's unread badge ("", "1"–"9", "9+"). */
     socialBadge: String = "",
     socialOpen: Boolean = false,
@@ -108,11 +111,12 @@ fun StatusBar(
     val bar by source.collectAsStateWithLifecycle()
 
     // Date and time in the pack's display font, the battery figure in its mono font.
-    val mono = ThemeTypography.mono ?: ThemeTypography.family
+    val fonts = LocalThemeTypography.current
+    val mono = fonts.monoOrBody
     val style = TextStyle(
         color = Color.White,
         fontSize = textSize,
-        fontFamily = ThemeTypography.display ?: ThemeTypography.family,
+        fontFamily = fonts.displayOrBody,
         shadow = Shadow(Color(0x99000000), Offset(0f, 3f), 6f),
     )
     val density = LocalDensity.current
@@ -214,6 +218,7 @@ private fun BatterySlot(
 
 @Composable
 private fun BatteryGauge(bars: Int, low: Boolean, modifier: Modifier) {
+    val accent = LocalThemeAccent.current
     Canvas(modifier) {
         val stroke = size.height * 0.11f
         val nub = size.width * 0.07f
@@ -223,7 +228,7 @@ private fun BatteryGauge(bars: Int, low: Boolean, modifier: Modifier) {
         drawRoundRect(GlyphShadow, shadow, body, CornerRadius(stroke * 1.5f), style = Stroke(stroke))
         // The outline follows the accent halo (white unless game art or the battery tint color it);
         // read while drawing, so a morph redraws this canvas only.
-        val rim = ThemeAccent.halo.value
+        val rim = accent.halo.value
         drawRoundRect(rim, Offset.Zero, body, CornerRadius(stroke * 1.5f), style = Stroke(stroke))
         drawRect(rim, Offset(body.width, size.height * 0.3f), Size(nub, size.height * 0.4f))
         // Three bars like the reference ([StatusBarState.batteryBars]).
@@ -367,15 +372,16 @@ private fun DrawScope.drawVolume(volume: VolumeStatus, stroke: Float, lit: Color
 @Composable
 private fun LogoSlot(icon: ThemeIcon, capHeight: Dp) {
     when (icon) {
-        is ThemeIcon.Vector -> {
+        is VectorIcon -> {
             val v = icon.image
             val aspect = if (v.defaultHeight.value > 0f) v.defaultWidth.value / v.defaultHeight.value else 1f
             Image(rememberVectorPainter(v), "Theme logo", Modifier.size(width = capHeight * aspect, height = capHeight), contentScale = ContentScale.Fit)
         }
-        is ThemeIcon.Bitmap -> {
+        is BitmapIcon -> {
             val b = icon.image
             val aspect = if (b.height > 0) b.width.toFloat() / b.height else 1f
             Image(remember(b) { BitmapPainter(b) }, "Theme logo", Modifier.size(width = capHeight * aspect, height = capHeight), contentScale = ContentScale.Fit)
         }
+        else -> Unit
     }
 }

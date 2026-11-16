@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Quick smoke test (~30–45 s) on a connected device/emulator (adb): Xross is installed, starts
+# Quick smoke test (~11 s with the UI reader, ~30 s without) on a connected device/emulator (adb): Xross is installed, starts
 # from cleared data, scans the seeded /sdcard/ROMs into its database, draws the category bar and
 # the Games root, opens the first platform, moves between categories, and doesn't crash. No media,
 # theme, database or battery fixtures: those live in the suites.
 #
-#   ./gradlew :app:installDebug
+#   ./gradlew :app:installDebug :ui-reader:installDebug   # the reader is optional: ~0.1 s screen reads
 #   tools/device-tests/smoke.sh                 # this quick check
 #   tools/device-tests/smoke.sh theme           # one suite: theme, media, library, input, integration
-#   tools/device-tests/smoke.sh --all           # full regression (run-all.sh: every suite, 429 checks)
+#   tools/device-tests/smoke.sh --all           # full regression (run-all.sh: every suite, 533 checks)
 #
 # WARNING: clears Xross's app data, moves /sdcard/Xross/config to /sdcard/Xross-smoke-backup/, and
 # replaces /sdcard/ROMs with test files (removed again at the end).

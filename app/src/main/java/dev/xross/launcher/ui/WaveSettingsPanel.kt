@@ -49,6 +49,7 @@ import dev.xross.launcher.state.WaveEditorState
 import dev.xross.launcher.state.WaveRow
 import dev.xross.launcher.theme.WaveTint
 import dev.xross.launcher.theme.ThemePalette
+import dev.xross.launcher.theme.wavePalette
 
 /**
  * Settings ▸ Theme ▸ Wave settings: a frosted panel on the right with sliders for the shader
@@ -201,7 +202,7 @@ internal fun SettingSlider(fraction: Float, focused: Boolean, onChange: (Float) 
 /** The three colors the wave will draw with, as small dots. */
 @Composable
 private fun TintSwatch(settings: XrossSettings, base: ThemePalette) {
-    val p = dev.xross.launcher.theme.wavePalette(base, WaveTint.byName(settings.waveTint), settings.waveColors)
+    val p = wavePalette(base, WaveTint.byName(settings.waveTint), settings.waveColors)
     Row(horizontalArrangement = Arrangement.spacedBy(3.dp), modifier = Modifier.padding(end = 8.dp)) {
         for (c in listOf(p.top, p.bottom, p.wave)) {
             Box(

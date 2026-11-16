@@ -1,7 +1,7 @@
 package dev.xross.launcher
 
 import dev.xross.launcher.data.GameEntity
-import dev.xross.launcher.scrape.ArtKind
+import dev.xross.launcher.model.ArtKind
 import dev.xross.launcher.scrape.AssetCache
 import dev.xross.launcher.scrape.MediaGame
 import dev.xross.launcher.scrape.MediaNames

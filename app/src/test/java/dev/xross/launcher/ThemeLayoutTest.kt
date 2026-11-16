@@ -1,5 +1,7 @@
 package dev.xross.launcher
 
+import dev.xross.launcher.theme.pack.nav
+import dev.xross.launcher.theme.pack.tween
 import android.content.Context
 import androidx.compose.animation.core.SnapSpec
 import androidx.compose.animation.core.SpringSpec

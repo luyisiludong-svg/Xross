@@ -1,5 +1,6 @@
 package dev.xross.launcher
 
+import dev.xross.launcher.theme.pack.StressPack
 import android.content.Context
 import android.net.Uri
 import android.os.Looper
@@ -27,7 +28,7 @@ import dev.xross.launcher.theme.pack.StatusSide
 import dev.xross.launcher.theme.pack.StatusSlot.AVATAR
 import dev.xross.launcher.theme.pack.StatusSlot.BATTERY
 import dev.xross.launcher.theme.pack.StatusSlot.CLOCK
-import dev.xross.launcher.theme.pack.ThemeDefaults
+import dev.xross.launcher.data.ThemeDefaults
 import dev.xross.launcher.theme.pack.UserLook
 import dev.xross.launcher.state.NamePurpose
 import dev.xross.launcher.theme.XrossTheme
@@ -47,6 +48,14 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
+import dev.xross.launcher.data.of
+import dev.xross.launcher.state.MenuSnapshot
+import dev.xross.launcher.state.ThemeSetup
+import dev.xross.launcher.theme.PACK_THEME
+import dev.xross.launcher.theme.WaveTint
+import dev.xross.launcher.theme.pack.ArchiveResult
+import dev.xross.launcher.theme.pack.StagedTheme
+import dev.xross.launcher.theme.pack.ThemeArchive
 
 /**
  * Settings ▸ Theme out of [XmbViewModel] (2b.8-prep): the view model's theme tests, unchanged,
@@ -57,6 +66,24 @@ class ThemeControllerTest {
     private val context: Context = ApplicationProvider.getApplicationContext()
 
     // region Through the view model (moved from ComponentsTest and ComponentsTwoBTest)
+
+    @Test fun theResolvedLookFollowsTheSettingsAndMatchesTheStatusBarsComponents() {
+        val container = AppContainer(context)
+        val vm = XmbViewModel(context, container, storageAccess = { false })
+        fun idle() = shadowOf(Looper.getMainLooper()).idle()
+        idle()
+        assertEquals(QuickProfile.byName(container.settings.current.quickProfile), vm.look.value.profile)
+        assertEquals(vm.components.value, vm.look.value.components)
+
+        container.settings.update { it.copy(quickProfile = QuickProfile.MONOCHROME_EINK.name) }
+        idle()
+        assertEquals(QuickProfile.MONOCHROME_EINK, vm.look.value.profile)
+        assertTrue(vm.look.value.stillMotion)
+
+        container.settings.update { it.copy(quickProfile = QuickProfile.NONE.name, surfaceStyle = "OLED_TRUE_BLACK") }
+        idle()
+        assertEquals("OLED_TRUE_BLACK", vm.look.value.surface.id)
+    }
 
     @Test fun slotEditsThroughTheViewModelReopenTheListAndTheAvatarSlotGatesTheHud() {
         val container = AppContainer(context)
@@ -383,8 +410,8 @@ class ThemeControllerTest {
     }
 
     @Test fun settingsThemeOffersExportAfterResetAndThePackRowForAnyPack() {
-        val setup = dev.xross.launcher.state.ThemeSetup(packs = listOf("default" to "Default", "stress" to "Stress"))
-        val rows = MenuTree(dev.xross.launcher.state.MenuSnapshot(themes = setup)).list(MenuTree.DISPLAY)
+        val setup = ThemeSetup(packs = listOf("default" to "Default", "stress" to "Stress"))
+        val rows = MenuTree(MenuSnapshot(themes = setup)).list(MenuTree.DISPLAY)
         val ids = rows.map { it.id }
         assertEquals(ids.indexOf("disp:reset") + 1, ids.indexOf("disp:export"))
         val export = rows.single { it.id == "disp:export" }
@@ -463,7 +490,7 @@ class ThemeControllerTest {
         container.settings.update {
             it.copy(
                 effectOverrides = EffectOverrides(foregroundParticles = "SNOW"), layoutOverrides = LayoutOverrides(uiScale = 0.9f),
-                theme = XrossTheme.TEAL.name, waveTint = dev.xross.launcher.theme.WaveTint.AURORA.name, quickProfile = QuickProfile.OLED_TRUE_BLACK.name,
+                theme = XrossTheme.TEAL.name, waveTint = WaveTint.AURORA.name, quickProfile = QuickProfile.OLED_TRUE_BLACK.name,
             )
         }
         c.onCommand(Command.ExportTheme)
@@ -478,8 +505,8 @@ class ThemeControllerTest {
         val after = container.settings.current
         assertTrue(UserLook.of(after).isNone)
         assertEquals("", after.themeVariant)
-        assertEquals(dev.xross.launcher.theme.PACK_THEME, after.theme)
-        assertEquals(dev.xross.launcher.theme.WaveTint.THEME.name, after.waveTint)
+        assertEquals(PACK_THEME, after.theme)
+        assertEquals(WaveTint.THEME.name, after.waveTint)
         assertEquals("The quick profile stays a setting", QuickProfile.OLED_TRUE_BLACK.name, after.quickProfile)
     }
 
@@ -516,19 +543,19 @@ class ThemeControllerTest {
     // region Share as .xtheme (2b.8c)
 
     private fun archives(container: AppContainer) =
-        dev.xross.launcher.theme.pack.ThemeArchive({ container.environment.current.themes }, container.themePacks::inspect)
+        ThemeArchive({ container.environment.current.themes }, container.themePacks::inspect)
 
     /** [file] stages as an import would: the archive is a valid `.xtheme`. */
-    private fun stages(container: AppContainer, file: File): dev.xross.launcher.theme.pack.StagedTheme {
+    private fun stages(container: AppContainer, file: File): StagedTheme {
         val r = archives(container).stage(file, file.name)
-        return (r as? dev.xross.launcher.theme.pack.ArchiveResult.Staged)?.theme ?: throw AssertionError("rejected: $r")
+        return (r as? ArchiveResult.Staged)?.theme ?: throw AssertionError("rejected: $r")
     }
 
     private fun shareFile(name: String) = File(context.cacheDir, "shared/$name").apply { parentFile!!.mkdirs(); delete() }
 
     @Test fun thePackRowSharesAnyPack() {
-        val setup = dev.xross.launcher.state.ThemeSetup(packs = listOf("default" to "Default", "stress" to "Stress"))
-        val rows = MenuTree(dev.xross.launcher.state.MenuSnapshot(themes = setup)).list(MenuTree.DISPLAY)
+        val setup = ThemeSetup(packs = listOf("default" to "Default", "stress" to "Stress"))
+        val rows = MenuTree(MenuSnapshot(themes = setup)).list(MenuTree.DISPLAY)
         val share = rows.single { it.id == "disp:pack" }.menu.single { it.label == "Share as .xtheme…" }
         assertEquals(listOf(Command.ShareThemePack("default"), Command.ShareThemePack("stress")), share.submenu.map { it.command })
     }

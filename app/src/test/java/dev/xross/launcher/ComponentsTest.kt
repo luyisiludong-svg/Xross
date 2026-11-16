@@ -1,5 +1,6 @@
 package dev.xross.launcher
 
+import dev.xross.launcher.theme.pack.VectorIcon
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import dev.xross.launcher.config.ConfigCodec
@@ -32,7 +33,7 @@ import dev.xross.launcher.theme.pack.StatusSlot.LOGO
 import dev.xross.launcher.theme.pack.StatusSlot.VOLUME
 import dev.xross.launcher.theme.pack.StatusSlot.WIFI
 import dev.xross.launcher.theme.pack.TelemetryMode
-import dev.xross.launcher.theme.pack.ThemeDefaults
+import dev.xross.launcher.data.ThemeDefaults
 import dev.xross.launcher.theme.pack.ThemeIcon
 import dev.xross.launcher.theme.pack.ThemeManifest
 import dev.xross.launcher.theme.pack.ThemePackLoader
@@ -47,6 +48,10 @@ import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import java.io.File
+import dev.xross.launcher.config.SettingsFile
+import dev.xross.launcher.theme.BatteryLevel
+import dev.xross.launcher.theme.QuickProfile
+import dev.xross.launcher.theme.pack.UserLook
 
 /**
  * Theme 2.0, 2b.7a: the `components` block (decoding, aliases, bad values, the schema), its
@@ -183,7 +188,7 @@ class ComponentsTest {
         // Unknown variant: the base.
         assertEquals(base, p.components("nope"))
         // ThemeLookResolver resolves the same cascade.
-        assertEquals(mine, ThemeLookResolver.resolve(LookInputs(pack = p, variant = "night", user = dev.xross.launcher.theme.pack.UserLook(components = user))).components)
+        assertEquals(mine, ThemeLookResolver.resolve(LookInputs(pack = p, variant = "night", user = UserLook(components = user))).components)
     }
 
     @Test fun overridesAndRulesCantPatchComponents() {
@@ -198,7 +203,7 @@ class ComponentsTest {
         assertTrue(p.problems.toString(), p.problems.any { it.startsWith("systemOverrides.dreamcast.components is ignored") })
         assertTrue(p.problems.toString(), p.problems.any { it.startsWith("rules[0].components is ignored") })
         val inGames = ThemeLookResolver.resolve(
-            LookInputs(pack = p, category = "games", system = "dreamcast", battery = dev.xross.launcher.theme.BatteryLevel(10, charging = false)),
+            LookInputs(pack = p, category = "games", system = "dreamcast", battery = BatteryLevel(10, charging = false)),
         ).components
         assertEquals(BatteryDisplayMode.PERCENTAGE, inGames.battery)
         assertEquals(listOf(CLOCK, BATTERY, AVATAR), inGames.right)
@@ -259,7 +264,7 @@ class ComponentsTest {
     @Test fun logoIsReadThroughTheIconChecks() {
         val svg = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 16"><path d="M0 0h48v16H0z" fill="#fff"/></svg>"""
         val p = pack("logo", """"components": {"logo": "art/Logo.svg", "statusBarLeft": ["LOGO"]}""", mapOf("art/logo.svg" to svg))
-        val logo = (p.logos["art/Logo.svg"] as ThemeIcon.Vector).image
+        val logo = (p.logos["art/Logo.svg"] as VectorIcon).image
         // A wide SVG keeps its aspect (48 × 16 dp from a 48 × 16 viewBox).
         assertEquals(3f, logo.defaultWidth.value / logo.defaultHeight.value, 0.01f)
         assertEquals("art/Logo.svg", p.components().logo)
@@ -276,13 +281,13 @@ class ComponentsTest {
         val user = ComponentOverrides(statusBarLeft = listOf("wi-fi", "radar"), batteryMode = "percent", clockFormat = "MdHmZ")
         val st = XrossSettings(componentOverrides = user.normalized())
         assertEquals(ComponentOverrides(statusBarLeft = listOf("WIFI"), batteryMode = "PERCENTAGE", clockFormat = "MdHm"), st.componentOverrides)
-        val json = ConfigCodec.json.encodeToString(dev.xross.launcher.config.SettingsFile.serializer(), ConfigCodec.settingsFile(st))
+        val json = ConfigCodec.json.encodeToString(SettingsFile.serializer(), ConfigCodec.settingsFile(st))
         assertTrue(json, json.contains("\"components\""))
-        val back = ConfigCodec.applySettings(XrossSettings(), ConfigCodec.json.decodeFromString(dev.xross.launcher.config.SettingsFile.serializer(), json))
+        val back = ConfigCodec.applySettings(XrossSettings(), ConfigCodec.json.decodeFromString(SettingsFile.serializer(), json))
         assertEquals(st.componentOverrides, back.componentOverrides)
         // A hand-edited file is normalized on read.
         val edited = json.replace("\"PERCENTAGE\"", "\"capsule\"")
-        assertEquals("CAPSULE_ICON", ConfigCodec.applySettings(XrossSettings(), ConfigCodec.json.decodeFromString(dev.xross.launcher.config.SettingsFile.serializer(), edited)).componentOverrides.batteryMode)
+        assertEquals("CAPSULE_ICON", ConfigCodec.applySettings(XrossSettings(), ConfigCodec.json.decodeFromString(SettingsFile.serializer(), edited)).componentOverrides.batteryMode)
     }
 
     @Test fun resetToThemeDefaultsClearsComponentsAndQuickProfilesDont() {
@@ -295,7 +300,7 @@ class ComponentsTest {
         assertTrue(tree.list(MenuTree.DISPLAY).single { it.id == "disp:reset" }.subtitle!!.contains("1 component"))
         // A quick profile changes the look, never the components.
         val p = loader.load(ThemePackLoader.DEFAULT_ID)
-        val profiled = ThemeLookResolver.resolve(LookInputs(pack = p, profile = dev.xross.launcher.theme.QuickProfile.MONOCHROME_EINK))
+        val profiled = ThemeLookResolver.resolve(LookInputs(pack = p, profile = QuickProfile.MONOCHROME_EINK))
         assertEquals(ResolvedComponents.DEFAULT, profiled.components)
     }
 

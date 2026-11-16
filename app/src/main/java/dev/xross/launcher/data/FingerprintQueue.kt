@@ -5,7 +5,7 @@ import android.util.Log
 import dev.xross.launcher.BuildConfig
 import dev.xross.launcher.storage.Fingerprinter
 import dev.xross.launcher.storage.FingerprintPolicy
-import dev.xross.launcher.storage.PlatformRegistry
+import dev.xross.launcher.model.PlatformRegistry
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.asCoroutineDispatcher

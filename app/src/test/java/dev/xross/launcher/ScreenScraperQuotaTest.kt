@@ -17,6 +17,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import dev.xross.launcher.scrape.HttpClient
 
 @RunWith(RobolectricTestRunner::class)
 class ScreenScraperQuotaTest {
@@ -70,7 +71,7 @@ class ScreenScraperQuotaTest {
 
     @Test fun notFoundAnswersCountTowardTheNotFoundAllowance() = runBlocking {
         var answer = FakeHttp.json(200, game(user = userBlock(ko = 1999)))
-        val http = object : dev.xross.launcher.scrape.HttpClient by FakeHttp() {
+        val http = object : HttpClient by FakeHttp() {
             override suspend fun get(url: String, headers: Map<String, String>, maxBytes: Long) = answer
         }
         val provider = ScreenScraperProvider(http, { creds }, RateLimiter(0, clock = { 0L }, sleep = {}))

@@ -1,6 +1,6 @@
 package dev.xross.launcher
 
-import dev.xross.launcher.audio.MusicUnderSnaps
+import dev.xross.launcher.data.MusicUnderSnaps
 import dev.xross.launcher.audio.VolumeChannel
 import dev.xross.launcher.config.ConfigCodec
 import dev.xross.launcher.data.XrossSettings
@@ -11,6 +11,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import dev.xross.launcher.data.SettingsStore
+import dev.xross.launcher.data.ThemeDefaults
 
 /** Phase 2b.5b: the separate volumes in settings.json, their migration and their steps. */
 @RunWith(RobolectricTestRunner::class)
@@ -73,8 +75,8 @@ class VolumeSettingsTest {
     @Test fun legacyPreferencesSplitTheOneVolume() {
         val prefs = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
             .getSharedPreferences("volume-test", android.content.Context.MODE_PRIVATE)
-        prefs.edit().putFloat(dev.xross.launcher.data.SettingsStore.KEY_SFX_VOLUME, 0.25f).commit()
-        val s = dev.xross.launcher.data.SettingsStore.loadLegacy(prefs)
+        prefs.edit().putFloat(SettingsStore.KEY_SFX_VOLUME, 0.25f).commit()
+        val s = SettingsStore.loadLegacy(prefs)
         assertEquals(0.25f, s.cueVolume)
         assertEquals(0.25f, s.snapVolume)
         assertEquals(1f, s.musicVolume)
@@ -102,7 +104,7 @@ class VolumeSettingsTest {
 
     @Test fun resetToThemeDefaultsKeepsTheVolumes() {
         val s = XrossSettings(soundVolume = 0.2f, cueVolume = 0.3f, bgmVolume = 0.4f, musicVolume = 0.5f, snapVolume = 0.6f, musicUnderSnaps = MusicUnderSnaps.DUCK, surfaceStyle = "OLED_TRUE_BLACK")
-        val r = dev.xross.launcher.theme.pack.ThemeDefaults.reset(s)
+        val r = ThemeDefaults.reset(s)
         assertEquals("", r.surfaceStyle)
         for (c in VolumeChannel.entries) assertEquals(c.of(s), c.of(r))
         assertEquals(MusicUnderSnaps.DUCK, r.musicUnderSnaps)

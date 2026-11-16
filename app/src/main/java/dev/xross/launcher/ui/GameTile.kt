@@ -49,7 +49,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
-import dev.xross.launcher.scrape.ArtKind
+import dev.xross.launcher.model.ArtKind
 import dev.xross.launcher.state.GameTelemetry
 import dev.xross.launcher.model.GlyphKey
 import dev.xross.launcher.state.NodeIcon
@@ -109,6 +109,7 @@ internal fun GameTile(
     }
     val shown by animateFloatAsState(if (art != null) 1f else 0f, tween(320), label = "tileArt")
     val frame = LocalFocusFrame.current
+    val accent = LocalThemeAccent.current
 
     Box(
         Modifier
@@ -120,7 +121,7 @@ internal fun GameTile(
             }
             // Focus frame (2b.4d): soft white rings breathing with the pulse by default, or the
             // theme's steady neon, hard shadow or gold bezel.
-            .drawBehind { drawPlateFrame(frame, glow(), 6.dp.toPx()) },
+            .drawBehind { drawPlateFrame(frame, accent, glow(), 6.dp.toPx()) },
     ) {
         Box(
             contentAlignment = Alignment.Center,

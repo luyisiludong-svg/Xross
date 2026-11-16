@@ -8,6 +8,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
+import dev.xross.launcher.model.ArtKind
 
 /**
  * Decodes cached art for the UI: downsampled to the size it is drawn at, decoded on

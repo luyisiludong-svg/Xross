@@ -27,6 +27,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import java.io.File
 import kotlin.math.abs
+import dev.xross.launcher.theme.pack.IconMask
 
 /**
  * Theme 2.0, 2b.4e: `effects.foregroundParticles` through the cascade; the particle field's
@@ -87,7 +88,7 @@ class AmbientParticlesTest {
         assertEquals(ParticlePreset.SNOW, t.look().cosmetics.particleField)
         assertEquals(ParticlePreset.BOKEH, t.look("soft").cosmetics.particleField)
         // Naming the particles leaves the other cosmetics alone.
-        assertEquals(dev.xross.launcher.theme.pack.IconMask.CIRCLE, t.look("soft").cosmetics.mask)
+        assertEquals(IconMask.CIRCLE, t.look("soft").cosmetics.mask)
         assertEquals(ParticlePreset.NONE, t.look("soft", category = "music").cosmetics.particleField)
         assertEquals(ParticlePreset.DUST_MOTES, t.look("soft", category = "video").cosmetics.particleField)
     }

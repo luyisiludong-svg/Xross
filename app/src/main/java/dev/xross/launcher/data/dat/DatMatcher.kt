@@ -1,6 +1,7 @@
 package dev.xross.launcher.data.dat
 
 import dev.xross.launcher.data.DatCandidate
+import dev.xross.launcher.data.SetNameHit
 
 /** Which hash produced a candidate (the DAO's `kind` column). */
 enum class HashKind { SHA1, MD5, CRC32 }
@@ -60,13 +61,13 @@ object DatMatcher {
     /** Set-name hits for arcade games: one per game, preferring arcade DATs, then newer ones. */
     fun resolveSetNames(
         games: Map<Long, String>,
-        hits: List<dev.xross.launcher.data.SetNameHit>,
+        hits: List<SetNameHit>,
     ): List<DatMatch> {
         val byName = hits.groupBy { it.gameName }
         return games.mapNotNull { (gameId, setName) ->
             byName[setName]
                 ?.sortedWith(
-                    compareBy<dev.xross.launcher.data.SetNameHit> { if (it.datPlatformId == "arcade") 0 else 1 }
+                    compareBy<SetNameHit> { if (it.datPlatformId == "arcade") 0 else 1 }
                         .thenByDescending { it.datImportedAt }
                         .thenBy { it.romId },
                 )

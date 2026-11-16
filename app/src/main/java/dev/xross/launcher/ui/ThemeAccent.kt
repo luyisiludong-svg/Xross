@@ -2,10 +2,12 @@ package dev.xross.launcher.ui
 
 import androidx.compose.animation.Animatable
 import androidx.compose.animation.core.Animatable
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 
 /**
@@ -13,8 +15,12 @@ import androidx.compose.ui.graphics.Color
  * (Theme 2.0, 2b.3). Animated values read only while drawing (focus halos, the avatar glow, the
  * status bar's battery outline), so a ~300 ms morph redraws those layers without recomposing any
  * row. Driven by [AdaptiveWave].
+ *
+ * One per composition root, provided through [LocalThemeAccent]; drawing code takes the holder in
+ * composition and reads its values while drawing.
  */
-object ThemeAccent {
+@Stable
+class ThemeAccent {
     /** Color of focus halos and glow-text bloom: white unless a color layer tints it. */
     val halo = Animatable(Color.White)
 
@@ -31,9 +37,14 @@ object ThemeAccent {
     /** True when [halo] isn't plain white, so tinting layers know to draw the tint. */
     val tinted: Boolean get() = halo.value != Color.White
 
-    /** How long a color morph takes. */
-    const val MORPH_MS = 300
+    companion object {
+        /** How long a color morph takes. */
+        const val MORPH_MS = 300
+    }
 }
+
+/** The root's [ThemeAccent]. Not provided is an error, so two compositions never share one. */
+val LocalThemeAccent = staticCompositionLocalOf<ThemeAccent> { error("No ThemeAccent provided (MainActivity provides one)") }
 
 /**
  * True under a still-motion quick profile (Monochrome E-Ink): every infinite animation (focus
