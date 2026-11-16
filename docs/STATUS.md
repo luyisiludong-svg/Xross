@@ -58,10 +58,11 @@ commits and older notes still resolve here.
 | 3.29–3.34 | Phase 2b.7a–e and the A55 pass | [`phase-2b/2b.7/STATUS.md`](phase-2b/2b.7/STATUS.md) |
 | 3.35–3.37 | Phase 2b.8a–c | [`phase-2b/2b.8/STATUS.md`](phase-2b/2b.8/STATUS.md) |
 | 3.38 | Phase 3-prep: layering, modules, the look in `ThemeController` | [`phase-3-prep/STATUS.md`](phase-3-prep/STATUS.md) |
+| 3.39 | `BLACK_HOLE` background, feedback and field passes, on the A55 | [`phase-3-prep/STATUS.md`](phase-3-prep/STATUS.md#s3.39) |
 | 4.1–4.3 | Display matrix, animation and stutter, scope targets | [`status/PERFORMANCE.md`](status/PERFORMANCE.md) |
 
 New evidence goes into the phase's own `STATUS.md` (a new phase gets a new folder), numbered on
-from §3.38; this dashboard only gets its summary row and index entry updated.
+from §3.39; this dashboard only gets its summary row and index entry updated.
 
 ---
 

@@ -9,6 +9,7 @@ and links back to it.
 | --- | --- |
 | [`USER_GUIDE.md`](USER_GUIDE.md) | Using Xross: the `Xross/` folder, library, metadata, RetroAchievements, media, apps |
 | [`THEME_SPECIFICATION.md`](THEME_SPECIFICATION.md) | The theme pack format as implemented (`theme.json` v2, rules, effects, `.xtheme`) |
+| [`SHADER_GUIDE.md`](SHADER_GUIDE.md) | Writing background shaders: uniforms, feedback and field passes, the frame budget, the `BLACK_HOLE` preset and its tunables |
 | [`DEVELOPMENT.md`](DEVELOPMENT.md) | Building, unit/live/device tests, emulator stand-ins, source layout |
 | [`HARDWARE_TESTING.md`](HARDWARE_TESTING.md) | Checklist for a real handheld, and what to send back |
 | [`XMB_FIDELITY.md`](XMB_FIDELITY.md) | How close Xross is to the real XMB, against the PS3 and PSP manuals |
@@ -32,13 +33,13 @@ docs/
       PROMPTS.md            the implementation plan in slices, with as-built notes
       STATUS.md             evidence: tests, device runs, frame timing, what is not verified
       PENDING_TESTS.md      (2b.3 only) what is still to verify
-  phase-3-prep/             module boundaries before Phase 3: STATUS.md (evidence, §3.38)
+  phase-3-prep/             module boundaries before Phase 3: STATUS.md (evidence, §3.38–3.39)
   design/                   reviews and proposals
   reference/                third-party API notes
 ```
 
 A new phase gets its own folder (`phase-3/`, …) with the same `README.md` + `STATUS.md` shape; a
-new 2b-style milestone gets a `2b.N/` folder. Evidence sections keep numbering on from §3.37.
+new 2b-style milestone gets a `2b.N/` folder. Evidence sections keep numbering on from §3.39.
 
 ## Design and proposals
 
