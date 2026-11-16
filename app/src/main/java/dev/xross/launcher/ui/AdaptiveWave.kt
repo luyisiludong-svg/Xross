@@ -113,13 +113,14 @@ fun AdaptiveWave(
         (switches.batteryTint && (BatteryTint.low(ambient.battery) || ambient.battery?.charging == true))
     val halo = if (colored) Color(palette.glow) else Color.White
     val still = profile.stillMotion
-    LaunchedEffect(halo, still) {
-        ThemeAccent.haloTarget = halo
-        if (still) ThemeAccent.halo.snapTo(halo) else ThemeAccent.halo.animateTo(halo, tween(ThemeAccent.MORPH_MS))
+    val accent = LocalThemeAccent.current
+    LaunchedEffect(accent, halo, still) {
+        accent.haloTarget = halo
+        if (still) accent.halo.snapTo(halo) else accent.halo.animateTo(halo, tween(ThemeAccent.MORPH_MS))
     }
     val mix = if (shownArt != null) ADAPTIVE_AVATAR_MIX else 0f
-    LaunchedEffect(mix, still) {
-        if (still) ThemeAccent.adaptiveMix.snapTo(mix) else ThemeAccent.adaptiveMix.animateTo(mix, tween(ThemeAccent.MORPH_MS))
+    LaunchedEffect(accent, mix, still) {
+        if (still) accent.adaptiveMix.snapTo(mix) else accent.adaptiveMix.animateTo(mix, tween(ThemeAccent.MORPH_MS))
     }
 }
 

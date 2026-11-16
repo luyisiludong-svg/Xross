@@ -300,8 +300,9 @@ fun XmbScreen(
         // Frosted surfaces show blurred art only where a still image is what's behind them:
         // not over a video snap or a media screen.
         val snapOn = snap?.player?.collectAsState()?.value != null
+        val frost = LocalFrostedBackdrop.current
         val frostOff = snapOn || state.overlay != null
-        androidx.compose.runtime.SideEffect { FrostedBackdrop.suppressed = frostOff }
+        androidx.compose.runtime.SideEffect { frost.suppressed = frostOff }
         // Layer 4: ambient particles over the art (2b.4e), hidden under a snap, full-screen media,
         // the wave editor and E-Ink, resting when stopped or after 10 s without input.
         val particlePreset = (LocalThemeLook.current?.cosmetics ?: Cosmetics.NONE).particleField
@@ -750,7 +751,7 @@ private fun CategoryBar(
                 text = category.title,
                 fontSize = labelSp,
                 glow = { pulse() * focus() },
-                fontFamily = ThemeTypography.display ?: ThemeTypography.family,
+                fontFamily = LocalThemeTypography.current.displayOrBody,
                 modifier = Modifier.fadeAlpha { focus() * (1f - depth()) },
             )
         }
@@ -1047,7 +1048,8 @@ private fun SubtitleLine(text: String, pills: List<TitlePill>, size: TextUnit, m
 /** One title badge: the pack's surface at a small radius; figures in the `mono` font. */
 @Composable
 private fun TitlePillChip(pill: TitlePill, size: TextUnit) {
-    val family = if (pill.mono) ThemeTypography.mono ?: ThemeTypography.family else ThemeTypography.family
+    val fonts = LocalThemeTypography.current
+    val family = if (pill.mono) fonts.monoOrBody else fonts.family
     Text(
         pill.text,
         style = shadowed(size, weight = FontWeight.Medium).copy(fontFamily = family, shadow = null),
@@ -1150,6 +1152,7 @@ private fun XmbIcon(
 ) {
     val canBlur = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
     val frame = LocalFocusFrame.current
+    val accent = LocalThemeAccent.current
     val neon = frame.style == FocusFrameStyle.STATIC_NEON
     Box(
         Modifier
@@ -1171,7 +1174,7 @@ private fun XmbIcon(
                         scaleY = if (neon) 1.6f else 1.9f
                     }
                     .drawBehind {
-                        val c = frame.bloomColor() ?: return@drawBehind
+                        val c = frame.bloomColor(accent) ?: return@drawBehind
                         val core = if (neon) 0.6f else 0.42f
                         drawCircle(
                             Brush.radialGradient(
@@ -1279,13 +1282,14 @@ private fun ArtIcon(
             contentAlignment = Alignment.Center,
         ) {
             val frame = LocalFocusFrame.current
+            val accent = LocalThemeAccent.current
             if (frame.style == FocusFrameStyle.BREATHING_HALO || frame.style == FocusFrameStyle.STATIC_NEON) {
                 Box(
                     Modifier
                         .fillMaxSize()
                         .graphicsLayer { alpha = glow(); scaleX = 1.6f; scaleY = 1.6f }
                         .drawBehind {
-                            val c = frame.bloomColor() ?: return@drawBehind
+                            val c = frame.bloomColor(accent) ?: return@drawBehind
                             drawCircle(Brush.radialGradient(0f to c.copy(alpha = 0.3f), 1f to Color.Transparent))
                         },
                 )
@@ -1298,7 +1302,7 @@ private fun ArtIcon(
                 contentScale = ContentScale.Fit,
                 modifier = Modifier
                     .size(size)
-                    .then(if (frame.framesPlates) Modifier.drawBehind { fittedFrame(frame, glow(), image.width, image.height) } else Modifier)
+                    .then(if (frame.framesPlates) Modifier.drawBehind { fittedFrame(frame, accent, glow(), image.width, image.height) } else Modifier)
                     .shadow(6.dp, RoundedCornerShape(3.dp), clip = false),
             )
         }
@@ -1339,13 +1343,14 @@ private fun ThumbIcon(
         contentAlignment = Alignment.Center,
     ) {
         val frame = LocalFocusFrame.current
+        val accent = LocalThemeAccent.current
         if (frame.style == FocusFrameStyle.BREATHING_HALO || frame.style == FocusFrameStyle.STATIC_NEON) {
             Box(
                 Modifier
                     .fillMaxSize()
                     .graphicsLayer { alpha = glow(); scaleX = 1.7f; scaleY = 1.7f }
                     .drawBehind {
-                        val c = frame.bloomColor() ?: return@drawBehind
+                        val c = frame.bloomColor(accent) ?: return@drawBehind
                         drawCircle(Brush.radialGradient(0f to c.copy(alpha = 0.35f), 1f to Color.Transparent))
                     },
             )
@@ -1357,7 +1362,7 @@ private fun ThumbIcon(
             modifier = Modifier
                 .size(width = size * aspect, height = size)
                 .wrapContentSize(unbounded = true)
-                .then(if (frame.framesPlates) Modifier.drawBehind { drawPlateFrame(frame, glow(), 4.dp.toPx()) } else Modifier)
+                .then(if (frame.framesPlates) Modifier.drawBehind { drawPlateFrame(frame, accent, glow(), 4.dp.toPx()) } else Modifier)
                 .shadow(4.dp, RoundedCornerShape(4.dp))
                 .clip(RoundedCornerShape(4.dp))
                 .border(1.dp, Color.White.copy(alpha = 0.85f), RoundedCornerShape(4.dp)),
@@ -1369,13 +1374,13 @@ private fun ThumbIcon(
  * [drawPlateFrame] around an image of [imageW] × [imageH] drawn with [ContentScale.Fit] in this
  * scope (centered), so the frame hugs the art rather than the square slot.
  */
-private fun androidx.compose.ui.graphics.drawscope.DrawScope.fittedFrame(frame: FocusFrame, glow: Float, imageW: Int, imageH: Int) {
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.fittedFrame(frame: FocusFrame, accent: ThemeAccent, glow: Float, imageW: Int, imageH: Int) {
     if (glow <= 0f || imageW <= 0 || imageH <= 0) return
     val k = minOf(size.width / imageW, size.height / imageH)
     val w = imageW * k
     val h = imageH * k
     translate((size.width - w) / 2, (size.height - h) / 2) {
-        drawPlateFrame(frame, glow, 3.dp.toPx(), androidx.compose.ui.geometry.Size(w, h))
+        drawPlateFrame(frame, accent, glow, 3.dp.toPx(), androidx.compose.ui.geometry.Size(w, h))
     }
 }
 
@@ -1439,11 +1444,13 @@ internal fun Modifier.fadeAlpha(alpha: () -> Float): Modifier = graphicsLayer {
     compositingStrategy = CompositingStrategy.ModulateAlpha
 }
 
+@Composable
+@androidx.compose.runtime.ReadOnlyComposable
 internal fun shadowed(size: TextUnit, color: Color = TextBright, weight: FontWeight = FontWeight.Normal) = TextStyle(
     color = color,
     fontSize = size,
     fontWeight = weight,
-    fontFamily = ThemeTypography.family,
+    fontFamily = LocalThemeTypography.current.family,
     shadow = Shadow(DropShadow, Offset(0f, 3f), blurRadius = 6f),
 )
 
@@ -1463,7 +1470,7 @@ internal fun GlowText(
     glow: () -> Float,
     modifier: Modifier = Modifier,
     /** A font role other than body (the category bar uses `display`). */
-    fontFamily: androidx.compose.ui.text.font.FontFamily? = ThemeTypography.family,
+    fontFamily: androidx.compose.ui.text.font.FontFamily? = LocalThemeTypography.current.family,
     overflow: TextOverflowMode = TextOverflowMode.ELLIPSIS,
     marquee: Boolean = false,
 ) {
@@ -1508,7 +1515,7 @@ private fun GlowBloom(
     cut: TextOverflow,
     glow: () -> Float,
 ) {
-    val halo = ThemeAccent.haloTarget
+    val halo = LocalThemeAccent.current.haloTarget
     Text(
         text,
         style = TextStyle(

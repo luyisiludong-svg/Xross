@@ -12,7 +12,9 @@ inputs in `ThemeController`. How it was built, where it differs from this propos
 not verify: [§10](#10-as-built-phase-3-prep-steps-15). Step 6, the ViewModel split, is done too:
 five controllers came out of `XmbViewModel` ([§11](#11-as-built-step-6-the-viewmodel-split)).
 Step 7 is done (2026-11-16): one `XmbEvent` sink replaces `XmbScreen`'s 41 callbacks
-([§12](#12-as-built-step-7-the-xmbevent-sink)). Next is step 8, the `CompositionLocal` holders.
+([§12](#12-as-built-step-7-the-xmbevent-sink)). Step 8 is done too: the global snapshot-state
+objects are now holders provided per composition root
+([§13](#13-as-built-step-8-the-compositionlocal-holders)). Next is step 9, per-region state slices.
 
 Related documents: the [developer guide](../DEVELOPMENT.md) (source layout, build and tests), the
 [status dashboard](../STATUS.md) (test and frame-timing evidence) and
@@ -33,6 +35,7 @@ targets that a shared theme engine would serve).
 10. [As built: Phase 3-prep, steps 1–5](#10-as-built-phase-3-prep-steps-15)
 11. [As built: step 6, the ViewModel split](#11-as-built-step-6-the-viewmodel-split)
 12. [As built: step 7, the `XmbEvent` sink](#12-as-built-step-7-the-xmbevent-sink)
+13. [As built: step 8, the `CompositionLocal` holders](#13-as-built-step-8-the-compositionlocal-holders)
 
 ## 1. Verdict
 
@@ -267,7 +270,7 @@ strains it:
    assembled with `remember` in `MainActivity`. Moving them into `ThemeController` as a
    `StateFlow<ResolvedLook>` makes the whole cascade testable without Compose and leaves the
    Activity to collect one value.
-5. **Replace the six snapshot-state singletons with holders provided through `CompositionLocal`**,
+5. ✅ **Replace the six snapshot-state singletons with holders provided through `CompositionLocal`** (done, §13; four of the six held state),
    created once in `MainActivity`. The draw-phase read trick still works, because a
    `mutableStateOf` inside a provided holder is read the same way. This matters as soon as there
    are two compositions (a Settings preview beside the live menu, or a desktop preview window).
@@ -301,8 +304,8 @@ strains it:
 | 5 | Look inputs into `ThemeController` as a `StateFlow<ResolvedLook>` | The cascade testable end to end without Compose | 1 day | 4 | ✅ §10.3 |
 | 6 | Finish the ViewModel split (search, editors, folder pickers, library jobs, boot) | Stops every feature landing in one class; precondition for feature modules | 1–1.5 weeks | — | ✅ §11 |
 | 7 | `XmbEvent` sink, controller by controller | Smaller signatures; new panels don't touch `MainActivity` | 2 days | 6 | ✅ §12 |
-| 8 | `CompositionLocal` holders in place of the six singletons | Previews, tests and a second composition stop sharing state | 2 days | — | Next |
-| 9 | Per-region state slices (item column, overlays), checked with `palette-perf.sh` | Flat recomposition as `XmbUiState` grows | 2–3 days | 6 | ❌ |
+| 8 | `CompositionLocal` holders in place of the six singletons | Previews, tests and a second composition stop sharing state | 2 days | — | ✅ §13 |
+| 9 | Per-region state slices (item column, overlays), checked with `palette-perf.sh` | Flat recomposition as `XmbUiState` grows | 2–3 days | 6 | Next |
 | 10 | `:core:data` and `:render:gl` | KSP isolation, migration tests alone; shader work out of Compose | 3 days each | 4 | ❌ (`xross.android.library` is ready for them) |
 | 11 | Phase 3 features as `:feature:*` modules from the start; `:feature:ra` as the first extraction | New code born modular | With Phase 3 | 6, 10 | ❌ |
 | 12 | `ui/` subpackages, `imaging/` with one cache budget, mirrored test packages | Findability; predictable memory on 3–4 GB handhelds | 2 days | Alongside 4–10 | ◐ the engine's tests mirror its packages |
@@ -521,3 +524,60 @@ the removed forwards to `onEvent`; the controller tests call the controllers as 
 Verified: 980 unit tests (899 in `:app`, 4 opt-in live tests skipped; 81 in `:theme:engine`),
 `check` with `lintDebug` 0 errors and `ArchitectureTest`, debug and profiling builds. Device
 results: [Phase 3-prep evidence §3.40](../phase-3-prep/STATUS.md#s3.40).
+
+## 13. As built: step 8, the `CompositionLocal` holders
+
+On `refactor/phase3-prep`, 2026-11-16. **Four** of the six objects that §2 counted held snapshot
+state. `PreBlur` (box-blur math on `IntArray`s) and `ParticleRest` (the particles' resting rule)
+are pure functions and constants, so they stay objects.
+
+| Was (global `object`) | Now | Provided as | Written by |
+| --- | --- | --- | --- |
+| `ThemeTypography` (three `mutableStateOf` font families) | `@Immutable data class ThemeTypography(family, display, mono)`, built with `ThemeTypography.of(pack.fonts)` | `LocalThemeTypography`, static, default `SYSTEM` | `MainActivity`: `remember(pack)` |
+| `ThemeSurfaces` (`active`) | `@Stable class ThemeSurfaces` | `LocalThemeSurfaces`, static | `MainActivity`, from the resolved look |
+| `ThemeAccent` (`halo`, `haloTarget`, `adaptiveMix`) | `@Stable class ThemeAccent`; `MORPH_MS` in its companion | `LocalThemeAccent`, static | `AdaptiveWave` |
+| `FrostedBackdrop` (`wallpaper`, `hero`, `suppressed`, `host`, plus the blur cache) | `@Stable class FrostedBackdrop` for the screen state; the cache, `idOf` and `blurred` in `object FrostCache` | `LocalFrostedBackdrop`, static | `FrostLayerEffect`, `XmbScreen`, the frost host node |
+
+* **The three mutable holders have no default.** Reading one without a provider throws, so a
+  preview, a test or a second window can't fall back to a hidden shared instance (a
+  `staticCompositionLocalOf` default is created once per process, so it would be a global
+  again). `MainActivity` creates each one once with `remember` and provides it next to the
+  existing locals. The typography default (`SYSTEM`, no pack fonts) is immutable, so sharing it
+  is harmless.
+* **Typography became a plain value**, not a holder. It changes only with the pack, and
+  `LocalThemePack` already recomposes everything when the pack changes. `shadowed()` and the
+  media screens' `style()` are now `@Composable @ReadOnlyComposable`; all 113 call sites were
+  already in composition. It also fixes a small glitch: the fonts used to be set in a
+  `LaunchedEffect`, so the first frame after a pack switch drew in the old font.
+* **The blur cache stays process-wide** as `FrostCache`. It is memory, not screen state: the same
+  art is blurred once for every composition, and `XrossApplication.onTrimMemory` clears it. It
+  belongs to the `imaging/` budget in step 12.
+* **`Modifier.xrossSurface` is three `Modifier.Node`s now.** A modifier factory isn't composable,
+  so its `drawWithCache` and `graphicsLayer` lambdas couldn't reach a `CompositionLocal`. The
+  same chain is now `SurfaceGlowNode` (glow, shadows and outer borders, a `CacheDrawModifierNode`
+  delegate), `SurfaceClipNode` (`placeWithLayer` with the surface's shape, as `graphicsLayer`
+  does), the existing `FrostedSliceNode`, and `SurfaceFillNode` (fill, sheen, content and inner
+  borders). Each reads the holder with `currentValueOf(LocalThemeSurfaces)` and its `active`
+  while building the drawing cache or the layer. Both of those reads are observed, so switching
+  the surface still redraws without recomposing. The drawing code is unchanged.
+* **The focus frame takes the accent explicitly.** `FocusFrame.neonNow(accent)`,
+  `bloomColor(accent)` and `drawPlateFrame(frame, accent, …)`. The seven call sites read
+  `LocalThemeAccent.current` next to `LocalFocusFrame.current` and capture it for the draw
+  lambda. `FocusFrame` stays an immutable description of the look.
+* **`ArchitectureTest.noObjectHoldsSnapshotState`** fails when an `object` has a property
+  initialized with `mutableStateOf` (or the `Int`/`Float`/`Long`/`Double`, list and map
+  variants) or `Animatable`. A probe object confirmed that it fires on a member and ignores
+  function locals and objects without a body.
+
+Tests: `ThemeHoldersTest` (3, Robolectric) checks that a missing holder throws; that switching
+the provided surface reaches the surface's layer (its shape is read again) with no
+recomposition; and that two roots with their own holders don't see each other's surface.
+`FocusFrameIconMaskTest` passes its own `ThemeAccent`.
+
+Verified: 984 unit tests (903 in `:app`, 4 opt-in live tests skipped; 81 in `:theme:engine`),
+`check` with `lintDebug` 0 errors and `ArchitectureTest`, debug and profiling builds. On the API 37
+emulator: `smoke.sh` 12/12 and the theme suite 426/426. This step changes the draw path, so
+`palette-perf.sh` ran too: 0.29–0.59% janky over three pairs (game-art palette on 0.58, 0.29,
+0.30%; off 0.30, 0.59, 0.44%), the same as 2b.8 and §10.4. Not run: the A55 and the other device
+suites.
+

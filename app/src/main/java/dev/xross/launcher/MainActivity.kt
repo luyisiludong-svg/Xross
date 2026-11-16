@@ -70,6 +70,12 @@ import dev.xross.launcher.ui.LocalThemeLook
 import dev.xross.launcher.ui.LocalThemePack
 import dev.xross.launcher.ui.LocalUiIdle
 import dev.xross.launcher.ui.ParticleRest
+import dev.xross.launcher.ui.FrostedBackdrop
+import dev.xross.launcher.ui.LocalFrostedBackdrop
+import dev.xross.launcher.ui.LocalThemeAccent
+import dev.xross.launcher.ui.LocalThemeSurfaces
+import dev.xross.launcher.ui.LocalThemeTypography
+import dev.xross.launcher.ui.ThemeAccent
 import dev.xross.launcher.ui.ThemeSurfaces
 import dev.xross.launcher.ui.ThemeTypography
 import dev.xross.launcher.ui.WaveIntro
@@ -221,13 +227,8 @@ class MainActivity : ComponentActivity() {
         setContent {
             val state by viewModel.state.collectAsStateWithLifecycle()
             val pack by container.themes.active.collectAsStateWithLifecycle()
-            // The theme pack's font for every launcher text style.
-            androidx.compose.runtime.LaunchedEffect(pack) {
-                fun family(t: android.graphics.Typeface?) = t?.let { androidx.compose.ui.text.font.FontFamily(it) }
-                ThemeTypography.family = family(pack.fonts.body.typeface)
-                ThemeTypography.display = family(pack.fonts.display.typeface)
-                ThemeTypography.mono = family(pack.fonts.mono.typeface)
-            }
+            // The theme pack's fonts for every launcher text style.
+            val typography = androidx.compose.runtime.remember(pack) { ThemeTypography.of(pack.fonts) }
             // The pack's look here (Appendix A.4): its variant, the open category's and the settled
             // system's overrides, the context rules, then the user's picks and the quick profile.
             // Resolved off Compose by ThemeController (Assessment §7.4); the Activity collects it.
@@ -253,9 +254,14 @@ class MainActivity : ComponentActivity() {
             androidx.compose.runtime.LaunchedEffect(pack, look.gains) { container.sounds.useLook(pack, look) }
             // So does the theme music loop (a category override can give Games its own, 2b.5c).
             androidx.compose.runtime.LaunchedEffect(pack, look.bgm) { container.audio.onBgmTrack(pack.bgmTrack(look.bgm)) }
-            // Read in the draw phase only, so a category or system switch redraws without recomposing.
+            // This composition's draw-phase theme state (Assessment §7.5): the surface, the accent
+            // morph and the frosted backdrops, read while drawing, so a change redraws without
+            // recomposing. Created here, once, so no other composition shares them.
+            val surfaces = androidx.compose.runtime.remember { ThemeSurfaces(resolved.surface) }
+            val accent = androidx.compose.runtime.remember { ThemeAccent() }
+            val frost = androidx.compose.runtime.remember { FrostedBackdrop() }
             androidx.compose.runtime.LaunchedEffect(resolved.surface) {
-                ThemeSurfaces.active = resolved.surface
+                surfaces.active = resolved.surface
             }
             var backdropCovers by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
             // Cold-start intro (2b.5d): the black, the boot video or the shader ramp, then the menu.
@@ -277,6 +283,10 @@ class MainActivity : ComponentActivity() {
                 LocalStillMotion provides resolved.stillMotion,
                 LocalComponents provides resolved.components,
                 LocalGlyphs provides state.glyphs,
+                LocalThemeTypography provides typography,
+                LocalThemeSurfaces provides surfaces,
+                LocalThemeAccent provides accent,
+                LocalFrostedBackdrop provides frost,
             ) {
             Box(Modifier.fillMaxSize()) {
                 // The wave is hidden (and its GL loop stopped) under full-screen photos and video,

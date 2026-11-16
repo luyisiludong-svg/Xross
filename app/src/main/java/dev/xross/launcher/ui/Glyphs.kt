@@ -1,6 +1,8 @@
 package dev.xross.launcher.ui
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -21,6 +23,9 @@ import dev.xross.launcher.theme.pack.ResolvedComponents
 import dev.xross.launcher.theme.pack.Surface
 import dev.xross.launcher.theme.pack.ThemeLayout
 import dev.xross.launcher.theme.pack.ThemeLook
+import dev.xross.launcher.theme.pack.ThemeFont
+import dev.xross.launcher.theme.pack.ThemeFonts
+import dev.xross.launcher.theme.pack.typeface
 
 /** The active theme pack, provided at the root of the UI (see MainActivity). */
 val LocalThemePack = staticCompositionLocalOf<LoadedTheme?> { null }
@@ -50,28 +55,52 @@ val LocalGlyphs = androidx.compose.runtime.compositionLocalOf { GlyphSet.KEYBOAR
 val LocalThemeLayout = androidx.compose.runtime.compositionLocalOf<ThemeLayout?> { null }
 
 /**
- * The theme pack's typeface for all launcher text. Snapshot state rather than a composition
- * local because [shadowed] builds styles outside composable scope; reads during composition are
- * still tracked, so switching packs redraws text.
+ * The theme pack's typefaces for all launcher text, by role. Changes only with the pack, so it is a
+ * plain value: [shadowed] and every style read it from [LocalThemeTypography] while composing, and
+ * a pack switch recomposes the text.
  */
-object ThemeTypography {
+@Immutable
+data class ThemeTypography(
     /** `body`: titles, descriptions, menus, dialogs (every style that doesn't pick a role). */
-    var family: FontFamily? by mutableStateOf(null)
-
+    val family: FontFamily? = null,
     /** `display`: the clock and category names; the body font when the pack has none. */
-    var display: FontFamily? by mutableStateOf(null)
-
+    val display: FontFamily? = null,
     /** `mono`: figures that should line up (battery, points, playtime); the body font otherwise. */
-    var mono: FontFamily? by mutableStateOf(null)
+    val mono: FontFamily? = null,
+) {
+    /** [display], or the body font. */
+    val displayOrBody: FontFamily? get() = display ?: family
+
+    /** [mono], or the body font. */
+    val monoOrBody: FontFamily? get() = mono ?: family
+
+    companion object {
+        /** The system font in every role (no pack loaded, or a composition without a provider). */
+        val SYSTEM = ThemeTypography()
+
+        /** The roles of [fonts] (the active pack's). */
+        fun of(fonts: ThemeFonts): ThemeTypography {
+            fun family(f: ThemeFont?) = f?.typeface?.let { FontFamily(it) }
+            return ThemeTypography(family(fonts.body), family(fonts.display), family(fonts.mono))
+        }
+    }
 }
+
+/** The active pack's [ThemeTypography]; MainActivity provides it. */
+val LocalThemeTypography = staticCompositionLocalOf { ThemeTypography.SYSTEM }
 
 /**
  * The surface every card, panel and toast is drawn with (`Modifier.xrossSurface`). Snapshot state,
- * read only while drawing, so switching surfaces redraws without recomposing anything.
+ * read only while drawing, so switching surfaces redraws without recomposing anything. One per
+ * composition root, provided through [LocalThemeSurfaces].
  */
-object ThemeSurfaces {
-    var active: Surface by mutableStateOf(Surface.FALLBACK)
+@Stable
+class ThemeSurfaces(initial: Surface = Surface.FALLBACK) {
+    var active: Surface by mutableStateOf(initial)
 }
+
+/** The root's [ThemeSurfaces]. Not provided is an error, so two compositions never share one. */
+val LocalThemeSurfaces = staticCompositionLocalOf<ThemeSurfaces> { error("No ThemeSurfaces provided (MainActivity provides one)") }
 
 private val Blank = ColorPainter(Color.Transparent)
 

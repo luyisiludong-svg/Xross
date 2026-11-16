@@ -111,11 +111,12 @@ fun StatusBar(
     val bar by source.collectAsStateWithLifecycle()
 
     // Date and time in the pack's display font, the battery figure in its mono font.
-    val mono = ThemeTypography.mono ?: ThemeTypography.family
+    val fonts = LocalThemeTypography.current
+    val mono = fonts.monoOrBody
     val style = TextStyle(
         color = Color.White,
         fontSize = textSize,
-        fontFamily = ThemeTypography.display ?: ThemeTypography.family,
+        fontFamily = fonts.displayOrBody,
         shadow = Shadow(Color(0x99000000), Offset(0f, 3f), 6f),
     )
     val density = LocalDensity.current
@@ -217,6 +218,7 @@ private fun BatterySlot(
 
 @Composable
 private fun BatteryGauge(bars: Int, low: Boolean, modifier: Modifier) {
+    val accent = LocalThemeAccent.current
     Canvas(modifier) {
         val stroke = size.height * 0.11f
         val nub = size.width * 0.07f
@@ -226,7 +228,7 @@ private fun BatteryGauge(bars: Int, low: Boolean, modifier: Modifier) {
         drawRoundRect(GlyphShadow, shadow, body, CornerRadius(stroke * 1.5f), style = Stroke(stroke))
         // The outline follows the accent halo (white unless game art or the battery tint color it);
         // read while drawing, so a morph redraws this canvas only.
-        val rim = ThemeAccent.halo.value
+        val rim = accent.halo.value
         drawRoundRect(rim, Offset.Zero, body, CornerRadius(stroke * 1.5f), style = Stroke(stroke))
         drawRect(rim, Offset(body.width, size.height * 0.3f), Size(nub, size.height * 0.4f))
         // Three bars like the reference ([StatusBarState.batteryBars]).

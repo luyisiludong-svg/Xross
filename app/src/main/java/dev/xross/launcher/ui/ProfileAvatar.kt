@@ -86,6 +86,7 @@ fun ProfileAvatar(
     // Larger pictures (User Card, dashboard) get a proportionally heavier ring.
     val styleWidth = style?.let { it.borderWidthDp.dp * sqrt((size / 32.dp).coerceAtLeast(1f)) }
     val glowOn = style?.glowEnabled == true
+    val accent = LocalThemeAccent.current
     // Breathes only while it is shown in use; holds at its resting strength while the screen rests.
     val glowPhase = rememberBreathing(
         running = glowOn && animateGlow && !LocalUiIdle.current,
@@ -105,7 +106,7 @@ fun ProfileAvatar(
                     // Halo in the ring color (leaning toward the game-art accent while one shows):
                     // both its reach (the "blur") and its opacity breathe.
                     val phase = glowPhase.value
-                    val haloColor = androidx.compose.ui.graphics.lerp(styleColor, ThemeAccent.halo.value, ThemeAccent.adaptiveMix.value)
+                    val haloColor = androidx.compose.ui.graphics.lerp(styleColor, accent.halo.value, accent.adaptiveMix.value)
                     val k = style!!.glowIntensity
                     val picture = pictureSize.toPx() / 2
                     val reach = picture * (1.15f + 0.55f * k * (0.65f + 0.35f * phase))
@@ -126,7 +127,7 @@ fun ProfileAvatar(
                 // Glow: a white halo fading outwards, its strength following the shared pulse.
                 if (focusGlow) drawCircle(
                     Brush.radialGradient(
-                        0.55f to ThemeAccent.halo.value.copy(alpha = 0.45f * focus * (0.5f + 0.5f * pulse())),
+                        0.55f to accent.halo.value.copy(alpha = 0.45f * focus * (0.5f + 0.5f * pulse())),
                         1f to Color.Transparent,
                         center = center,
                         radius = r,

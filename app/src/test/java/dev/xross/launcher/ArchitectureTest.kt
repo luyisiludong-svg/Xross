@@ -99,6 +99,30 @@ class ArchitectureTest {
         assertTrue("Android or Compose UI in the theme engine:\n" + violations.joinToString("\n"), violations.isEmpty())
     }
 
+    /**
+     * No `object` holds Compose snapshot state (§7.5, step 8): state that drawing or composition
+     * reads lives in a holder provided through a `CompositionLocal`, one per composition root, so
+     * a second composition (a preview, a test, a desktop window) never shares it. Caches and pure
+     * functions in objects are fine.
+     */
+    @Test fun noObjectHoldsSnapshotState() {
+        val violations = sources().flatMap { src ->
+            val lines = src.code.lines()
+            buildList {
+                var depth = 0
+                var objectAt = -1
+                var objectName = ""
+                lines.forEachIndexed { i, l ->
+                    if (objectAt < 0) OBJECT.find(l)?.let { objectAt = depth; objectName = it.groupValues[1] }
+                    else if (depth == objectAt + 1 && SNAPSHOT_MEMBER.containsMatchIn(l)) add("${src.module} ${src.path}:${i + 1}: object $objectName: ${l.trim()}")
+                    depth += l.count { it == '{' } - l.count { it == '}' }
+                    if (objectAt >= 0 && depth <= objectAt) objectAt = -1
+                }
+            }
+        }
+        assertTrue("Snapshot state in an object:\n" + violations.joinToString("\n"), violations.isEmpty())
+    }
+
     @Test fun categoryIdsMirrorTheMenuCategories() {
         assertEquals(CategoryIds.all, Categories.all.map { it.id })
     }
@@ -141,6 +165,11 @@ class ArchitectureTest {
     private companion object {
         const val ROOT = "(root)"
         val REF = Regex("""\bdev\.xross\.launcher\.([a-z]+)(?:\.[A-Za-z_][A-Za-z0-9_]*)+""")
+        /** A top-level or nested `object` declaration (not `companion object`, not an expression). */
+        val OBJECT = Regex("""^\s*(?:(?:private|internal|public|data)\s+)*object\s+([A-Z][A-Za-z0-9_]*)""")
+
+        /** A property initialized with snapshot state, not inside a function (that is `remember`'s business). */
+        val SNAPSHOT_MEMBER = Regex("""^\s*(?:(?:private|internal|public|override)\s+)*va[lr]\s.*(?:\bmutable(?:Int|Float|Long|Double)?StateOf\(|\bmutableState(?:List|Map)Of\(|\bAnimatable\()""")
         val ANDROID = Regex("""\b(?:android|androidx)\.[a-z0-9_.]*[A-Za-z_]+""")
 
         /** [text] with block and line comments blanked out, line breaks kept so line numbers hold. */

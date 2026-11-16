@@ -170,13 +170,14 @@ class FocusFrameIconMaskTest {
     /** The shared pulse under [style], sampled every 250 ms for [samples] steps of a running, non-idle screen. */
     private fun pulseUnder(style: FocusFrameStyle, samples: Int = 16): Pair<androidx.compose.runtime.State<Float>, List<Float>> {
         var pulse: androidx.compose.runtime.State<Float>? = null
+        val accent = dev.xross.launcher.ui.ThemeAccent()
         compose.mainClock.autoAdvance = false
         compose.setContent {
             CompositionLocalProvider(LocalFocusFrame provides FocusFrame(style)) {
                 pulse = rememberFocusPulse(running = true)
                 val frame = LocalFocusFrame.current
                 val p = pulse!!
-                Box(Modifier.size(64.dp).drawBehind { drawPlateFrame(frame, p.value, 6.dp.toPx()) })
+                Box(Modifier.size(64.dp).drawBehind { drawPlateFrame(frame, accent, p.value, 6.dp.toPx()) })
             }
         }
         val values = List(samples) {

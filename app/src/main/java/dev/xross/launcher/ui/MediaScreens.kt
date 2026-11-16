@@ -33,6 +33,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -87,8 +88,10 @@ import kotlin.math.max
 import kotlin.math.min
 
 private val OverlayText: TextStyle
-    get() = TextStyle(color = Color.White, fontFamily = ThemeTypography.family, shadow = Shadow(Color(0xAA000000), Offset(0f, 2f), 6f))
+    @Composable @ReadOnlyComposable get() = TextStyle(color = Color.White, fontFamily = LocalThemeTypography.current.family, shadow = Shadow(Color(0xAA000000), Offset(0f, 2f), 6f))
 
+@Composable
+@ReadOnlyComposable
 private fun style(size: TextUnit, weight: FontWeight = FontWeight.Normal, color: Color = Color.White) =
     OverlayText.copy(fontSize = size, fontWeight = weight, color = color)
 

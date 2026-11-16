@@ -87,7 +87,7 @@ internal fun FocusBackdrop(
     val image = shown ?: return
     if (alpha <= 0f) return
     // Frosted surfaces draw a pre-blurred slice of this art (2b.4c).
-    val key = "hero:${FrostedBackdrop.idOf(image)}"
+    val key = "hero:${FrostCache.idOf(image)}"
     val opaque = remember(image) { !image.asAndroidBitmap().hasAlpha() }
     FrostLayerEffect(FrostSlot.HERO, key, image, viewport, opaque, BackdropScrim.HERO) { alpha }
     Box(Modifier.fillMaxSize().graphicsLayer { this.alpha = alpha }) {

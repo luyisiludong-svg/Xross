@@ -40,15 +40,15 @@ data class FocusFrame(
      * The neon color now: the game-art or battery accent while one tints the halos
      * ([ThemeAccent.tinted]), else [neon]. Read in the draw phase.
      */
-    fun neonNow(): Color = if (ThemeAccent.tinted) ThemeAccent.halo.value else neon
+    fun neonNow(accent: ThemeAccent): Color = if (accent.tinted) accent.halo.value else neon
 
     /**
      * The soft radial bloom behind a focused glyph, art or thumbnail: white for the breathing
      * halo, the neon or gold color for those styles, none under a hard shadow.
      */
-    fun bloomColor(): Color? = when (style) {
+    fun bloomColor(accent: ThemeAccent): Color? = when (style) {
         FocusFrameStyle.BREATHING_HALO -> Color.White
-        FocusFrameStyle.STATIC_NEON -> neonNow()
+        FocusFrameStyle.STATIC_NEON -> neonNow(accent)
         FocusFrameStyle.HARD_SHADOW -> null
         FocusFrameStyle.GOLD_BEZEL -> gold
     }
@@ -106,7 +106,7 @@ fun metalBrush(base: Color, start: Offset, end: Offset): Brush {
  * scope; [corner] px radius), at strength [glow] (0–1), drawn outside the plate's bounds. [FocusFrameStyle.BREATHING_HALO]
  * is the soft white rings the game tiles always had.
  */
-fun DrawScope.drawPlateFrame(frame: FocusFrame, glow: Float, corner: Float, plate: Size = size) {
+fun DrawScope.drawPlateFrame(frame: FocusFrame, accent: ThemeAccent, glow: Float, corner: Float, plate: Size = size) {
     if (glow <= 0f) return
     when (frame.style) {
         FocusFrameStyle.BREATHING_HALO -> {
@@ -114,7 +114,7 @@ fun DrawScope.drawPlateFrame(frame: FocusFrame, glow: Float, corner: Float, plat
             for (i in 1..4) ring(plate, Color.White.copy(alpha = 0.22f * glow / i), step * i, step * 1.2f, corner)
         }
         FocusFrameStyle.STATIC_NEON -> {
-            val neon = frame.neonNow()
+            val neon = frame.neonNow(accent)
             val step = 2.dp.toPx()
             // A crisp, bright core hugging the plate, then a short, tight falloff.
             ring(plate, neon.copy(alpha = 0.95f * glow), 1.dp.toPx(), 1.5.dp.toPx(), corner)

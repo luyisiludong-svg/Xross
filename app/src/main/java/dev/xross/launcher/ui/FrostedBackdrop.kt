@@ -4,11 +4,13 @@ import android.graphics.Bitmap
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -23,9 +25,11 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.node.CompositionLocalConsumerModifierNode
 import androidx.compose.ui.node.DrawModifierNode
 import androidx.compose.ui.node.GlobalPositionAwareModifierNode
 import androidx.compose.ui.node.ModifierNodeElement
+import androidx.compose.ui.node.currentValueOf
 import androidx.compose.ui.node.invalidateDraw
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
@@ -75,8 +79,12 @@ class FrostLayer(
  *
  * Empty over the live shader: a surface then keeps its translucent tint alone. [suppressed]
  * while something that isn't a still image covers the backdrops (a video snap, a media screen).
+ *
+ * One per composition root, provided through [LocalFrostedBackdrop]. The blurred copies
+ * themselves are memory, not screen state, so they live in the process-wide [FrostCache].
  */
-object FrostedBackdrop {
+@Stable
+class FrostedBackdrop {
     var wallpaper: FrostLayer? by mutableStateOf(null)
     var hero: FrostLayer? by mutableStateOf(null)
     var suppressed: Boolean by mutableStateOf(false)
@@ -91,7 +99,16 @@ object FrostedBackdrop {
         val top = all.indexOfLast { it.opaque && it.alpha() >= 0.999f }
         return if (top <= 0) all else all.subList(top, all.size)
     }
+}
 
+/** The root's [FrostedBackdrop]. Not provided is an error, so two compositions never share one. */
+val LocalFrostedBackdrop = staticCompositionLocalOf<FrostedBackdrop> { error("No FrostedBackdrop provided (MainActivity provides one)") }
+
+/**
+ * The pre-blurred copies of backdrop images, shared by every composition (the same art blurred
+ * once) and dropped on low memory ([trim], from `XrossApplication.onTrimMemory`).
+ */
+object FrostCache {
     private val cache = PreBlurCache<ImageBitmap>()
 
     private val ids = java.util.WeakHashMap<ImageBitmap, Long>()
@@ -129,7 +146,7 @@ object FrostedBackdrop {
 
 /**
  * Publishes [image] (named [key], drawn with `ContentScale.Crop` into [viewport]) in [slot] of
- * [FrostedBackdrop] while this is composed, blurred for the active surface's `backdropBlurDp`.
+ * the root's [FrostedBackdrop] while this is composed, blurred for the active surface's `backdropBlurDp`.
  * Nothing is blurred while the active surface has no blur.
  */
 @Composable
@@ -142,14 +159,15 @@ internal fun FrostLayerEffect(
     scrim: BackdropScrim,
     alpha: () -> Float,
 ) {
-    val blurPx = ThemeSurfaces.active.backdropBlurDp * LocalDensity.current.density
+    val frost = LocalFrostedBackdrop.current
+    val blurPx = LocalThemeSurfaces.current.active.backdropBlurDp * LocalDensity.current.density
     val currentAlpha by rememberUpdatedState(alpha)
     var blurred by remember(key) { mutableStateOf<ImageBitmap?>(null) }
     LaunchedEffect(key, image, blurPx, viewport) {
         val drawnWidth = PreBlur.cropRect(image.width.toFloat(), image.height.toFloat(), viewport.width, viewport.height)[2]
         val radius = PreBlur.radiusFor(blurPx, drawnWidth, PreBlur.smallSize(image.width, image.height).first)
         val start = System.nanoTime()
-        blurred = if (radius <= 0) null else FrostedBackdrop.blurred(key, image, radius)
+        blurred = if (radius <= 0) null else FrostCache.blurred(key, image, radius)
         // Debug and profiling builds: what was blurred, how much, and how long it took (cache hits ~0).
         if (dev.xross.launcher.BuildConfig.PERF_LOG) {
             android.util.Log.i(
@@ -159,9 +177,9 @@ internal fun FrostLayerEffect(
         }
     }
     val layer = remember(blurred, opaque, scrim) { blurred?.let { FrostLayer(it, { currentAlpha() }, scrim, opaque) } }
-    DisposableEffect(slot, layer) {
-        slot.set(layer)
-        onDispose { if (slot.get() === layer) slot.set(null) }
+    DisposableEffect(frost, slot, layer) {
+        slot.set(frost, layer)
+        onDispose { if (slot.get(frost) === layer) slot.set(frost, null) }
     }
 }
 
@@ -170,10 +188,10 @@ internal enum class FrostSlot {
     HERO,
     ;
 
-    fun get(): FrostLayer? = if (this == WALLPAPER) FrostedBackdrop.wallpaper else FrostedBackdrop.hero
+    fun get(frost: FrostedBackdrop): FrostLayer? = if (this == WALLPAPER) frost.wallpaper else frost.hero
 
-    fun set(layer: FrostLayer?) {
-        if (this == WALLPAPER) FrostedBackdrop.wallpaper = layer else FrostedBackdrop.hero = layer
+    fun set(frost: FrostedBackdrop, layer: FrostLayer?) {
+        if (this == WALLPAPER) frost.wallpaper = layer else frost.hero = layer
     }
 }
 
@@ -185,13 +203,19 @@ private data object FrostHostElement : ModifierNodeElement<FrostHostNode>() {
     override fun update(node: FrostHostNode) = Unit
 }
 
-private class FrostHostNode : Modifier.Node(), GlobalPositionAwareModifierNode {
+private class FrostHostNode : Modifier.Node(), GlobalPositionAwareModifierNode, CompositionLocalConsumerModifierNode {
+    /** The holder this node last set the host on, so [onDetach] clears that one. */
+    private var frost: FrostedBackdrop? = null
+
     override fun onGloballyPositioned(coordinates: LayoutCoordinates) {
-        FrostedBackdrop.host = coordinates
+        val now = currentValueOf(LocalFrostedBackdrop)
+        frost = now
+        now.host = coordinates
     }
 
     override fun onDetach() {
-        if (FrostedBackdrop.host?.isAttached != true) FrostedBackdrop.host = null
+        frost?.let { if (it.host?.isAttached != true) it.host = null }
+        frost = null
     }
 }
 
@@ -212,14 +236,14 @@ private data class FrostedSliceElement(val strength: () -> Float, val clip: () -
 }
 
 private class FrostedSliceNode(var strength: () -> Float, var clip: () -> Boolean) :
-    Modifier.Node(), DrawModifierNode, GlobalPositionAwareModifierNode {
+    Modifier.Node(), DrawModifierNode, GlobalPositionAwareModifierNode, CompositionLocalConsumerModifierNode {
     private var coordinates: LayoutCoordinates? = null
     private var lastOffset = Offset.Unspecified
 
     override fun onGloballyPositioned(coordinates: LayoutCoordinates) {
         this.coordinates = coordinates
-        if (ThemeSurfaces.active.backdropBlurDp <= 0f) return
-        val host = FrostedBackdrop.host ?: return
+        if (currentValueOf(LocalThemeSurfaces).active.backdropBlurDp <= 0f) return
+        val host = currentValueOf(LocalFrostedBackdrop).host ?: return
         val offset = runCatching { host.localPositionOf(coordinates, Offset.Zero) }.getOrNull() ?: return
         if (offset != lastOffset) {
             lastOffset = offset
@@ -233,12 +257,13 @@ private class FrostedSliceNode(var strength: () -> Float, var clip: () -> Boolea
     }
 
     private fun ContentDrawScope.drawSlice() {
-        if (ThemeSurfaces.active.backdropBlurDp <= 0f || !clip()) return
-        val layers = FrostedBackdrop.layers()
+        if (currentValueOf(LocalThemeSurfaces).active.backdropBlurDp <= 0f || !clip()) return
+        val frost = currentValueOf(LocalFrostedBackdrop)
+        val layers = frost.layers()
         if (layers.isEmpty()) return
         val k = strength().coerceIn(0f, 1f)
         if (k <= 0f) return
-        val host = FrostedBackdrop.host?.takeIf { it.isAttached } ?: return
+        val host = frost.host?.takeIf { it.isAttached } ?: return
         val me = coordinates?.takeIf { it.isAttached } ?: return
         val offset = runCatching { host.localPositionOf(me, Offset.Zero) }.getOrNull() ?: return
         lastOffset = offset

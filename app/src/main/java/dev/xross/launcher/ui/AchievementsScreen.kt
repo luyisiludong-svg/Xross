@@ -284,6 +284,7 @@ private fun BadgeCell(
     val shape = RoundedCornerShape(12.dp)
     // The theme's focus frame (2b.4d): the amber bloom (breathing or steady), a hard shadow or a gold bezel.
     val frame = LocalFocusFrame.current
+    val accent = LocalThemeAccent.current
     val bloom = frame.style == FocusFrameStyle.BREATHING_HALO || frame.style == FocusFrameStyle.STATIC_NEON
     Box(
         Modifier
@@ -304,7 +305,7 @@ private fun BadgeCell(
                         radius = size.minDimension * 0.85f,
                     )
                 } else {
-                    drawPlateFrame(frame, lift, 12.dp.toPx())
+                    drawPlateFrame(frame, accent, lift, 12.dp.toPx())
                 }
             }
             .clip(shape)

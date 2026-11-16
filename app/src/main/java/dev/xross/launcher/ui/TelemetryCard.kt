@@ -192,7 +192,7 @@ private fun RichCardBody(
             Spacer(Modifier.width(6.dp))
             Text(
                 progress,
-                style = shadowed(size * 0.92f, weight = FontWeight.Bold).copy(fontFamily = ThemeTypography.mono ?: ThemeTypography.family),
+                style = shadowed(size * 0.92f, weight = FontWeight.Bold).copy(fontFamily = LocalThemeTypography.current.monoOrBody),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
