@@ -220,7 +220,7 @@ data class ThemeManifest(
         val adaptiveGamePalette: Boolean? = null,
         /**
          * Background program ([dev.xross.launcher.theme.shader.ShaderPreset]): `WAVE` (default),
-         * `ASCII_MATRIX`, `BOKEH`, `STARFIELD`, `CRT`, or `CUSTOM` for the pack's own GLSL.
+         * `ASCII_MATRIX`, `BOKEH`, `STARFIELD`, `CRT`, `BLACK_HOLE`, or `CUSTOM` for the pack's own GLSL.
          */
         @kotlinx.serialization.json.JsonNames("shader") val shaderPreset: String? = null,
         /** CUSTOM's fragment shader, from the pack root (default `shader.frag`); alone it implies CUSTOM. */

@@ -16,6 +16,8 @@ enum class ShaderPreset(val file: String?, val label: String) {
     BOKEH("bokeh.frag", "Bokeh"),
     STARFIELD("starfield.frag", "Starfield"),
     CRT("crt.frag", "CRT"),
+    /** Gargantua-style black hole, ray traced through Schwarzschild space and drawn in ASCII. */
+    BLACK_HOLE("black_hole.frag", "Black hole"),
     CUSTOM(null, "Custom shader"),
     ;
 

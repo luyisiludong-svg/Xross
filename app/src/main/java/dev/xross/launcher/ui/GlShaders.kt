@@ -43,6 +43,11 @@ internal class GlProgram(val spec: ShaderSpec) {
     var uBright = -1; var uLines = -1; var uTurb = -1; var uThick = -1
     /** CRT's own: render pixels per dp (2b.4f). */
     var uPxPerDp = -1
+    /** Feedback: last frame's picture, seconds since it, 1.0 when there is none. */
+    var uPrev = -1; var uFrameDt = -1; var uFresh = -1
+
+    /** Reads `uPrev`, so it is drawn through [FeedbackTargets]. */
+    val usesFeedback: Boolean get() = FeedbackPolicy.wants(uPrev)
 
     fun fail(cause: ShaderStatus.Cause, error: String) {
         this.cause = cause
@@ -108,6 +113,7 @@ internal class GlProgram(val spec: ShaderSpec) {
         uTransition = loc("uTransition"); uTravel = loc("uTravel")
         uBright = loc("uBright"); uLines = loc("uLines"); uTurb = loc("uTurb"); uThick = loc("uThick")
         uPxPerDp = loc("uPxPerDp")
+        uPrev = loc("uPrev"); uFrameDt = loc("uFrameDt"); uFresh = loc("uFresh")
         state = ProgramState.READY
         return null
     }
@@ -281,4 +287,120 @@ internal class GpuTimer(extensions: String) {
         const val GL_TIME_ELAPSED_EXT = 0x88BF
         const val GL_GPU_DISJOINT_EXT = 0x8FBB
     }
+}
+
+/**
+ * Last frame's picture for programs that read `uPrev` (ping-pong feedback): two RGBA8 textures at
+ * the surface size that take turns. Each frame the program draws into [target] while sampling
+ * [source], then [present] blits it to the screen and the roles swap. Allocated only while such a
+ * program is on screen (~2 × 4 bytes per render pixel), freed when it leaves.
+ */
+internal class FeedbackTargets {
+    private val tex = IntArray(2)
+    private val fbo = IntArray(2)
+    private var cur = 0
+    var width = 0
+        private set
+    var height = 0
+        private set
+
+    val allocated: Boolean get() = fbo[0] != 0
+
+    /** (Re)allocates at [w]×[h], cleared to black; true when it did (the history is gone). */
+    fun ensure(w: Int, h: Int): Boolean {
+        if (allocated && w == width && h == height) return false
+        release()
+        GLES30.glGenTextures(2, tex, 0)
+        GLES30.glGenFramebuffers(2, fbo, 0)
+        for (i in 0..1) {
+            GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, tex[i])
+            GLES30.glTexImage2D(GLES30.GL_TEXTURE_2D, 0, GLES30.GL_RGBA8, w, h, 0, GLES30.GL_RGBA, GLES30.GL_UNSIGNED_BYTE, null)
+            GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MIN_FILTER, GLES30.GL_LINEAR)
+            GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MAG_FILTER, GLES30.GL_LINEAR)
+            GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_S, GLES30.GL_CLAMP_TO_EDGE)
+            GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_T, GLES30.GL_CLAMP_TO_EDGE)
+            GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, fbo[i])
+            GLES30.glFramebufferTexture2D(GLES30.GL_FRAMEBUFFER, GLES30.GL_COLOR_ATTACHMENT0, GLES30.GL_TEXTURE_2D, tex[i], 0)
+        }
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, 0)
+        val complete = GLES30.glCheckFramebufferStatus(GLES30.GL_FRAMEBUFFER) == GLES30.GL_FRAMEBUFFER_COMPLETE
+        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
+        if (!complete) {
+            android.util.Log.e("XrossShader", "feedback framebuffer incomplete at ${w}x$h; drawing without it")
+            release()
+            return false
+        }
+        width = w
+        height = h
+        clear()
+        return true
+    }
+
+    /** Both pictures to black: the next frame starts without history. */
+    fun clear() {
+        if (!allocated) return
+        GLES30.glClearColor(0f, 0f, 0f, 1f)
+        for (i in 0..1) {
+            GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, fbo[i])
+            GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT)
+        }
+        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
+    }
+
+    /** Binds this frame's render target and puts last frame's picture on texture unit 0. */
+    fun bind() {
+        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, fbo[cur])
+        GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, tex[1 - cur])
+    }
+
+    /** Copies this frame to the screen (framebuffer 0, left bound) and swaps the roles. */
+    fun present() {
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, 0) // never sample the texture being written next frame
+        GLES30.glBindFramebuffer(GLES30.GL_READ_FRAMEBUFFER, fbo[cur])
+        GLES30.glBindFramebuffer(GLES30.GL_DRAW_FRAMEBUFFER, 0)
+        GLES30.glBlitFramebuffer(0, 0, width, height, 0, 0, width, height, GLES30.GL_COLOR_BUFFER_BIT, GLES30.GL_NEAREST)
+        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
+        cur = 1 - cur
+    }
+
+    /** Frees the textures (the context must be current). */
+    fun release() {
+        if (fbo[0] != 0) GLES30.glDeleteFramebuffers(2, fbo, 0)
+        if (tex[0] != 0) GLES30.glDeleteTextures(2, tex, 0)
+        forget()
+    }
+
+    /** The context died with its handles: drop them without GL calls. */
+    fun forget() {
+        fbo.fill(0)
+        tex.fill(0)
+        width = 0
+        height = 0
+        cur = 0
+    }
+}
+
+/**
+ * When feedback history may be trusted (pure, so the rules are unit tested). A program opts in by
+ * using `uniform sampler2D uPrev` (the driver gives an unused uniform no location).
+ */
+internal object FeedbackPolicy {
+    /** A gap longer than this (paused, covered, a hitch) means last frame's picture is stale. */
+    const val MAX_GAP_NS = 500_000_000L
+
+    /** `uFrameDt`'s ceiling, so a long frame never fades a trail to nothing in one step. */
+    const val MAX_DT_S = 0.1f
+
+    fun wants(uPrevLocation: Int): Boolean = uPrevLocation >= 0
+
+    /**
+     * Start without history: a different program from the last feedback frame, new targets (a
+     * resize or a lost context), or too long since the last feedback frame.
+     */
+    fun fresh(lastKey: String?, key: String, reallocated: Boolean, lastNs: Long, nowNs: Long): Boolean =
+        reallocated || lastKey != key || lastNs == 0L || nowNs - lastNs > MAX_GAP_NS
+
+    /** `uFrameDt`: seconds since the last frame, clamped to (0, [MAX_DT_S]]; 1/60 for the first. */
+    fun frameDt(dtSeconds: Float): Float = if (dtSeconds <= 0f) 1f / 60f else dtSeconds.coerceAtMost(MAX_DT_S)
 }

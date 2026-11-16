@@ -309,7 +309,8 @@ class PostProcessSettingsTest {
     @Test fun rowsCycleThePackFirstThenEachChoice() {
         assertEquals("WAVE", EffectSlot.SHADER.next(""))
         assertEquals("CRT", EffectSlot.SHADER.next("STARFIELD"))
-        assertEquals("", EffectSlot.SHADER.next("CRT"))
+        assertEquals("BLACK_HOLE", EffectSlot.SHADER.next("CRT"))
+        assertEquals("", EffectSlot.SHADER.next("BLACK_HOLE"))
         assertEquals("SNOW", EffectSlot.PARTICLES.next("none"))
         assertEquals("System", EffectSlot.ICON_MASK.label("NONE"))
         assertEquals("Matrix", EffectSlot.SHADER.label("ASCII_MATRIX"))
