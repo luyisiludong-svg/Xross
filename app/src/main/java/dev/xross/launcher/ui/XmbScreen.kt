@@ -261,8 +261,10 @@ fun XmbScreen(
             is NodeIcon.Tile -> if (icon.scraped) FocusedArt(icon.uuid, icon.version) else null
             else -> null
         }
-        val quiet = state.overlay == null && state.search == null && state.optionsMenu == null &&
-            state.info == null && state.booting == null && state.remap == null && state.waveEditor == null &&
+        // The Options and Information panels sit over the focused game, so its art and snap keep
+        // playing behind them; full-screen overlays stop them.
+        val quiet = state.overlay == null && state.search == null &&
+            state.booting == null && state.remap == null && state.waveEditor == null &&
             state.achievements == null && state.profileCard == null && state.nameEntry == null &&
             state.avatarEditor == null && state.raHub == null
         var heroCovers by remember { mutableStateOf(false) }
