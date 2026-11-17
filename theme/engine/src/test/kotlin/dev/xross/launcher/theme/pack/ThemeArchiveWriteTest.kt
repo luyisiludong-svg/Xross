@@ -83,7 +83,7 @@ class ThemeArchiveWriteTest {
         // No folder was written to make it.
         assertEquals(emptyList<String>(), themes.list()!!.toList())
         val s = staged(file)
-        assertEquals("default-pack", s.id)
+        assertEquals("xmb-pack", s.id)
         assertEquals(setOf("theme.json") + export.files.map { it.path }, tree(s.dir))
         for (f in export.files) {
             val bytes = TestAssets.platform.openAsset("${ThemePackLoader.DEFAULT_DIR}/${f.path}").use { it.readBytes() }

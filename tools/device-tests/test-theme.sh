@@ -50,7 +50,7 @@ category 0
 section "Settings"
 press DPAD_DOWN 3 KEYCODE_DPAD_CENTER
 expect "Theme pack" "Theme section lists theme packs"
-expect "Default" "the built-in Default pack is active"
+expect "XMB" "the built-in Default pack is active"
 # Colors: Theme color, Adaptive colors, Circadian curve, Battery alert tint.
 press DPAD_DOWN 2 KEYCODE_DPAD_CENTER
 expect "Lavender" "Theme ▸ Colors shows the current theme color"
@@ -358,7 +358,7 @@ pause 1.5
 top_list
 key KEYCODE_DPAD_CENTER
 pause 1.5
-expect "Default" "cycling returns to the Default pack"
+expect "XMB" "cycling returns to the Default pack"
 key KEYCODE_BACK
 
 section "Theme import and variants"
@@ -450,7 +450,7 @@ top_list
 key KEYCODE_BUTTON_Y
 press DPAD_UP 8 KEYCODE_DPAD_CENTER
 pause 1.5
-expect "Default" "Theme pack Options switch back to Default"
+expect "XMB" "Theme pack Options switch back to Default"
 expect_not "Theme variant" "Default has no Theme variant row"
 key KEYCODE_BACK
 adb shell rm -rf /sdcard/Xross/themes/smoke-variants /sdcard/Xross/themes/smoke-variants-2 /sdcard/Download/smoke_variants.xtheme /sdcard/Download/smoke_slip.xtheme
@@ -1843,14 +1843,14 @@ expect_not "Base look only" "no variant rows for a pack without variants"
 key KEYCODE_BACK
 xshots def
 open_export
-export_as 0 "Default"
-adb shell ls /sdcard/Xross/themes/default-pack/theme.json >/dev/null 2>&1 && ok "the whole pack is written to Xross/themes/default-pack" || bad "no default-pack folder"
-n=$(adb shell 'ls /sdcard/Xross/themes/default-pack/sounds /sdcard/Xross/themes/default-pack/icons' | grep -cE '\.(wav|svg)$')
-[ "$n" -eq 36 ] && ok "…with its 7 sounds and 29 icons from the APK assets" || bad "default-pack has $n sounds and icons, not 36"
-adb shell cat /sdcard/Xross/themes/default-pack/theme.json | grep -q '"FLAT_GLASS"' && ok "…and surfaces.json merged into its one theme.json" || bad "surfaces not in theme.json"
+export_as 0 "XMB"
+adb shell ls /sdcard/Xross/themes/xmb-pack/theme.json >/dev/null 2>&1 && ok "the whole pack is written to Xross/themes/xmb-pack" || bad "no xmb-pack folder"
+n=$(adb shell 'ls /sdcard/Xross/themes/xmb-pack/sounds /sdcard/Xross/themes/xmb-pack/icons' | grep -cE '\.(wav|svg)$')
+[ "$n" -eq 36 ] && ok "…with its 7 sounds and 29 icons from the APK assets" || bad "xmb-pack has $n sounds and icons, not 36"
+adb shell cat /sdcard/Xross/themes/xmb-pack/theme.json | grep -q '"FLAT_GLASS"' && ok "…and surfaces.json merged into its one theme.json" || bad "surfaces not in theme.json"
 adb shell ls /sdcard/Xross/themes/ | grep -q '^\.export-' && bad "a staging folder was left behind" || ok "no staging folder is left behind"
-switch_to "Default"
-[ "$(display_get themePack)" = '"default-pack"' ] && ok "Switch to makes default-pack the active pack" || bad "themePack is $(display_get themePack)"
+switch_to "XMB"
+[ "$(display_get themePack)" = '"xmb-pack"' ] && ok "Switch to makes xmb-pack the active pack" || bad "themePack is $(display_get themePack)"
 xshots defpack
 same_look def defpack "the exported Default pack looks the same as the built-in one"
 
@@ -1859,8 +1859,8 @@ display_set 'd["themePack"] = "default"; d["theme"] = "CRIMSON"; d["effects"] = 
 open_export
 press DPAD_DOWN 1
 expect "With your picks: 3 layout values, 3 effects, 2 components, surface" "Current look lists the user's picks"
-export_as 0 "Default (my look)"
-switch_to "Default (my look)"
+export_as 0 "XMB (my look)"
+switch_to "XMB (my look)"
 [ "$(display_get theme)" = '"PACK"' ] && [ "$(display_get effects | grep -c GOLD)" = 0 ] && [ "$(display_get surfaceStyle)" = '""' ] \
   && ok "Switch to a current look uses its colours and clears the user layer" || bad "after Switch to: theme $(display_get theme), effects $(display_get effects)"
 
@@ -1938,9 +1938,9 @@ xshots photo
 open_export
 press DPAD_DOWN 1
 expect "wallpaper" "Current look counts the picked wallpaper"
-export_as 0 "Default (my look)"
-adb shell ls /sdcard/Xross/themes/default-my-look-2/wallpaper.png >/dev/null 2>&1 && ok "the picture is copied as wallpaper.png" || bad "no wallpaper.png in the export ($(adb shell ls /sdcard/Xross/themes/))"
-switch_to "Default (my look)"
+export_as 0 "XMB (my look)"
+adb shell ls /sdcard/Xross/themes/xmb-my-look-2/wallpaper.png >/dev/null 2>&1 && ok "the picture is copied as wallpaper.png" || bad "no wallpaper.png in the export ($(adb shell ls /sdcard/Xross/themes/))"
+switch_to "XMB (my look)"
 adb shell dumpsys activity permissions 2>/dev/null | grep -q smoke_export && bad "the picker's grant is still held" || ok "Switch to lets go of the picker's grant"
 xshots photopack
 same_look photo photopack "the export with the picked wallpaper looks the same"
@@ -1949,7 +1949,7 @@ adb shell rm -f /sdcard/Download/smoke_export.png; media_scan
 adb shell am force-stop "$PKG"; adb logcat -c; start_app
 adb logcat -d -s XrossWallpaper:I | tail -1 | grep -q "wallpaper=pack .*opaque=true" \
   && ok "the export shows the copied picture with the original gone" || bad "no pack wallpaper ($(adb logcat -d -s XrossWallpaper:I | tail -1))"
-adb shell rm -rf /sdcard/Xross/themes/default-pack /sdcard/Xross/themes/default-my-look /sdcard/Xross/themes/default-my-look-2 \
+adb shell rm -rf /sdcard/Xross/themes/xmb-pack /sdcard/Xross/themes/xmb-my-look /sdcard/Xross/themes/xmb-my-look-2 \
   /sdcard/Xross/themes/export_stress /sdcard/Xross/themes/export-stress "'/sdcard/Xross/themes/export-stress-base-look'" \
   /sdcard/Xross/themes/export-stress-ember /sdcard/Xross/themes/export-stress-mono /sdcard/Xross/themes/export-stress-my-look
 display_set 'd["themePack"] = "default"; d["wave"] = True'
@@ -1980,7 +1980,7 @@ import_doc() {
   key KEYCODE_DPAD_CENTER; pause 2
   pick "$1"
 }
-adb shell rm -rf /sdcard/Download/default-pack.xtheme /sdcard/Download/default-my-look.xtheme /sdcard/Xross/themes/default-pack /sdcard/Xross/themes/default-my-look
+adb shell rm -rf /sdcard/Download/xmb-pack.xtheme /sdcard/Download/xmb-my-look.xtheme /sdcard/Xross/themes/xmb-pack /sdcard/Xross/themes/xmb-my-look
 display_set 'd.update({"wave": False, "themePack": "default", "themeVariant": "", "theme": "LAVENDER", "effects": {}, "components": {}, "layout": {}, "surfaceStyle": "", "customWallpaper": "", "adaptiveGamePalette": None, "circadianCurve": None, "batteryTint": None, "quickProfile": "NONE", "waveTint": "THEME"})'
 # The Theme pack row's Options ▸ Share as .xtheme… (the last row) ▸ Default ▸ Whole pack.
 category 0; press DPAD_DOWN 3 KEYCODE_DPAD_CENTER; top_list
@@ -1988,40 +1988,40 @@ key KEYCODE_BUTTON_Y
 press DPAD_DOWN 25
 expect "Share as .xtheme" "the Theme pack row's Options offer Share as .xtheme…"
 key KEYCODE_DPAD_CENTER; pause 0.8
-expect "Default" "…for every installed pack, the built-in Default pack included"
+expect "XMB" "…for every installed pack, the built-in Default pack included"
 key KEYCODE_DPAD_CENTER; pause 1
 expect "Share Default" "…then the scope list"
 key KEYCODE_DPAD_CENTER; pause 0.8
 expect "Name the shared theme" "…then the name entry"
 key KEYCODE_ENTER; pause 2
-expect "pick where to save default-pack.xtheme" "the confirm panel names the file"
+expect "pick where to save xmb-pack.xtheme" "the confirm panel names the file"
 expect_not "Includes your wallpaper photo" "…and no photo warning without a picked wallpaper"
 key KEYCODE_DPAD_CENTER
-save_doc default-pack.xtheme
-adb shell ls /sdcard/Xross/themes | grep -q '^default-pack$' && bad "sharing wrote a folder" || ok "sharing the whole pack writes no folder in Xross/themes"
-adb pull /sdcard/Download/default-pack.xtheme "$XT_TMP/default-pack.xtheme" >/dev/null 2>&1
-n=$(unzip -Z1 "$XT_TMP/default-pack.xtheme" 2>/dev/null | grep -cE '^(sounds/.*\.wav|icons/.*\.svg)$')
-unzip -Z1 "$XT_TMP/default-pack.xtheme" 2>/dev/null | head -1 | grep -qx theme.json && [ "$n" -eq 36 ] \
+save_doc xmb-pack.xtheme
+adb shell ls /sdcard/Xross/themes | grep -q '^xmb-pack$' && bad "sharing wrote a folder" || ok "sharing the whole pack writes no folder in Xross/themes"
+adb pull /sdcard/Download/xmb-pack.xtheme "$XT_TMP/xmb-pack.xtheme" >/dev/null 2>&1
+n=$(unzip -Z1 "$XT_TMP/xmb-pack.xtheme" 2>/dev/null | grep -cE '^(sounds/.*\.wav|icons/.*\.svg)$')
+unzip -Z1 "$XT_TMP/xmb-pack.xtheme" 2>/dev/null | head -1 | grep -qx theme.json && [ "$n" -eq 36 ] \
   && ok "…theme.json first, with the 7 sounds and 29 icons from the APK assets" || bad "the archive has $n sounds and icons"
 media_scan
-import_doc default-pack.xtheme
-for _ in $(seq 16); do settings_has '"themePack": "default-pack"' && break; pause 0.5; done
-settings_has '"themePack": "default-pack"' && ok "the shared file imports back as default-pack and is applied" || bad "default-pack isn't active"
+import_doc xmb-pack.xtheme
+for _ in $(seq 16); do settings_has '"themePack": "xmb-pack"' && break; pause 0.5; done
+settings_has '"themePack": "xmb-pack"' && ok "the shared file imports back as xmb-pack and is applied" || bad "xmb-pack isn't active"
 
 # A current look, exported, shared from the saved menu, its folder deleted, imported back.
 display_set 'd["themePack"] = "default"; d["theme"] = "CRIMSON"; d["effects"] = {"focusFrameStyle": "GOLD_BEZEL", "iconMask": "CIRCLE", "backgroundFilter": "SCANLINES"}; d["components"] = {"batteryMode": "PERCENTAGE", "statusBarRight": ["BATTERY", "CLOCK", "AVATAR"]}; d["layout"] = {"preset": "PSP_CENTER", "uiScale": 1.1, "itemSpacingDp": 20}; d["surfaceStyle"] = "Y2K_GLOSSY_BEZEL"'
 open_export
-export_as 1 "Default (my look)"
+export_as 1 "XMB (my look)"
 press DPAD_DOWN 2
 expect "Share as .xtheme" "after an export: Share as .xtheme…"
 key KEYCODE_DPAD_CENTER
-save_doc default-my-look.xtheme
-adb shell rm -rf /sdcard/Xross/themes/default-my-look; pause 1
+save_doc xmb-my-look.xtheme
+adb shell rm -rf /sdcard/Xross/themes/xmb-my-look; pause 1
 media_scan
-import_doc default-my-look.xtheme
-for _ in $(seq 16); do adb shell ls /sdcard/Xross/themes/default-my-look/theme.json >/dev/null 2>&1 && break; pause 0.5; done
-adb shell ls /sdcard/Xross/themes/default-my-look/theme.json >/dev/null 2>&1 && ok "the deleted export comes back from its file" || bad "default-my-look not re-imported"
-adb shell rm -rf /sdcard/Download/default-pack.xtheme /sdcard/Download/default-my-look.xtheme /sdcard/Xross/themes/default-pack /sdcard/Xross/themes/default-my-look
+import_doc xmb-my-look.xtheme
+for _ in $(seq 16); do adb shell ls /sdcard/Xross/themes/xmb-my-look/theme.json >/dev/null 2>&1 && break; pause 0.5; done
+adb shell ls /sdcard/Xross/themes/xmb-my-look/theme.json >/dev/null 2>&1 && ok "the deleted export comes back from its file" || bad "xmb-my-look not re-imported"
+adb shell rm -rf /sdcard/Download/xmb-pack.xtheme /sdcard/Download/xmb-my-look.xtheme /sdcard/Xross/themes/xmb-pack /sdcard/Xross/themes/xmb-my-look
 display_set 'd["themePack"] = "default"; d["wave"] = True'
 
 suite_end

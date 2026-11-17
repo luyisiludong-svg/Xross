@@ -285,7 +285,7 @@ class ThemePackLoader(
     private val platform: PackPlatform,
     private val themesDir: () -> File,
 ) {
-    /** Default first, then folder packs by name. Unreadable and v1 folders are skipped. */
+    /** Built-in packs first (Default, then the bundled ones), then folder packs by name. Unreadable and v1 folders are skipped. */
     fun discover(): List<ThemePackInfo> = scan().packs
 
     /** [discover], plus each skipped folder with a `theme.json` and the reason it was skipped. */
@@ -293,11 +293,12 @@ class ThemePackLoader(
         val packs = ArrayList<ThemePackInfo>()
         val rejected = ArrayList<RejectedPack>()
         builtIn()?.let(packs::add)
+        packs += bundled()
         val dir = themesDir()
         val folders = dir.listFiles()?.filter { it.isDirectory && !it.name.startsWith(".") }.orEmpty()
         for (folder in folders.sortedBy { it.name.lowercase(Locale.ROOT) }) {
             val id = folder.name
-            if (!ID.matches(id) || id.equals(DEFAULT_ID, ignoreCase = true)) continue
+            if (!ID.matches(id) || isBuiltIn(id)) continue
             if (find(folder, MANIFEST) == null) continue
             when (val r = readFolderManifest(folder)) {
                 is Read.Ok -> packs += ThemePackInfo(id, r.manifest, PackSource.Folder(folder), r.json)
@@ -316,12 +317,25 @@ class ThemePackLoader(
         return (r as? Read.Ok)?.let { ThemePackInfo(DEFAULT_ID, it.manifest, PackSource.Builtin(DEFAULT_DIR), it.json) }
     }
 
+    /** The packs bundled in the APK besides Default ([BUNDLED_IDS]); a broken one is left out. */
+    fun bundled(): List<ThemePackInfo> = BUNDLED_IDS.mapNotNull(::bundled)
+
+    private fun bundled(id: String): ThemePackInfo? {
+        val dir = "$THEMES_DIR/$id"
+        val r = readManifest(MANIFEST) { name -> runCatching { platform.openAsset("$dir/$name").bufferedReader().use { it.readText() } }.getOrNull() }
+        return (r as? Read.Ok)?.let { ThemePackInfo(id, it.manifest, PackSource.Builtin(dir), it.json) }
+    }
+
     /** Loads [id], or the Default pack when [id] is unknown or unreadable. */
     fun load(id: String): LoadedTheme = (loadStrict(id) as? PackLoad.Ok)?.theme ?: base()
 
     /** Loads [id] without falling back, so a hot reload can keep the last good theme. */
     fun loadStrict(id: String): PackLoad {
-        if (id.equals(DEFAULT_ID, ignoreCase = true) || id.isBlank()) return PackLoad.Ok(base())
+        if (isDefault(id)) return PackLoad.Ok(base())
+        BUNDLED_IDS.firstOrNull { it.equals(id, ignoreCase = true) }?.let { bid ->
+            val info = bundled(bid) ?: return PackLoad.Failed("The built-in $bid pack can't be read")
+            return PackLoad.Ok(resolve(info, base()))
+        }
         val folder = themesDir().listFiles()?.firstOrNull { it.isDirectory && it.name == id }
             ?: return PackLoad.Failed("$id is no longer in Xross/themes")
         return when (val r = readFolderManifest(folder)) {
@@ -338,9 +352,10 @@ class ThemePackLoader(
 
     /**
      * Changes when any file of folder pack [id] is added, removed or rewritten (names, sizes and
-     * modification times, two folders deep); 0 for the built-in pack.
+     * modification times, two folders deep); 0 for the built-in packs.
      */
     fun fingerprint(id: String): Long {
+        if (isBuiltIn(id)) return 0
         val folder = themesDir().listFiles()?.firstOrNull { it.isDirectory && it.name == id } ?: return 0
         var h = 17L
         fun walk(dir: File, depth: Int) {
@@ -748,6 +763,23 @@ class ThemePackLoader(
     companion object {
         const val DEFAULT_ID = "default"
         const val DEFAULT_DIR = "themes/default"
+        const val THEMES_DIR = "themes"
+        /** The Phosphor look (Phosphor icons over the Default pack's XMB look). */
+        const val XROSS_ID = "xross"
+        /** Packs shipped in the APK under `themes/<id>` besides Default, in menu order after it. */
+        val BUNDLED_IDS = listOf(XROSS_ID)
+        /**
+         * Former ids of the Default pack: "xmb" was the classic look bundled beside it before it
+         * became the Default. Settings that saved one load the Default pack, and the id stays reserved.
+         */
+        val DEFAULT_ALIASES = listOf("xmb")
+
+        /** The Default pack's id, one of its [DEFAULT_ALIASES], or blank. */
+        fun isDefault(id: String): Boolean =
+            id.isBlank() || id.equals(DEFAULT_ID, ignoreCase = true) || DEFAULT_ALIASES.any { it.equals(id, ignoreCase = true) }
+
+        /** Default or a bundled pack: read from the APK, never from `Xross/themes/`, and its id is reserved. */
+        fun isBuiltIn(id: String): Boolean = isDefault(id) || BUNDLED_IDS.any { it.equals(id, ignoreCase = true) }
         const val MANIFEST = "theme.json"
         const val SOUNDS = "sounds"
         const val ICONS = "icons"

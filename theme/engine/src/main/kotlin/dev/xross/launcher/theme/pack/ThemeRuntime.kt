@@ -21,7 +21,7 @@ class ThemeRuntime(
     private val _active = MutableStateFlow(loader.load(ThemePackLoader.DEFAULT_ID))
     val active: StateFlow<LoadedTheme> = _active.asStateFlow()
 
-    private val _packs = MutableStateFlow(listOfNotNull(loader.builtIn()))
+    private val _packs = MutableStateFlow(listOfNotNull(loader.builtIn()) + loader.bundled())
     /** Default first, then `Xross/themes/` packs; refreshed by [rediscover]. */
     val packs: StateFlow<List<ThemePackInfo>> = _packs.asStateFlow()
 
@@ -65,7 +65,7 @@ class ThemeRuntime(
      */
     suspend fun hotReload(): String? = lock.withLock {
         val id = _active.value.id
-        if (id == ThemePackLoader.DEFAULT_ID) return@withLock null
+        if (ThemePackLoader.isBuiltIn(id)) return@withLock null
         withContext(io) {
             val print = loader.fingerprint(id)
             when (val r = loader.loadStrict(id)) {
@@ -85,7 +85,7 @@ class ThemeRuntime(
     /** [hotReload] if the active pack changed on disk since it was loaded (missed file events). */
     suspend fun reloadIfChanged(): String? {
         val id = _active.value.id
-        if (id == ThemePackLoader.DEFAULT_ID) return null
+        if (ThemePackLoader.isBuiltIn(id)) return null
         val print = withContext(io) { loader.fingerprint(id) }
         return if (print != loadedPrint) hotReload() else null
     }

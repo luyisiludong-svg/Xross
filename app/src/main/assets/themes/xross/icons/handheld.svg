@@ -1,0 +1,4 @@
+<!-- Xross draft in the Phosphor style: a landscape handheld. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="8.00 8.00 240.00 240.00">
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M48,56H208a40,40,0,0,1,40,40v64a40,40,0,0,1-40,40H48a40,40,0,0,1-40-40V96A40,40,0,0,1,48,56ZM84,80H172a8,8,0,0,1,8,8v80a8,8,0,0,1-8,8H84a8,8,0,0,1-8-8V88A8,8,0,0,1,84,80ZM36,110h12v12h12v12h-12v12h-12v-12h-12v-12h12ZM194,140a10,10,0,1,0,20,0a10,10,0,1,0,-20,0ZM216,116a10,10,0,1,0,20,0a10,10,0,1,0,-20,0Z"/>
+</svg>

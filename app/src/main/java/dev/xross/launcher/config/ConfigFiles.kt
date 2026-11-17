@@ -14,6 +14,7 @@ import dev.xross.launcher.theme.AvatarStyleLimits
 import dev.xross.launcher.theme.WaveLimits
 import dev.xross.launcher.theme.WaveTint
 import dev.xross.launcher.theme.pack.ThemeManifest
+import dev.xross.launcher.theme.pack.ThemePackLoader
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -324,7 +325,8 @@ object ConfigCodec {
         deadzone = f.controls.stickDeadzone.finiteOr(D.deadzone).coerceIn(0f, 0.95f),
         axialDeadzone = f.controls.axialDeadzone.finiteOr(D.axialDeadzone).coerceIn(0f, 0.95f),
         theme = f.display.theme.ifBlank { D.theme },
-        themePack = f.display.themePack.trim().ifBlank { D.themePack },
+        // A former id of the Default pack ("xmb") is saved back as "default".
+        themePack = f.display.themePack.trim().let { if (ThemePackLoader.isDefault(it)) ThemePackLoader.DEFAULT_ID else it },
         surfaceStyle = f.display.surfaceStyle.trim().take(48),
         themeVariant = f.display.themeVariant.trim().take(48),
         customWallpaper = f.display.customWallpaper.trim().take(MAX_WALLPAPER_CHARS),

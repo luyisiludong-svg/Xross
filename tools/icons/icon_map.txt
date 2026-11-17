@@ -1,6 +1,10 @@
+# LEGACY: the Default pack no longer uses these icons. It ships Phosphor icons
+# (assets/icons/phosphor, credits in app/src/main/assets/themes/xross/CREDITS.md).
+# Running `build` below would bring the old glyphs back.
+#
 # Launcher role = source icon id (run `svg_icons.py list` to see ids and previews).
 # Regenerate the Default theme pack's icons with:
-#   python3 tools/icons/svg_icons.py build assets/icons tools/icons/icon_map.txt app/src/main/assets/themes/default/icons
+#   python3 tools/icons/svg_icons.py build assets/icons tools/icons/icon_map.txt app/src/main/assets/themes/xross/icons
 
 # Category bar
 settings      = group1_04   # toolbox

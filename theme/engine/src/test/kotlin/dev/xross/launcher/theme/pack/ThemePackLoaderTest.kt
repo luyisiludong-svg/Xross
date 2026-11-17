@@ -1,6 +1,8 @@
 package dev.xross.launcher.theme.pack
 
 import dev.xross.launcher.theme.pack.PackSource
+import dev.xross.launcher.theme.pack.SoundRole
+import dev.xross.launcher.theme.pack.SoundSource
 import dev.xross.launcher.theme.pack.ThemeManifest
 import dev.xross.launcher.theme.pack.ThemePackLoader
 import dev.xross.launcher.theme.pack.iconId
@@ -83,6 +85,44 @@ class ThemePackLoaderTest {
         val sounds = TestAssets.platform.listAssets("$dir/sounds").orEmpty().map { "sounds/$it" }
         assertEquals((icons + sounds).toSet(), t.files)
         for (path in t.files) TestAssets.platform.openAsset("$dir/$path").close()
+    }
+
+    @Test fun theBundledXrossPackIsListedAfterDefaultAndAFolderCantTakeItsId() {
+        File(themes, "xross").apply { mkdirs() }.resolve("theme.json").writeText("""{"schemaVersion": 2, "name": "Impostor"}""")
+        File(themes, "sakura").apply { mkdirs() }.resolve("theme.json").writeText("""{"schemaVersion": 2, "name": "Sakura"}""")
+        val packs = loader.discover()
+        assertEquals(listOf("default", "xross", "sakura"), packs.map { it.id })
+        assertEquals("XMB", packs[0].name)
+        val xross = packs[1]
+        assertEquals("Xross", xross.name)
+        assertEquals(PackSource.Builtin("themes/xross"), xross.source)
+        assertTrue(xross.builtIn)
+        // Loading by id reads the APK's copy, not the folder of the same name.
+        assertEquals("Xross", loader.load("xross").info.name)
+        assertEquals(0L, loader.fingerprint("xross"))
+    }
+
+    @Test fun theFormerXmbIdLoadsTheDefaultPackAndStaysReserved() {
+        File(themes, "xmb").apply { mkdirs() }.resolve("theme.json").writeText("""{"schemaVersion": 2, "name": "Impostor"}""")
+        assertEquals(listOf("default", "xross"), loader.discover().map { it.id })
+        val t = loader.load("xmb")
+        assertEquals(ThemePackLoader.DEFAULT_ID, t.id)
+        assertEquals("XMB", t.info.name)
+        assertTrue(ThemePackLoader.isBuiltIn("XMB"))
+    }
+
+    @Test fun theBundledXrossPackLoadsEveryIconAndSoundFromItsOwnAssets() {
+        val t = loader.load(ThemePackLoader.XROSS_ID)
+        assertEquals("xross", t.id)
+        assertTrue(t.problems.toString(), t.problems.isEmpty())
+        for (key in GlyphKey.entries) {
+            val file = t.info.manifest.icons[key.iconId] ?: "${key.iconId}.svg"
+            assertTrue("$key from icons/$file", "icons/$file" in t.files)
+        }
+        for (role in SoundRole.entries) {
+            val src = t.sounds[role]
+            assertTrue("$role: $src", src is SoundSource.Asset && src.path.startsWith("themes/xross/sounds/"))
+        }
     }
 
     @Test fun aFolderPackDoesNotListWhatTheDefaultPackLendsIt() {

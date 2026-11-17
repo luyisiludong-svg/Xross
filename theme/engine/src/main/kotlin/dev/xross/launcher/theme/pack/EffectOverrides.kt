@@ -101,7 +101,7 @@ enum class EffectSlot(val title: String, val choices: List<Pair<String, String>>
         listOf(
             ShaderPreset.WAVE.name to "Wave", ShaderPreset.ASCII_MATRIX.name to "Matrix", ShaderPreset.BOKEH.name to "Bokeh",
             ShaderPreset.STARFIELD.name to "Starfield", ShaderPreset.CRT.name to "CRT",
-            ShaderPreset.BLACK_HOLE.name to "Black hole",
+            ShaderPreset.BLACK_HOLE.name to "Black hole", ShaderPreset.MECHA.name to "Mecha",
         ),
     ),
     BACKGROUND_FILTER(

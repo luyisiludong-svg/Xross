@@ -122,7 +122,7 @@ class ThemeExportTest {
         // The built-in pack's name never takes the reserved id.
         val d = loader.load(ThemePackLoader.DEFAULT_ID)
         val de = LookExporter.export(d, ExportScope.WholePack, "", date, loader.packFiles(d.info))
-        assertEquals("default-pack", (writer.write(de, reader(d)) as ExportResult.Saved).id)
+        assertEquals("xmb-pack", (writer.write(de, reader(d)) as ExportResult.Saved).id)
         assertTrue(File(themes, StressPack.ID).isDirectory)
     }
 

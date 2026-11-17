@@ -102,7 +102,7 @@ data class MenuSnapshot(
 /** What Settings ▸ Theme shows about theme packs. */
 data class ThemeSetup(
     /** (id, name) of every pack, Default first. */
-    val packs: List<Pair<String, String>> = listOf(ThemePackLoader.DEFAULT_ID to "Default"),
+    val packs: List<Pair<String, String>> = listOf(ThemePackLoader.DEFAULT_ID to "XMB"),
     val activeId: String = ThemePackLoader.DEFAULT_ID,
     val activeName: String = "Default",
     val activeAuthor: String = "",

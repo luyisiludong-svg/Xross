@@ -154,7 +154,7 @@ class ThemeArchiveTest {
         assertFalse(s.exists)
         assertTrue(s.dir.name.startsWith(ThemeArchive.STAGING_PREFIX))
         // Hidden: discovery doesn't offer a half-finished import.
-        assertEquals(listOf(ThemePackLoader.DEFAULT_ID), loader.discover().map { it.id })
+        assertEquals(emptyList<String>(), loader.discover().filterNot { it.builtIn }.map { it.id })
         assertTrue(File(s.dir, "icons/platforms/dc.png").isFile)
         // 2b.4c: the pack-root wallpaper and the default CUSTOM shader file come along.
         assertTrue(File(s.dir, "wallpaper.png").isFile && File(s.dir, "shader.frag").isFile && File(s.dir, "wallpapers/night.webp").isFile)
@@ -238,6 +238,8 @@ class ThemeArchiveTest {
         assertEquals("my-pack-1", ThemeArchive.idFor("", "My Pack (1).xtheme", null))
         assertEquals("sakura", ThemeArchive.idFor("", "x.zip", "Sakura"))
         assertEquals("default-pack", ThemeArchive.idFor("Default", "x.xtheme", null))
+        assertEquals("xmb-pack", ThemeArchive.idFor("XMB", "x.xtheme", null))
+        assertEquals("xross-pack", ThemeArchive.idFor("Xross", "x.xtheme", null))
         assertEquals("theme", ThemeArchive.idFor("☆", "☆.xtheme", null))
         assertTrue(ThemeArchive.idFor("a".repeat(200), "", null).length <= 48)
     }
@@ -251,7 +253,7 @@ class ThemeArchiveTest {
         val s = staged(a.stage(zip("y2k.xtheme", "theme.json" to text(manifest), "sounds/cursor.wav" to text("wav")), "y2k.xtheme"))
         assertEquals(InstallResult.Installed("y2k-cyber-dream"), a.install(s, replace = false))
         assertOnly("y2k-cyber-dream")
-        assertEquals(listOf("default", "y2k-cyber-dream"), loader.discover().map { it.id })
+        assertEquals(listOf("y2k-cyber-dream"), loader.discover().filterNot { it.builtIn }.map { it.id })
         assertEquals(0xFF1B1829.toInt(), loader.load("y2k-cyber-dream").palette!!.top)
     }
 

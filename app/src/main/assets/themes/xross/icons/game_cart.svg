@@ -1,0 +1,4 @@
+<!-- Based on Phosphor hard-drive-fill (MIT): round light swapped for a square, moved up. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="16.00 16.00 224.00 224.00">
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M224,64H32A16,16,0,0,0,16,80v96a16,16,0,0,0,16,16H224a16,16,0,0,0,16-16V80A16,16,0,0,0,224,64ZM172,96h28v28h-28Z"/>
+</svg>

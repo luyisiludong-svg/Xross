@@ -18,6 +18,8 @@ enum class ShaderPreset(val file: String?, val label: String) {
     CRT("crt.frag", "CRT"),
     /** Gargantua-style black hole, ray traced through Schwarzschild space and drawn in ASCII. */
     BLACK_HOLE("black_hole.frag", "Black hole"),
+    /** A battle-worn mecha kneeling over its sword, drawn in ASCII; the core ignites after launch. */
+    MECHA("mecha.frag", "Mecha"),
     CUSTOM(null, "Custom shader"),
     ;
 
