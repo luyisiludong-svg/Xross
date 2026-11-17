@@ -17,6 +17,7 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
 import dev.xross.launcher.model.GlyphKey
+import dev.xross.launcher.theme.shader.ShaderPreset
 
 /**
  * 2b.8-prep: a loaded pack keeps the merged manifest JSON it was decoded from
@@ -91,7 +92,7 @@ class ThemePackLoaderTest {
         File(themes, "xross").apply { mkdirs() }.resolve("theme.json").writeText("""{"schemaVersion": 2, "name": "Impostor"}""")
         File(themes, "sakura").apply { mkdirs() }.resolve("theme.json").writeText("""{"schemaVersion": 2, "name": "Sakura"}""")
         val packs = loader.discover()
-        assertEquals(listOf("default", "xross", "sakura"), packs.map { it.id })
+        assertEquals(listOf("default", "xross", "blackhole", "sakura"), packs.map { it.id })
         assertEquals("XMB", packs[0].name)
         val xross = packs[1]
         assertEquals("Xross", xross.name)
@@ -104,11 +105,24 @@ class ThemePackLoaderTest {
 
     @Test fun theFormerXmbIdLoadsTheDefaultPackAndStaysReserved() {
         File(themes, "xmb").apply { mkdirs() }.resolve("theme.json").writeText("""{"schemaVersion": 2, "name": "Impostor"}""")
-        assertEquals(listOf("default", "xross"), loader.discover().map { it.id })
+        assertEquals(listOf("default", "xross", "blackhole"), loader.discover().map { it.id })
         val t = loader.load("xmb")
         assertEquals(ThemePackLoader.DEFAULT_ID, t.id)
         assertEquals("XMB", t.info.name)
         assertTrue(ThemePackLoader.isBuiltIn("XMB"))
+    }
+
+    @Test fun theBundledGargantuaPackLoadsItsShaderAndFontsFromTheApk() {
+        // A folder of the same id is ignored: the APK's copy is the pack.
+        File(themes, "Blackhole").apply { mkdirs() }.resolve("theme.json").writeText("""{"schemaVersion": 2, "name": "Impostor"}""")
+        val t = loader.load("Blackhole")
+        assertEquals(ThemePackLoader.BLACKHOLE_ID, t.id)
+        assertEquals("Gargantua", t.info.name)
+        assertTrue(t.problems.toString(), t.problems.isEmpty())
+        assertEquals(ShaderPreset.CUSTOM, t.shader.preset)
+        assertTrue(t.customShaders.values.single().contains("Gargantua"))
+        assertTrue("black_hole.frag" in t.files)
+        assertTrue(t.fonts.display != null && t.fonts.body != null && t.fonts.mono != null)
     }
 
     @Test fun theBundledXrossPackLoadsEveryIconAndSoundFromItsOwnAssets() {

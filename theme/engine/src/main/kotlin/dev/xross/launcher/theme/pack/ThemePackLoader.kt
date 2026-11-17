@@ -305,10 +305,9 @@ class ThemePackLoader(
                 is Read.Bad -> rejected += RejectedPack(id, r.reason)
             }
         }
-        return PackScan(
-            packs.sortedWith(compareBy<ThemePackInfo>({ !it.builtIn }, { it.name.lowercase(Locale.ROOT) })),
-            rejected,
-        )
+        // Built-in packs keep their order (Default, then BUNDLED_IDS); folder packs follow by name.
+        val (builtIns, folderPacks) = packs.partition { it.builtIn }
+        return PackScan(builtIns + folderPacks.sortedBy { it.name.lowercase(Locale.ROOT) }, rejected)
     }
 
     /** The Default pack's manifest; null only if the APK is broken. */
@@ -557,18 +556,18 @@ class ThemePackLoader(
     // region Files inside a pack
 
     /**
-     * A CUSTOM shader's text, read at load so a hot reload (ThemeWatcher) picks up an edit. Only
-     * folder packs carry one; a missing, oversized or binary file is reported and left out (the
-     * renderer then shows the wave and says why).
+     * A CUSTOM shader's text, read at load so a hot reload (ThemeWatcher) picks up an edit. Folder
+     * packs read it from disk, bundled packs (Gargantua) from the APK; a missing, oversized or binary
+     * file is reported and left out (the renderer then shows the wave and says why).
      */
     private fun shaderText(pack: ThemePackInfo, path: String, problems: MutableList<String>, files: MutableSet<String>): String? =
         packText(pack, "Shader", path, problems, files)
 
     /** A pack's source file (a CUSTOM shader, or a CUSTOM UI filter's AGSL, 2b.4f) as text; see [shaderText]. */
     private fun packText(pack: ThemePackInfo, what: String, path: String, problems: MutableList<String>, files: MutableSet<String>): String? {
-        val dir = (pack.source as? PackSource.Folder)?.dir ?: run {
-            problems += if (what == "Shader") "Shader $path: only folder packs can bring a CUSTOM shader" else "$what $path: only folder packs can bring their own code"
-            return null
+        val dir = when (val s = pack.source) {
+            is PackSource.Folder -> s.dir
+            is PackSource.Builtin -> return builtinText(s.dir, what, path, problems, files)
         }
         val file = inside(dir, path)?.takeIf { it.isFile } ?: run {
             problems += "$what $path not found in the pack"
@@ -584,6 +583,39 @@ class ThemePackLoader(
             return null
         }
         relativePath(dir, file)?.let(files::add)
+        return text
+    }
+
+    /** [packText] for a pack bundled in the APK (Gargantua's shader): the same size and text checks. */
+    private fun builtinText(dir: String, what: String, path: String, problems: MutableList<String>, files: MutableSet<String>): String? {
+        val asset = "$dir/$path"
+        if (path.split('/', '\\').any { it == ".." } || !assetExists(asset)) {
+            problems += "$what $path not found in the pack"
+            return null
+        }
+        // At most one byte past the cap, so an oversized asset is never read whole.
+        val bytes = runCatching {
+            platform.openAsset(asset).use { input ->
+                val out = java.io.ByteArrayOutputStream()
+                val buf = ByteArray(8192)
+                while (out.size() <= MAX_SHADER_BYTES) {
+                    val n = input.read(buf, 0, minOf(buf.size.toLong(), MAX_SHADER_BYTES + 1 - out.size()).toInt())
+                    if (n < 0) break
+                    out.write(buf, 0, n)
+                }
+                out.toByteArray()
+            }
+        }.getOrNull()
+        if (bytes != null && bytes.size > MAX_SHADER_BYTES) {
+            problems += "$what $path is larger than ${MAX_SHADER_BYTES / 1024} KB"
+            return null
+        }
+        val text = bytes?.toString(Charsets.UTF_8)
+        if (text == null || text.any { it == '\u0000' }) {
+            problems += "$what $path can't be read as text"
+            return null
+        }
+        files += path
         return text
     }
 
@@ -766,8 +798,10 @@ class ThemePackLoader(
         const val THEMES_DIR = "themes"
         /** The Phosphor look (Phosphor icons over the Default pack's XMB look). */
         const val XROSS_ID = "xross"
+        /** Gargantua: the ASCII black hole shader in Redaction 50. */
+        const val BLACKHOLE_ID = "blackhole"
         /** Packs shipped in the APK under `themes/<id>` besides Default, in menu order after it. */
-        val BUNDLED_IDS = listOf(XROSS_ID)
+        val BUNDLED_IDS = listOf(XROSS_ID, BLACKHOLE_ID)
         /**
          * Former ids of the Default pack: "xmb" was the classic look bundled beside it before it
          * became the Default. Settings that saved one load the Default pack, and the id stays reserved.

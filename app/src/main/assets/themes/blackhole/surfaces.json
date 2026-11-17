@@ -1,0 +1,23 @@
+{
+  "surfaces": {
+    "event_horizon": {
+      "label": "Event horizon",
+      "backdropBlurDp": 16,
+      "fill": {
+        "type": "LINEAR_GRADIENT",
+        "angle": 180,
+        "stops": [["#1a0b04", 0.0, 0.72], ["#0c0503", 0.6, 0.82], ["#030101", 1.0, 0.9]]
+      },
+      "sheen": { "heightPercent": 0.3, "gradient": [["#ffd9a8", 0.08], ["#ffd9a8", 0.0]] },
+      "borders": [
+        {
+          "type": "INNER",
+          "widthDp": 1.25,
+          "brush": { "type": "SWEEP_GRADIENT", "colors": ["#b32109", "#f24d12", "#ffb354", "#ffe0ad", "#d1deff", "#ffb354", "#b32109"] }
+        }
+      ],
+      "shadows": [{ "offsetDp": [0, 4], "blurDp": 14, "color": "#000000", "opacity": 0.55 }],
+      "glow": { "color": "#ff8024", "radiusDp": 10, "intensity": 0.35 }
+    }
+  }
+}

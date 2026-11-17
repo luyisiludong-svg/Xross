@@ -1,0 +1,31 @@
+{
+    "schemaVersion": 2,
+    "name": "Gargantua",
+    "author": "Beluwhal",
+    "version": "1.2",
+    "description": "An ASCII black hole ray traced behind the menu, set in Redaction 50 (OFL). Warm accretion-disk orange over a near-black sky.",
+    "imports": ["surfaces.json"],
+    "palette": {
+        "canvas": "#9a3c12",
+        "accent": "#c46200",
+        "accentSecondary": "#d1deff",
+        "focusGold": "#ffb354"
+    },
+    "wave": {
+        "speed": 1.0,
+        "gradient": ["#9a3c12", "#2a0e04"]
+    },
+    "typography": {
+        "display": "fonts/Redaction50-Bold.ttf",
+        "body": "fonts/Redaction50-Regular.ttf",
+        "mono": "fonts/Redaction50-Regular.ttf"
+    },
+    "effects": {
+        "shaderPath": "black_hole.frag",
+        "surfaceStyle": "event_horizon",
+        "focusFrameStyle": "STATIC_NEON",
+        "bootIntro": "SHADER",
+        "launchCurtain": "IRIS",
+        "foregroundParticles": "NONE"
+    }
+}
