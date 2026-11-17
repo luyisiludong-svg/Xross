@@ -138,7 +138,7 @@ docs/                user guide, theme specification, implementation status, har
                      XMB fidelity, feasibility review, ScreenScraper API guide (English)
 .env.example         keys for local service credentials (.env itself is git-ignored)
 assets/docs/         PS3 and PSP instruction manuals (local reference only, git-ignored)
-assets/examples/     XMB reference screenshots and design mock-ups
+assets/              Xross screenshots and the app icon source (Xross_icon.svg)
 tools/icons/         SVG → VectorDrawable converter and icon role map
 tools/emulator-stub/ test-only emulator stand-ins (Gradle module :emulator-stub)
 tools/device-tests/  adb-driven device tests: quick smoke, five suites, run-all.sh, frame timing

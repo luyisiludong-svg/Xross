@@ -3,7 +3,7 @@
 ## Icons
 
 From [Phosphor Icons](https://phosphoricons.com), MIT License, Copyright (c) 2023 Phosphor Icons.
-The original downloads are in the repository at `assets/icons/phosphor/`. Each file in `icons/` names its source in a comment.
+The originals are at [phosphoricons.com](https://phosphoricons.com). Each file in `icons/` names its source in a comment.
 
 - **Used as-is** (cropped and renamed to the icon key): the fill weight of `file-plus`, `cube`,
   `download-simple`, `list-star`, `folder-simple`, `disc`, `game-controller`, `house-line`, `info`,

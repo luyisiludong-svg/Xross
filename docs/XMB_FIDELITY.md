@@ -13,7 +13,7 @@ for the code at `2c142d6` (Phase 2b.1). The remaining work is tracked in
 | PS3 instruction manual, CECH-2501A, system software 3.30 (`assets/docs/CECH-2501A-3.30_1.pdf`) | XMB basics (p. 11), PS button, options menu, on-screen keyboard (p. 34), USB content (p. 25), background color behavior (p. 44), settings layout |
 | PSP E1000 instruction manual, system software 6.50 (`assets/docs/ENUK_PSP-E1002_E1003-6.50.pdf`) | XMB and categories (pp. 16–17), multi-tap keyboard (pp. 20–21), Theme Settings color behavior (p. 29), power saving |
 | PSP Go instruction manual (`assets/docs/PSP-N1004_PSP Go_IM$en.pdf`) | XMB with busy icon (p. 24), categories (p. 25), Pause/Resume Game (p. 37), battery icon (p. 21) |
-| PSP home-menu screenshots (`assets/examples/main.*.jpg`, `PSP-BloodRed-Theme-4.webp`) | Proportions, typography, status bar, list layout |
+| PSP home-menu screenshots (no longer kept in the repository) | Proportions, typography, status bar, list layout |
 | Xross on a Galaxy A55 and the Android emulator (2026-11-10) | Current look and behavior |
 
 The manuals are hardware guides, so they describe the XMB's rules rather than its exact visuals.

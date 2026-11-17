@@ -1064,7 +1064,6 @@ generate their own files and don't use it. Never commit anything from that folde
 ## Appendix C — References
 
 - Gameplay and UX reference video: <https://www.youtube.com/watch?v=014gbBBHZ4s>
-- Design reference screenshots and mock-ups: `assets/examples/` (the RetroAchievements dashboard
-  follows `Screenshot 2026-11-11 at 19.15.40.png`)
+- Screenshots of the current build: `assets/Screenshot_*_Xross.jpg`
 - PS3 and PSP manuals: `assets/docs/` (local only, git-ignored; see docs/XMB_FIDELITY.md)
 - Repository: <https://github.com/luyisiludong-svg/Xross>

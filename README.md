@@ -33,10 +33,18 @@ them.
 
 ## Screenshots
 
-*Captures of the current build are still to come.* Until then,
-[`assets/examples/`](assets/examples/) holds the reference screenshots and design mock-ups the
-look is built from, and [`docs/XMB_FIDELITY.md`](docs/XMB_FIDELITY.md) compares Xross with the
-original menu screen by screen.
+<p>
+<img src="assets/Screenshot_20261117_130742_Xross.jpg" width="32%" alt="Xross screenshot 1">
+<img src="assets/Screenshot_20261117_130852_Xross.jpg" width="32%" alt="Xross screenshot 2">
+<img src="assets/Screenshot_20261117_130915_Xross.jpg" width="32%" alt="Xross screenshot 3">
+<img src="assets/Screenshot_20261117_130951_Xross.jpg" width="32%" alt="Xross screenshot 4">
+<img src="assets/Screenshot_20261117_131034_Xross.jpg" width="32%" alt="Xross screenshot 5">
+<img src="assets/Screenshot_20261117_131105_Xross.jpg" width="32%" alt="Xross screenshot 6">
+<img src="assets/Screenshot_20261117_131150_Xross.jpg" width="32%" alt="Xross screenshot 7">
+</p>
+
+[`docs/XMB_FIDELITY.md`](docs/XMB_FIDELITY.md) compares Xross with the original menu screen by
+screen.
 
 ## Features at a glance
 

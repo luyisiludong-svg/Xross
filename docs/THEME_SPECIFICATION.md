@@ -540,14 +540,8 @@ surfaces with Phosphor icons (MIT, credited in its `CREDITS.md`), and **Gargantu
 hole shader set in Redaction 50 (OFL). Bundled packs are listed right
 after Default, load from the APK, and their ids are reserved (`ThemePackLoader.BUNDLED_IDS`).
 
-The Phosphor icons come from `assets/icons` (the design SVGs): `tools/icons/svg_icons.py` splits the icon
-sheets and writes the ones listed in `tools/icons/icon_map.txt` as pack SVGs. To change an icon,
-edit the map and run:
-
-```bash
-python3 tools/icons/svg_icons.py list assets/icons /tmp/icons   # previews every icon id
-python3 tools/icons/svg_icons.py build assets/icons tools/icons/icon_map.txt app/src/main/assets/themes/xross/icons
-```
+The Phosphor icons are committed as pack SVGs; each names its source icon in a comment. To change
+one, download it from [phosphoricons.com](https://phosphoricons.com) and replace the file.
 
 ## 15. Components
 
