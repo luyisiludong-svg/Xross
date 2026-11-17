@@ -7,10 +7,12 @@
 ![Android API 28+](https://img.shields.io/badge/Android-API%2028%2B-3DDC84?logo=android&logoColor=white)
 ![Jetpack Compose](https://img.shields.io/badge/Jetpack-Compose-4285F4?logo=jetpackcompose&logoColor=white)
 ![OpenGL ES 3.0](https://img.shields.io/badge/OpenGL%20ES-3.0-5586A4?logo=opengl&logoColor=white)
-![Unit tests](https://img.shields.io/badge/unit%20tests-645%20passing-brightgreen)
-![Device checks](https://img.shields.io/badge/device%20checks-226%2F226-brightgreen)
-![Architecture](https://img.shields.io/badge/architecture-MVVM%20%C2%B7%20single%20module-blueviolet)
-![License](https://img.shields.io/badge/license-not%20yet%20chosen-lightgrey)
+![Release](https://img.shields.io/badge/release-0.2.0.1--beta-orange)
+![Unit tests](https://img.shields.io/badge/unit%20tests-990%2B%20passing-brightgreen)
+![Architecture](https://img.shields.io/badge/architecture-MVVM%20%C2%B7%20multi--module-blueviolet)
+![License](https://img.shields.io/badge/license-Apache%202.0-blue)
+
+**[⬇ Download the latest release](https://github.com/luyisiludong-svg/Xross/releases)**
 
 </div>
 
@@ -22,9 +24,12 @@ against No-Intro and Redump, pulls in artwork and tracks your RetroAchievements.
 restyle every surface, sound, shader and particle from plain JSON files that reload as you save
 them.
 
-> **Status:** Phase 2b.4 (visual effects, shaders and materials) is complete on the emulator.
-> See [`Roadmap.md`](Roadmap.md) for what is next and [`docs/STATUS.md`](docs/STATUS.md) for what
-> has been verified, and on which hardware.
+> **Status: 0.2.0.1-beta, the first public release.** The library, scraping, RetroAchievements and
+> the full Theme 2.0 engine are in. Expect rough edges: so far it has been tested on the Android
+> emulator and on a Samsung Galaxy A55, but not yet on a gaming handheld or with a physical
+> controller. See [`CHANGELOG.md`](CHANGELOG.md) for what changed, [`Roadmap.md`](Roadmap.md) for
+> what is next and [`docs/STATUS.md`](docs/STATUS.md) for what has been verified, and on which
+> hardware.
 
 ## Screenshots
 
@@ -52,18 +57,25 @@ original menu screen by screen.
 - Hash fingerprinting inside `.zip`, `.7z` and CHD files, including No-Intro header-less hashes.
 - Offline DAT verification against No-Intro, Redump and MAME.
 - Artwork, descriptions and video snaps from Hasheous, SteamGridDB and ScreenScraper, cached
-  ES-DE style.
-- RetroAchievements: a status-bar avatar with a mini-HUD, a dashboard, per-game badge grids and
-  unlock toasts.
+  ES-DE style. ScreenScraper works out of the box on a shared quota.
+- **Settings ▸ Accounts** in one place: link RetroAchievements, and sign in to your own
+  ScreenScraper account for your own daily quota (the login is checked as you save it).
+- RetroAchievements: a status-bar avatar with a mini-HUD, a User Card, a dashboard, per-game badge
+  grids and unlock toasts.
 - One-press launch into RetroArch, DuckStation, NetherSX2, Dolphin, PPSSPP and six more emulators,
   chosen per system or per game.
 
 ### 🎨 Theme 2.0 engine
 
+- Two built-in packs: **XMB** (the default), the classic cross-media bar look, and **Xross**, with Phosphor
+  icons. Both come with synthesized UI sounds.
 - Theme packs in plain JSON (palettes, font roles, surfaces, icons, sounds) that hot-reload while
   you edit them, or install from one `.xtheme` file.
-- Background shader presets, your own `shader.frag`, and audio-reactive uniforms driven by Xross's
-  music player.
+- A Live Theme Mixer for layout, scale and spacing, and export of your look as a pack or a
+  shareable `.xtheme`.
+- Background shaders (Wave, MECHA, Black Hole, Starfield, Bokeh, ASCII Matrix), your own
+  `shader.frag`, and audio-reactive uniforms driven by Xross's music player. A
+  [browser preview](tools/shader-preview/index.html) shows a shader or pack on the desktop.
 - Frosted-glass surfaces, wallpapers, focus frames, app icon masks and ambient particles.
 - Scanline, CRT and LCD-grid filters in GL, and AGSL UI filters on Android 13+.
 - Context rules (category, system, battery, time of day), a circadian color curve, palettes taken
@@ -81,12 +93,12 @@ original menu screen by screen.
 
 ## Quick start
 
-**You need** an Android 9+ device (API 28) with a landscape screen, and the Android SDK to build.
+**You need** an Android 9+ device (API 28) with a landscape screen.
 
-```bash
-./gradlew :app:testDebugUnitTest     # fast JVM unit tests
-./gradlew :app:installDebug          # build and install on a device or emulator
-```
+**Install:** download `Xross-<version>.apk` from the
+[releases page](https://github.com/luyisiludong-svg/Xross/releases) and open it on the device
+(allow installs from your browser or file manager when asked). The whole launcher is under 9 MB;
+artwork and video snaps download later into the `Xross/` folder.
 
 Then on the device:
 
@@ -94,7 +106,22 @@ Then on the device:
 2. **Add games:** put ROMs in platform folders under `Xross/roms/` (`snes/`, `psx/`, `gba/`, …).
    Settings ▸ Library ▸ Base ROMs folder ▸ Create system folders makes them all for you.
 3. **Optional:** drop DATs in `Xross/dats/` and import them, turn on scraping in Settings ▸
-   Library ▸ Metadata & artwork, or copy a theme pack into `Xross/themes/`.
+   Library ▸ Metadata & artwork, link your accounts in Settings ▸ Accounts, or copy a theme pack
+   into `Xross/themes/`.
+
+### Building from source
+
+You need the Android SDK and JDK 17.
+
+```bash
+./gradlew :app:testDebugUnitTest     # fast JVM unit tests
+./gradlew :app:installDebug          # build and install on a device or emulator
+```
+
+ScreenScraper needs developer credentials, read at build time from a git-ignored `.env` (see
+[`.env.example`](.env.example)). Without them a build still runs, with ScreenScraper turned off; a
+release build refuses to run without them. Details are in the
+[developer guide](docs/DEVELOPMENT.md).
 
 Upgrading from **Wave**? The project was renamed on 2026-11-11 and the app ID changed to
 `dev.xross.launcher`, so uninstall the old app by hand
@@ -105,7 +132,9 @@ Upgrading from **Wave**? The project was renamed on 2026-11-11 and the app ID ch
 | Guide | What's in it |
 | --- | --- |
 | [User and storage guide](docs/USER_GUIDE.md) | The `Xross/` folder, SD/USB, backups, ROM folders, DATs, scraping, RetroAchievements, media and apps, feature status |
+| [Changelog](CHANGELOG.md) | What changed in each release |
 | [Theme 2.0 specification](docs/THEME_SPECIFICATION.md) | Pack layout, `theme.json` v2, surfaces, sounds, Wave settings, effects, rules, quick profiles, `.xtheme` |
+| [Shader guide](docs/SHADER_GUIDE.md) | Writing background shaders, their uniforms, and previewing them in the browser |
 | [Developer guide](docs/DEVELOPMENT.md) | Building, unit/live/device tests, emulator stand-ins, source layout |
 | [Roadmap and backlog](Roadmap.md) | The plan: what is done, known issues, order of work, scope decisions and upcoming specs |
 | [Implementation status](docs/STATUS.md) | The status dashboard, with per-phase evidence under `docs/phase-*/` and `docs/status/` (test suites, device runs, frame timings, bugs found and fixed) |
@@ -122,10 +151,12 @@ Upgrading from **Wave**? The project was renamed on 2026-11-11 and the app ID ch
 
 Xross is tested on three levels:
 
-- **Unit tests** (645, JVM and Robolectric): `./gradlew :app:testDebugUnitTest`. Opt-in live tests
-  call the real scraping and RetroAchievements APIs with credentials from `.env`.
+- **Unit tests** (over 990: JVM and Robolectric in `:app`, plain JUnit in `:theme:engine`):
+  `./gradlew :app:testDebugUnitTest :theme:engine:test`. Opt-in live tests call the real scraping
+  and RetroAchievements APIs with credentials from `.env`.
 - **Device tests** over adb, in three tiers: `smoke.sh` (12 checks, ~30 s), five focused suites
-  (library, theme, media, input, integration), and `run-all.sh` for the full 226-check regression.
+  (library, theme, media, input, integration), and `run-all.sh` for the full regression of more
+  than 540 checks.
 - **Frame timing** on the R8-optimized `profiling` build (`palette-perf.sh`, `display-matrix.sh`).
 
 > ⚠️ **Run device tests on a throwaway emulator or test device only.** They wipe Xross's data and
@@ -136,9 +167,9 @@ Commands and details are in the [developer guide](docs/DEVELOPMENT.md#testing) a
 
 ## License and community
 
-Xross has no license file yet, so all rights are reserved by default until one is chosen. Bug
-reports and ideas are welcome as issues; check [`Roadmap.md`](Roadmap.md) first to see whether
-something is already planned.
+Xross is released under the [Apache License 2.0](LICENSE). Bug reports and ideas are welcome as
+[issues](https://github.com/luyisiludong-svg/Xross/issues); check [`Roadmap.md`](Roadmap.md) first
+to see whether something is already planned.
 
 Xross is an independent fan project. It isn't affiliated with or endorsed by Sony Interactive
 Entertainment.
