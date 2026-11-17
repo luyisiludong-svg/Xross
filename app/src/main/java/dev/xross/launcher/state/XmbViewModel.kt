@@ -1,5 +1,6 @@
 package dev.xross.launcher.state
 
+import dev.xross.launcher.scrape.BuiltInCredentials
 import dev.xross.launcher.theme.ResolvedLook
 import dev.xross.launcher.model.GlyphKey
 import dev.xross.launcher.data.MusicUnderSnaps
@@ -420,7 +421,7 @@ class XmbViewModel(
                 dats = m.dats,
                 metadata = m.metadata,
                 scraperSetup = ScraperSetup(
-                    screenScraperAvailable = BuildConfig.SCREENSCRAPER_DEV_ID.isNotBlank(),
+                    screenScraperAvailable = BuiltInCredentials.hasScreenScraper,
                     screenScraperUser = accounts.screenScraperUser,
                     steamGridDbKeySet = accounts.steamGridDbKey.isNotBlank(),
                     screenScraperQuota = quota?.let { q -> (q.user?.let { "$it · " } ?: "") + q.summary },
@@ -919,7 +920,13 @@ class XmbViewModel(
                 }
             is TextPrompt.ScreenScraperPassword -> {
                 container.credentials.update { it.copy(screenScraperUser = prompt.user, screenScraperPassword = text) }
-                toast("ScreenScraper account saved")
+                // Sign in straight away so a typo shows now, not as a failed scrape later.
+                datWork {
+                    when (val check = container.screenScraper.checkAccount()) {
+                        is AccountCheck.Ok -> "ScreenScraper account saved · " + check.quota.summary
+                        is AccountCheck.Failed -> "Saved, but sign-in failed: ${check.reason}"
+                    }
+                }
             }
             TextPrompt.SteamGridDbKey -> {
                 container.credentials.update { it.copy(steamGridDbKey = value) }
@@ -1445,7 +1452,7 @@ class XmbViewModel(
             Command.CycleScrapeLanguage -> settingsStore.update { it.copy(scrapeLanguage = MenuTree.LANGUAGES.nextOf(it.scrapeLanguage)) }
             Command.ToggleHasheous -> settingsStore.update { it.copy(hasheousEnabled = !it.hasheousEnabled) }
             Command.EditScreenScraperAccount ->
-                if (BuildConfig.SCREENSCRAPER_DEV_ID.isBlank()) {
+                if (!BuiltInCredentials.hasScreenScraper) {
                     toast("This build has no ScreenScraper developer credentials")
                 } else {
                     emit(UiEffect.PromptText(TextPrompt.ScreenScraperUser(container.credentials.current.screenScraperUser)))

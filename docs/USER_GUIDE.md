@@ -130,8 +130,11 @@ revision and serial.
 
 * **Hasheous** (identification by hash) needs no account.
 * **SteamGridDB** (capsules, hero banners, logos) needs a free API key.
-* **ScreenScraper** (descriptions, box art, video snaps) needs developer credentials issued to the
-  app, plus optionally your own account. An English guide to ScreenScraper's API rules is in
+* **ScreenScraper** (descriptions, box art, video snaps) works out of the box: release builds
+  carry Xross's developer credentials. Signing in with your own free screenscraper.fr account in
+  **Settings ▸ Accounts ▸ ScreenScraper account…** gives you your own daily quota instead of the
+  shared one; use your user name, not your email. Saving checks the login and shows today's quota;
+  a blank user name signs out. An English guide to ScreenScraper's API rules is in
   [`reference/SCREENSCRAPER_API.md`](reference/SCREENSCRAPER_API.md).
 
 Scraping runs only while Xross is in front; automatic scraping is off until you turn it on, and
@@ -155,7 +158,8 @@ audio behaviour are described under
 ### Credentials for builds
 
 Copy [`.env.example`](../.env.example) to `.env` (git-ignored). The build reads ScreenScraper
-developer credentials from it. Debug builds only also pre-fill your SteamGridDB key, ScreenScraper
+developer credentials from it and masks them into the APK (users never need their own); a release
+build refuses to run without them. Debug builds only also pre-fill your SteamGridDB key, ScreenScraper
 account and RetroAchievements user name and Web API key (never the password) on a fresh install.
 In the app itself, credentials you type go to app-private storage (see
 [Accounts stay private](#accounts-stay-private)).

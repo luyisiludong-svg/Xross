@@ -115,7 +115,7 @@ sealed interface TextPrompt {
 
     data class ScreenScraperUser(override val initial: String) : TextPrompt {
         override val title = "ScreenScraper user name"
-        override val hint = "Leave empty to sign out"
+        override val hint = "Your screenscraper.fr user name (not your email) · empty signs out"
     }
 
     data class ScreenScraperPassword(val user: String) : TextPrompt {

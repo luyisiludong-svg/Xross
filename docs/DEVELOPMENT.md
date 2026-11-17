@@ -26,6 +26,11 @@ ScreenScraper developer credentials from it. Debug builds only also pre-fill you
 ScreenScraper account and RetroAchievements user name and Web API key (never the password) on a
 fresh install. See the [user guide](USER_GUIDE.md#credentials-for-builds).
 
+**Release:** `./gradlew :app:assembleRelease` signs with the `XROSS_KEY*` entries in `.env` and
+fails without ScreenScraper developer credentials (`-PallowNoScreenScraper=true` overrides). The
+credentials are masked in the APK, not encrypted: anyone determined can recover them from a
+release build, which is how every ScreenScraper client ships. They never go in the repository.
+
 Measure smoothness only on the `profiling` build. The debug build is debuggable, and Compose runs
 several times slower there, so it shows stutter that the optimized build doesn't have.
 

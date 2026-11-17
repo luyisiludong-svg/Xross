@@ -33,6 +33,9 @@ data class ScreenScraperCredentials(
     val password: String = "",
 ) {
     val hasDeveloper: Boolean get() = devId.isNotBlank() && devPassword.isNotBlank()
+
+    /** Never print the secrets (logs, crash reports). */
+    override fun toString(): String = "ScreenScraperCredentials(softName=$softName, user=$user, secrets=<hidden>)"
 }
 
 /** The user's ScreenScraper limits, as reported in every API answer (`ssuser`). */

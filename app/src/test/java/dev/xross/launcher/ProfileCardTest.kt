@@ -5,6 +5,7 @@ import dev.xross.launcher.state.Command
 import dev.xross.launcher.state.MenuSnapshot
 import dev.xross.launcher.state.MenuTree
 import dev.xross.launcher.state.AccountsSetup
+import dev.xross.launcher.state.ScraperSetup
 import dev.xross.launcher.state.NodeAction
 import dev.xross.launcher.state.ProfileCard
 import dev.xross.launcher.state.ProfileCardButton
@@ -60,15 +61,26 @@ class ProfileCardTest {
 
     @Test fun accountsSettingsShowTheLinkState() {
         val unlinked = MenuTree(MenuSnapshot()).list(MenuTree.ACCOUNTS)
-        assertEquals(listOf("acct:ra"), unlinked.map { it.id })
-        assertEquals(NodeAction.Run(Command.LinkRetroAchievements), unlinked.single().action)
+        assertEquals(listOf("acct:ra", "acct:ss"), unlinked.map { it.id })
+        assertEquals(NodeAction.Run(Command.LinkRetroAchievements), unlinked.first().action)
 
         val linked = MenuTree(
             MenuSnapshot(accounts = AccountsSetup("MaxMilyin", true, retroAchievementsPoints = 399597, retroAchievementsRank = 4616)),
         ).list(MenuTree.ACCOUNTS)
-        assertEquals(listOf("acct:ra", "acct:card", "acct:refresh"), linked.map { it.id })
+        assertEquals(listOf("acct:ra", "acct:card", "acct:refresh", "acct:ss"), linked.map { it.id })
         val subtitle = linked.first().subtitle!!
         assertTrue(subtitle, subtitle.startsWith("Linked as MaxMilyin"))
         assertTrue(subtitle, subtitle.contains("4,616") || subtitle.contains("4616"))
+    }
+
+    @Test fun accountsSettingsCarryTheScreenScraperLogin() {
+        val signedIn = MenuTree(
+            MenuSnapshot(scraperSetup = ScraperSetup(screenScraperAvailable = true, screenScraperUser = "retrofan")),
+        ).list(MenuTree.ACCOUNTS)
+        assertEquals(listOf("acct:ra", "acct:ss", "acct:sscheck"), signedIn.map { it.id })
+        val ss = signedIn.first { it.id == "acct:ss" }
+        assertEquals(NodeAction.Run(Command.EditScreenScraperAccount), ss.action)
+        assertTrue(ss.subtitle!!, ss.subtitle!!.startsWith("Signed in as retrofan"))
+        assertEquals(NodeAction.Run(Command.CheckScreenScraperAccount), signedIn.last().action)
     }
 }

@@ -616,7 +616,11 @@ class MenuTree(private val s: MenuSnapshot) {
 
     private fun accountsSummary(): String {
         val a = s.accounts
-        return if (a.retroAchievementsLinked) "RetroAchievements · ${a.retroAchievementsUser}" else "RetroAchievements profile"
+        val ssUser = s.scraperSetup.screenScraperUser
+        return listOfNotNull(
+            if (a.retroAchievementsLinked) "RetroAchievements · ${a.retroAchievementsUser}" else "RetroAchievements",
+            if (ssUser.isNotBlank()) "ScreenScraper · $ssUser" else "ScreenScraper",
+        ).joinToString(" · ")
     }
 
     /** Settings ▸ Accounts. */
@@ -641,6 +645,27 @@ class MenuTree(private val s: MenuSnapshot) {
         if (a.retroAchievementsLinked) {
             add(setting("acct:card", "User Card", "Profile picture, rank, points and recent unlocks", GlyphKey.USERS, Command.OpenProfileCard))
             add(setting("acct:refresh", "Refresh profile", "Fetch points, rank and avatar again", GlyphKey.REFRESH, Command.RefreshRetroAchievements))
+        }
+        val ss = s.scraperSetup
+        add(
+            setting(
+                "acct:ss", "ScreenScraper account…",
+                when {
+                    !ss.screenScraperAvailable -> "Unavailable in this build (no developer credentials)"
+                    ss.screenScraperUser.isNotBlank() -> "Signed in as ${ss.screenScraperUser} · enter a blank name to sign out"
+                    else -> "Optional — your screenscraper.fr user name and password raise your daily quota"
+                },
+                GlyphKey.DOWNLOAD, Command.EditScreenScraperAccount,
+            ),
+        )
+        if (ss.screenScraperAvailable) {
+            add(
+                setting(
+                    "acct:sscheck", "Check ScreenScraper account",
+                    ss.screenScraperQuota ?: if (ss.screenScraperUser.isNotBlank()) "Sign in and show today's quota" else "Show the shared quota for today",
+                    GlyphKey.NETWORK, Command.CheckScreenScraperAccount,
+                ),
+            )
         }
     }
 
@@ -823,24 +848,15 @@ class MenuTree(private val s: MenuSnapshot) {
         )
         add(
             setting(
-                "meta:ss", "ScreenScraper account…",
+                "meta:ss", "ScreenScraper",
                 when {
                     !setup.screenScraperAvailable -> "Unavailable in this build (no developer credentials)"
-                    setup.screenScraperUser.isNotBlank() -> "Signed in as ${setup.screenScraperUser}"
-                    else -> "Optional — your own account raises the daily quota"
+                    setup.screenScraperUser.isNotBlank() -> "Signed in as ${setup.screenScraperUser} · Settings ▸ Accounts"
+                    else -> "Shared quota · sign in with your own account in Settings ▸ Accounts"
                 },
                 GlyphKey.INFO, Command.EditScreenScraperAccount,
             ),
         )
-        if (setup.screenScraperAvailable) {
-            add(
-                setting(
-                    "meta:sscheck", "Check ScreenScraper account",
-                    setup.screenScraperQuota ?: "Sign in and show today's quota",
-                    GlyphKey.NETWORK, Command.CheckScreenScraperAccount,
-                ),
-            )
-        }
         add(
             setting(
                 "meta:sgdb", "SteamGridDB API key…",

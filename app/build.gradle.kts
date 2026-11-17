@@ -1,3 +1,5 @@
+import java.security.MessageDigest
+import java.util.Base64
 import java.util.Properties
 
 plugins {
@@ -30,10 +32,51 @@ android {
             ?: envNames.firstNotNullOfOrNull { dotenv.getProperty(it)?.takeIf { v -> v.isNotBlank() } } ?: ""
     fun quoted(value: String) = "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
 
+    // Developer credentials have to ship inside the APK (every ScreenScraper call needs them), so
+    // they are stored masked rather than as plain strings: no secret scanner, `strings` or casual
+    // decompile shows them. BuiltInCredentials.kt reverses the mask. This is obfuscation, not
+    // encryption; the values never appear in the repository either way.
+    fun masked(field: String, value: String): String {
+        if (value.isEmpty()) return "\"\""
+        val key = MessageDigest.getInstance("SHA-256").digest("xross:$field".toByteArray())
+        val bytes = value.toByteArray(Charsets.UTF_8)
+        val out = ByteArray(bytes.size) { i -> (bytes[i].toInt() xor key[i % key.size].toInt()).toByte() }
+        return quoted(Base64.getEncoder().encodeToString(out))
+    }
+    val ssDevId = secret("screenscraper.devId", "SCREENSCRAPER_DEV_ID")
+    val ssDevPassword = secret("screenscraper.devPassword", "SCREENSCRAPER_DEV_PASSWORD")
+
+    // A release without developer credentials would ship with ScreenScraper switched off for every
+    // user, so refuse to build one. -PallowNoScreenScraper=true builds it anyway (forks, CI smoke builds).
+    val releaseMissingScreenScraper = (ssDevId.isBlank() || ssDevPassword.isBlank()) &&
+        (project.findProperty("allowNoScreenScraper") as String?) != "true"
+    tasks.configureEach {
+        if (name == "preReleaseBuild") doFirst {
+            if (releaseMissingScreenScraper) throw GradleException(
+                "Release build without ScreenScraper developer credentials: set SCREENSCRAPER_DEV_ID and " +
+                    "SCREENSCRAPER_DEV_PASSWORD in .env (see .env.example), or pass -PallowNoScreenScraper=true.",
+            )
+        }
+    }
+
+    // Release signing, from the same places (XROSS_KEYSTORE=/path/to/keystore, XROSS_KEYSTORE_PASSWORD,
+    // XROSS_KEY_ALIAS, XROSS_KEY_PASSWORD). Without them the release APK comes out unsigned.
+    val keystorePath = secret("xross.keystore", "XROSS_KEYSTORE")
+    val keystore = keystorePath.takeIf { it.isNotEmpty() }?.let { rootProject.file(it) }
+    if (keystore != null && !keystore.isFile) logger.warn("XROSS_KEYSTORE points to a missing file; the release APK will be unsigned")
+    if (keystore != null && keystore.isFile) {
+        signingConfigs.create("release") {
+            storeFile = keystore
+            storePassword = secret("xross.keystorePassword", "XROSS_KEYSTORE_PASSWORD")
+            keyAlias = secret("xross.keyAlias", "XROSS_KEY_ALIAS")
+            keyPassword = secret("xross.keyPassword", "XROSS_KEY_PASSWORD")
+        }
+    }
+
     defaultConfig {
         buildConfigField("boolean", "PERF_LOG", "false")
-        buildConfigField("String", "SCREENSCRAPER_DEV_ID", quoted(secret("screenscraper.devId", "SCREENSCRAPER_DEV_ID")))
-        buildConfigField("String", "SCREENSCRAPER_DEV_PASSWORD", quoted(secret("screenscraper.devPassword", "SCREENSCRAPER_DEV_PASSWORD")))
+        buildConfigField("String", "SCREENSCRAPER_DEV_ID_MASKED", masked("SCREENSCRAPER_DEV_ID", ssDevId))
+        buildConfigField("String", "SCREENSCRAPER_DEV_PASSWORD_MASKED", masked("SCREENSCRAPER_DEV_PASSWORD", ssDevPassword))
         // A personal account is only ever baked into debug builds (see below), for testing.
         buildConfigField("String", "DEBUG_SCREENSCRAPER_USER", "\"\"")
         buildConfigField("String", "DEBUG_SCREENSCRAPER_PASSWORD", "\"\"")
@@ -43,8 +86,9 @@ android {
         applicationId = "dev.xross.launcher"
         minSdk = 28
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0-alpha"
+        // 0.2.0.1 → 201 (major·10000 + minor·1000 + patch·100 + build).
+        versionCode = 201
+        versionName = "0.2.0.1-beta"
     }
 
     buildTypes {
@@ -59,6 +103,7 @@ android {
             buildConfigField("String", "DEBUG_RETROACHIEVEMENTS_KEY", quoted(secret("retroachievements.apiKey", "RETROACHIEVEMENTS_WEB_API_KEY", "RETROACHIEVEMENT_USER_API")))
         }
         release {
+            signingConfigs.findByName("release")?.let { signingConfig = it }
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")

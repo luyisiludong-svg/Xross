@@ -13,6 +13,7 @@ import dev.xross.launcher.scrape.ScrapeOrchestrator
 import dev.xross.launcher.scrape.ScrapePrefs
 import dev.xross.launcher.scrape.UrlConnectionHttp
 import dev.xross.launcher.scrape.providers.HasheousProvider
+import dev.xross.launcher.scrape.BuiltInCredentials
 import dev.xross.launcher.scrape.providers.ScreenScraperCredentials
 import dev.xross.launcher.scrape.providers.ScreenScraperProvider
 import dev.xross.launcher.scrape.providers.SteamGridDbProvider
@@ -172,8 +173,8 @@ class AppContainer(context: Context) {
     val screenScraper: ScreenScraperProvider by lazy {
         ScreenScraperProvider(http, credentials = {
             ScreenScraperCredentials(
-                devId = BuildConfig.SCREENSCRAPER_DEV_ID,
-                devPassword = BuildConfig.SCREENSCRAPER_DEV_PASSWORD,
+                devId = BuiltInCredentials.screenScraperDevId,
+                devPassword = BuiltInCredentials.screenScraperDevPassword,
                 softName = "Xross",
                 user = credentials.current.screenScraperUser,
                 password = credentials.current.screenScraperPassword,
