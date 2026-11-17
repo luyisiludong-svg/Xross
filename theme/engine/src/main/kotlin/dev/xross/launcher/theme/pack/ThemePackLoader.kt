@@ -331,7 +331,7 @@ class ThemePackLoader(
 
     /** Loads [id] without falling back, so a hot reload can keep the last good theme. */
     fun loadStrict(id: String): PackLoad {
-        if (id.equals(DEFAULT_ID, ignoreCase = true) || id.isBlank()) return PackLoad.Ok(base())
+        if (isDefault(id)) return PackLoad.Ok(base())
         BUNDLED_IDS.firstOrNull { it.equals(id, ignoreCase = true) }?.let { bid ->
             val info = bundled(bid) ?: return PackLoad.Failed("The built-in $bid pack can't be read")
             return PackLoad.Ok(resolve(info, base()))
@@ -764,13 +764,22 @@ class ThemePackLoader(
         const val DEFAULT_ID = "default"
         const val DEFAULT_DIR = "themes/default"
         const val THEMES_DIR = "themes"
-        /** The classic look the Default pack had before its Phosphor icons. */
-        const val XMB_ID = "xmb"
+        /** The Phosphor look (Phosphor icons over the Default pack's XMB look). */
+        const val XROSS_ID = "xross"
         /** Packs shipped in the APK under `themes/<id>` besides Default, in menu order after it. */
-        val BUNDLED_IDS = listOf(XMB_ID)
+        val BUNDLED_IDS = listOf(XROSS_ID)
+        /**
+         * Former ids of the Default pack: "xmb" was the classic look bundled beside it before it
+         * became the Default. Settings that saved one load the Default pack, and the id stays reserved.
+         */
+        val DEFAULT_ALIASES = listOf("xmb")
+
+        /** The Default pack's id, one of its [DEFAULT_ALIASES], or blank. */
+        fun isDefault(id: String): Boolean =
+            id.isBlank() || id.equals(DEFAULT_ID, ignoreCase = true) || DEFAULT_ALIASES.any { it.equals(id, ignoreCase = true) }
 
         /** Default or a bundled pack: read from the APK, never from `Xross/themes/`, and its id is reserved. */
-        fun isBuiltIn(id: String): Boolean = id.equals(DEFAULT_ID, ignoreCase = true) || BUNDLED_IDS.any { it.equals(id, ignoreCase = true) }
+        fun isBuiltIn(id: String): Boolean = isDefault(id) || BUNDLED_IDS.any { it.equals(id, ignoreCase = true) }
         const val MANIFEST = "theme.json"
         const val SOUNDS = "sounds"
         const val ICONS = "icons"

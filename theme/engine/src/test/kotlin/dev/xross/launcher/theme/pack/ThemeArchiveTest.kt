@@ -239,6 +239,7 @@ class ThemeArchiveTest {
         assertEquals("sakura", ThemeArchive.idFor("", "x.zip", "Sakura"))
         assertEquals("default-pack", ThemeArchive.idFor("Default", "x.xtheme", null))
         assertEquals("xmb-pack", ThemeArchive.idFor("XMB", "x.xtheme", null))
+        assertEquals("xross-pack", ThemeArchive.idFor("Xross", "x.xtheme", null))
         assertEquals("theme", ThemeArchive.idFor("☆", "☆.xtheme", null))
         assertTrue(ThemeArchive.idFor("a".repeat(200), "", null).length <= 48)
     }

@@ -43,6 +43,7 @@ one full-screen triangle with the active fragment shader, then the background fi
 | `STARFIELD` | `starfield.frag` | one |
 | `CRT` | `crt.frag` | one |
 | `BLACK_HOLE` | `black_hole.frag` | field + full size, with feedback |
+| `MECHA` | `mecha.frag` | field + full size |
 
 Built-in sources live in [`app/src/main/assets/shaders/`](../app/src/main/assets/shaders/).
 

@@ -3,7 +3,7 @@
 Converts the design SVGs in assets/icons into Android VectorDrawables.
 
 LEGACY: since the switch to Phosphor icons (assets/icons/phosphor), the Default pack's icons
-are no longer generated here; see app/src/main/assets/themes/default/CREDITS.md.
+are no longer generated here; see app/src/main/assets/themes/xross/CREDITS.md.
 
 The source files come in two shapes:
   * single icons: one <svg> with white <path>s (sometimes over a black backdrop <rect>)
@@ -15,8 +15,8 @@ Usage:
   svg_icons.py list  <assets/icons> <out_dir>          # split everything + preview.html
   svg_icons.py build <assets/icons> <icon_map.txt> <theme icons dir>
 
-`build` writes one <name>.svg per mapped icon into the built-in Default theme pack
-(app/src/main/assets/themes/default/icons), which ThemePackLoader reads at runtime with
+`build` writes one <name>.svg per mapped icon into the bundled Xross theme pack
+(app/src/main/assets/themes/xross/icons), which ThemePackLoader reads at runtime with
 theme/pack/SvgIcon.kt. Theme packs in Xross/themes/<id>/icons/ use the same names.
 
 icon_map.txt lines:  <icon name> = <source id>   (ids as printed by `list`)

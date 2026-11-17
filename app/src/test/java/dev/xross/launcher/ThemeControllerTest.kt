@@ -384,9 +384,9 @@ class ThemeControllerTest {
         // The built-in pack: no variants, so no variant rows; it is active, so Current look.
         c.onCommand(Command.ExportTheme)
         val default = host.menus.last()
-        assertEquals("Export Default", default.title)
+        assertEquals("Export XMB", default.title)
         assertEquals(listOf("Whole pack", "Current look"), labels(default))
-        assertEquals("Default, as it ships", default.current.options[0].detail)
+        assertEquals("XMB, as it ships", default.current.options[0].detail)
         assertEquals("What is on screen", default.current.options[1].detail)
         container.settings.update { it.copy(effectOverrides = EffectOverrides(shaderPreset = "BOKEH"), layoutOverrides = LayoutOverrides(uiScale = 1.2f)) }
         c.onCommand(Command.ExportTheme)
@@ -410,7 +410,7 @@ class ThemeControllerTest {
     }
 
     @Test fun settingsThemeOffersExportAfterResetAndThePackRowForAnyPack() {
-        val setup = ThemeSetup(packs = listOf("default" to "Default", "stress" to "Stress"))
+        val setup = ThemeSetup(packs = listOf("default" to "XMB", "stress" to "Stress"))
         val rows = MenuTree(MenuSnapshot(themes = setup)).list(MenuTree.DISPLAY)
         val ids = rows.map { it.id }
         assertEquals(ids.indexOf("disp:reset") + 1, ids.indexOf("disp:export"))
@@ -448,10 +448,10 @@ class ThemeControllerTest {
         val before = container.settings.current
         c.onCommand(Command.ExportTheme)
         val id = export(c, host, "default", ExportScope.WholePack)
-        assertEquals("default-pack", id)
+        assertEquals("xmb-pack", id)
         assertEquals("Busy while building and while writing", listOf(true, false, true, false), host.busy)
         val confirm = host.menus[host.menus.size - 2]
-        assertTrue(confirm.current.options[0].detail!!, Regex("""Default, \d+ files, [\d.]+ (KB|MB)""").matches(confirm.current.options[0].detail!!))
+        assertTrue(confirm.current.options[0].detail!!, Regex("""XMB, \d+ files, [\d.]+ (KB|MB)""").matches(confirm.current.options[0].detail!!))
         assertTrue(File(container.environment.current.themes, "$id/theme.json").isFile)
 
         c.onCommand(Command.SwitchToExportedTheme)
@@ -461,7 +461,7 @@ class ThemeControllerTest {
         assertEquals(UserLook.of(before), UserLook.of(after))
         assertEquals(before.theme, after.theme)
         assertEquals(1.7f, after.waveSpeed)
-        assertEquals("Theme pack: Default", host.toasts.last())
+        assertEquals("Theme pack: XMB", host.toasts.last())
     }
 
     @Test fun aVariantExportStartsOnTheNewBaseAndKeepsTheUserLayer() {
@@ -497,7 +497,7 @@ class ThemeControllerTest {
         val id = export(c, host, "default", ExportScope.CurrentLook, name = "My look")
         assertEquals("my-look", id)
         val detail = host.menus[host.menus.size - 2].current.options[0].detail!!
-        assertTrue(detail, detail.startsWith("Default + 1 layout value, 1 effect, the Aurora wave colors, "))
+        assertTrue(detail, detail.startsWith("XMB + 1 layout value, 1 effect, the Aurora wave colors, "))
         assertTrue(detail, detail.endsWith("; quick profile not included"))
 
         c.onCommand(Command.SwitchToExportedTheme)
@@ -524,7 +524,7 @@ class ThemeControllerTest {
         // The scope list closed: no name entry. The name entry closed: no confirm panel.
         c.onCommand(Command.ExportTheme)
         c.onCommand(Command.ChooseExportScope("default", ExportScope.WholePack))
-        assertEquals("Default", host.nameEntry!!.text)
+        assertEquals("XMB", host.nameEntry!!.text)
         assertEquals(ThemeController.MAX_EXPORT_NAME, host.nameEntry!!.maxLength)
         c.onExportNamed(host.nameEntry!!.purpose as NamePurpose.ExportTheme, "   ")
         assertEquals("Type a name first", host.toasts.last())
@@ -554,7 +554,7 @@ class ThemeControllerTest {
     private fun shareFile(name: String) = File(context.cacheDir, "shared/$name").apply { parentFile!!.mkdirs(); delete() }
 
     @Test fun thePackRowSharesAnyPack() {
-        val setup = ThemeSetup(packs = listOf("default" to "Default", "stress" to "Stress"))
+        val setup = ThemeSetup(packs = listOf("default" to "XMB", "stress" to "Stress"))
         val rows = MenuTree(MenuSnapshot(themes = setup)).list(MenuTree.DISPLAY)
         val share = rows.single { it.id == "disp:pack" }.menu.single { it.label == "Share as .xtheme…" }
         assertEquals(listOf(Command.ShareThemePack("default"), Command.ShareThemePack("stress")), share.submenu.map { it.command })
@@ -568,7 +568,7 @@ class ThemeControllerTest {
         val before = dir.list()!!.toSet()
         c.onCommand(Command.ShareThemePack("default"))
         val scopes = host.menus.last()
-        assertEquals("Share Default", scopes.title)
+        assertEquals("Share XMB", scopes.title)
         assertEquals(listOf("Whole pack", "Current look"), labels(scopes))
         assertEquals(Command.ChooseExportScope("default", ExportScope.WholePack, share = true), scopes.current.options[0].command)
         c.onCommand(Command.ChooseExportScope("default", ExportScope.WholePack, share = true))
@@ -576,21 +576,21 @@ class ThemeControllerTest {
         assertEquals("Name the shared theme", entry.title)
         assertEquals(NamePurpose.ExportTheme("default", ExportScope.WholePack, share = true), entry.purpose)
         c.onExportNamed(entry.purpose as NamePurpose.ExportTheme, entry.text)
-        await("the confirm panel") { host.menus.last().title == "Share as Default" }
+        await("the confirm panel") { host.menus.last().title == "Share as XMB" }
         val confirm = host.menus.last()
         assertEquals(listOf("Share", "Licences"), labels(confirm))
-        assertTrue(confirm.current.options[0].detail!!, confirm.current.options[0].detail!!.endsWith("pick where to save default-pack.xtheme"))
+        assertTrue(confirm.current.options[0].detail!!, confirm.current.options[0].detail!!.endsWith("pick where to save xmb-pack.xtheme"))
         assertFalse("Includes your wallpaper photo" in confirm.current.options[0].detail!!)
         c.onCommand(Command.ConfirmThemeExport)
-        assertEquals(UiEffect.CreateThemeArchive("default-pack.xtheme"), host.effects.last())
+        assertEquals(UiEffect.CreateThemeArchive("xmb-pack.xtheme"), host.effects.last())
         // The picker answers with the new document.
-        val file = shareFile("default-pack.xtheme")
+        val file = shareFile("xmb-pack.xtheme")
         c.onThemeArchiveCreated(android.net.Uri.fromFile(file))
-        await("the archive") { host.toasts.lastOrNull()?.startsWith("Saved Default as ") == true }
+        await("the archive") { host.toasts.lastOrNull()?.startsWith("Saved XMB as ") == true }
         assertEquals(listOf(true, false, true, false), host.busy)
         assertEquals("No folder in Xross/themes", before, dir.list()!!.toSet())
         val staged = stages(container, file)
-        assertEquals("default-pack", staged.id)
+        assertEquals("xmb-pack", staged.id)
         assertTrue(File(staged.dir, "sounds/gameboot.wav").isFile)
         // Answered once: a second answer does nothing.
         c.onThemeArchiveCreated(android.net.Uri.fromFile(shareFile("again.xtheme")))
@@ -609,7 +609,7 @@ class ThemeControllerTest {
         c.onExportNamed(host.nameEntry!!.purpose as NamePurpose.ExportTheme, "Mine")
         await("the confirm panel") { host.menus.last().title == "Share as Mine" }
         val detail = host.menus.last().current.options[0].detail!!
-        assertTrue(detail, detail.startsWith("Includes your wallpaper photo · Default + "))
+        assertTrue(detail, detail.startsWith("Includes your wallpaper photo · XMB + "))
         c.onCommand(Command.ConfirmThemeExport)
         assertEquals(UiEffect.CreateThemeArchive("mine.xtheme"), host.effects.last())
         val file = shareFile("mine.xtheme")
@@ -641,7 +641,7 @@ class ThemeControllerTest {
         c.onCommand(Command.ShareExportedTheme)
         val file = shareFile("$id.xtheme")
         c.onThemeArchiveCreated(android.net.Uri.fromFile(file))
-        await("the archive") { host.toasts.lastOrNull()?.startsWith("Saved Default as ") == true }
+        await("the archive") { host.toasts.lastOrNull()?.startsWith("Saved XMB as ") == true }
         val folder = File(container.environment.current.themes, id)
         val staged = stages(container, file)
         assertEquals(

@@ -389,7 +389,7 @@ instead of being ignored silently, so a typo shows up.
 | --- | --- | --- |
 | `surfaceStyle` | a preset or a surface the pack defines | 2b.2 |
 | `adaptiveGamePalette` | `true` / `false` | 2b.3 |
-| `shaderPreset` (`shader`) | `WAVE`, `ASCII_MATRIX`, `BOKEH`, `STARFIELD`, `CRT`, `BLACK_HOLE`, `CUSTOM` | 2b.4a (`BLACK_HOLE` 2026-11-16) |
+| `shaderPreset` (`shader`) | `WAVE`, `ASCII_MATRIX`, `BOKEH`, `STARFIELD`, `CRT`, `BLACK_HOLE`, `MECHA`, `CUSTOM` | 2b.4a (`BLACK_HOLE` 2026-11-16, `MECHA` 2026-11-17) |
 | `shaderPath` | a `.frag` in the pack (implies `CUSTOM`) | 2b.4a |
 | `wallpaperPath` (`wallpaper`) | a PNG, JPEG or WebP in the pack, or `none` | 2b.4c |
 | `focusFrameStyle` (`focusFrame`) | `BREATHING_HALO`, `STATIC_NEON`, `HARD_SHADOW`, `GOLD_BEZEL` | 2b.4d |
@@ -527,18 +527,24 @@ The wave stops rendering while art or video covers it. Scraping itself is descri
 
 ## 14. The Default pack and icon tooling
 
-The bundled icons and sounds live in
+The Default pack, named **XMB**, lives in
 [`app/src/main/assets/themes/default/`](../app/src/main/assets/themes/default) (`theme.json`,
-`surfaces.json`, `icons/*.svg`, `sounds/*.wav`), kept apart from the app code so they can be
-swapped as a whole. It is a working example of a v2 pack.
+`surfaces.json`, XMB-style `icons/*.svg`, `sounds/*.wav`), kept apart from the app code so it can be
+swapped as a whole. It is what every other pack inherits from, and a working example of a v2 pack.
+Settings that name its former id `xmb` load it.
 
-The icons come from `assets/icons` (the design SVGs): `tools/icons/svg_icons.py` splits the icon
+The APK also bundles **Xross** in
+[`app/src/main/assets/themes/xross/`](../app/src/main/assets/themes/xross): the same sounds and
+surfaces with Phosphor icons (MIT, credited in its `CREDITS.md`). Bundled packs are listed right
+after Default, load from the APK, and their ids are reserved (`ThemePackLoader.BUNDLED_IDS`).
+
+The Phosphor icons come from `assets/icons` (the design SVGs): `tools/icons/svg_icons.py` splits the icon
 sheets and writes the ones listed in `tools/icons/icon_map.txt` as pack SVGs. To change an icon,
 edit the map and run:
 
 ```bash
 python3 tools/icons/svg_icons.py list assets/icons /tmp/icons   # previews every icon id
-python3 tools/icons/svg_icons.py build assets/icons tools/icons/icon_map.txt app/src/main/assets/themes/default/icons
+python3 tools/icons/svg_icons.py build assets/icons tools/icons/icon_map.txt app/src/main/assets/themes/xross/icons
 ```
 
 ## 15. Components

@@ -87,23 +87,33 @@ class ThemePackLoaderTest {
         for (path in t.files) TestAssets.platform.openAsset("$dir/$path").close()
     }
 
-    @Test fun theBundledXmbPackIsListedAfterDefaultAndAFolderCantTakeItsId() {
-        File(themes, "xmb").apply { mkdirs() }.resolve("theme.json").writeText("""{"schemaVersion": 2, "name": "Impostor"}""")
+    @Test fun theBundledXrossPackIsListedAfterDefaultAndAFolderCantTakeItsId() {
+        File(themes, "xross").apply { mkdirs() }.resolve("theme.json").writeText("""{"schemaVersion": 2, "name": "Impostor"}""")
         File(themes, "sakura").apply { mkdirs() }.resolve("theme.json").writeText("""{"schemaVersion": 2, "name": "Sakura"}""")
         val packs = loader.discover()
-        assertEquals(listOf("default", "xmb", "sakura"), packs.map { it.id })
-        val xmb = packs[1]
-        assertEquals("XMB", xmb.name)
-        assertEquals(PackSource.Builtin("themes/xmb"), xmb.source)
-        assertTrue(xmb.builtIn)
+        assertEquals(listOf("default", "xross", "sakura"), packs.map { it.id })
+        assertEquals("XMB", packs[0].name)
+        val xross = packs[1]
+        assertEquals("Xross", xross.name)
+        assertEquals(PackSource.Builtin("themes/xross"), xross.source)
+        assertTrue(xross.builtIn)
         // Loading by id reads the APK's copy, not the folder of the same name.
-        assertEquals("XMB", loader.load("xmb").info.name)
-        assertEquals(0L, loader.fingerprint("xmb"))
+        assertEquals("Xross", loader.load("xross").info.name)
+        assertEquals(0L, loader.fingerprint("xross"))
     }
 
-    @Test fun theBundledXmbPackLoadsEveryIconAndSoundFromItsOwnAssets() {
-        val t = loader.load(ThemePackLoader.XMB_ID)
-        assertEquals("xmb", t.id)
+    @Test fun theFormerXmbIdLoadsTheDefaultPackAndStaysReserved() {
+        File(themes, "xmb").apply { mkdirs() }.resolve("theme.json").writeText("""{"schemaVersion": 2, "name": "Impostor"}""")
+        assertEquals(listOf("default", "xross"), loader.discover().map { it.id })
+        val t = loader.load("xmb")
+        assertEquals(ThemePackLoader.DEFAULT_ID, t.id)
+        assertEquals("XMB", t.info.name)
+        assertTrue(ThemePackLoader.isBuiltIn("XMB"))
+    }
+
+    @Test fun theBundledXrossPackLoadsEveryIconAndSoundFromItsOwnAssets() {
+        val t = loader.load(ThemePackLoader.XROSS_ID)
+        assertEquals("xross", t.id)
         assertTrue(t.problems.toString(), t.problems.isEmpty())
         for (key in GlyphKey.entries) {
             val file = t.info.manifest.icons[key.iconId] ?: "${key.iconId}.svg"
@@ -111,7 +121,7 @@ class ThemePackLoaderTest {
         }
         for (role in SoundRole.entries) {
             val src = t.sounds[role]
-            assertTrue("$role: $src", src is SoundSource.Asset && src.path.startsWith("themes/xmb/sounds/"))
+            assertTrue("$role: $src", src is SoundSource.Asset && src.path.startsWith("themes/xross/sounds/"))
         }
     }
 

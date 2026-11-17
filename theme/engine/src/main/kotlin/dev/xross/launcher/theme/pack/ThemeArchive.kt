@@ -405,7 +405,7 @@ class ThemeArchive(
 
         /**
          * Folder id for a pack: a slug of its [name] ("Y2K Cyber Dream" → "y2k-cyber-dream"),
-         * else of the archive's folder or file name; never a built-in pack's id ("default", "xmb").
+         * else of the archive's folder or file name; never a built-in pack's id ("default", "xross", and the former "xmb").
          */
         fun idFor(name: String, fileName: String, folder: String?): String {
             fun slug(s: String) = s.lowercase(Locale.ROOT).replace(Regex("[^a-z0-9]+"), "-").trim('-').take(48).trim('-')

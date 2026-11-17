@@ -61,7 +61,7 @@ class ThemePackTest {
 
     @Test fun defaultPackShipsEveryIconAndSound() {
         val theme = loader.load(ThemePackLoader.DEFAULT_ID)
-        assertEquals("Default", theme.info.name)
+        assertEquals("XMB", theme.info.name)
         assertTrue(theme.info.builtIn)
         for (key in GlyphKey.entries) assertTrue("icon for $key", theme.icons[key] is VectorIcon)
         for (role in SoundRole.entries) assertTrue("sound for $role", theme.sounds[role] is SoundSource.Asset)
@@ -119,7 +119,7 @@ class ThemePackTest {
         rawPack("old", """{"name": "Old v1", "palette": {"top": "#000000", "bottom": "#111111", "wave": "#FFFFFF"}}""")
         File(themes, "no-manifest").mkdirs()
         val scan = loader.scan()
-        assertEquals(listOf("default", "xmb", "sakura"), scan.packs.map { it.id })
+        assertEquals(listOf("default", "xross", "sakura"), scan.packs.map { it.id })
         assertTrue(scan.packs[2].source is PackSource.Folder)
         // Skipped folders are reported, with the reason: v1 packs aren't read.
         val reasons = scan.rejected.associate { it.id to it.reason }
@@ -196,7 +196,7 @@ class ThemePackTest {
         rawPack("old", """{"name": "Old"}""")
         val runtime = ThemeRuntime(loader)
         assertEquals("default", runtime.active.value.id)
-        assertEquals(listOf("default", "xmb", "sakura"), runtime.rediscover().map { it.id })
+        assertEquals(listOf("default", "xross", "sakura"), runtime.rediscover().map { it.id })
         assertEquals("sakura", runtime.select("sakura").id)
         assertEquals("default", runtime.select("gone").id)
         assertEquals(listOf("old"), runtime.rejected.value.map { it.id })

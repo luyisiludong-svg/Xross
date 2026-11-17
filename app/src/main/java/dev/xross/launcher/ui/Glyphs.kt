@@ -106,8 +106,8 @@ private val Blank = ColorPainter(Color.Transparent)
 
 /**
  * The icon for [key] from the active theme pack: an SVG drawn as a vector, or a PNG/WebP bitmap.
- * Packs that lack an icon inherit the Default pack's (Phosphor icons, see
- * assets/themes/default/CREDITS.md), so every key resolves while a pack is active.
+ * Packs that lack an icon inherit the Default pack's (XMB-style glyphs in
+ * assets/themes/default/icons), so every key resolves while a pack is active.
  */
 @Composable
 fun glyphPainter(key: GlyphKey): Painter {
