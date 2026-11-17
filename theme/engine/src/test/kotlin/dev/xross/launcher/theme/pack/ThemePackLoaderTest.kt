@@ -1,6 +1,8 @@
 package dev.xross.launcher.theme.pack
 
 import dev.xross.launcher.theme.pack.PackSource
+import dev.xross.launcher.theme.pack.SoundRole
+import dev.xross.launcher.theme.pack.SoundSource
 import dev.xross.launcher.theme.pack.ThemeManifest
 import dev.xross.launcher.theme.pack.ThemePackLoader
 import dev.xross.launcher.theme.pack.iconId
@@ -83,6 +85,34 @@ class ThemePackLoaderTest {
         val sounds = TestAssets.platform.listAssets("$dir/sounds").orEmpty().map { "sounds/$it" }
         assertEquals((icons + sounds).toSet(), t.files)
         for (path in t.files) TestAssets.platform.openAsset("$dir/$path").close()
+    }
+
+    @Test fun theBundledXmbPackIsListedAfterDefaultAndAFolderCantTakeItsId() {
+        File(themes, "xmb").apply { mkdirs() }.resolve("theme.json").writeText("""{"schemaVersion": 2, "name": "Impostor"}""")
+        File(themes, "sakura").apply { mkdirs() }.resolve("theme.json").writeText("""{"schemaVersion": 2, "name": "Sakura"}""")
+        val packs = loader.discover()
+        assertEquals(listOf("default", "xmb", "sakura"), packs.map { it.id })
+        val xmb = packs[1]
+        assertEquals("XMB", xmb.name)
+        assertEquals(PackSource.Builtin("themes/xmb"), xmb.source)
+        assertTrue(xmb.builtIn)
+        // Loading by id reads the APK's copy, not the folder of the same name.
+        assertEquals("XMB", loader.load("xmb").info.name)
+        assertEquals(0L, loader.fingerprint("xmb"))
+    }
+
+    @Test fun theBundledXmbPackLoadsEveryIconAndSoundFromItsOwnAssets() {
+        val t = loader.load(ThemePackLoader.XMB_ID)
+        assertEquals("xmb", t.id)
+        assertTrue(t.problems.toString(), t.problems.isEmpty())
+        for (key in GlyphKey.entries) {
+            val file = t.info.manifest.icons[key.iconId] ?: "${key.iconId}.svg"
+            assertTrue("$key from icons/$file", "icons/$file" in t.files)
+        }
+        for (role in SoundRole.entries) {
+            val src = t.sounds[role]
+            assertTrue("$role: $src", src is SoundSource.Asset && src.path.startsWith("themes/xmb/sounds/"))
+        }
     }
 
     @Test fun aFolderPackDoesNotListWhatTheDefaultPackLendsIt() {

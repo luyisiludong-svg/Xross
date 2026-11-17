@@ -405,12 +405,12 @@ class ThemeArchive(
 
         /**
          * Folder id for a pack: a slug of its [name] ("Y2K Cyber Dream" → "y2k-cyber-dream"),
-         * else of the archive's folder or file name; never "default".
+         * else of the archive's folder or file name; never a built-in pack's id ("default", "xmb").
          */
         fun idFor(name: String, fileName: String, folder: String?): String {
             fun slug(s: String) = s.lowercase(Locale.ROOT).replace(Regex("[^a-z0-9]+"), "-").trim('-').take(48).trim('-')
             val base = listOf(name, folder.orEmpty(), fileName.substringBeforeLast('.')).map(::slug).firstOrNull { it.isNotEmpty() } ?: "theme"
-            return if (base == ThemePackLoader.DEFAULT_ID) "$base-pack" else base
+            return if (ThemePackLoader.isBuiltIn(base)) "$base-pack" else base
         }
 
         /** Removes staging folders a cancelled or interrupted import left behind. */
