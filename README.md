@@ -7,7 +7,7 @@
 ![Android API 28+](https://img.shields.io/badge/Android-API%2028%2B-3DDC84?logo=android&logoColor=white)
 ![Jetpack Compose](https://img.shields.io/badge/Jetpack-Compose-4285F4?logo=jetpackcompose&logoColor=white)
 ![OpenGL ES 3.0](https://img.shields.io/badge/OpenGL%20ES-3.0-5586A4?logo=opengl&logoColor=white)
-![Release](https://img.shields.io/badge/release-0.2.0.3--beta-orange)
+![Release](https://img.shields.io/badge/release-0.2.0.4--beta-orange)
 ![Unit tests](https://img.shields.io/badge/unit%20tests-990%2B%20passing-brightgreen)
 ![Architecture](https://img.shields.io/badge/architecture-MVVM%20%C2%B7%20multi--module-blueviolet)
 ![License](https://img.shields.io/badge/license-Apache%202.0-blue)
@@ -24,7 +24,7 @@ against No-Intro and Redump, pulls in artwork and tracks your RetroAchievements.
 restyle every surface, sound, shader and particle from plain JSON files that reload as you save
 them.
 
-> **Status: 0.2.0.3-beta.** The library, scraping, RetroAchievements and
+> **Status: 0.2.0.4-beta.** The library, scraping, RetroAchievements and
 > the full Theme 2.0 engine are in. Expect rough edges: so far it has been tested on the Android
 > emulator and on a Samsung Galaxy A55, but not yet on a gaming handheld or with a physical
 > controller. See [`CHANGELOG.md`](CHANGELOG.md) for what changed, [`Roadmap.md`](Roadmap.md) for

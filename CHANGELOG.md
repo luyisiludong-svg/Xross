@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.2.0.4-beta — 2026-11-17
+
+- **Music playlists.** Make playlists under Music ▸ Playlists and add songs from any song's
+  Options ▸ Add to playlist; albums and artists can be added whole. Inside a playlist, songs move
+  up, move down or come out; a playlist plays in order or shuffled. Playlists are plain `.m3u8`
+  files in `Xross/playlists`, so they travel with the Xross folder, survive a rescan and open in
+  other players.
+- **Favorites.** A built-in playlist, always first under Playlists. Every song's Options has a
+  one-press Add to Favorites (or Remove from Favorites).
+- **Sort songs and albums.** All songs sorts by title (A–Z or Z–A), artist, album or recently
+  added; Albums by title (A–Z or Z–A), artist or recently added. The choice is in their Options and
+  shows under the row.
+- **Wallpaper fit.** A picture set as the Xross wallpaper can fill the screen (as before), fit
+  inside it with the theme's background around it, stretch to cover it, or sit centered at its own
+  size. Pick it in a photo's Options or Settings ▸ Theme ▸ Xross wallpaper.
+- **New app icon,** with a matching TV banner and a monochrome icon for themed launchers.
+
 ## 0.2.0.3-beta — 2026-11-17
 
 - **New built-in theme pack: Gargantua.** An ASCII black hole, ray traced behind the menu, in
