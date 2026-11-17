@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.0.2-beta — 2026-11-17
+
+- **Surface styles work.** Flat glass, Y2K glossy bezel, OLED true black and E-Ink high contrast
+  now change the Options panel, the Information sheet, toasts, the mini player and the button-hint
+  bars. Before, only a few rarely seen elements used the chosen style, so the styles looked the same.
+
 ## 0.2.0.1-beta — 2026-11-17
 
 First beta.
