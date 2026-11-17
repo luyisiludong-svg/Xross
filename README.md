@@ -33,15 +33,53 @@ them.
 
 ## Screenshots
 
-<p>
-<img src="assets/Screenshot_20261117_130742_Xross.jpg" width="32%" alt="Xross screenshot 1">
-<img src="assets/Screenshot_20261117_130852_Xross.jpg" width="32%" alt="Xross screenshot 2">
-<img src="assets/Screenshot_20261117_130915_Xross.jpg" width="32%" alt="Xross screenshot 3">
-<img src="assets/Screenshot_20261117_130951_Xross.jpg" width="32%" alt="Xross screenshot 4">
-<img src="assets/Screenshot_20261117_131034_Xross.jpg" width="32%" alt="Xross screenshot 5">
-<img src="assets/Screenshot_20261117_131105_Xross.jpg" width="32%" alt="Xross screenshot 6">
-<img src="assets/Screenshot_20261117_131150_Xross.jpg" width="32%" alt="Xross screenshot 7">
-</p>
+### The menu
+
+Categories run across, items run down, over the animated wave background. The status bar shows the date, time, battery and your RetroAchievements avatar.
+
+![The menu](assets/Menu.jpg)
+
+### Game details
+
+Box art, rating, release info and a description for each game, scraped automatically. L1 and R1 step through the other games in the list.
+
+![Game details](assets/Game_Details.jpg)
+
+### Game list with achievement card
+
+The selected game's video snap plays behind the list, and a card shows its RetroAchievements badges and progress.
+
+![Game list with achievement card](assets/Retroachievement_RichCard.jpg)
+
+### RetroAchievements profile
+
+Your points, library completion, mastered games and recent unlocks, filterable by platform.
+
+![RetroAchievements profile](assets/Retroachievement_Menu.jpg)
+
+### Music player
+
+Now playing with album art, seek bar, shuffle and repeat, all on the controller.
+
+![Music player](assets/Music_menu.jpg)
+
+### Black hole shader
+
+The bundled Gargantua theme renders an animated ASCII black hole behind the menu.
+
+![Black hole shader](assets/Dynamic_Shader.jpg)
+
+### Mecha shader
+
+Background shaders can be swapped from Theme › Background.
+
+![Mecha shader](assets/Dynamic_Shader_2.jpg)
+
+### Your own wallpaper
+
+Set any image as the Xross wallpaper and choose how it fits: fill, fit, stretch or center.
+
+![Your own wallpaper](assets/Background_Change.jpg)
 
 [`docs/XMB_FIDELITY.md`](docs/XMB_FIDELITY.md) compares Xross with the original menu screen by
 screen.
