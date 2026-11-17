@@ -925,6 +925,7 @@ class XmbViewModel(
                     when (val check = container.screenScraper.checkAccount()) {
                         is AccountCheck.Ok -> "ScreenScraper account saved · " + check.quota.summary
                         is AccountCheck.Failed -> "Saved, but sign-in failed: ${check.reason}"
+                        AccountCheck.SharedQuota -> "ScreenScraper account saved"
                     }
                 }
             }
@@ -1466,6 +1467,7 @@ class XmbViewModel(
                     is AccountCheck.Ok ->
                         "Signed in" + (check.quota.user?.let { " as $it" } ?: "") + " · " + check.quota.summary
                     is AccountCheck.Failed -> check.reason
+                    AccountCheck.SharedQuota -> "ScreenScraper works · not signed in, so lookups share Xross's quota"
                 }
             }
             Command.ClearArtwork -> viewModelScope.launch {

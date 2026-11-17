@@ -66,6 +66,9 @@ data class ScreenScraperQuota(
 sealed interface AccountCheck {
     data class Ok(val quota: ScreenScraperQuota) : AccountCheck
     data class Failed(val reason: String) : AccountCheck
+
+    /** No user signed in; the build's developer credentials work (shared quota). */
+    data object SharedQuota : AccountCheck
 }
 
 /**
@@ -200,8 +203,11 @@ class ScreenScraperProvider(
     suspend fun checkAccount(): AccountCheck {
         val creds = credentials()
         if (!creds.hasDeveloper) return AccountCheck.Failed("This build has no ScreenScraper developer credentials")
+        // ssuserInfos.php needs a user login; without one, ssinfraInfos.php checks the developer
+        // credentials alone (it answers 403 to wrong ones).
+        val anonymous = creds.user.isBlank()
         val response = try {
-            call("ssuserInfos.php", creds, emptyMap())
+            call(if (anonymous) "ssinfraInfos.php" else "ssuserInfos.php", creds, emptyMap())
         } catch (e: CancellationException) {
             throw e
         } catch (e: IOException) {
@@ -209,6 +215,7 @@ class ScreenScraperProvider(
         }
         if (response.code == 403) return AccountCheck.Failed(loginError(response.text()))
         if (!response.isSuccess) return AccountCheck.Failed("ScreenScraper answered HTTP ${response.code}")
+        if (anonymous) return AccountCheck.SharedQuota
         return _quota.value?.let { AccountCheck.Ok(it) } ?: AccountCheck.Failed("ScreenScraper sent no account details")
     }
 

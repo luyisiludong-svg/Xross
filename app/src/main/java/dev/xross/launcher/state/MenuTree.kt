@@ -662,7 +662,7 @@ class MenuTree(private val s: MenuSnapshot) {
             add(
                 setting(
                     "acct:sscheck", "Check ScreenScraper account",
-                    ss.screenScraperQuota ?: if (ss.screenScraperUser.isNotBlank()) "Sign in and show today's quota" else "Show the shared quota for today",
+                    ss.screenScraperQuota ?: if (ss.screenScraperUser.isNotBlank()) "Sign in and show today's quota" else "Check ScreenScraper works with the shared quota",
                     GlyphKey.NETWORK, Command.CheckScreenScraperAccount,
                 ),
             )

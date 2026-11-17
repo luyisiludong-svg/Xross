@@ -100,6 +100,18 @@ class ScreenScraperQuotaTest {
         assertTrue(url.contains("devid=dev"))
     }
 
+    @Test fun accountCheckWithoutAUserChecksTheDeveloperCredentialsOnly() = runBlocking {
+        val anon = creds.copy(user = "", password = "")
+        val http = FakeHttp(listOf("ssinfraInfos" to FakeHttp.json(200, """{"response": {"serveurs": {}}}""")))
+        assertEquals(AccountCheck.SharedQuota, ScreenScraperProvider(http, { anon }, RateLimiter(0, clock = { 0L }, sleep = {})).checkAccount())
+        val url = http.requests.single()
+        assertTrue(url.contains("ssinfraInfos.php"))
+        assertFalse(url.contains("ssid="))
+        val bad = FakeHttp(listOf("ssinfraInfos" to FakeHttp.json(403, "Erreur de login : Vérifier vos identifiants développeur !")))
+        val failed = ScreenScraperProvider(bad, { anon }, RateLimiter(0, clock = { 0L }, sleep = {})).checkAccount() as AccountCheck.Failed
+        assertTrue(failed.reason.contains("developer"))
+    }
+
     @Test fun sendsFileHashesToScreenScraperAndHeaderlessOnesToHasheous() = runBlocking {
         val ss = FakeHttp(listOf("jeuInfos" to FakeHttp.json(200, game())))
         ScreenScraperProvider(ss, { creds }, RateLimiter(0, clock = { 0L }, sleep = {})).lookup(request)
