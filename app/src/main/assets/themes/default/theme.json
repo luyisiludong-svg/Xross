@@ -3,7 +3,7 @@
   "name": "Default",
   "author": "Xross",
   "version": "2.0",
-  "description": "The built-in look: XMB-style glyphs and console UI sounds. Packs in Xross/themes/ replace any part of it.",
+  "description": "The built-in look: Phosphor glyphs (MIT, see CREDITS.md) and console UI sounds. Packs in Xross/themes/ replace any part of it.",
   "imports": ["surfaces.json"],
   "wave": { "speed": 1.0, "lineCount": 5, "turbulence": 1.0, "ribbonThickness": 1.0 },
   "audio": {

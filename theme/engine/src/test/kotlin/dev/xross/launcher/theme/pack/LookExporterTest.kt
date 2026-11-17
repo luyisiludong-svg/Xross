@@ -99,11 +99,12 @@ class LookExporterTest {
         checkShape(e)
         assertEquals("Default", e.name)
         assertEquals("Xross", e.manifest.text("author"))
-        // surfaces.json is merged in, and the pack keeps everything it ships, power.svg included.
+        // surfaces.json is merged in, and the pack keeps everything it ships, power.svg included,
+        // and CREDITS.md (the Phosphor icons' MIT notice travels with a shared copy).
         assertTrue(e.manifest.obj("surfaces").containsKey("FLAT_GLASS"))
         val sounds = TestAssets.platform.listAssets("${ThemePackLoader.DEFAULT_DIR}/sounds")!!.map { "sounds/$it" }
         val icons = TestAssets.platform.listAssets("${ThemePackLoader.DEFAULT_DIR}/icons")!!.map { "icons/$it" }
-        assertEquals((sounds + icons).toSet(), e.paths())
+        assertEquals((sounds + icons + "CREDITS.md").toSet(), e.paths())
         assertTrue("icons/power.svg" in e.paths())
     }
 

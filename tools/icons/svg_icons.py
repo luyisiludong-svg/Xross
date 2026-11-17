@@ -2,6 +2,9 @@
 """
 Converts the design SVGs in assets/icons into Android VectorDrawables.
 
+LEGACY: since the switch to Phosphor icons (assets/icons/phosphor), the Default pack's icons
+are no longer generated here; see app/src/main/assets/themes/default/CREDITS.md.
+
 The source files come in two shapes:
   * single icons: one <svg> with white <path>s (sometimes over a black backdrop <rect>)
   * sheets ("Group N.svg"): many icons, each in its own <g clip-path="url(#id)"> whose
