@@ -79,20 +79,46 @@ class PlaylistsTest {
         val pl = Playlist("Mix", listOf(songs[2].path, "/gone.mp3", songs[0].path))
         val menus = MediaMenus(MediaLibrary(songs = songs), playlists = listOf(pl, Playlist("Empty", emptyList())))
         val rows = menus.list(MediaMenus.PLAYLISTS)
-        assertEquals(listOf("New playlist", "Mix", "Empty"), rows.map { it.title })
+        assertEquals(listOf("New playlist", "Favorites", "Mix", "Empty"), rows.map { it.title })
         assertEquals(NodeAction.Run(Command.NewPlaylist()), rows[0].action)
-        assertEquals("2 songs · 1 missing · 2:00", rows[1].subtitle)
+        assertEquals("2 songs · 1 missing · 2:00", rows[2].subtitle)
         val key = MediaMenus.PLAYLIST + "Mix"
         assertEquals(listOf("Ember", "Tide Lines"), menus.songs(key).map { it.title })
         val inMix = menus.list(key)
         assertEquals(NodeAction.OpenMedia(MediaKind.SONG, key, 1), inMix[1].action)
-        assertEquals(listOf("Move up", "Move down", "Remove from playlist", "Add to playlist"), inMix[0].menu.map { it.label })
+        assertEquals(listOf("Move up", "Move down", "Remove from playlist", "Add to Favorites", "Add to playlist"), inMix[0].menu.map { it.label })
         assertEquals(Command.RemoveFromPlaylist("Mix", songs[2].path), inMix[0].menu[2].command)
         // Adding from inside Mix offers the other playlists, not Mix itself.
-        assertEquals(listOf("Empty", "New playlist…"), inMix[0].menu[3].submenu.map { it.label })
+        assertEquals(listOf("Empty", "New playlist…"), inMix[0].menu[4].submenu.map { it.label })
         assertEquals("This playlist is empty", menus.list(MediaMenus.PLAYLIST + "Empty").single().title)
         assertEquals("Playlists", menus.musicRoot(NowPlaying()).last().title)
     }
+
+    @Test fun favoritesIsAlwaysThereAndOnePressAway() {
+        val none = MediaMenus(MediaLibrary(songs = songs))
+        // No file yet: still listed (first), empty, and not deletable.
+        val fav = none.list(MediaMenus.PLAYLISTS)[1]
+        assertEquals("Favorites", fav.title)
+        assertTrue(fav.menu.isEmpty())
+        assertEquals("Add songs with Options ▸ Add to Favorites", none.list(MediaMenus.PLAYLIST + "Favorites").single().subtitle)
+        assertEquals("1 playlist", none.musicRoot(NowPlaying()).last().subtitle)
+        val ember = none.list(MediaMenus.SONGS_ALL).first { it.title == "Ember" }
+        assertEquals(MenuOptionLabel("Add to Favorites", Command.AddToPlaylist("Favorites", listOf(songs[2].path))), ember.menu.first().let { MenuOptionLabel(it.label, it.command) })
+        // A favorite offers the way back; its file can be named in any case.
+        val some = MediaMenus(MediaLibrary(songs = songs), playlists = listOf(Playlist("favorites", listOf(songs[2].path))))
+        val again = some.list(MediaMenus.SONGS_ALL).first { it.title == "Ember" }
+        assertEquals(Command.RemoveFromPlaylist("favorites", songs[2].path), again.menu.first().command)
+        assertEquals(listOf("Ember"), some.songs(MediaMenus.PLAYLIST + "Favorites").map { it.title })
+        val inFav = some.list(MediaMenus.PLAYLIST + "favorites").single()
+        assertEquals(listOf("Move up", "Move down", "Remove from playlist", "Add to playlist"), inFav.menu.map { it.label })
+        val favRow = some.list(MediaMenus.PLAYLISTS)[1]
+        assertEquals(listOf("Play", "Shuffle"), favRow.menu.map { it.label })
+        // Albums add to Favorites through their playlist list.
+        val album = some.list(MediaMenus.ALBUMS).first()
+        assertEquals("favorites", album.menu[0].submenu[0].label)
+    }
+
+    private data class MenuOptionLabel(val label: String, val command: Command?)
 
     @Test fun songsAlbumsAndArtistsAddToPlaylists() {
         val menus = MediaMenus(MediaLibrary(songs = songs), playlists = listOf(Playlist("Mix", listOf(songs[0].path))))
@@ -102,7 +128,7 @@ class PlaylistsTest {
         assertEquals(Command.NewPlaylist(listOf(songs[0].path)), add.submenu.last().command)
         val album = menus.list(MediaMenus.ALBUMS).first { it.title == "Blue Hours" }
         // Album order (track 1 first).
-        assertEquals(Command.AddToPlaylist("Mix", listOf(songs[1].path, songs[0].path)), album.menu[0].submenu[0].command)
+        assertEquals(Command.AddToPlaylist("Mix", listOf(songs[1].path, songs[0].path)), album.menu[0].submenu[1].command)
         val artist = menus.list(MediaMenus.ARTISTS).first { it.title == "Crimson Trio" }
         assertEquals("Add all to playlist", artist.menu.single().label)
     }

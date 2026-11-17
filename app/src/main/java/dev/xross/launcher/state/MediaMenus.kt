@@ -149,7 +149,15 @@ class MediaMenus(
 
     private fun playlist(key: String): Playlist? = playlistNamed(key.removePrefix(PLAYLIST))
 
-    fun playlistNamed(name: String): Playlist? = playlists.firstOrNull { it.name.equals(name, ignoreCase = true) }
+    /** Favorites, from its file or (none yet) empty: always there, always first. */
+    private val favorites: Playlist by lazy {
+        playlists.firstOrNull { it.name.equals(FAVORITES, ignoreCase = true) } ?: Playlist(FAVORITES, emptyList())
+    }
+
+    /** Favorites first, then the user's playlists by name. */
+    private val shownPlaylists: List<Playlist> by lazy { listOf(favorites) + playlists.filterNot { it.name.equals(FAVORITES, ignoreCase = true) } }
+
+    fun playlistNamed(name: String): Playlist? = shownPlaylists.firstOrNull { it.name.equals(name, ignoreCase = true) }
 
     /** The songs of playlist [name] that are still in the library. */
     fun playlistSongs(name: String): List<Song> = playlistNamed(name)?.let(::resolve).orEmpty()
@@ -202,7 +210,7 @@ class MediaMenus(
         add(folder(SONGS_ALL, "All songs", "${count(media.songs.size, "song")} · ${songSort.label}", NodeIcon.Glyph(GlyphKey.MUSIC)).copy(menu = songSortMenu()))
         add(folder(ALBUMS, "Albums", "${count(albums.size, "album")} · ${albumSort.label}", NodeIcon.Glyph(GlyphKey.ALBUM)).copy(menu = albumSortMenu()))
         add(folder(ARTISTS, "Artists", count(artists.size, "artist"), NodeIcon.Glyph(GlyphKey.ARTIST)))
-        add(folder(PLAYLISTS, "Playlists", count(playlists.size, "playlist"), NodeIcon.Glyph(GlyphKey.FAVORITES)))
+        add(folder(PLAYLISTS, "Playlists", count(shownPlaylists.size, "playlist"), NodeIcon.Glyph(GlyphKey.FAVORITES)))
     }
 
     // endregion
@@ -249,14 +257,22 @@ class MediaMenus(
             add(MenuOption("Move down", command = Command.MoveInPlaylist(inPlaylist.name, s.path, 1)))
             add(MenuOption("Remove from playlist", command = Command.RemoveFromPlaylist(inPlaylist.name, s.path)))
         }
-        if (s.path.isNotEmpty()) add(addToPlaylist("Add to playlist", listOf(s.path), except = inPlaylist?.name))
+        if (s.path.isNotEmpty()) {
+            // One press: Favorites is the playlist songs go to most.
+            when {
+                inPlaylist == favorites -> Unit // "Remove from playlist" above
+                s.path in favorites.paths -> add(MenuOption("Remove from Favorites", command = Command.RemoveFromPlaylist(favorites.name, s.path)))
+                else -> add(MenuOption("Add to Favorites", command = Command.AddToPlaylist(favorites.name, listOf(s.path))))
+            }
+            add(addToPlaylist("Add to playlist", listOf(s.path), except = inPlaylist?.name, withFavorites = false))
+        }
         if (key == SONGS_ALL) add(songSortSubmenu())
     }
 
     /** "Add to playlist" ▸ each playlist (but [except], the one open), then New playlist…. */
-    private fun addToPlaylist(label: String, paths: List<String>, except: String? = null) = MenuOption(
+    private fun addToPlaylist(label: String, paths: List<String>, except: String? = null, withFavorites: Boolean = true) = MenuOption(
         label,
-        submenu = playlists.filter { it.name != except }.map { p ->
+        submenu = shownPlaylists.filter { it.name != except && (withFavorites || it != favorites) }.map { p ->
             val has = paths.all { it in p.paths }
             MenuOption(p.name, detail = if (has) "Already in it" else count(p.paths.size, "song"), command = Command.AddToPlaylist(p.name, paths))
         } + MenuOption("New playlist…", command = Command.NewPlaylist(paths)),
@@ -280,8 +296,9 @@ class MediaMenus(
 
     private fun playlistsRows(): List<XmbNode> = buildList {
         add(XmbNode("music:playlist-new", "New playlist", "Then add songs from their Options", NodeIcon.Glyph(GlyphKey.ADD), NodeAction.Run(Command.NewPlaylist())))
-        for (p in playlists) {
+        for (p in shownPlaylists) {
             val songs = resolve(p)
+            val isFavorites = p == favorites
             val missing = p.paths.size - songs.size
             add(
                 XmbNode(
@@ -289,14 +306,15 @@ class MediaMenus(
                     title = p.name,
                     subtitle = count(songs.size, "song") + (if (missing > 0) " · $missing missing" else "") +
                         (duration(songs.sumOf { it.durationMs })?.let { " · $it" } ?: ""),
-                    icon = songs.firstOrNull()?.let { thumb(ThumbKind.ALBUM_ART, it.id, GlyphKey.FAVORITES) } ?: NodeIcon.Glyph(GlyphKey.FAVORITES),
+                    icon = if (isFavorites) NodeIcon.Glyph(GlyphKey.FAVORITES) else songs.firstOrNull()?.let { thumb(ThumbKind.ALBUM_ART, it.id, GlyphKey.MUSIC) } ?: NodeIcon.Glyph(GlyphKey.MUSIC),
                     action = NodeAction.OpenList(PLAYLIST + p.name),
                     menu = buildList {
                         if (songs.isNotEmpty()) {
                             add(MenuOption("Play", command = Command.PlayPlaylist(p.name, shuffle = false)))
                             add(MenuOption("Shuffle", command = Command.PlayPlaylist(p.name, shuffle = true)))
                         }
-                        add(
+                        // Favorites stays; emptying it is removing its songs.
+                        if (!isFavorites) add(
                             MenuOption(
                                 "Delete playlist",
                                 submenu = listOf(
@@ -314,7 +332,9 @@ class MediaMenus(
         val p = playlist(key) ?: return emptyList()
         val songs = resolve(p)
         if (songs.isEmpty()) {
-            val subtitle = if (p.paths.isEmpty()) "Add songs with Options ▸ Add to playlist" else "Its ${count(p.paths.size, "song")} aren't in the library"
+            val subtitle = if (p.paths.isEmpty()) {
+                if (p == favorites) "Add songs with Options ▸ Add to Favorites" else "Add songs with Options ▸ Add to playlist"
+            } else "Its ${count(p.paths.size, "song")} aren't in the library"
             return listOf(XmbNode("music:playlist-empty", "This playlist is empty", subtitle, NodeIcon.Glyph(GlyphKey.INFO)))
         }
         return songs.mapIndexed { i, s -> songNode(s, key, i, showAlbum = true) }
@@ -362,9 +382,17 @@ class MediaMenus(
          */
         fun photoOptions(photoId: Long, customWallpaper: Boolean, fit: WallpaperFit = WallpaperFit.FILL): List<MenuOption> = buildList {
             add(MenuOption("Set as Xross wallpaper", detail = "Behind the menu", command = Command.SetXrossWallpaper(photoId)))
+            add(wallpaperFitMenu(fit))
             add(MenuOption("Set as Android wallpaper", command = Command.SetWallpaper(photoId)))
             if (customWallpaper) add(MenuOption("Use the theme's wallpaper", command = Command.ResetXrossWallpaper))
         }
+
+        /** Xross wallpaper ▸ Wallpaper fit: Fill, Fit, Stretch or Center, the current one marked. */
+        fun wallpaperFitMenu(fit: WallpaperFit) = MenuOption(
+            "Wallpaper fit",
+            detail = fit.label,
+            submenu = WallpaperFit.entries.map { MenuOption(it.label, detail = it.detail, command = Command.SetWallpaperFit(it), selected = it == fit) },
+        )
 
         const val PHOTOS_ALL = "photos:all"
         const val PHOTO_FOLDER = "photos:folder:"
@@ -379,21 +407,15 @@ class MediaMenus(
         const val ARTIST = "music:artist:"
         const val PLAYLISTS = "music:playlists"
         const val PLAYLIST = "music:playlist:"
+        /** The built-in playlist (`Xross/playlists/Favorites.m3u8`), always listed first. */
+        const val FAVORITES = "Favorites"
 
         private val DATE: DateFormat = DateFormat.getDateInstance(DateFormat.MEDIUM)
 
-            add(wallpaperFitMenu(fit))
         fun count(n: Int, noun: String) = if (n == 1) "1 $noun" else "$n ${noun}s"
 
         fun duration(ms: Long): String? {
             if (ms <= 0) return null
-        /** Xross wallpaper ▸ Wallpaper fit: Fill, Fit, Stretch or Center, the current one marked. */
-        fun wallpaperFitMenu(fit: WallpaperFit) = MenuOption(
-            "Wallpaper fit",
-            detail = fit.label,
-            submenu = WallpaperFit.entries.map { MenuOption(it.label, detail = it.detail, command = Command.SetWallpaperFit(it), selected = it == fit) },
-        )
-
             val total = ms / 1000
             val h = total / 3600
             val m = (total % 3600) / 60
