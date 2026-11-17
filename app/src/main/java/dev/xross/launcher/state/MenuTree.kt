@@ -79,6 +79,8 @@ data class MenuSnapshot(
     val scanStatus: String? = null,
     val versionName: String = "",
     val media: MediaLibrary = MediaLibrary(),
+    /** Music playlists (`Xross/playlists`). */
+    val playlists: List<dev.xross.launcher.media.Playlist> = emptyList(),
     /** Roots of mounted volumes; empty means "unknown", in which case nothing is marked offline. */
     val mountedRoots: List<String> = emptyList(),
     /** Imported DATs with their match counts. */
@@ -192,7 +194,7 @@ class MenuTree(private val s: MenuSnapshot) {
     private val cache = HashMap<String, List<XmbNode>>()
 
     /** Photo/Music/Video lists and the collections behind the media viewers. */
-    val media by lazy { MediaMenus(s.media, s.storageGranted) }
+    val media by lazy { MediaMenus(s.media, s.storageGranted, s.playlists, s.settings.songSort, s.settings.albumSort) }
 
     /** Music root with the live Now Playing row. Not cached. */
     fun musicRoot(now: NowPlaying): List<XmbNode> = media.musicRoot(now)

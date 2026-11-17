@@ -159,6 +159,10 @@ data class SettingsFile(
         val slideshowSeconds: Int = D.slideshowSeconds,
         val resumeMusicAfterGames: Boolean = D.resumeMusicAfterGames,
         val loopVideos: Boolean = D.videoLoop,
+        /** TITLE, TITLE_DESC, ARTIST, ALBUM or RECENT. */
+        val songSort: String = D.songSort.name,
+        /** TITLE, TITLE_DESC, ARTIST or RECENT. */
+        val albumSort: String = D.albumSort.name,
     )
 
     @Serializable
@@ -302,7 +306,7 @@ object ConfigCodec {
             snapVolume = s.snapVolume,
             musicUnderSnaps = s.musicUnderSnaps.name,
         ),
-        media = SettingsFile.Media(s.slideshowSeconds, s.resumeMusicAfterGames, s.videoLoop),
+        media = SettingsFile.Media(s.slideshowSeconds, s.resumeMusicAfterGames, s.videoLoop, s.songSort.name, s.albumSort.name),
         metadata = SettingsFile.Metadata(
             s.scrapeAutomatically, s.scrapeWifiOnly, s.scrapeVideos, s.scrapeRegion, s.scrapeLanguage, s.hasheousEnabled,
         ),
@@ -366,6 +370,8 @@ object ConfigCodec {
         slideshowSeconds = f.media.slideshowSeconds.coerceIn(1, 600),
         resumeMusicAfterGames = f.media.resumeMusicAfterGames,
         videoLoop = f.media.loopVideos,
+        songSort = dev.xross.launcher.data.SongSort.parse(f.media.songSort),
+        albumSort = dev.xross.launcher.data.AlbumSort.parse(f.media.albumSort),
         scrapeAutomatically = f.metadata.scrapeAutomatically,
         scrapeWifiOnly = f.metadata.wifiOnly,
         scrapeVideos = f.metadata.videos,

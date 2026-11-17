@@ -9,6 +9,9 @@ sealed interface NamePurpose {
     /** A new Apps folder for [packageName]. */
     data class NewAppFolder(val packageName: String) : NamePurpose
 
+    /** A new Music playlist, starting with the songs at [paths]. */
+    data class NewPlaylist(val paths: List<String>) : NamePurpose
+
     /** The name of a theme exported from pack [packId] in [scope] (2b.8b), into an `.xtheme` file when [share] (2b.8c). */
     data class ExportTheme(val packId: String, val scope: ExportScope, val share: Boolean = false) : NamePurpose
 }

@@ -1,10 +1,13 @@
 package dev.xross.launcher.state
 
 import dev.xross.launcher.model.GlyphKey
+import dev.xross.launcher.data.AlbumSort
 import dev.xross.launcher.media.MediaLibrary
 import dev.xross.launcher.media.NowPlaying
 import dev.xross.launcher.media.Photo
+import dev.xross.launcher.media.Playlist
 import dev.xross.launcher.media.Song
+import dev.xross.launcher.data.SongSort
 import dev.xross.launcher.media.ThumbKind
 import dev.xross.launcher.media.Video
 import java.text.DateFormat
@@ -20,11 +23,22 @@ import java.util.Locale
  * read through All files access (the same grant as the ROM library), and without it MediaStore
  * returns nothing, which must not be presented as "no photos".
  */
-class MediaMenus(private val media: MediaLibrary, private val storageGranted: Boolean = true) {
+class MediaMenus(
+    private val media: MediaLibrary,
+    private val storageGranted: Boolean = true,
+    /** `Xross/playlists/<name>.m3u8`, as file paths; resolved against the library here. */
+    private val playlists: List<Playlist> = emptyList(),
+    private val songSort: SongSort = SongSort.TITLE,
+    private val albumSort: AlbumSort = AlbumSort.TITLE,
+) {
 
     private val photosByFolder by lazy { media.photos.groupBy { it.folder } }
     private val videosByFolder by lazy { media.videos.groupBy { it.folder } }
-    private val songsSorted by lazy { media.songs.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.title }) }
+    private val songsSorted by lazy { sorted(media.songs, songSort) }
+    private val songsByPath by lazy { media.songs.filter { it.path.isNotEmpty() }.associateBy { it.path } }
+
+    /** A playlist's songs in its order; entries whose file is gone are left out. */
+    private fun resolve(p: Playlist): List<Song> = p.paths.mapNotNull { songsByPath[it] }
     /**
      * Albums: MediaStore's album, split by folder when one album id spans several folders. The
      * same album ripped twice (FLAC and MP3 with identical tags) shares an id, and would otherwise
@@ -40,7 +54,31 @@ class MediaMenus(private val media: MediaLibrary, private val storageGranted: Bo
                     copyLabel = if (byFolder.size == 1) null else copyLabel(songs, byFolder.values),
                 )
             }
-        }.sortedWith(compareBy<AlbumGroup, String>(String.CASE_INSENSITIVE_ORDER) { it.songs.first().album }.thenBy { it.copyLabel.orEmpty() })
+        }.sortedWith(albumOrder())
+    }
+
+    private fun sorted(songs: List<Song>, sort: SongSort): List<Song> {
+        val byTitle = compareBy<Song, String>(String.CASE_INSENSITIVE_ORDER) { it.title }
+        return when (sort) {
+            SongSort.TITLE -> songs.sortedWith(byTitle)
+            SongSort.TITLE_DESC -> songs.sortedWith(byTitle.reversed())
+            SongSort.ARTIST -> songs.sortedWith(
+                compareBy<Song, String>(String.CASE_INSENSITIVE_ORDER) { it.artist }
+                    .thenBy(String.CASE_INSENSITIVE_ORDER) { it.album }.thenBy { it.track }.then(byTitle),
+            )
+            SongSort.ALBUM -> songs.sortedWith(compareBy<Song, String>(String.CASE_INSENSITIVE_ORDER) { it.album }.thenBy { it.track }.then(byTitle))
+            SongSort.RECENT -> songs.sortedWith(compareByDescending<Song> { it.addedAt }.then(byTitle))
+        }
+    }
+
+    private fun albumOrder(): Comparator<AlbumGroup> {
+        val byTitle = compareBy<AlbumGroup, String>(String.CASE_INSENSITIVE_ORDER) { it.songs.first().album }.thenBy { it.copyLabel.orEmpty() }
+        return when (albumSort) {
+            AlbumSort.TITLE -> byTitle
+            AlbumSort.TITLE_DESC -> byTitle.reversed()
+            AlbumSort.ARTIST -> compareBy<AlbumGroup, String>(String.CASE_INSENSITIVE_ORDER) { it.songs.first().artist }.then(byTitle)
+            AlbumSort.RECENT -> compareByDescending<AlbumGroup> { g -> g.songs.maxOf { it.addedAt } }.then(byTitle)
+        }
     }
 
     /** One album on screen, possibly one copy of an album that exists in several folders. */
@@ -72,8 +110,10 @@ class MediaMenus(private val media: MediaLibrary, private val storageGranted: Bo
         key == VIDEOS_ALL || key.startsWith(VIDEO_FOLDER) -> videos(key).mapIndexed { i, v -> videoNode(v, key, i) }
         key == SONGS_ALL || key.startsWith(ALBUM) || key.startsWith(ARTIST) ->
             songs(key).mapIndexed { i, s -> songNode(s, key, i, showAlbum = !key.startsWith(ALBUM)) }
+        key.startsWith(PLAYLIST) -> playlistRows(key)
         key == ALBUMS -> albums.map(::albumNode)
         key == ARTISTS -> artists.map { (name, songs) -> artistNode(name, songs) }
+        key == PLAYLISTS -> playlistsRows()
         else -> emptyList()
     }
 
@@ -98,10 +138,21 @@ class MediaMenus(private val media: MediaLibrary, private val storageGranted: Bo
             ?: key.removePrefix(ALBUM).substringBefore(COPY).toLongOrNull()
                 ?.let { id -> albums.firstOrNull { it.songs.first().albumId == id } }?.songs.orEmpty()
         key.startsWith(ARTIST) -> artists[key.removePrefix(ARTIST)].orEmpty()
+        key.startsWith(PLAYLIST) -> playlist(key)?.let(::resolve).orEmpty()
         else -> emptyList()
     }
 
     val allSongs: List<Song> get() = songsSorted
+
+    private fun playlist(key: String): Playlist? = playlistNamed(key.removePrefix(PLAYLIST))
+
+    fun playlistNamed(name: String): Playlist? = playlists.firstOrNull { it.name.equals(name, ignoreCase = true) }
+
+    /** The songs of playlist [name] that are still in the library. */
+    fun playlistSongs(name: String): List<Song> = playlistNamed(name)?.let(::resolve).orEmpty()
+
+    /** Whether [path] is a song in the library (playlist moves skip the missing ones). */
+    fun hasSong(path: String) = path in songsByPath
 
     // endregion
 
@@ -145,9 +196,10 @@ class MediaMenus(private val media: MediaLibrary, private val storageGranted: Bo
             return@buildList
         }
         add(XmbNode("music:shuffle", "Shuffle all", count(media.songs.size, "song"), NodeIcon.Glyph(GlyphKey.SHUFFLE), NodeAction.Run(Command.ShuffleAllSongs)))
-        add(folder(SONGS_ALL, "All songs", count(media.songs.size, "song"), NodeIcon.Glyph(GlyphKey.MUSIC)))
-        add(folder(ALBUMS, "Albums", count(albums.size, "album"), NodeIcon.Glyph(GlyphKey.ALBUM)))
+        add(folder(SONGS_ALL, "All songs", "${count(media.songs.size, "song")} · ${songSort.label}", NodeIcon.Glyph(GlyphKey.MUSIC)).copy(menu = songSortMenu()))
+        add(folder(ALBUMS, "Albums", "${count(albums.size, "album")} · ${albumSort.label}", NodeIcon.Glyph(GlyphKey.ALBUM)).copy(menu = albumSortMenu()))
         add(folder(ARTISTS, "Artists", count(artists.size, "artist"), NodeIcon.Glyph(GlyphKey.ARTIST)))
+        add(folder(PLAYLISTS, "Playlists", count(playlists.size, "playlist"), NodeIcon.Glyph(GlyphKey.FAVORITES)))
     }
 
     // endregion
@@ -184,16 +236,99 @@ class MediaMenus(private val media: MediaLibrary, private val storageGranted: Bo
         subtitle = listOfNotNull(s.artist, s.album.takeIf { showAlbum }, copyOfSong[s.id], duration(s.durationMs)).joinToString(" · "),
         icon = thumb(ThumbKind.ALBUM_ART, s.id, GlyphKey.MUSIC),
         action = NodeAction.OpenMedia(MediaKind.SONG, key, i),
+        menu = songMenu(s, key),
     )
+
+    private fun songMenu(s: Song, key: String): List<MenuOption> = buildList {
+        val inPlaylist = if (key.startsWith(PLAYLIST)) playlist(key) else null
+        if (inPlaylist != null) {
+            add(MenuOption("Move up", command = Command.MoveInPlaylist(inPlaylist.name, s.path, -1)))
+            add(MenuOption("Move down", command = Command.MoveInPlaylist(inPlaylist.name, s.path, 1)))
+            add(MenuOption("Remove from playlist", command = Command.RemoveFromPlaylist(inPlaylist.name, s.path)))
+        }
+        if (s.path.isNotEmpty()) add(addToPlaylist("Add to playlist", listOf(s.path), except = inPlaylist?.name))
+        if (key == SONGS_ALL) add(songSortSubmenu())
+    }
+
+    /** "Add to playlist" ▸ each playlist (but [except], the one open), then New playlist…. */
+    private fun addToPlaylist(label: String, paths: List<String>, except: String? = null) = MenuOption(
+        label,
+        submenu = playlists.filter { it.name != except }.map { p ->
+            val has = paths.all { it in p.paths }
+            MenuOption(p.name, detail = if (has) "Already in it" else count(p.paths.size, "song"), command = Command.AddToPlaylist(p.name, paths))
+        } + MenuOption("New playlist…", command = Command.NewPlaylist(paths)),
+    )
+
+    private fun songSortSubmenu() = MenuOption(
+        "Sort songs",
+        detail = songSort.label,
+        submenu = SongSort.entries.map { MenuOption(it.label, command = Command.SetSongSort(it), selected = it == songSort) },
+    )
+
+    private fun albumSortSubmenu() = MenuOption(
+        "Sort albums",
+        detail = albumSort.label,
+        submenu = AlbumSort.entries.map { MenuOption(it.label, command = Command.SetAlbumSort(it), selected = it == albumSort) },
+    )
+
+    private fun songSortMenu() = listOf(songSortSubmenu())
+
+    private fun albumSortMenu() = listOf(albumSortSubmenu())
+
+    private fun playlistsRows(): List<XmbNode> = buildList {
+        add(XmbNode("music:playlist-new", "New playlist", "Then add songs from their Options", NodeIcon.Glyph(GlyphKey.ADD), NodeAction.Run(Command.NewPlaylist())))
+        for (p in playlists) {
+            val songs = resolve(p)
+            val missing = p.paths.size - songs.size
+            add(
+                XmbNode(
+                    id = PLAYLIST + p.name,
+                    title = p.name,
+                    subtitle = count(songs.size, "song") + (if (missing > 0) " · $missing missing" else "") +
+                        (duration(songs.sumOf { it.durationMs })?.let { " · $it" } ?: ""),
+                    icon = songs.firstOrNull()?.let { thumb(ThumbKind.ALBUM_ART, it.id, GlyphKey.FAVORITES) } ?: NodeIcon.Glyph(GlyphKey.FAVORITES),
+                    action = NodeAction.OpenList(PLAYLIST + p.name),
+                    menu = buildList {
+                        if (songs.isNotEmpty()) {
+                            add(MenuOption("Play", command = Command.PlayPlaylist(p.name, shuffle = false)))
+                            add(MenuOption("Shuffle", command = Command.PlayPlaylist(p.name, shuffle = true)))
+                        }
+                        add(
+                            MenuOption(
+                                "Delete playlist",
+                                submenu = listOf(
+                                    MenuOption("Delete \"${p.name}\"", detail = "Removes the file; the songs stay", command = Command.DeletePlaylist(p.name)),
+                                ),
+                            ),
+                        )
+                    },
+                ),
+            )
+        }
+    }
+
+    private fun playlistRows(key: String): List<XmbNode> {
+        val p = playlist(key) ?: return emptyList()
+        val songs = resolve(p)
+        if (songs.isEmpty()) {
+            val subtitle = if (p.paths.isEmpty()) "Add songs with Options ▸ Add to playlist" else "Its ${count(p.paths.size, "song")} aren't in the library"
+            return listOf(XmbNode("music:playlist-empty", "This playlist is empty", subtitle, NodeIcon.Glyph(GlyphKey.INFO)))
+        }
+        return songs.mapIndexed { i, s -> songNode(s, key, i, showAlbum = true) }
+    }
 
     private fun albumNode(album: AlbumGroup): XmbNode {
         val first = album.songs.first()
         return folder(album.key, album.title, "${first.artist} · ${count(album.songs.size, "song")}", thumb(ThumbKind.ALBUM_ART, first.id, GlyphKey.ALBUM))
+            .copy(menu = listOfNotNull(pathsOf(album.songs)?.let { addToPlaylist("Add album to playlist", it) }, albumSortSubmenu()))
     }
+
+    private fun pathsOf(songs: List<Song>) = songs.map { it.path }.filter { it.isNotEmpty() }.takeIf { it.isNotEmpty() }
 
     private fun artistNode(name: String, songs: List<Song>): XmbNode {
         val albumCount = songs.map { it.albumId to it.folder }.distinct().size
         return folder(ARTIST + name, name, "${count(albumCount, "album")} · ${count(songs.size, "song")}", NodeIcon.Glyph(GlyphKey.ARTIST))
+            .copy(menu = listOfNotNull(pathsOf(songs)?.let { addToPlaylist("Add all to playlist", it) }))
     }
 
     private fun folder(key: String, title: String, subtitle: String, icon: NodeIcon) =
@@ -239,6 +374,8 @@ class MediaMenus(private val media: MediaLibrary, private val storageGranted: Bo
         /** Separates the album id from the folder in the key of one copy of a split album. */
         const val COPY = "|"
         const val ARTIST = "music:artist:"
+        const val PLAYLISTS = "music:playlists"
+        const val PLAYLIST = "music:playlist:"
 
         private val DATE: DateFormat = DateFormat.getDateInstance(DateFormat.MEDIUM)
 

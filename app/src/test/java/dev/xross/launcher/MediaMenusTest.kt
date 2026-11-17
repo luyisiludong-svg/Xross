@@ -68,7 +68,7 @@ class MediaMenusTest {
     }
 
     @Test fun musicRootShowsNowPlayingOnlyWhileSomethingIsLoaded() {
-        assertEquals(listOf("Shuffle all", "All songs", "Albums", "Artists"), menus.musicRoot(NowPlaying()).map { it.title })
+        assertEquals(listOf("Shuffle all", "All songs", "Albums", "Artists", "Playlists"), menus.musicRoot(NowPlaying()).map { it.title })
         val playing = menus.musicRoot(NowPlaying(song = library.songs[2], isPlaying = true))
         assertEquals("Now playing", playing.first().title)
         assertEquals("Ember · Crimson Trio", playing.first().subtitle)

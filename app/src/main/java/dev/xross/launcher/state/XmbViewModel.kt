@@ -54,6 +54,7 @@ import dev.xross.launcher.data.DatSummary
 import dev.xross.launcher.data.GameMetadataEntity
 import dev.xross.launcher.data.XrossSettings
 import dev.xross.launcher.media.NowPlaying
+import dev.xross.launcher.media.PlaylistStore
 import dev.xross.launcher.media.Photo
 import dev.xross.launcher.profile.FriendsState
 import dev.xross.launcher.profile.ProfileState
@@ -431,14 +432,15 @@ class XmbViewModel(
         container.games.games,
         container.apps.apps,
         settingsStore.settings,
-        container.media.library,
-    ) { e, games, apps, settings, mediaLib ->
+        combine(container.media.library, container.playlists.playlists, ::Pair),
+    ) { e, games, apps, settings, (mediaLib, playlists) ->
         MenuTree(
             e.copy(
                 games = games,
                 apps = apps,
                 settings = settings,
                 media = mediaLib,
+                playlists = playlists,
                 datFolder = folders.datFolder(settings.datFolder).absolutePath,
                 baseRomsFolder = folders.baseRomsFolder(settings.baseRomsFolder).absolutePath,
             ),
@@ -1207,6 +1209,8 @@ class XmbViewModel(
         audio.onReturnFromGame()
         recordFinishedSession()
         viewModelScope.launch { container.media.refresh() }
+        // Playlists copied in or edited on a PC while Xross was away.
+        viewModelScope.launch { container.playlists.reload() }
         library.resumeBackgroundWork()
         ra.onForeground()
         // Theme files edited while Xross was in the background (or events FUSE didn't deliver).
@@ -1269,9 +1273,79 @@ class XmbViewModel(
                 val name = AppFolders.normalizeName(text)
                 if (name == null) toast("Type a name first") else moveAppToFolder(purpose.packageName, name)
             }
+            is NamePurpose.NewPlaylist -> {
+                val name = PlaylistStore.normalizeName(text)
+                if (name == null) toast("Type a name first") else addToPlaylist(name, purpose.paths, creating = true)
+            }
             is NamePurpose.ExportTheme -> theme.onExportNamed(purpose, text)
         }
     }
+
+    // region Music playlists
+
+    private fun addToPlaylist(name: String, paths: List<String>, creating: Boolean = false) {
+        val existed = container.playlists.find(name)
+        viewModelScope.launch {
+            val added = container.playlists.add(name, paths)
+            val shown = container.playlists.find(name)?.name ?: name
+            when {
+                added == null -> refuse().also { toast("Couldn't save the playlist $shown") }
+                paths.isEmpty() -> {
+                    sounds.play(UiSound.OK)
+                    toast(if (existed != null) "$shown already exists" else "Created $shown")
+                }
+                added == 0 -> toast(if (paths.size == 1) "Already in $shown" else "All already in $shown")
+                else -> {
+                    sounds.play(UiSound.OK)
+                    val what = if (added == 1 && paths.size == 1) "Added" else "Added ${MediaMenus.count(added, "song")}"
+                    toast(if (creating && existed == null) "Created $shown with ${MediaMenus.count(added, "song")}" else "$what to $shown")
+                }
+            }
+        }
+    }
+
+    private fun playlistCommand(command: Command) {
+        val store = container.playlists
+        when (command) {
+            is Command.NewPlaylist -> typing.openNameEntry(
+                NameEntry(
+                    if (command.paths.isEmpty()) "New playlist" else "New playlist with ${MediaMenus.count(command.paths.size, "song")}",
+                    NamePurpose.NewPlaylist(command.paths),
+                    maxLength = PlaylistStore.MAX_NAME,
+                ),
+            )
+            is Command.AddToPlaylist -> addToPlaylist(command.name, command.paths)
+            is Command.RemoveFromPlaylist -> viewModelScope.launch {
+                if (store.remove(command.name, command.path)) {
+                    sounds.play(UiSound.OK)
+                    toast("Removed from ${command.name}")
+                } else {
+                    refuse()
+                }
+            }
+            is Command.MoveInPlaylist -> viewModelScope.launch {
+                val menus = tree.value.media
+                if (store.move(command.name, command.path, command.delta, menus::hasSong)) sounds.play(UiSound.MOVE) else refuse()
+            }
+            is Command.DeletePlaylist -> viewModelScope.launch {
+                if (store.delete(command.name)) {
+                    sounds.play(UiSound.OK)
+                    toast("Deleted ${command.name}")
+                } else {
+                    refuse()
+                }
+            }
+            is Command.PlayPlaylist -> {
+                val songs = tree.value.media.playlistSongs(command.name)
+                if (songs.isEmpty()) return refuse()
+                music.play(songs, if (command.shuffle) songs.indices.random() else 0, shuffle = command.shuffle)
+                toast(if (command.shuffle) "Shuffling ${command.name}" else "Playing ${command.name}")
+            }
+            else -> error("not a playlist command: $command")
+        }
+    }
+
+    // endregion
 
     fun closeNameEntry() = typing.closeNameEntry()
 
@@ -1530,6 +1604,11 @@ class XmbViewModel(
                 nav.update { it.jumpTo(index, category.id, category.title, Frame(MenuTree.LIBRARY, "Library")) }
             }
             Command.OpenNowPlaying -> media.openNowPlaying()
+            is Command.NewPlaylist, is Command.AddToPlaylist, is Command.RemoveFromPlaylist, is Command.MoveInPlaylist,
+            is Command.DeletePlaylist, is Command.PlayPlaylist,
+            -> playlistCommand(command)
+            is Command.SetSongSort -> settingsStore.update { it.copy(songSort = command.sort) }
+            is Command.SetAlbumSort -> settingsStore.update { it.copy(albumSort = command.sort) }
             Command.ShuffleAllSongs -> {
                 val songs = tree.value.media.allSongs
                 if (songs.isNotEmpty()) {
@@ -1633,6 +1712,8 @@ class XmbViewModel(
     // state declared throughout the class (a property declared below it would still be null).
     init {
         container.media.watch(viewModelScope)
+        // The Xross folder can move (storage granted, SD card): read the playlists where it is now.
+        viewModelScope.launch { container.environment.layout.map { it.root }.distinctUntilChanged().collect { container.playlists.reload() } }
         library.watch()
         // Art is named after each game's ROM: keep the index current, then move the old private cache once.
         viewModelScope.launch {

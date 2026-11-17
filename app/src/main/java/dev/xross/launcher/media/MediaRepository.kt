@@ -64,6 +64,10 @@ data class Song(
     val folder: String = "",
     /** "FLAC", "MP3", "AAC"… from the MIME type; empty when unknown. */
     val format: String = "",
+    /** Absolute file path; what playlists store, so they survive MediaStore renumbering. Empty when unknown. */
+    val path: String = "",
+    /** When MediaStore first saw the file (ms), for "Recently added". */
+    val addedAt: Long = 0,
 )
 
 data class MediaLibrary(
@@ -337,6 +341,7 @@ class MediaRepository(private val context: Context) {
             MediaStore.Audio.Media.ALBUM, MediaStore.Audio.Media.ALBUM_ID, MediaStore.Audio.Media.TRACK,
             MediaStore.Audio.Media.DURATION, MediaStore.Audio.Media.DISPLAY_NAME,
             @Suppress("DEPRECATION") MediaStore.Audio.Media.DATA, MediaStore.Audio.Media.MIME_TYPE,
+            MediaStore.Audio.Media.DATE_ADDED,
         )
         // Music only: skip ringtones, notification sounds and voice notes.
         val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0"
@@ -357,6 +362,8 @@ class MediaRepository(private val context: Context) {
                             durationMs = c.getLong(6),
                             folder = c.getString(8).orEmpty().substringBeforeLast('/', ""),
                             format = formatOf(c.getString(9)),
+                            path = c.getString(8).orEmpty(),
+                            addedAt = c.getLong(10) * 1000,
                         ),
                     )
                 }

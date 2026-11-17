@@ -79,6 +79,10 @@ class AppContainer(context: Context) {
     val sounds: UiSounds by lazy { UiSounds(appContext).also { it.useTheme(themes.active.value) } }
     val sessions: PlaySessionTracker by lazy { PlaySessionTracker(PrefsSessionStore(appContext)) }
     val media: MediaRepository by lazy { MediaRepository(appContext) }
+    /** Music playlists, `Xross/playlists/<name>.m3u8`. */
+    val playlists: dev.xross.launcher.media.PlaylistStore by lazy {
+        dev.xross.launcher.media.PlaylistStore { java.io.File(environment.current.root, dev.xross.launcher.media.PlaylistStore.FOLDER) }
+    }
     val music: MusicPlayer by lazy { MusicPlayer(appContext) }
     val dats: DatRepository by lazy { DatRepository(database) }
     val credentials: CredentialStore by lazy {

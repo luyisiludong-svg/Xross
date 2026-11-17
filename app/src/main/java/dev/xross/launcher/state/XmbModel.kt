@@ -117,6 +117,18 @@ sealed interface Command {
     data class SetGameEmulator(val gameId: Long, val key: String?) : Command
     data object OpenNowPlaying : Command
     data object ShuffleAllSongs : Command
+    /** Type a name, then create that playlist with [paths] in it (none: an empty playlist). */
+    data class NewPlaylist(val paths: List<String> = emptyList()) : Command
+    /** Appends the songs at [paths] to playlist [name] (those already in it are skipped). */
+    data class AddToPlaylist(val name: String, val paths: List<String>) : Command
+    data class RemoveFromPlaylist(val name: String, val path: String) : Command
+    /** Moves the song at [path] one place up ([delta] -1) or down (+1) in playlist [name]. */
+    data class MoveInPlaylist(val name: String, val path: String, val delta: Int) : Command
+    data class DeletePlaylist(val name: String) : Command
+    /** Plays playlist [name] from the start, or shuffled. */
+    data class PlayPlaylist(val name: String, val shuffle: Boolean) : Command
+    data class SetSongSort(val sort: dev.xross.launcher.data.SongSort) : Command
+    data class SetAlbumSort(val sort: dev.xross.launcher.data.AlbumSort) : Command
     /** Sets the photo as the Android system wallpaper (through the system's cropper). */
     data class SetWallpaper(val photoId: Long) : Command
     /** Draws the photo behind Xross's menu instead of the theme's wallpaper (`display.customWallpaper`). */

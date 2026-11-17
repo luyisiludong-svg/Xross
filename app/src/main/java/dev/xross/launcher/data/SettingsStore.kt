@@ -135,6 +135,10 @@ data class XrossSettings(
     /** Pause music when a game starts and pick it up again on return. */
     val resumeMusicAfterGames: Boolean = true,
     val videoLoop: Boolean = false,
+    /** Music ▸ All songs order (its Options ▸ Sort songs). */
+    val songSort: dev.xross.launcher.data.SongSort = dev.xross.launcher.data.SongSort.TITLE,
+    /** Music ▸ Albums order. */
+    val albumSort: dev.xross.launcher.data.AlbumSort = dev.xross.launcher.data.AlbumSort.TITLE,
     /**
      * Platform folders live inside one "All Games" folder (true), or sit directly in the Games
      * category next to Search and the collections (false: the classic, flatter PS3-style list).
