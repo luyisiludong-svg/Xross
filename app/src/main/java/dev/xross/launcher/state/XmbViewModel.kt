@@ -793,7 +793,7 @@ class XmbViewModel(
 
     /** The photo viewer's Options: its wallpaper choices, over the viewer. */
     private fun openPhotoOptions(photo: Photo) {
-        val options = MediaMenus.photoOptions(photo.id, customWallpaper = settingsStore.current.customWallpaper.isNotBlank())
+        val options = MediaMenus.photoOptions(photo.id, customWallpaper = settingsStore.current.customWallpaper.isNotBlank(), fit = settingsStore.current.wallpaperFit)
         transient.update { it.copy(optionsMenu = OptionsMenuState.open(photo.name.substringBeforeLast('.'), options)) }
     }
 
@@ -1607,6 +1607,11 @@ class XmbViewModel(
             is Command.NewPlaylist, is Command.AddToPlaylist, is Command.RemoveFromPlaylist, is Command.MoveInPlaylist,
             is Command.DeletePlaylist, is Command.PlayPlaylist,
             -> playlistCommand(command)
+            is Command.SetWallpaperFit -> {
+                settingsStore.update { it.copy(wallpaperFit = command.fit) }
+                sounds.play(UiSound.OK)
+                toast(if (settingsStore.current.customWallpaper.isBlank()) "Wallpaper fit: ${command.fit.label} (for a picture you set as Xross wallpaper)" else "Wallpaper fit: ${command.fit.label}")
+            }
             is Command.SetSongSort -> settingsStore.update { it.copy(songSort = command.sort) }
             is Command.SetAlbumSort -> settingsStore.update { it.copy(albumSort = command.sort) }
             Command.ShuffleAllSongs -> {

@@ -24,7 +24,9 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import dev.xross.launcher.data.WallpaperFit
 import dev.xross.launcher.theme.WallpaperSource
+import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -102,6 +104,8 @@ internal fun WallpaperBackdrop(
     viewport: Size,
     load: suspend (WallpaperSource, Int) -> Wallpaper?,
     onCovering: (Boolean) -> Unit,
+    /** How a picture the user chose is placed; the pack's wallpaper (and the fallback) always fills. */
+    fit: WallpaperFit = WallpaperFit.FILL,
 ) {
     var wallpaper by remember { mutableStateOf<Wallpaper?>(null) }
     var visible by remember { mutableStateOf<Wallpaper?>(null) }
@@ -132,14 +136,30 @@ internal fun WallpaperBackdrop(
         label = "wallpaper",
     )
     val report by rememberUpdatedState(onCovering)
-    val covering = target != null && target.opaque && alpha >= 0.999f
+    fun fitOf(w: Wallpaper) = if (source is WallpaperSource.Custom && w.key == source.key) fit else WallpaperFit.FILL
+    fun coversScreen(w: Wallpaper) = w.opaque && fitOf(w).covers(w.image.width.toFloat(), w.image.height.toFloat(), viewport.width, viewport.height)
+    val covering = target != null && coversScreen(target) && alpha >= 0.999f
     LaunchedEffect(covering) { report(covering) }
 
     val w = visible ?: return
     if (alpha <= 0f) return
-    FrostLayerEffect(FrostSlot.WALLPAPER, "wallpaper:${w.key}", w.image, viewport, w.opaque, BackdropScrim.WALLPAPER) { alpha }
+    val wFit = fitOf(w)
+    FrostLayerEffect(FrostSlot.WALLPAPER, "wallpaper:${w.key}", w.image, viewport, coversScreen(w), BackdropScrim.WALLPAPER, wFit) { alpha }
     Box(Modifier.fillMaxSize().graphicsLayer { this.alpha = alpha }) {
-        Image(w.image, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+        if (wFit == WallpaperFit.FILL) {
+            Image(w.image, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+        } else {
+            Box(
+                Modifier.fillMaxSize().drawBehind {
+                    val r = wFit.place(w.image.width.toFloat(), w.image.height.toFloat(), size.width, size.height)
+                    drawImage(
+                        w.image,
+                        dstOffset = androidx.compose.ui.unit.IntOffset(r[0].roundToInt(), r[1].roundToInt()),
+                        dstSize = androidx.compose.ui.unit.IntSize(r[2].roundToInt(), r[3].roundToInt()),
+                    )
+                },
+            )
+        }
         Box(Modifier.fillMaxSize().drawBehind { BackdropScrim.WALLPAPER.draw(this, size, 1f) })
     }
 }

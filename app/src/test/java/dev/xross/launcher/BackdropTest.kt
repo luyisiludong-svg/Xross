@@ -156,7 +156,7 @@ class BackdropTest {
 
     @Test fun photoOptionsOfferBothWallpapersAndTheWayBack() {
         assertEquals(
-            listOf(Command.SetXrossWallpaper(5), Command.SetWallpaper(5)),
+            listOf(Command.SetXrossWallpaper(5), null, Command.SetWallpaper(5)),
             MediaMenus.photoOptions(5, customWallpaper = false).map { it.command },
         )
         assertEquals(Command.ResetXrossWallpaper, MediaMenus.photoOptions(5, customWallpaper = true).last().command)

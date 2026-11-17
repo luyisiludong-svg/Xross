@@ -86,6 +86,8 @@ data class SettingsFile(
         val themeVariant: String = D.themeVariant,
         /** Xross wallpaper: a photo's content:// URI or a file path; empty = the theme pack's wallpaper. */
         val customWallpaper: String = D.customWallpaper,
+        /** FILL, FIT, STRETCH or CENTER: how [customWallpaper] is placed on the screen. */
+        val wallpaperFit: String = D.wallpaperFit.name,
         /**
          * Overrides of the pack's effects (Settings ▸ Theme): `shaderPreset`, `backgroundFilter`,
          * `uiFilter`, `focusFrameStyle`, `foregroundParticles`, `iconMask`; empty = the pack's.
@@ -278,6 +280,7 @@ object ConfigCodec {
             surfaceStyle = s.surfaceStyle,
             themeVariant = s.themeVariant,
             customWallpaper = s.customWallpaper,
+            wallpaperFit = s.wallpaperFit.name,
             effects = s.effectOverrides,
             components = s.componentOverrides,
             layout = s.layoutOverrides,
@@ -334,6 +337,7 @@ object ConfigCodec {
         surfaceStyle = f.display.surfaceStyle.trim().take(48),
         themeVariant = f.display.themeVariant.trim().take(48),
         customWallpaper = f.display.customWallpaper.trim().take(MAX_WALLPAPER_CHARS),
+        wallpaperFit = dev.xross.launcher.data.WallpaperFit.parse(f.display.wallpaperFit),
         effectOverrides = f.display.effects.normalized(),
         componentOverrides = f.display.components.normalized(),
         layoutOverrides = f.display.layout.normalized(),

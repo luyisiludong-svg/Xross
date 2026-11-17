@@ -8,6 +8,7 @@ import dev.xross.launcher.media.Photo
 import dev.xross.launcher.media.Playlist
 import dev.xross.launcher.media.Song
 import dev.xross.launcher.data.SongSort
+import dev.xross.launcher.data.WallpaperFit
 import dev.xross.launcher.media.ThumbKind
 import dev.xross.launcher.media.Video
 import java.text.DateFormat
@@ -30,6 +31,8 @@ class MediaMenus(
     private val playlists: List<Playlist> = emptyList(),
     private val songSort: SongSort = SongSort.TITLE,
     private val albumSort: AlbumSort = AlbumSort.TITLE,
+    /** For the photos' Options ▸ Wallpaper fit. */
+    private val wallpaperFit: WallpaperFit = WallpaperFit.FILL,
 ) {
 
     private val photosByFolder by lazy { media.photos.groupBy { it.folder } }
@@ -215,7 +218,7 @@ class MediaMenus(
         ).joinToString(" · "),
         icon = thumb(ThumbKind.PHOTO, p.id, GlyphKey.PHOTO),
         action = NodeAction.OpenMedia(MediaKind.PHOTO, key, i),
-        menu = photoOptions(p.id, customWallpaper = false),
+        menu = photoOptions(p.id, customWallpaper = false, fit = wallpaperFit),
     )
 
     private fun videoNode(v: Video, key: String, i: Int) = XmbNode(
@@ -357,7 +360,7 @@ class MediaMenus(
          * A photo's Options: Xross's own wallpaper (behind the menu) or the Android one, and, while
          * a Xross wallpaper is set ([customWallpaper]), back to the theme's.
          */
-        fun photoOptions(photoId: Long, customWallpaper: Boolean): List<MenuOption> = buildList {
+        fun photoOptions(photoId: Long, customWallpaper: Boolean, fit: WallpaperFit = WallpaperFit.FILL): List<MenuOption> = buildList {
             add(MenuOption("Set as Xross wallpaper", detail = "Behind the menu", command = Command.SetXrossWallpaper(photoId)))
             add(MenuOption("Set as Android wallpaper", command = Command.SetWallpaper(photoId)))
             if (customWallpaper) add(MenuOption("Use the theme's wallpaper", command = Command.ResetXrossWallpaper))
@@ -379,10 +382,18 @@ class MediaMenus(
 
         private val DATE: DateFormat = DateFormat.getDateInstance(DateFormat.MEDIUM)
 
+            add(wallpaperFitMenu(fit))
         fun count(n: Int, noun: String) = if (n == 1) "1 $noun" else "$n ${noun}s"
 
         fun duration(ms: Long): String? {
             if (ms <= 0) return null
+        /** Xross wallpaper ▸ Wallpaper fit: Fill, Fit, Stretch or Center, the current one marked. */
+        fun wallpaperFitMenu(fit: WallpaperFit) = MenuOption(
+            "Wallpaper fit",
+            detail = fit.label,
+            submenu = WallpaperFit.entries.map { MenuOption(it.label, detail = it.detail, command = Command.SetWallpaperFit(it), selected = it == fit) },
+        )
+
             val total = ms / 1000
             val h = total / 3600
             val m = (total % 3600) / 60

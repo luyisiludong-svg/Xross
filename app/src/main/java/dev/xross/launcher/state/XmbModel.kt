@@ -133,6 +133,8 @@ sealed interface Command {
     data class SetWallpaper(val photoId: Long) : Command
     /** Draws the photo behind Xross's menu instead of the theme's wallpaper (`display.customWallpaper`). */
     data class SetXrossWallpaper(val photoId: Long) : Command
+    /** How the Xross wallpaper is placed (Fill, Fit, Stretch, Center). */
+    data class SetWallpaperFit(val fit: dev.xross.launcher.data.WallpaperFit) : Command
     /** Back to the theme pack's wallpaper (or none). */
     data object ResetXrossWallpaper : Command
     /** Settings ▸ Theme ▸ Xross wallpaper ▸ Pick a picture: any image, through the system picker. */

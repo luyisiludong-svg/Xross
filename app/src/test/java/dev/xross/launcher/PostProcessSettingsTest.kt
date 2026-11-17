@@ -350,7 +350,7 @@ class PostProcessSettingsTest {
         assertEquals("Clears 1 effect, wallpaper", byId["disp:reset"]!!.subtitle)
         val wall = byId["disp:wallpaper"]!!
         assertEquals(NodeAction.Run(Command.ResetXrossWallpaper), wall.action)
-        assertEquals(listOf("Pick custom…", "Reset to theme (none)"), wall.menu.map { it.label })
+        assertEquals(listOf("Pick custom…", "Wallpaper fit", "Reset to theme (none)"), wall.menu.map { it.label })
         val clean = MenuTree(MenuSnapshot(themes = setup)).themeRows().associateBy { it.id }
         assertEquals("Nothing overrides Sakura", clean["disp:reset"]!!.subtitle)
         assertEquals(NodeAction.Run(Command.PickXrossWallpaper), clean["disp:wallpaper"]!!.action)

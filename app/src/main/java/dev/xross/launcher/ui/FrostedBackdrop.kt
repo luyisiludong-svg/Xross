@@ -68,8 +68,10 @@ class FrostLayer(
     /** The backdrop's on-screen opacity (its fade), read while drawing. */
     val alpha: () -> Float,
     val scrim: BackdropScrim,
-    /** The backdrop image has no transparent pixels, so layers below it needn't be drawn. */
+    /** The backdrop image has no transparent pixels and covers the screen, so layers below it needn't be drawn. */
     val opaque: Boolean,
+    /** How the image is placed on the screen; its slices are placed the same way. */
+    val fit: dev.xross.launcher.data.WallpaperFit = dev.xross.launcher.data.WallpaperFit.FILL,
 )
 
 /**
@@ -157,14 +159,15 @@ internal fun FrostLayerEffect(
     viewport: Size,
     opaque: Boolean,
     scrim: BackdropScrim,
+    fit: dev.xross.launcher.data.WallpaperFit = dev.xross.launcher.data.WallpaperFit.FILL,
     alpha: () -> Float,
 ) {
     val frost = LocalFrostedBackdrop.current
     val blurPx = LocalThemeSurfaces.current.active.backdropBlurDp * LocalDensity.current.density
     val currentAlpha by rememberUpdatedState(alpha)
     var blurred by remember(key) { mutableStateOf<ImageBitmap?>(null) }
-    LaunchedEffect(key, image, blurPx, viewport) {
-        val drawnWidth = PreBlur.cropRect(image.width.toFloat(), image.height.toFloat(), viewport.width, viewport.height)[2]
+    LaunchedEffect(key, image, blurPx, viewport, fit) {
+        val drawnWidth = fit.place(image.width.toFloat(), image.height.toFloat(), viewport.width, viewport.height)[2]
         val radius = PreBlur.radiusFor(blurPx, drawnWidth, PreBlur.smallSize(image.width, image.height).first)
         val start = System.nanoTime()
         blurred = if (radius <= 0) null else FrostCache.blurred(key, image, radius)
@@ -176,7 +179,7 @@ internal fun FrostLayerEffect(
             )
         }
     }
-    val layer = remember(blurred, opaque, scrim) { blurred?.let { FrostLayer(it, { currentAlpha() }, scrim, opaque) } }
+    val layer = remember(blurred, opaque, scrim, fit) { blurred?.let { FrostLayer(it, { currentAlpha() }, scrim, opaque, fit) } }
     DisposableEffect(frost, slot, layer) {
         slot.set(frost, layer)
         onDispose { if (slot.get(frost) === layer) slot.set(frost, null) }
@@ -273,7 +276,7 @@ private class FrostedSliceNode(var strength: () -> Float, var clip: () -> Boolea
                 for (layer in layers) {
                     val a = (layer.alpha() * k).coerceIn(0f, 1f)
                     if (a <= 0f) continue
-                    val r = PreBlur.cropRect(layer.image.width.toFloat(), layer.image.height.toFloat(), box.width, box.height)
+                    val r = layer.fit.place(layer.image.width.toFloat(), layer.image.height.toFloat(), box.width, box.height)
                     drawImage(
                         layer.image,
                         dstOffset = IntOffset(r[0].roundToInt(), r[1].roundToInt()),

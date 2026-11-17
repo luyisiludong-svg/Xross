@@ -194,7 +194,7 @@ class MenuTree(private val s: MenuSnapshot) {
     private val cache = HashMap<String, List<XmbNode>>()
 
     /** Photo/Music/Video lists and the collections behind the media viewers. */
-    val media by lazy { MediaMenus(s.media, s.storageGranted, s.playlists, s.settings.songSort, s.settings.albumSort) }
+    val media by lazy { MediaMenus(s.media, s.storageGranted, s.playlists, s.settings.songSort, s.settings.albumSort, s.settings.wallpaperFit) }
 
     /** Music root with the live Now Playing row. Not cached. */
     fun musicRoot(now: NowPlaying): List<XmbNode> = media.musicRoot(now)
@@ -1295,7 +1295,7 @@ class MenuTree(private val s: MenuSnapshot) {
     private fun wallpaperRow(): XmbNode {
         val custom = s.settings.customWallpaper.isNotBlank()
         val summary = when {
-            custom -> "A picture you chose · Confirm to use the theme's"
+            custom -> "A picture you chose (${s.settings.wallpaperFit.label}) · Confirm to use the theme's"
             s.themes.packWallpaper -> "From ${s.themes.activeName} · Confirm to pick your own"
             else -> "None (the background shader shows) · Confirm to pick one"
         }
@@ -1305,6 +1305,7 @@ class MenuTree(private val s: MenuSnapshot) {
             "disp:wallpaper", "Xross wallpaper", summary, NodeIcon.Glyph(GlyphKey.PHOTO), action,
             menu = listOf(
                 MenuOption("Pick custom…", detail = "Any picture, through the file picker", command = Command.PickXrossWallpaper),
+                MediaMenus.wallpaperFitMenu(s.settings.wallpaperFit),
                 MenuOption(theirs, command = Command.ResetXrossWallpaper, selected = !custom),
             ),
         )

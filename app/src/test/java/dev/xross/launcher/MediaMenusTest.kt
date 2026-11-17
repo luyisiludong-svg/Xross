@@ -53,8 +53,8 @@ class MediaMenusTest {
         val trips = menus.list(MediaMenus.PHOTO_FOLDER + "Trips")
         assertEquals(2, trips.size)
         assertEquals(NodeAction.OpenMedia(MediaKind.PHOTO, MediaMenus.PHOTO_FOLDER + "Trips", 1), trips[1].action)
-        assertEquals(listOf(Command.SetXrossWallpaper(3), Command.SetWallpaper(3)), trips[1].menu.map { it.command })
-        assertEquals(listOf("Set as Xross wallpaper", "Set as Android wallpaper"), trips[1].menu.map { it.label })
+        assertEquals(listOf(Command.SetXrossWallpaper(3), null, Command.SetWallpaper(3)), trips[1].menu.map { it.command })
+        assertEquals(listOf("Set as Xross wallpaper", "Wallpaper fit", "Set as Android wallpaper"), trips[1].menu.map { it.label })
     }
 
     @Test fun albumsSortTracksAndArtistsGroupAlbums() {

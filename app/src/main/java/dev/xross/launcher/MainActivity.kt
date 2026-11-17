@@ -374,6 +374,7 @@ class MainActivity : ComponentActivity() {
                         WallpaperSource.packWallpaper(pack, look)
                     },
                     loadWallpaper = { source, px -> container.wallpapers.load(source, px) },
+                    wallpaperFit = state.settings.wallpaperFit,
                     particlesIdle = particlesIdle,
                     reveal = { bootReveal.menu },
                 )

@@ -74,6 +74,8 @@ data class XrossSettings(
      * wallpaper, if it has one. Separate from the Android system wallpaper.
      */
     val customWallpaper: String = "",
+    /** How [customWallpaper] is placed: fill (crop), fit, stretch or center. */
+    val wallpaperFit: WallpaperFit = WallpaperFit.FILL,
     /**
      * Settings ▸ Theme picks over the pack's effects (2b.4f): background shader and filter, UI
      * filter, focus frame, particles, app icon mask. Empty values follow the pack.

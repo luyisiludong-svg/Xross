@@ -211,6 +211,8 @@ fun XmbScreen(
     /** The pack's wallpaper, shown when [wallpaper] (the user's) can't be read. */
     packWallpaper: WallpaperSource? = null,
     loadWallpaper: suspend (WallpaperSource, Int) -> Wallpaper? = { _, _ -> null },
+    /** How the user's own wallpaper is placed (the pack's always fills). */
+    wallpaperFit: dev.xross.launcher.data.WallpaperFit = dev.xross.launcher.data.WallpaperFit.FILL,
     /** No input for [ParticleRest.IDLE_AFTER_MS]: the foreground particles rest. */
     particlesIdle: Boolean = false,
     /** The menu's alpha on a cold start ([BootReveal.menu], 2b.5d): the fade-in, or 1 under the boot video. */
@@ -280,6 +282,7 @@ fun XmbScreen(
             viewport = viewport,
             load = loadWallpaper,
             onCovering = { wallpaperCovers = it },
+            fit = wallpaperFit,
         )
         FocusBackdrop(
             uuid = focusedArt?.uuid?.takeIf { quiet && state.details == null },
