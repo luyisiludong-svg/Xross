@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.0.3-beta — 2026-11-17
+
+- **New built-in theme pack: Gargantua.** An ASCII black hole, ray traced behind the menu, in
+  warm accretion-disk orange over a near-black sky, set in Redaction 50. Pick it in Settings ▸
+  Theme ▸ Theme pack. Built-in packs can now bring their own background shader.
+- **Video snaps keep playing under the Options and Information panels.** Opening either one on a
+  game used to stop its video and show the wallpaper.
+
 ## 0.2.0.2-beta — 2026-11-17
 
 - **Surface styles work.** Flat glass, Y2K glossy bezel, OLED true black and E-Ink high contrast
