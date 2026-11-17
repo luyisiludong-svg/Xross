@@ -64,6 +64,10 @@ internal fun Modifier.xrossSurface(
     borderScale: Float = 1f,
 ): Modifier = xrossSurface(shape = { it.shapeFor(shape) }, strength = { strength }, borderAlpha = { borderAlpha }, borderScale = borderScale)
 
+/** The backing of a row of button hints: a light pill of the theme surface. */
+internal fun Modifier.hintBar(): Modifier =
+    xrossSurface(RoundedCornerShape(50), strength = 0.55f, borderAlpha = 0.45f, borderScale = 2f / 3f)
+
 /**
  * [xrossSurface] for a component that animates it: [shape] picks the outline from the active
  * surface (the avatar HUD morphs from a circle into its capsule), [strength] and [borderAlpha] are

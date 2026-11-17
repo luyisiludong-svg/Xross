@@ -86,11 +86,7 @@ internal fun InfoPanel(
                 Modifier
                     .width(sheetWidth.dp())
                     .heightIn(max = (m.height * 0.86f).dp())
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(
-                        Brush.verticalGradient(0f to Color(0xF2141420), 1f to Color(0xF20A0A10)),
-                    )
-                    .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(12.dp))
+                    .xrossSurface(RoundedCornerShape(12.dp), strength = 0.95f, borderAlpha = 0.7f)
                     // Swallow taps inside the sheet so they don't dismiss it.
                     .clickable(remember { MutableInteractionSource() }, indication = null) {}
                     .padding(horizontal = (m.s * 0.05f).dp(), vertical = (m.s * 0.04f).dp()),

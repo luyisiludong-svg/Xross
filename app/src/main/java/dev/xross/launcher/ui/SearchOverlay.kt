@@ -109,8 +109,7 @@ internal fun SearchOverlay(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .clip(RoundedCornerShape(50))
-                .background(Color(0x40000000))
+                .hintBar()
                 .padding(horizontal = 10.dp, vertical = 4.dp),
         ) {
             if (search.focus == SearchFocus.KEYS) {
@@ -167,8 +166,7 @@ internal fun NameEntryOverlay(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .clip(RoundedCornerShape(50))
-                .background(Color(0x40000000))
+                .hintBar()
                 .padding(horizontal = 10.dp, vertical = 4.dp),
         ) {
             Hint(confirmGlyph, "Type", m.subtitleSize.sp())

@@ -122,9 +122,7 @@ private fun CardBody(
         modifier = Modifier
             .widthIn(min = 160.dp, max = 280.dp)
             .shadow(10.dp, CardShape, clip = false)
-            .clip(CardShape)
-            .background(Color(0xD9141420))
-            .border(1.dp, Color(0x33FFFFFF), CardShape)
+            .xrossSurface(CardShape, strength = 0.95f, borderAlpha = 0.6f)
             .combinedClickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,

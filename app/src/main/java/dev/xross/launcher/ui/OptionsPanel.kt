@@ -34,6 +34,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -79,17 +80,20 @@ internal fun OptionsPanel(
         val panelWidth = if (landscape) (m.width * 0.42f).coerceAtLeast(m.s * 0.75f) else m.width * 0.86f
         val rowHeight = m.titleSize * 2.5f
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.CenterEnd) {
+            // A short fade leads into the panel, which is drawn with the theme surface.
+            Row(Modifier.width(panelWidth.dp()).fillMaxHeight()) {
+                Box(
+                    Modifier
+                        .width((panelWidth * FADE).dp())
+                        .fillMaxHeight()
+                        .background(Brush.horizontalGradient(0f to Color.Transparent, 1f to Color(0x800C0C14))),
+                )
+                Box(Modifier.weight(1f).fillMaxHeight().xrossSurface(RectangleShape, strength = 0.95f, borderAlpha = 0.7f))
+            }
             Column(
                 Modifier
                     .width(panelWidth.dp())
                     .fillMaxHeight()
-                    .background(
-                        Brush.horizontalGradient(
-                            0f to Color.Transparent,
-                            0.14f to Color(0xE60C0C14),
-                            1f to Color(0xF20C0C14),
-                        ),
-                    )
                     // Swallow taps inside the panel so they don't dismiss it.
                     .clickable(remember { MutableInteractionSource() }, indication = null) {}
                     .padding(start = (panelWidth * 0.2f).dp(), end = (m.s * 0.04f).dp(), top = (m.s * 0.08f).dp(), bottom = (m.s * 0.04f).dp()),
@@ -162,3 +166,6 @@ internal fun OptionsPanel(
         }
     }
 }
+
+/** The share of the panel's width that fades in before its surface starts. */
+private const val FADE = 0.14f

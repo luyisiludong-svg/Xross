@@ -651,9 +651,8 @@ fun XmbScreen(
                 last,
                 style = shadowed(m.subtitleSize.sp()),
                 modifier = Modifier
-                    .clip(RoundedCornerShape(50))
-                    // Nearly opaque: toasts can land on top of overlay text.
-                    .background(Color(0xE6101018))
+                    // Full strength: toasts can land on top of overlay text.
+                    .xrossSurface(RoundedCornerShape(50), borderAlpha = 0.7f)
                     .padding(horizontal = (m.s * 0.04f).dp(), vertical = (m.s * 0.018f).dp()),
             )
         }
@@ -1391,8 +1390,7 @@ private fun OverlayHints(pairs: List<Pair<String, String>>, state: XmbUiState, s
     Row(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         modifier = Modifier
-            .clip(RoundedCornerShape(50))
-            .background(Color(0x40000000))
+            .hintBar()
             .padding(horizontal = 10.dp, vertical = 4.dp),
     ) {
         for ((glyph, label) in pairs) {
@@ -1584,8 +1582,7 @@ private fun ButtonHints(state: XmbUiState, size: TextUnit, modifier: Modifier) {
     Row(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         modifier = modifier
-            .clip(RoundedCornerShape(50))
-            .background(Color(0x40000000))
+            .hintBar()
             .padding(horizontal = 10.dp, vertical = 4.dp)
             .graphicsLayer { alpha = 0.85f },
     ) {
