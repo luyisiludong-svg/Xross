@@ -535,9 +535,9 @@ Settings that name its former id `xmb` load it.
 
 The APK also bundles **Xross** in
 [`app/src/main/assets/themes/xross/`](../app/src/main/assets/themes/xross): the same sounds and
-surfaces with Phosphor icons (MIT, credited in its `CREDITS.md`), and **Gargantua** in
+surfaces with Phosphor icons (MIT, credited in [`CREDITS.md`](../CREDITS.md)), and **Gargantua** in
 [`app/src/main/assets/themes/blackhole/`](../app/src/main/assets/themes/blackhole): an ASCII black
-hole shader set in Redaction 50 (OFL). Bundled packs are listed right
+hole shader set in Redaction 50 (OFL, also credited there). Bundled packs are listed right
 after Default, load from the APK, and their ids are reserved (`ThemePackLoader.BUNDLED_IDS`).
 
 The Phosphor icons are committed as pack SVGs; each names its source icon in a comment. To change

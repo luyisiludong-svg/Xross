@@ -1,5 +1,5 @@
 # LEGACY: the Default pack no longer uses these icons. It ships Phosphor icons
-# (assets/icons/phosphor, credits in app/src/main/assets/themes/xross/CREDITS.md).
+# (assets/icons/phosphor, credits in CREDITS.md at the repository root).
 # Running `build` below would bring the old glyphs back.
 #
 # Launcher role = source icon id (run `svg_icons.py list` to see ids and previews).

@@ -113,7 +113,7 @@ class LookExporterTest {
         checkShape(e)
         assertEquals("Xross", e.name)
         // The Phosphor icons' MIT notice travels with a shared copy.
-        assertTrue("CREDITS.md" in e.paths())
+        assertTrue("LICENSE.txt" in e.paths())
         assertTrue("icons/power.svg" in e.paths())
     }
 

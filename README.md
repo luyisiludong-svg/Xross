@@ -211,11 +211,13 @@ Xross is tested on three levels:
 Commands and details are in the [developer guide](docs/DEVELOPMENT.md#testing) and
 [`HARDWARE_TESTING.md`](docs/HARDWARE_TESTING.md).
 
-## License and community
+## License, credits and community
 
-Xross is released under the [Apache License 2.0](LICENSE). Bug reports and ideas are welcome as
-[issues](https://github.com/luyisiludong-svg/Xross/issues); check [`Roadmap.md`](Roadmap.md) first
-to see whether something is already planned.
+Xross is released under the [Apache License 2.0](LICENSE). The icons, fonts, shaders, libraries
+and services it builds on are credited in [`CREDITS.md`](CREDITS.md).
+
+Bug reports and ideas are welcome as [issues](https://github.com/luyisiludong-svg/Xross/issues);
+check [`Roadmap.md`](Roadmap.md) first to see whether something is already planned.
 
 Xross is an independent fan project. It isn't affiliated with or endorsed by Sony Interactive
 Entertainment.
