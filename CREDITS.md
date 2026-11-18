@@ -1,7 +1,40 @@
 # Credits
 
 Xross itself is released under the [Apache License 2.0](LICENSE). This file lists the third-party
-work it ships with or builds on, and the services it talks to.
+work it ships with or builds on, the projects that inspired it, and the services it talks to.
+
+## Inspiration
+
+Xross owes its ideas to a lot of other work. None of the projects below contributed code or
+assets unless stated otherwise.
+
+### Frontends
+
+- **Sony's XMB** on the PS3 and PSP, the interface Xross is modelled on. Its layout and behaviour
+  were studied from the consoles and Sony's official user manuals.
+- **Wave Launcher.** Xross began as a plan to fork Wave Launcher. Wave is closed source, so Xross
+  was written from scratch instead, with Wave's design as one of its visual references. Xross
+  contains no code or assets from Wave Launcher.
+- **[ES-DE](https://es-de.org).** Xross follows ES-DE's conventions so libraries move between the
+  two: platform ids match ES-DE's system names, artwork uses ES-DE's media folder layout, and
+  several emulator launch recipes come from ES-DE's published Android rules.
+- **Daijishō and Beacon**, whose approach to Android emulation frontends showed the shape Xross's
+  library and launching took.
+
+### Theming and visuals
+
+- **[Wallpaper Engine](https://www.wallpaperengine.io)** inspired the animated, shader-driven
+  backgrounds.
+- **Linux ricing and [r/unixporn](https://www.reddit.com/r/unixporn/)**, and setups built on tools
+  like Hyprland and Waybar, inspired theme packs: plain files you can edit, share and swap.
+- **JIN2 (@jin_22ee).** JIN2's black hole work inspired the Gargantua pack's shader. Xross's
+  `black_hole.frag` is an independent implementation built from the published physics of light
+  bending around a spinning black hole (see the
+  [Gargantua pack](#gargantua-pack-appsrcmainassetsthemesblackhole) below) and uses none of JIN2's
+  code.
+
+Xross is an independent project. It is not affiliated with or endorsed by Sony Interactive
+Entertainment or any of the projects and people above.
 
 ## Bundled theme packs
 
