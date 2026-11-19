@@ -64,6 +64,7 @@ class ConfigCodecTest {
         resumeMusicAfterGames = false,
         videoLoop = true,
         allGamesFolder = false,
+        showFileFormat = false,
         systemOverrides = mapOf("snes" to SystemOverride(extraFolders = setOf("SFC Hacks"), extraExtensions = setOf("bps"))),
         hiddenApps = setOf("com.example.ads"),
         hideSystemApps = true,

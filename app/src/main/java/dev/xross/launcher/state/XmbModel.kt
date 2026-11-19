@@ -181,6 +181,7 @@ sealed interface Command {
     data object ToggleResumeMusicAfterGames : Command
     data object ToggleVideoLoop : Command
     data object ToggleAllGamesFolder : Command
+    data object ToggleFileFormat : Command
     /** Moves the Xross folder to the next mounted volume (primary storage, SD card, …). */
     data object CycleXrossVolume : Command
     data object BackupNow : Command

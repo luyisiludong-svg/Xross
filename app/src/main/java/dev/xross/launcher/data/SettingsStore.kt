@@ -146,6 +146,8 @@ data class XrossSettings(
      * category next to Search and the collections (false: the classic, flatter PS3-style list).
      */
     val allGamesFolder: Boolean = true,
+    /** The file type ("ISO", "CHD") at the end of a game row's subtitle. */
+    val showFileFormat: Boolean = true,
     /** platformId → the user's extra folder names and extensions (systems.json). */
     val systemOverrides: Map<String, SystemOverride> = emptyMap(),
     /** Package names hidden from Apps and Games ▸ Android Games. */

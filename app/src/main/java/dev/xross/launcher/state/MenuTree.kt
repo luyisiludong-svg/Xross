@@ -356,7 +356,7 @@ class MenuTree(private val s: MenuSnapshot) {
             meta?.region?.let { add(it) }
             // Skip the extension when it only repeats the platform ("GBA · GBA").
             val ext = game.fileName.substringAfterLast('.', "").uppercase(Locale.ROOT)
-            if (!((showPlatform || systemPill) && ext == platform?.shortName?.uppercase(Locale.ROOT))) add(ext)
+            if (s.settings.showFileFormat && !((showPlatform || systemPill) && ext == platform?.shortName?.uppercase(Locale.ROOT))) add(ext)
             // Tracked playtime where the file size used to be (the size is in Information).
             if (BadgePill.PLAYTIME !in pills) add(playtimeSubtitle(game.playTimeMs))
         }
@@ -1012,7 +1012,7 @@ class MenuTree(private val s: MenuSnapshot) {
         folder(DISPLAY_INTRO, "Intro and transitions", GlyphKey.DISPLAY, introSummary()),
         folder(DISPLAY_COMPONENTS, "Components", GlyphKey.DISPLAY, componentsSummary()),
         layoutRow(),
-        folder(DISPLAY_MENU, "Menu and profile", GlyphKey.USERS, "Profile customization, button hints, platform folders"),
+        folder(DISPLAY_MENU, "Menu and profile", GlyphKey.USERS, "Profile customization, button hints, platform folders, game rows"),
         resetThemeRow(),
         setting(
             "disp:export", "Export theme…",
@@ -1182,6 +1182,13 @@ class MenuTree(private val s: MenuSnapshot) {
             if (s.settings.allGamesFolder) "Inside All Games" else "At the top of Games (classic)",
             GlyphKey.GAMES,
             Command.ToggleAllGamesFolder,
+        ),
+        setting(
+            "disp:fileformat",
+            "File format in game rows",
+            if (s.settings.showFileFormat) "Shown (ISO, CHD…)" else "Hidden",
+            GlyphKey.GAMES,
+            Command.ToggleFileFormat,
         ),
     )
 

@@ -123,6 +123,8 @@ data class SettingsFile(
         val waveColors: WaveColors = WaveColors(),
         val buttonHints: Boolean = D.showButtonHints,
         val allGamesFolder: Boolean = D.allGamesFolder,
+        /** The file type ("ISO", "CHD") in game rows; the Information screen shows it either way. */
+        val showFileFormat: Boolean = D.showFileFormat,
     )
 
     /** `#RRGGBB` gradient for the CUSTOM wave tint. */
@@ -297,6 +299,7 @@ object ConfigCodec {
             waveColors = SettingsFile.WaveColors(s.waveColors.top, s.waveColors.bottom, s.waveColors.wave),
             buttonHints = s.showButtonHints,
             allGamesFolder = s.allGamesFolder,
+            showFileFormat = s.showFileFormat,
         ),
         sound = SettingsFile.Sound(
             effects = s.soundEffects,
@@ -362,6 +365,7 @@ object ConfigCodec {
         },
         showButtonHints = f.display.buttonHints,
         allGamesFolder = f.display.allGamesFolder,
+        showFileFormat = f.display.showFileFormat,
         soundEffects = f.sound.effects,
         soundVolume = f.sound.effectsVolume.finiteOr(D.soundVolume).coerceIn(0f, 1f),
         cueVolume = f.sound.cueVolume.volumeOr(f.sound.effectsVolume.finiteOr(D.soundVolume)),

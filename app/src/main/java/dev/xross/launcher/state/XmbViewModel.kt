@@ -1630,6 +1630,7 @@ class XmbViewModel(
             Command.ToggleResumeMusicAfterGames -> settingsStore.update { it.copy(resumeMusicAfterGames = !it.resumeMusicAfterGames) }
             Command.ToggleVideoLoop -> settingsStore.update { it.copy(videoLoop = !it.videoLoop) }
             Command.ToggleAllGamesFolder -> settingsStore.update { it.copy(allGamesFolder = !it.allGamesFolder) }
+            Command.ToggleFileFormat -> settingsStore.update { it.copy(showFileFormat = !it.showFileFormat) }
             is Command.LaunchApp -> launchApp(command.packageName, command.activityName)
             is Command.HideApp -> {
                 settingsStore.update { it.copy(hiddenApps = it.hiddenApps + command.packageName) }
