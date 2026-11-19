@@ -39,9 +39,9 @@ class LibraryOrganizationTest {
         val base = File(tmp.root, "Xross/roms")
         val result = SystemFolders.create(base)
         assertTrue(result.ok)
-        assertEquals(22, PlatformRegistry.builtIn.size)
+        assertEquals(23, PlatformRegistry.builtIn.size)
         assertEquals(PlatformRegistry.builtIn.map { it.id }, result.created)
-        for (id in listOf("nes", "snes", "psx", "ps2", "n3ds", "switch", "arcade")) {
+        for (id in listOf("nes", "snes", "psx", "ps2", "ps3", "n3ds", "switch", "arcade")) {
             assertTrue("$id/", File(base, id).isDirectory)
             // Every scaffolded folder is recognised by the scanner.
             assertEquals(id, PlatformRegistry.forFolder(id)?.id)
@@ -54,10 +54,10 @@ class LibraryOrganizationTest {
         val keep = File(base, "snes/Chrono Trigger.sfc").apply { writeText("rom") }
         val first = SystemFolders.create(base)
         assertEquals(listOf("snes"), first.existing)
-        assertEquals(21, first.created.size)
+        assertEquals(22, first.created.size)
         val second = SystemFolders.create(base)
         assertTrue(second.created.isEmpty())
-        assertEquals(22, second.existing.size)
+        assertEquals(23, second.existing.size)
         assertEquals("rom", keep.readText())
     }
 
@@ -65,7 +65,7 @@ class LibraryOrganizationTest {
         val blocked = File(tmp.root, "file-not-folder").apply { writeText("x") }
         val result = SystemFolders.create(blocked)
         assertFalse(result.ok)
-        assertEquals(22, result.failed.size)
+        assertEquals(23, result.failed.size)
     }
 
     @Test fun theBaseFolderIsScannedFirstBesideAutoDetection() {

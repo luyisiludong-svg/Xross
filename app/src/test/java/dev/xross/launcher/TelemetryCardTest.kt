@@ -192,7 +192,8 @@ class TelemetryCardTest {
         assertEquals("Rich card · Newest unlocks and friends who played it, above the hints", subtitle(true, "RICH_CARD"))
         assertEquals("Rich card · Needs a RetroAchievements account (Settings ▸ Accounts)", subtitle(false, "RICH_CARD"))
         assertEquals("Off · No RetroAchievements badge on games", subtitle(false, "OFF"))
-        assertEquals("the last row, so earlier rows keep their places", "disp:comp:telemetry", rows(true, null).last().id)
+        // After the earlier rows, so they keep their places; only Game tile glow (0.2.1.0) comes later.
+        assertEquals(listOf("disp:comp:telemetry", "disp:comp:tile_glow"), rows(true, null).takeLast(2).map { it.id })
     }
 
     // endregion

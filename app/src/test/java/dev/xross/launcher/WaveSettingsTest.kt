@@ -155,7 +155,7 @@ class WaveSettingsTest {
             MenuTree.DISPLAY_COMPONENTS, "disp:layout", MenuTree.DISPLAY_MENU, "disp:reset", "disp:export", "disp:import"), rows.map { it.id })
         assertEquals(listOf("Colors", "Background", "Effects", "Intro and transitions", "Components", "Layout", "Menu and profile"), rows.subList(2, 9).map { it.title })
         assertEquals("Theme pack · Sakura", rows[2].subtitle)
-        assertEquals(listOf("disp:avatar", "disp:hints", "disp:allgames"), tree.list(MenuTree.DISPLAY_MENU).map { it.id })
+        assertEquals(listOf("disp:avatar", "disp:hints", "disp:allgames", "disp:fileformat", "disp:systemlogos"), tree.list(MenuTree.DISPLAY_MENU).map { it.id })
         val pack = rows[0]
         assertEquals("Sakura by me · 2 packs", pack.subtitle)
         assertEquals(NodeAction.Run(Command.CycleThemePack), pack.action)
