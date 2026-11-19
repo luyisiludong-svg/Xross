@@ -178,7 +178,7 @@ class ThemeExportTest {
                 shaderPreset = "STARFIELD", backgroundFilter = "SCANLINES", uiFilter = "BLOOM", focusFrameStyle = "GOLD_BEZEL",
                 foregroundParticles = "SNOW", iconMask = "CIRCLE", bootIntro = "SHADER", launchCurtain = "IRIS",
             ),
-            components = ComponentOverrides(batteryMode = "PERCENTAGE", statusBarRight = listOf("CLOCK", "AVATAR")),
+            components = ComponentOverrides(batteryMode = "PERCENTAGE", statusBarRight = listOf("CLOCK", "AVATAR"), tileGlow = false),
             layout = LayoutOverrides(preset = "MODERN_WIDESCREEN", uiScale = 0.9f, itemSpacingDp = 6f, focusedScale = 1.05f),
             surfaceStyle = "Y2K_GLOSSY_BEZEL",
             adaptiveGamePalette = false,

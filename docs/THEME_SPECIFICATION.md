@@ -560,7 +560,8 @@ category or battery level.
   "volumeAlways": false,
   "miniPlayerMode": "STATUS_TICKER",
   "glyphOverride": "AUTO",
-  "badgePills": ["SYSTEM", "YEAR", "RA_PROGRESS"]
+  "badgePills": ["SYSTEM", "YEAR", "RA_PROGRESS"],
+  "tileGlow": true
 }
 ```
 
@@ -591,6 +592,14 @@ category or battery level.
   "Sat, Nov 14  9:41 PM", `m` → "9:41 PM".
 
 The Default pack: left `[]`, right `[CLOCK, BATTERY, AVATAR]`, `BOTH`, empty clock format.
+
+### Game tile glow
+
+* `tileGlow` (0.2.1.0): `true` (the default) frames the focused game tile in the pack's
+  `effects.focusFrameStyle`; `false` draws no frame there. The focused tile still grows and shows
+  its title plate. Only game tiles change: RetroAchievements badges and thumbnails keep their frame,
+  so a pack can keep `GOLD_BEZEL` on badges and a flat look on the game row.
+* A value that isn't `true` or `false` is reported and ignored (the layer below's value is kept).
 
 ### Mini player, glyphs and title badges
 
@@ -668,6 +677,7 @@ leaving the rest of the block.
 | `badgePills` | array of `SYSTEM` (`PLATFORM`), `YEAR` (`RELEASE_YEAR`), `DEVELOPER`, `PLAYTIME`, `RA_PROGRESS` (`RA`, `ACHIEVEMENTS`) |
 | `logo` | an SVG, PNG or WebP in the pack, or `none` |
 | `volumeAlways` | `true` / `false` |
+| `tileGlow` (`glow`) | `true` / `false` |
 
 ### Settings ▸ Theme ▸ Components
 
@@ -685,7 +695,8 @@ leaving the rest of the block.
   Developer, Playtime and Achievements; Confirm turns a badge on (at the end) or off, and the list
   stays open on it.
 * *Top-left*: Theme pack, Social stack, Empty.
-* *Achievement badge* (last): Theme pack, Off, Compact, Rich card.
+* *Achievement badge*: Theme pack, Off, Compact, Rich card.
+* *Game tile glow* (last): Theme pack, On, Off.
 
 Saved as `display.components` in `settings.json` (`null` follows the pack); Reset to theme
 defaults clears it, quick profiles never touch it.

@@ -325,6 +325,7 @@ object LookExporter {
             "badgePills" to JsonArray(c.pills.map { str(it.name) }),
             "logo" to str(c.logo),
             "volumeAlways" to JsonPrimitive(c.volumeAlways),
+            "tileGlow" to JsonPrimitive(c.tileGlow),
         ),
     )
 

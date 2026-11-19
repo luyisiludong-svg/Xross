@@ -110,6 +110,7 @@ internal fun GameTile(
     val shown by animateFloatAsState(if (art != null) 1f else 0f, tween(320), label = "tileArt")
     val frame = LocalFocusFrame.current
     val accent = LocalThemeAccent.current
+    val tileGlow = LocalComponents.current.tileGlow
 
     Box(
         Modifier
@@ -120,8 +121,9 @@ internal fun GameTile(
                 scaleY = s
             }
             // Focus frame (2b.4d): soft white rings breathing with the pulse by default, or the
-            // theme's steady neon, hard shadow or gold bezel.
-            .drawBehind { drawPlateFrame(frame, accent, glow(), 6.dp.toPx()) },
+            // theme's steady neon, hard shadow or gold bezel. `components.tileGlow` off: none, the
+            // scale and the title plate show the focus.
+            .then(if (tileGlow) Modifier.drawBehind { drawPlateFrame(frame, accent, glow(), 6.dp.toPx()) } else Modifier),
     ) {
         Box(
             contentAlignment = Alignment.Center,

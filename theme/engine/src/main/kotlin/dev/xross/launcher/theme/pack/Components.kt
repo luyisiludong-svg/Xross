@@ -93,6 +93,13 @@ data class Components(
     val logo: String? = null,
     /** Show `VOLUME` all the time instead of for 3 s after a change. */
     val volumeAlways: Boolean? = null,
+    /**
+     * Frame the focused game tile with the pack's `focusFrameStyle` (default true). Off, the tile
+     * still grows and shows its title plate; badges and thumbnails keep their frame either way.
+     * Kept as JSON so a value that isn't `true` or `false` is reported and dropped on its own
+     * instead of failing the whole manifest ([ComponentsPatch.of] reads it).
+     */
+    @kotlinx.serialization.json.JsonNames("glow") val tileGlow: kotlinx.serialization.json.JsonElement? = null,
 ) {
     companion object {
         /** Every property `components` recognizes, with its aliases. */
@@ -101,6 +108,7 @@ data class Components(
             "batteryMode", "battery", "batteryDisplay", "clockFormat", "clock",
             "telemetryMode", "telemetry", "miniPlayerMode", "miniPlayer",
             "glyphOverride", "glyphs", "glyphStyle", "badgePills", "logo", "volumeAlways",
+            "tileGlow", "glow",
         )
 
         /**
@@ -110,7 +118,8 @@ data class Components(
         fun schemaProblems(root: JsonObject): List<String> {
             val out = ArrayList<String>()
             fun keys(where: String, e: kotlinx.serialization.json.JsonElement?) {
-                (e as? JsonObject)?.keys?.forEach { key ->
+                val block = e as? JsonObject ?: return
+                block.keys.forEach { key ->
                     if (key !in KEYS) out += "$where.components.$key isn't a components property (see docs/THEME_SPECIFICATION.md, components reference)"
                 }
             }
@@ -233,6 +242,7 @@ data class ComponentsPatch(
     /** Pack-relative path of the logo; empty: none. */
     val logo: String? = null,
     val volumeAlways: Boolean? = null,
+    val tileGlow: Boolean? = null,
 ) {
     /** These values with every one [patch] sets replacing them. */
     fun over(patch: ComponentsPatch?): ComponentsPatch = if (patch == null) this else ComponentsPatch(
@@ -247,6 +257,7 @@ data class ComponentsPatch(
         pills = patch.pills ?: pills,
         logo = patch.logo ?: logo,
         volumeAlways = patch.volumeAlways ?: volumeAlways,
+        tileGlow = patch.tileGlow ?: tileGlow,
     )
 
     val empty: Boolean get() = this == NONE
@@ -266,6 +277,7 @@ data class ComponentsPatch(
             pills = pills ?: emptyList(),
             logo = logo.orEmpty(),
             volumeAlways = volumeAlways ?: false,
+            tileGlow = tileGlow ?: true,
         )
     }
 
@@ -339,6 +351,12 @@ data class ComponentsPatch(
                 pills = pills,
                 logo = logo,
                 volumeAlways = c.volumeAlways,
+                tileGlow = c.tileGlow?.let { v ->
+                    val p = v as? kotlinx.serialization.json.JsonPrimitive
+                    val b = if (p == null || p.isString) null else p.content.toBooleanStrictOrNull()
+                    if (b == null && v !is kotlinx.serialization.json.JsonNull) problems += "$where.components.tileGlow: $v isn't true or false"
+                    b
+                },
             )
             return patch.takeUnless { it.empty }
         }
@@ -367,6 +385,8 @@ data class ResolvedComponents(
     /** Pack-relative path of the logo ([LoadedTheme.logos]); empty: none. */
     val logo: String = "",
     val volumeAlways: Boolean = false,
+    /** The focused game tile gets the focus frame. */
+    val tileGlow: Boolean = true,
 ) {
     /** The avatar (and its mini-HUD) is in the bar. */
     val avatar: Boolean get() = StatusSlot.AVATAR in right
@@ -434,6 +454,7 @@ data class ComponentOverrides(
     val glyphOverride: String? = null,
     val badgePills: List<String>? = null,
     val volumeAlways: Boolean? = null,
+    val tileGlow: Boolean? = null,
 ) {
     /** The overrides as a cascade layer (values that don't parse are left to the pack). */
     val patch: ComponentsPatch
@@ -448,6 +469,7 @@ data class ComponentOverrides(
             glyphs = ComponentNames.glyphs(glyphOverride),
             pills = badgePills?.mapNotNull(ComponentNames::pill)?.distinct(),
             volumeAlways = volumeAlways,
+            tileGlow = tileGlow,
         )
 
     /** Canonical names, unknown values dropped (a hand-edited typo follows the pack), clock skeleton filtered. */
@@ -464,6 +486,7 @@ data class ComponentOverrides(
             glyphOverride = p.glyphs?.name,
             badgePills = p.pills?.map { it.name },
             volumeAlways = volumeAlways,
+            tileGlow = tileGlow,
         )
     }
 
@@ -471,7 +494,7 @@ data class ComponentOverrides(
 
     /** How many rows the user set (for Reset to theme defaults). */
     val count: Int
-        get() = listOf(topLeftCluster, statusBarLeft, statusBarRight, batteryMode, clockFormat, telemetryMode, miniPlayerMode, glyphOverride, badgePills, volumeAlways)
+        get() = listOf(topLeftCluster, statusBarLeft, statusBarRight, batteryMode, clockFormat, telemetryMode, miniPlayerMode, glyphOverride, badgePills, volumeAlways, tileGlow)
             .count { it != null }
 
     /** A copy with [side]'s cluster set to [slots]; null follows the pack. */
@@ -491,6 +514,7 @@ data class ComponentOverrides(
         ComponentRow.MINI_PLAYER -> miniPlayerMode
         ComponentRow.GLYPHS -> glyphOverride
         ComponentRow.TELEMETRY -> telemetryMode
+        ComponentRow.TILE_GLOW -> tileGlow?.let(ComponentRow::onOff)
     }
 
     /** A copy with [row] set to [value] (normalized; null or unknown follows the pack). */
@@ -501,6 +525,7 @@ data class ComponentOverrides(
         ComponentRow.MINI_PLAYER -> copy(miniPlayerMode = ComponentNames.miniPlayer(value)?.name)
         ComponentRow.GLYPHS -> copy(glyphOverride = ComponentNames.glyphs(value)?.name)
         ComponentRow.TELEMETRY -> copy(telemetryMode = ComponentNames.telemetry(value)?.name)
+        ComponentRow.TILE_GLOW -> copy(tileGlow = ComponentRow.parseOnOff(value))
     }
 
     /** A copy with the title badges set to [pills] in that order (each once); null follows the pack, empty draws none. */
@@ -551,6 +576,9 @@ enum class ComponentRow(val title: String, val choices: List<Pair<String, String
         "Achievement badge",
         listOf(TelemetryMode.OFF.name to "Off", TelemetryMode.COMPACT_PILL.name to "Compact", TelemetryMode.RICH_CARD.name to "Rich card"),
     ),
+
+    /** `tileGlow` (0.2.1.0): the focus frame on game tiles. */
+    TILE_GLOW("Game tile glow", listOf("ON" to "On", "OFF" to "Off")),
     ;
 
     /** The label of [value]; "Theme pack" for null. */
@@ -568,6 +596,7 @@ enum class ComponentRow(val title: String, val choices: List<Pair<String, String
         MINI_PLAYER -> c.miniPlayer.name
         GLYPHS -> c.glyphs.name
         TELEMETRY -> c.telemetry.name
+        TILE_GLOW -> onOff(c.tileGlow)
     }
 
     /** "Theme pack (Icon and percentage)". */
@@ -578,6 +607,17 @@ enum class ComponentRow(val title: String, val choices: List<Pair<String, String
         val ids: List<String?> = listOf<String?>(null) + choices.map { it.first }
         val at = ids.indexOf(current).coerceAtLeast(0)
         return ids[(at + 1) % ids.size]
+    }
+
+    companion object {
+        fun onOff(on: Boolean): String = if (on) "ON" else "OFF"
+
+        /** "ON" / "OFF" (also true/false), else null: the pack's. */
+        fun parseOnOff(value: String?): Boolean? = when (value?.trim()?.uppercase(Locale.ROOT)) {
+            "ON", "TRUE" -> true
+            "OFF", "FALSE" -> false
+            else -> null
+        }
     }
 }
 

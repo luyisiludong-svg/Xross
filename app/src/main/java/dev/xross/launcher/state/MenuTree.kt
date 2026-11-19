@@ -1085,6 +1085,7 @@ class MenuTree(private val s: MenuSnapshot) {
         // After the earlier slices' rows, so those keep their places.
         componentRow(ComponentRow.TOP_LEFT),
         componentRow(ComponentRow.TELEMETRY),
+        componentRow(ComponentRow.TILE_GLOW),
     )
 
     /** Title badges: Confirm and Options both open the list of badges to turn on and off. */
@@ -1152,6 +1153,8 @@ class MenuTree(private val s: MenuSnapshot) {
                     "Newest unlocks and friends who played it, above the hints"
                 else -> "The focused game's unlocks and points, above the hints"
             }
+            ComponentRow.TILE_GLOW ->
+                if (shownComponents.tileGlow) "The focus frame around the focused game" else "The focused game grows; no frame"
         }
         return XmbNode(
             id = "disp:comp:" + row.name.lowercase(Locale.ROOT),

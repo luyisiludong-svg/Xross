@@ -484,7 +484,7 @@ class ThemeController(
                 "Link a RetroAchievements account to see your progress".takeIf {
                     c.telemetry != TelemetryMode.OFF && !credentials.current.retroAchievementsLinked
                 }
-            ComponentRow.MINI_PLAYER, ComponentRow.GLYPHS -> null
+            ComponentRow.MINI_PLAYER, ComponentRow.GLYPHS, ComponentRow.TILE_GLOW -> null
         }
         note?.let(host::toast)
         if (row == ComponentRow.TOP_LEFT || row == ComponentRow.TELEMETRY) host.friendsWanted(c)
