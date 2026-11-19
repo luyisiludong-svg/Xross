@@ -201,7 +201,8 @@ class DatParserTest {
         assertEquals("psp", DatNames.platformFor("Sony - PlayStation Portable"))
         assertEquals("megadrive", DatNames.platformFor("Sega - Mega Drive - Genesis"))
         assertEquals("arcade", DatNames.platformFor("MAME 0.264"))
-        assertNull(DatNames.platformFor("Sony - PlayStation 3"))
+        assertEquals("ps3", DatNames.platformFor("Sony - PlayStation 3"))
+        assertNull(DatNames.platformFor("Sony - PlayStation 4"))
         assertNull(DatNames.platformFor("Nintendo - Wii U"))
         assertNull(DatNames.platformFor("Atari - 2600"))
     }

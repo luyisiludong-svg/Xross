@@ -11,7 +11,11 @@ import dev.xross.launcher.model.PlatformRegistry
 import java.io.File
 
 /** An emulator launch as an Intent; the ROM is shared through a `content://` URI with a read grant. */
-internal data class IntentTarget(val intent: Intent) : LaunchTarget
+internal data class IntentTarget(
+    val intent: Intent,
+    /** Added to a failure message ("— grant ARMSX3 storage access"); empty for none. */
+    val failHint: String = "",
+) : LaunchTarget
 
 /**
  * [GameLauncher] for Android: finds emulators by package, builds their launch Intents
@@ -31,9 +35,9 @@ class AndroidIntentGameLauncher(private val context: Context) : GameLauncher {
             host.startActivity(target.intent)
             LaunchResult.Started
         } catch (_: ActivityNotFoundException) {
-            LaunchResult.Failed("${plan.emulatorName} couldn't be started")
+            LaunchResult.Failed("${plan.emulatorName} couldn't be started${target.failHint}")
         } catch (_: SecurityException) {
-            LaunchResult.Failed("${plan.emulatorName} refused the launch")
+            LaunchResult.Failed("${plan.emulatorName} refused the launch${target.failHint}")
         }
     }
 
@@ -68,6 +72,7 @@ class AndroidIntentGameLauncher(private val context: Context) : GameLauncher {
             ?: return LaunchPlan.Failed("Unknown emulator ${option.emulatorId}")
         val pkg = installedPackage(def)
             ?: return LaunchPlan.Failed("${def.name} is not installed")
+        def.check(file)?.let { return LaunchPlan.Failed(it) }
         val request = if (def.resolveCue && file.extension.equals("cue", ignoreCase = true)) {
             val track = CueSheet.firstTrack(file)
                 ?: return LaunchPlan.Failed("${def.name} needs the disc's tracks — ${file.name} lists none that are here")
@@ -79,7 +84,8 @@ class AndroidIntentGameLauncher(private val context: Context) : GameLauncher {
             LaunchRequest(game.path, uri, mime, pkg, option.core)
         }
         val intent = def.buildIntent(request)
-        return LaunchPlan.Ready(def.name + (option.core?.let { " · $it" } ?: ""), IntentTarget(intent))
+        val hint = if (def.needsStorageAccess) " — grant ${def.name} storage access" else ""
+        return LaunchPlan.Ready(def.name + (option.core?.let { " · $it" } ?: ""), IntentTarget(intent, hint))
     }
 
     private fun isInstalled(pkg: String) =

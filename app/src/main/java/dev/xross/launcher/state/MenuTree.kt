@@ -961,9 +961,14 @@ class MenuTree(private val s: MenuSnapshot) {
         val option = GameLauncher.resolveOption(platform, s.settings.emulatorChoice[platform.id], s.installedEmulators)
         val explicit = platform.emulators.firstOrNull { it.key == s.settings.emulatorChoice[platform.id] }
         val shown = option ?: explicit ?: platform.emulators.first()
-        val name = EmulatorRegistry.byId(shown.emulatorId)?.name ?: shown.emulatorId
+        val def = EmulatorRegistry.byId(shown.emulatorId)
+        val name = def?.name ?: shown.emulatorId
         val label = name + (shown.core?.let { " · $it" } ?: "")
-        val status = if (option == null) " (not installed)" else ""
+        val status = when {
+            option == null -> " (not installed)"
+            def?.needsStorageAccess == true -> " · needs its own storage access"
+            else -> ""
+        }
         setting(
             "emu:${platform.id}",
             platform.name,

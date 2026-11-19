@@ -128,6 +128,15 @@ object PlatformRegistry {
             isDiscBased = true,
         ),
         Platform(
+            // Disc images, and `.ps3` files naming a game installed inside ARMSX3 (its serial).
+            // Folder-format dumps (PS3_GAME/…) aren't scanned.
+            "ps3", "PlayStation 3", "PS3",
+            setOf("ps3", "playstation3", "sonyplaystation3"),
+            setOf("chd", "iso", "ps3"),
+            listOf(EmulatorOption("armsx3")),
+            isDiscBased = true,
+        ),
+        Platform(
             "psp", "PlayStation Portable", "PSP",
             setOf("psp", "playstationportable"),
             setOf("iso", "cso", "chd", "pbp", "elf"),

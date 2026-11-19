@@ -27,6 +27,13 @@ data class EmulatorDef(
      * for its first track ([CueSheet.firstTrack]) before the launch.
      */
     val resolveCue: Boolean = false,
+    /**
+     * The recipe hands over a plain file path, which the emulator reads with its own storage
+     * access (the URI grant doesn't cover it); a failed launch says to grant it.
+     */
+    val needsStorageAccess: Boolean = false,
+    /** Why [buildIntent] can't start this file ("doesn't hold a serial"); null when it can. */
+    val check: (File) -> String? = { null },
     val buildIntent: (LaunchRequest) -> Intent,
 )
 
@@ -101,6 +108,18 @@ object EmulatorRegistry {
                 .putExtra("path", req.romPath)
                 .withGrantedData(req)
         },
+        EmulatorDef(
+            // ES-DE's Android rules (es_find_rules.xml / es_systems.xml, ps3): ARMSX3 is built from
+            // ARMSX2's code and keeps its com.armsx2.Main activity. A disc image goes as a "path"
+            // extra with no action; a .ps3 file holds the serial of a game installed inside
+            // ARMSX3, launched by its folder under dev_hdd0. Both are plain paths, so ARMSX3 needs
+            // its own storage access (Xross's read grant doesn't cover a path).
+            id = "armsx3",
+            name = "ARMSX3",
+            packages = listOf("com.armsx3", "com.armsx3.play"),
+            needsStorageAccess = true,
+            check = Armsx3::check,
+        ) { req -> Armsx3.intent(req) },
         EmulatorDef(
             id = "dolphin",
             name = "Dolphin",

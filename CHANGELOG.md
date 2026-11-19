@@ -9,6 +9,17 @@
   Emulator; NetherSX2 stays the default. The stable and nightly builds are both found. A cue+bin
   game is handed to ARMSX2 as its first track, because ARMSX2 can't boot a `.cue` it can't see
   the tracks of.
+- **PlayStation 3 with ARMSX3.** A new PS3 system lists disc images (`.iso`, `.chd`) from a `ps3`
+  folder, and games installed inside ARMSX3 through a `.ps3` file holding the game's serial.
+  ARMSX3 opens games by path, so it needs its own storage access. PS3 games scrape from
+  ScreenScraper; there are no RetroAchievements for PS3.
+- **Hide the file format in game rows.** Settings ▸ Theme ▸ Menu and profile ▸ File format in
+  game rows drops "ISO", "CHD" and the like from under each title; Information still shows it.
+- **Game tile glow can be turned off.** Settings ▸ Theme ▸ Components ▸ Game tile glow: follow the
+  theme pack, on or off. Packs set it with `components.tileGlow`.
+- **Console logos on system folders.** A theme pack can bring a logo for each system
+  (`icons/systems/snes.svg`…), shown on the system's folder in Games. Turn them off in
+  Settings ▸ Theme ▸ Menu and profile. Xross's own packs ship none.
 
 ## 0.2.0.4-beta — 2026-11-17
 

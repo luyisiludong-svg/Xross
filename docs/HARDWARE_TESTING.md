@@ -108,7 +108,8 @@ seeds its own fixtures, so any of them runs on its own and in any order.
   `/data/data/<package>/cores/<core>_libretro_android.so`, which only exists once that core is
   downloaded.
 - **Standalone emulators:** install DuckStation, Dolphin and PPSSPP from the Play Store;
-  NetherSX2 and ARMSX2 have to be sideloaded. Open each once and grant it storage access.
+  NetherSX2, ARMSX2 and ARMSX3 have to be sideloaded. Open each once and grant it storage access
+  (ARMSX3 gets plain file paths, so without its own all-files access it can't open a game).
 - **Remove the test stand-ins** if they were ever installed. They use the real emulators'
   package names and would block or replace them:
 
@@ -116,7 +117,7 @@ seeds its own fixtures, so any of them runs on its own and in any order.
   adb uninstall com.retroarch.aarch64
   ```
 
-  (Likewise `com.github.stenzek.duckstation`, `xyz.aethersx2.android`, `com.armsx2`,
+  (Likewise `com.github.stenzek.duckstation`, `xyz.aethersx2.android`, `com.armsx2`, `com.armsx3`,
   `org.dolphinemu.dolphinemu`, `org.ppsspp.ppsspp`, but only if `adb shell pm list packages`
   shows that package is Xross's stand-in rather than the real emulator.)
 
@@ -130,6 +131,7 @@ version; capture a log (§9).
 | DuckStation | PS1 (`.chd`, `.cue`, `.m3u`) |
 | NetherSX2 | PS2 (`.iso`, `.chd`) |
 | ARMSX2 | PS2 (`.iso`, `.chd`, a cue+bin game listed by its `.cue`); once with ARMSX2 closed and once with it already open |
+| ARMSX3 | PS3: a disc image (`.iso` or `.chd`), and a game installed inside ARMSX3 through a `.ps3` file holding its serial; the A55 may be too slow to play but shows whether the game starts |
 | Dolphin | GameCube, Wii (`.rvz`, `.iso`) |
 | PPSSPP | PSP (`.iso`, `.cso`) |
 

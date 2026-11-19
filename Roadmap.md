@@ -130,6 +130,7 @@ been tested yet.
 | RetroArch with a core per platform | ✅ 🧪 | |
 | DuckStation, NetherSX2, Dolphin, PPSSPP | ✅ 🧪 | |
 | ARMSX2 | ✅ 🧪 | Recipe from ARMSX2's own launch code; a `.cue` is handed over as its first track, since ARMSX2 can't reach a sheet's tracks through a single-file URI |
+| ARMSX3 (PlayStation 3) | ✅ 🧪 | ES-DE's Android rules: a disc image as a `path` extra; a `.ps3` file's serial opens the game installed in ARMSX3. Needs its own storage access |
 | Azahar, Eden, Flycast, M64Plus FZ, melonDS, ScummVM | ✅ 🧪 | Launch recipes from ES-DE's published Android rules |
 | Emulator per platform (Settings ▸ Emulators) | ✅ | |
 | Emulator per game (Options ▸ Emulator) | ✅ | Game override → platform choice → first installed |

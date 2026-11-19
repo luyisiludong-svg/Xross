@@ -78,8 +78,8 @@ object DatNames {
         return SYSTEMS.firstOrNull { (needle, _) -> n.contains(needle) }?.second
     }
 
-    /** Systems whose names contain a supported one ("PlayStation 3" contains "PlayStation"). */
-    private val UNSUPPORTED = listOf("playstation 3", "playstation 4", "playstation 5", "playstation vita", "wii u")
+    /** Systems whose names contain a supported one ("PlayStation 4" contains "PlayStation"). */
+    private val UNSUPPORTED = listOf("playstation 4", "playstation 5", "playstation vita", "wii u")
 
     // Longest, most specific names first: "game boy advance" must win over "game boy".
     private val SYSTEMS = listOf(
@@ -111,6 +111,7 @@ object DatNames {
         "turbografx" to "pcengine",
         "playstation portable" to "psp",
         "playstation 2" to "ps2",
+        "playstation 3" to "ps3",
         "sony - playstation" to "psx",
         "scummvm" to "scummvm",
     )

@@ -302,7 +302,7 @@ class ScreenScraperProvider(
             "megadrive" to 1, "mastersystem" to 2, "nes" to 3, "snes" to 4, "gb" to 9, "gbc" to 10,
             "gba" to 12, "gc" to 13, "n64" to 14, "nds" to 15, "wii" to 16, "n3ds" to 17,
             "gamegear" to 21, "saturn" to 22, "dreamcast" to 23, "pcengine" to 31, "psx" to 57,
-            "ps2" to 58, "psp" to 61, "arcade" to 75, "scummvm" to 123, "switch" to 225,
+            "ps2" to 58, "ps3" to 59, "psp" to 61, "arcade" to 75, "scummvm" to 123, "switch" to 225,
         )
 
         /** Region fallbacks after the user's choice; "ss" is ScreenScraper's own reference name. */

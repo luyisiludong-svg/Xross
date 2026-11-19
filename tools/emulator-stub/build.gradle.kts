@@ -27,6 +27,7 @@ android {
         emulator("duckstation", "com.github.stenzek.duckstation", "com.github.stenzek.duckstation.EmulationActivity")
         emulator("nethersx2", "xyz.aethersx2.android", "xyz.aethersx2.android.EmulationActivity")
         emulator("armsx2", "com.armsx2", "com.armsx2.Main")
+        emulator("armsx3", "com.armsx3", "com.armsx2.Main")
         emulator("dolphin","org.dolphinemu.dolphinemu", "org.dolphinemu.dolphinemu.ui.main.MainActivity")
         emulator("ppsspp", "org.ppsspp.ppsspp", "org.ppsspp.ppsspp.PpssppActivity")
         emulator("azahar", "org.azahar_emu.azahar", "org.citra.citra_emu.activities.EmulationActivity")
