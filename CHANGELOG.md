@@ -13,6 +13,10 @@
   folder, and games installed inside ARMSX3 through a `.ps3` file holding the game's serial.
   ARMSX3 opens games by path, so it needs its own storage access. PS3 games scrape from
   ScreenScraper; there are no RetroAchievements for PS3.
+- **ES-DE hack and MSU folders.** `nesh`, `snesh`, `snes-msu1`, `gbh`, `gbch`, `gbah`, `genh` and
+  `msu-md` folders now list their games under the base system (NES, SNES, Game Boy…), so a ROMs
+  folder laid out for ES-DE scans as it is. Mega Drive also lists `.cue` and `.chd` files, which
+  is how MSU-MD games come.
 - **Media apps in Video, Music and Photo.** Streaming, music and gallery apps now sit in an Apps
   folder at the end of those categories instead of in Apps. Options moves an app back to Apps (or
   from Apps into any of the three); Settings ▸ Apps ▸ Sort media apps turns the sorting off.

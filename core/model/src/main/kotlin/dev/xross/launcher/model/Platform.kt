@@ -44,17 +44,21 @@ object PlatformRegistry {
 
     private fun ra(vararg cores: String) = cores.map { EmulatorOption(RA, it) }
 
-    /** Systems as Xross ships them, before any [SystemOverride]. */
+    /**
+     * Systems as Xross ships them, before any [SystemOverride]. ES-DE's hack and MSU folders
+     * (`nesh`, `snesh`, `snes-msu1`, `gbh`, `gbch`, `gbah`, `genh`, `msu-md`) are folder names of
+     * their base system, so a ROMs tree laid out for ES-DE scans as it is.
+     */
     val builtIn: List<Platform> = listOf(
         Platform(
             "nes", "Nintendo Entertainment System", "NES",
-            setOf("nes", "famicom", "fc", "nintendoentertainmentsystem"),
+            setOf("nes", "famicom", "fc", "nintendoentertainmentsystem", "nesh"),
             setOf("nes", "fds", "unf", "unif") + archives,
             ra("fceumm", "nestopia", "mesen"),
         ),
         Platform(
             "snes", "Super Nintendo", "SNES",
-            setOf("snes", "sfc", "superfamicom", "supernintendo", "supernes"),
+            setOf("snes", "sfc", "superfamicom", "supernintendo", "supernes", "snesh", "snesmsu1"),
             setOf("sfc", "smc", "fig", "swc", "bs") + archives,
             ra("snes9x", "bsnes"),
         ),
@@ -66,19 +70,19 @@ object PlatformRegistry {
         ),
         Platform(
             "gb", "Game Boy", "GB",
-            setOf("gb", "gameboy"),
+            setOf("gb", "gameboy", "gbh"),
             setOf("gb") + archives,
             ra("gambatte", "mgba", "sameboy"),
         ),
         Platform(
             "gbc", "Game Boy Color", "GBC",
-            setOf("gbc", "gameboycolor"),
+            setOf("gbc", "gameboycolor", "gbch"),
             setOf("gbc") + archives,
             ra("gambatte", "mgba", "sameboy"),
         ),
         Platform(
             "gba", "Game Boy Advance", "GBA",
-            setOf("gba", "gameboyadvance"),
+            setOf("gba", "gameboyadvance", "gbah"),
             setOf("gba") + archives,
             ra("mgba", "gpsp", "vba_next"),
         ),
@@ -90,8 +94,10 @@ object PlatformRegistry {
         ),
         Platform(
             "megadrive", "Sega Genesis / Mega Drive", "MD",
-            setOf("genesis", "megadrive", "md", "segagenesis", "segamegadrive"),
-            setOf("md", "gen", "smd", "bin") + archives,
+            // ES-DE's hack and MSU-MD folders (genh, msu-md) list here too; MSU-MD games are
+            // cue sheets (or CHDs) that Genesis Plus GX boots.
+            setOf("genesis", "megadrive", "md", "segagenesis", "segamegadrive", "genh", "msumd"),
+            setOf("md", "gen", "smd", "bin", "cue", "chd") + archives,
             ra("genesis_plus_gx", "picodrive"),
         ),
         Platform(
