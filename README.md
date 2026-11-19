@@ -16,13 +16,8 @@
 
 </div>
 
-Xross turns a retro-gaming handheld or Android TV box into a console-style home screen. Browse
-games, music, photos, video and apps on a horizontal bar of categories with vertical lists, the
-way a 2000s console menu worked, and drive all of it with a D-pad. Behind the menu runs a live
-OpenGL ribbon shader; in front of it sits a library that knows your ROMs by hash, matches them
-against No-Intro and Redump, pulls in artwork and tracks your RetroAchievements. Theme 2.0 lets you
-restyle every surface, sound, shader and particle from plain JSON files that reload as you save
-them.
+**A 100% FOSS, XMB-style launcher for Android handhelds and TVs — no paywalls, no closed binaries, no telemetry.**
+
 
 > **Status: 0.2.1.0-beta.** The library, scraping, RetroAchievements and
 > the full Theme 2.0 engine are in. Expect rough edges: so far it has been tested on the Android
