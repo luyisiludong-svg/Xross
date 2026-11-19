@@ -45,7 +45,7 @@ class Armsx3Test {
     }
 
     @Test fun aPs3FileOpensTheInstalledGameByItsSerial() {
-        val ps3 = tmp.newFile("Journey.ps3").apply { writeText("﻿\n  NPUA80068  \nsecond line\n") }
+        val ps3 = tmp.newFile("Journey.ps3").apply { writeText("\uFEFF\n  NPUA80068  \nsecond line\n") }
         val i = build(ps3, "com.armsx3.play")
         assertEquals(Intent.ACTION_VIEW, i.action)
         assertEquals("/storage/emulated/0/Android/data/com.armsx3.play/files/config/dev_hdd0/game/NPUA80068", i.getStringExtra("path"))

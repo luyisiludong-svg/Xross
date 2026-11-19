@@ -26,7 +26,7 @@ object M3u {
     }
 
     fun decode(text: String, baseDir: File?): List<String> = text.lineSequence()
-        .map { it.trim().removePrefix("﻿") }
+        .map { it.trim().removePrefix("\uFEFF") }
         .filter { it.isNotEmpty() && !it.startsWith("#") }
         .map { it.replace('\\', '/').removePrefix("file://") }
         .map { if (it.startsWith("/") || baseDir == null) it else File(baseDir, it).normalize().path }

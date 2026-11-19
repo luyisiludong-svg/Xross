@@ -8,16 +8,32 @@ Sizes: **XS** under an hour · **S** half a day · **M** one to two days · **L*
 
 | # | Feature | Size | Status |
 | --- | --- | --- | --- |
-| 1 | Hide the file format in game rows | XS | Planned |
-| 2 | Turn off the game tile glow | S | Planned |
-| 3 | Console logos on system folders | S–M | Planned |
+| 1 | Hide the file format in game rows | XS | ✅ `bda8885`, unit-tested |
+| 2 | Turn off the game tile glow | S | ✅ `948ee50`, unit-tested; frame timing not measured |
+| 3 | Console logos on system folders | S–M | ✅ `510c9bb`, unit-tested; Default pack ships no logos |
 | 4a | ARMSX2 recipe (PS2) | S | ✅ `45d0ecc`, stub-verified only |
-| 4b | ARMSX3 recipe and a PS3 platform | M | Planned |
+| 4b | ARMSX3 recipe and a PS3 platform | M | ✅ `f8a4a19`, unit-tested and stub only |
 | 5 | Custom launch recipes and custom systems | M–L | Planned (candidate for 0.2.2.0) |
-| 6 | Sort Android apps into Video, Music and Photo | M | Planned |
+| 6 | Sort Android apps into Video, Music and Photo | M | ✅ `2f8cd82`, unit-tested |
 | 7 | Choose a game's media from the scraper's offers | L | Planned (candidate for 0.2.2.0) |
-| 8 | New theme packs to show off the above | — | Alongside 2 and 3 |
+| 8 | New theme packs to show off the above | — | 🟡 Flat Shelf sample (outside this repo); designed packs still to do |
 | 9 | A `bios` folder in the Xross folder | XS | ✅ Done; Xross creates it and never reads it |
+
+**Built so far (2026-11-19, `feat/0.2.1.0`):** 1, 2, 3, 4b and 6, with the choices below where the
+plan left room. None has had its device check yet.
+
+- 1, 3: both switches sit in Settings ▸ Theme ▸ Menu and profile, next to Platform folders.
+- 2: `components.tileGlow` (alias `glow`) is a Components row (Theme pack · On · Off) rather than a
+  separate user-look field; a non-boolean value is reported and dropped on its own instead of
+  failing the manifest.
+- 3: `icons/systems/` names may be a platform id or a folder alias (`ps1.png` → `psx`); an exact id
+  wins.
+- 4b: a `.ps3` file without a serial (four letters, five digits) is refused before the launch;
+  PS3 DATs (Redump) now map to `ps3`.
+- 6: the user's own move is recorded in `apps.homes` and wins over the switch; Apps also offers
+  Move to Video, Music or Photo and Sort automatically.
+- 8: `Flat Shelf` in the theme packs folder: glow off and per-kind system icons copied from the
+  Default pack's glyphs.
 
 **Order:** 1–3 land together as one PR (small, settings and theme only). 4b next, then 6, then 5
 and 7. If the release has to shrink, 7 moves to 0.2.2.0 before 5 does: custom recipes also answer

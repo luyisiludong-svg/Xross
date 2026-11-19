@@ -18,7 +18,7 @@ object Armsx3 {
     private val SERIAL = Regex("""^[A-Za-z]{4}\d{5}$""")
 
     /** The serial a `.ps3` file names: its first non-blank line, trimmed; null when there is none. */
-    fun serial(text: String): String? = text.lineSequence().map { it.trim().trimStart('﻿') }.firstOrNull { it.isNotEmpty() }
+    fun serial(text: String): String? = text.lineSequence().map { it.trim().trimStart('\uFEFF') }.firstOrNull { it.isNotEmpty() }
 
     /** True when [serial] looks like a PS3 title id, which is what ARMSX3's game folders are named. */
     fun looksLikeSerial(serial: String): Boolean = SERIAL.matches(serial)
