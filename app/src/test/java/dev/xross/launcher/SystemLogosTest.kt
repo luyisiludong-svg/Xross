@@ -4,6 +4,9 @@ import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import dev.xross.launcher.config.ConfigCodec
 import dev.xross.launcher.data.GameEntity
+import dev.xross.launcher.data.SystemLogoStyle
+import dev.xross.launcher.model.PlatformRegistry
+import dev.xross.launcher.ui.SystemLogos
 import dev.xross.launcher.data.XrossSettings
 import dev.xross.launcher.model.GlyphKey
 import dev.xross.launcher.state.Command
@@ -89,9 +92,38 @@ class SystemLogosTest {
 
     @Test fun menuOffersTheSwitchAndSettingsKeepIt() {
         val row = MenuTree(MenuSnapshot()).list(MenuTree.DISPLAY_MENU).single { it.id == "disp:systemlogos" }
-        assertEquals(NodeAction.Run(Command.ToggleSystemLogos), row.action)
+        assertEquals(NodeAction.Run(Command.CycleSystemLogos), row.action)
         assertTrue(ConfigCodec.decodeSettings(XrossSettings(), """{"display": {}}""").showSystemLogos)
         val off = XrossSettings(showSystemLogos = false)
         assertFalse(ConfigCodec.decodeSettings(XrossSettings(), ConfigCodec.encodeSettings(off)).showSystemLogos)
+    }
+
+    @Test fun theChosenStyleRidesOnTheFolder() {
+        val color = XrossSettings(systemLogoStyle = SystemLogoStyle.COLOR.name)
+        assertEquals(NodeIcon.System("snes", GlyphKey.PLATFORM, SystemLogoStyle.COLOR), folder(color).icon)
+        // An unknown saved name reads as the pack's logos.
+        assertEquals(SystemLogoStyle.PACK, SystemLogoStyle.of("SPARKLY"))
+        val back = ConfigCodec.decodeSettings(XrossSettings(), ConfigCodec.encodeSettings(color))
+        assertEquals(SystemLogoStyle.COLOR.name, back.systemLogoStyle)
+        val junk = ConfigCodec.decodeSettings(XrossSettings(), """{"display": {"systemLogoStyle": "SPARKLY"}}""")
+        assertEquals(SystemLogoStyle.PACK.name, junk.systemLogoStyle)
+    }
+
+    @Test fun optionsListOffAndEveryStyle() {
+        val row = MenuTree(MenuSnapshot(settings = XrossSettings(systemLogoStyle = SystemLogoStyle.BLACK.name)))
+            .list(MenuTree.DISPLAY_MENU).single { it.id == "disp:systemlogos" }
+        assertEquals(listOf("Off") + SystemLogoStyle.entries.map { it.label }, row.menu.map { it.label })
+        assertEquals("Black", row.menu.single { it.selected }.label)
+        assertTrue(row.subtitle.orEmpty(), row.subtitle.orEmpty().startsWith("Black"))
+    }
+
+    @Test fun everySystemHasALogoInEveryBundledStyle() {
+        val ids = PlatformRegistry.builtIn.map { it.id }
+        for (style in SystemLogoStyle.entries) {
+            val folder = style.folder ?: continue
+            val shipped = context.assets.list("${SystemLogos.DIR}/$folder").orEmpty().map { it.substringBeforeLast('.') }.toSet()
+            assertEquals("$folder", ids.toSet(), shipped)
+            for (id in ids) assertNotNull("$folder/$id", SystemLogos.load(context.assets, style, id))
+        }
     }
 }

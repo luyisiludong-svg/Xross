@@ -1652,7 +1652,19 @@ class XmbViewModel(
             Command.ToggleVideoLoop -> settingsStore.update { it.copy(videoLoop = !it.videoLoop) }
             Command.ToggleAllGamesFolder -> settingsStore.update { it.copy(allGamesFolder = !it.allGamesFolder) }
             Command.ToggleFileFormat -> settingsStore.update { it.copy(showFileFormat = !it.showFileFormat) }
-            Command.ToggleSystemLogos -> settingsStore.update { it.copy(showSystemLogos = !it.showSystemLogos) }
+            Command.CycleSystemLogos -> settingsStore.update {
+                val styles = dev.xross.launcher.data.SystemLogoStyle.entries
+                when {
+                    !it.showSystemLogos -> it.copy(showSystemLogos = true, systemLogoStyle = styles.first().name)
+                    else -> when (val next = styles.getOrNull(dev.xross.launcher.data.SystemLogoStyle.of(it.systemLogoStyle).ordinal + 1)) {
+                        null -> it.copy(showSystemLogos = false)
+                        else -> it.copy(systemLogoStyle = next.name)
+                    }
+                }
+            }
+            is Command.SetSystemLogos -> settingsStore.update {
+                if (command.style == null) it.copy(showSystemLogos = false) else it.copy(showSystemLogos = true, systemLogoStyle = command.style.name)
+            }
             is Command.LaunchApp -> launchApp(command.packageName, command.activityName)
             is Command.HideApp -> {
                 settingsStore.update { it.copy(hiddenApps = it.hiddenApps + command.packageName) }

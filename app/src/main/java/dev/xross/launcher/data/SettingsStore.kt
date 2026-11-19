@@ -150,6 +150,8 @@ data class XrossSettings(
     val showFileFormat: Boolean = true,
     /** System folders show the theme pack's console logo when it has one (else the platform glyph). */
     val showSystemLogos: Boolean = true,
+    /** Which logos they show ([SystemLogoStyle] name): the pack's, or one of the bundled sets. */
+    val systemLogoStyle: String = SystemLogoStyle.PACK.name,
     /** platformId → the user's extra folder names and extensions (systems.json). */
     val systemOverrides: Map<String, SystemOverride> = emptyMap(),
     /** Package names hidden from Apps and Games ▸ Android Games. */

@@ -68,6 +68,21 @@ Theme pack by Beluwhal.
   2019 The Redaction Project Authors, SIL Open Font License 1.1; see
   [`fonts/OFL.txt`](app/src/main/assets/themes/blackhole/fonts/OFL.txt).
 
+## Console logos (`app/src/main/assets/system_logos`)
+
+The console logos on system folders are by
+**[Dan Patrick](https://forums.launchbox-app.com/profile/85709-dan-patrick/)**, from his platform
+logo collection (v2.1, Recommended Versions) shared on the LaunchBox Community Forums. Dan Patrick
+drew them by hand and gave permission to use them in other projects. Thank you!
+
+- **Styles:** `color`, `mono`, `white`, `dark_color`, `dark_mono` and `black` are his Light -
+  Color, Light - Black & White, Light - Just White, Dark - Color, Dark - Black & White and Dark -
+  Just Black sets; `outline` is his thin white outline set.
+- **Changed for Xross:** cropped, scaled down to fit 512 x 256 and saved as WebP, one per Xross
+  system, by [`tools/system_logos/import_logos.py`](tools/system_logos/import_logos.py).
+- The logos themselves are trademarks of their owners; neither Dan Patrick nor Xross claims them,
+  and per the author's terms they are never to be sold.
+
 ## Libraries
 
 | Library | License |

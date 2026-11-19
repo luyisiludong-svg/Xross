@@ -8,6 +8,7 @@ import dev.xross.launcher.data.MusicUnderSnaps
 import dev.xross.launcher.audio.VolumeChannel
 import dev.xross.launcher.data.AppEntry
 import dev.xross.launcher.data.GameEntity
+import dev.xross.launcher.data.SystemLogoStyle
 import dev.xross.launcher.data.XrossSettings
 import dev.xross.launcher.input.ConfirmLayout
 import dev.xross.launcher.input.ControllerKey
@@ -343,7 +344,7 @@ class MenuTree(private val s: MenuSnapshot) {
             null
         } else {
             val node = folder(PLATFORM_PREFIX + platform.id, platform.name, GlyphKey.PLATFORM, countLabel(count))
-            if (s.settings.showSystemLogos) node.copy(icon = NodeIcon.System(platform.id)) else node
+            if (s.settings.showSystemLogos) node.copy(icon = NodeIcon.System(platform.id, style = logoStyle)) else node
         }
     }
 
@@ -1244,14 +1245,25 @@ class MenuTree(private val s: MenuSnapshot) {
             GlyphKey.GAMES,
             Command.ToggleFileFormat,
         ),
-        setting(
-            "disp:systemlogos",
-            "Console logos on system folders",
-            if (s.settings.showSystemLogos) "The theme pack's logos, where it has them" else "Off: the same icon for every system",
-            GlyphKey.PLATFORM,
-            Command.ToggleSystemLogos,
-        ),
+        systemLogosRow(),
     )
+
+    private val logoStyle by lazy { SystemLogoStyle.of(s.settings.systemLogoStyle) }
+
+    /** Console logos: Confirm steps Off and each style; Options lists them all. */
+    private fun systemLogosRow(): XmbNode {
+        val on = s.settings.showSystemLogos
+        val shown = if (on) logoStyle.label + (logoStyle.detail?.let { " · $it" } ?: "") else "Off: the same icon for every system"
+        return XmbNode(
+            id = "disp:systemlogos",
+            title = "Console logos on system folders",
+            subtitle = shown,
+            icon = NodeIcon.Glyph(GlyphKey.PLATFORM),
+            action = NodeAction.Run(Command.CycleSystemLogos),
+            menu = listOf(MenuOption("Off", command = Command.SetSystemLogos(null), selected = !on)) +
+                SystemLogoStyle.entries.map { MenuOption(it.label, detail = it.detail, command = Command.SetSystemLogos(it), selected = on && logoStyle == it) },
+        )
+    }
 
     private val activeProfile by lazy { QuickProfile.byName(s.settings.quickProfile) }
 

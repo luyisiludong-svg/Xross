@@ -20,10 +20,14 @@ sealed interface NodeIcon {
     data class Glyph(val key: GlyphKey) : NodeIcon
 
     /**
-     * A system folder (0.2.1.0): the theme pack's logo for [platformId]
-     * ([dev.xross.launcher.theme.pack.LoadedTheme.systemIcons]), else the [fallback] glyph.
+     * A system folder (0.2.1.0): the logo for [platformId] in [style] (the theme pack's
+     * [dev.xross.launcher.theme.pack.LoadedTheme.systemIcons], or a bundled set), else the [fallback] glyph.
      */
-    data class System(val platformId: String, val fallback: GlyphKey = GlyphKey.PLATFORM) : NodeIcon
+    data class System(
+        val platformId: String,
+        val fallback: GlyphKey = GlyphKey.PLATFORM,
+        val style: dev.xross.launcher.data.SystemLogoStyle = dev.xross.launcher.data.SystemLogoStyle.PACK,
+    ) : NodeIcon
     data class App(val packageName: String) : NodeIcon
     /** Photo/video thumbnail or embedded album art, with a glyph to show until it loads. */
     data class Thumb(val kind: ThumbKind, val id: Long, val fallback: GlyphKey) : NodeIcon
@@ -188,7 +192,10 @@ sealed interface Command {
     data object ToggleVideoLoop : Command
     data object ToggleAllGamesFolder : Command
     data object ToggleFileFormat : Command
-    data object ToggleSystemLogos : Command
+    /** Console logos on system folders: Confirm steps Off, then each [dev.xross.launcher.data.SystemLogoStyle]. */
+    data object CycleSystemLogos : Command
+    /** Sets the logo style; null turns the logos off. */
+    data class SetSystemLogos(val style: dev.xross.launcher.data.SystemLogoStyle?) : Command
     /** Moves the Xross folder to the next mounted volume (primary storage, SD card, …). */
     data object CycleXrossVolume : Command
     data object BackupNow : Command

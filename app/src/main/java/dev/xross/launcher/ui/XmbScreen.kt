@@ -68,6 +68,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.isSpecified
 import androidx.compose.ui.graphics.ClipOp
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.clipPath
@@ -90,6 +91,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
@@ -922,6 +924,19 @@ private fun itemY(d: Float, m: XmbMetrics): Float = when {
 /** Photo and video thumbnails without a pack aspect: a little wider than tall. */
 private const val ThumbWideAspect = 1.3f
 
+/** A console logo's widest and tallest, in icon slots; a near-square logo just fills the slot. */
+private const val LogoMaxWidth = 2.4f
+private const val LogoMaxHeight = 0.8f
+
+/** [painter]'s size in an icon slot of [iconSize]: square stays the slot, wide fits [LogoMaxWidth] x [LogoMaxHeight]. */
+private fun logoSize(painter: Painter, iconSize: Dp): DpSize {
+    val intrinsic = painter.intrinsicSize
+    val aspect = if (intrinsic.isSpecified && intrinsic.height > 0f) intrinsic.width / intrinsic.height else 1f
+    if (aspect <= 1.25f) return DpSize(iconSize, iconSize)
+    val height = minOf(iconSize * LogoMaxHeight, iconSize * LogoMaxWidth / aspect)
+    return DpSize(height * aspect, height)
+}
+
 @Composable
 private fun ItemRow(
     node: XmbNode,
@@ -953,13 +968,17 @@ private fun ItemRow(
     val tileHeight = iconSize * GameTileHeightScale
     val tileAspect = aspect ?: GameTileAspect
     val thumbAspect = (node.icon as? NodeIcon.Thumb)?.let { aspect ?: if (it.kind == ThumbKind.ALBUM_ART) 1f else ThumbWideAspect }
+    // A console logo is a wordmark, wider than tall: it keeps its shape and overhangs like a tile.
+    val logo = (node.icon as? NodeIcon.System)?.let { systemLogo(it.platformId, it.style) }
+    val logoSize = logo?.let { logoSize(it.painter, iconSize) }
     val visualWidth = when (node.icon) {
         is NodeIcon.Tile -> tileHeight * tileAspect
         is NodeIcon.Thumb -> iconSize * thumbAspect!!
+        is NodeIcon.System -> logoSize?.width ?: iconSize
         else -> iconSize
     }
     val tileOverhang = when (node.icon) {
-        is NodeIcon.Tile -> ((visualWidth - iconSize) * scale / 2).coerceAtLeast(0.dp)
+        is NodeIcon.Tile, is NodeIcon.System -> ((visualWidth - iconSize) * scale / 2).coerceAtLeast(0.dp)
         is NodeIcon.Thumb -> ((visualWidth - iconSize * ThumbWideAspect) * scale / 2).coerceAtLeast(0.dp)
         else -> 0.dp
     }
@@ -979,11 +998,14 @@ private fun ItemRow(
                     glow = glow,
                 )
                 is NodeIcon.System -> XmbIcon(
-                    painter = systemPainter(icon.platformId) ?: glyphPainter(icon.fallback),
+                    painter = logo?.painter ?: glyphPainter(icon.fallback),
                     size = iconSize,
                     focus = focus,
                     focusScale = scale,
                     glow = glow,
+                    width = logoSize?.width ?: iconSize,
+                    height = logoSize?.height ?: iconSize,
+                    gloss = logo?.keepsColors != true,
                 )
                 is NodeIcon.App -> AppIcon(icon.packageName, iconSize, focus, scale, loadAppIcon)
                 is NodeIcon.Thumb -> ThumbIcon(icon, iconSize, thumbAspect!!, focus, scale, glow, loadThumb)
@@ -1160,14 +1182,20 @@ private fun XmbIcon(
     focus: () -> Float,
     focusScale: Float,
     glow: () -> Float,
+    /** A wide icon (a console logo) is drawn [width] x [height], centered on the [size] slot. */
+    width: Dp = size,
+    height: Dp = size,
+    /** The white-to-silver fill; false keeps the icon's own colors. */
+    gloss: Boolean = true,
 ) {
     val canBlur = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
     val frame = LocalFocusFrame.current
     val accent = LocalThemeAccent.current
     val neon = frame.style == FocusFrameStyle.STATIC_NEON
+    val wide = width > height
     Box(
         Modifier
-            .size(size)
+            .requiredSize(width, height)
             .graphicsLayer {
                 val s = 1f + (focusScale - 1f) * focus()
                 scaleX = s
@@ -1176,13 +1204,16 @@ private fun XmbIcon(
     ) {
         // Halo (2b.4d: white and breathing, or the neon / gold frame's color held steady).
         if (frame.style != FocusFrameStyle.HARD_SHADOW) {
+            // Drawn as a circle across the icon's width, then squashed to an ellipse for a wide logo.
             Box(
                 Modifier
-                    .fillMaxSize()
+                    .align(Alignment.Center)
+                    .requiredSize(width)
                     .graphicsLayer {
                         alpha = glow()
-                        scaleX = if (neon) 1.6f else 1.9f
-                        scaleY = if (neon) 1.6f else 1.9f
+                        val spread = if (neon) 1.6f else 1.9f
+                        scaleX = if (wide) (if (neon) 1.15f else 1.25f) else spread
+                        scaleY = spread * (height / width)
                     }
                     .drawBehind {
                         val c = frame.bloomColor(accent) ?: return@drawBehind
@@ -1202,26 +1233,27 @@ private fun XmbIcon(
                     FocusFrameStyle.GOLD_BEZEL -> frame.gold
                     else -> Color.White
                 }
-                BlurredCopy(painter, size, tint, blur = if (neon) 3.dp else 6.dp, alpha = { glow() * 0.9f })
+                BlurredCopy(painter, width, height, tint, blur = if (neon) 3.dp else 6.dp, alpha = { glow() * 0.9f })
             }
         } else {
             // A solid copy 2 dp down and right, no blur.
-            BlurredCopy(painter, size, Color.Black, blur = 0.dp, alpha = { glow() * 0.85f }, offset = IntOffset(2, 2))
+            BlurredCopy(painter, width, height, Color.Black, blur = 0.dp, alpha = { glow() * 0.85f }, offset = IntOffset(2, 2))
         }
         // Drop shadow.
         BlurredCopy(
             painter,
-            size,
+            width,
+            height,
             Color.Black,
             blur = if (canBlur) 2.5.dp else 0.dp,
             alpha = { 0.38f },
             offset = IntOffset(1, 2),
         )
-        // Glossy body.
+        // Glossy body (or the logo's own colors).
         Image(
             painter,
             contentDescription = null,
-            modifier = Modifier
+            modifier = if (!gloss) Modifier.fillMaxSize() else Modifier
                 .fillMaxSize()
                 .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
                 .drawWithContent {
@@ -1239,7 +1271,8 @@ private fun XmbIcon(
 @Composable
 private fun BlurredCopy(
     painter: Painter,
-    size: Dp,
+    width: Dp,
+    height: Dp,
     tint: Color,
     blur: Dp,
     alpha: () -> Float,
@@ -1248,13 +1281,13 @@ private fun BlurredCopy(
     Box(
         Modifier
             .wrapContentSize(unbounded = true)
-            .requiredSize(size * 2)
+            .requiredSize(width * 2, height * 2)
             .offset { IntOffset((offset.x * density).roundToInt(), (offset.y * density).roundToInt()) }
             .graphicsLayer { this.alpha = alpha() }
             .then(if (blur > 0.dp) Modifier.blur(blur, BlurredEdgeTreatment.Unbounded) else Modifier),
         contentAlignment = Alignment.Center,
     ) {
-        Image(painter, contentDescription = null, colorFilter = ColorFilter.tint(tint), modifier = Modifier.size(size))
+        Image(painter, contentDescription = null, colorFilter = ColorFilter.tint(tint), modifier = Modifier.size(width, height))
     }
 }
 

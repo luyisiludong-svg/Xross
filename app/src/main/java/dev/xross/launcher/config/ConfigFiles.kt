@@ -127,6 +127,8 @@ data class SettingsFile(
         val showFileFormat: Boolean = D.showFileFormat,
         /** The theme pack's console logo on system folders (`icons/systems/`), else the platform glyph. */
         val showSystemLogos: Boolean = D.showSystemLogos,
+        /** PACK, WHITE, COLOR, MONO, OUTLINED, DARK_COLOR, DARK_MONO or BLACK. */
+        val systemLogoStyle: String = D.systemLogoStyle,
     )
 
     /** `#RRGGBB` gradient for the CUSTOM wave tint. */
@@ -307,6 +309,7 @@ object ConfigCodec {
             allGamesFolder = s.allGamesFolder,
             showFileFormat = s.showFileFormat,
             showSystemLogos = s.showSystemLogos,
+            systemLogoStyle = s.systemLogoStyle,
         ),
         sound = SettingsFile.Sound(
             effects = s.soundEffects,
@@ -378,6 +381,7 @@ object ConfigCodec {
         allGamesFolder = f.display.allGamesFolder,
         showFileFormat = f.display.showFileFormat,
         showSystemLogos = f.display.showSystemLogos,
+        systemLogoStyle = dev.xross.launcher.data.SystemLogoStyle.of(f.display.systemLogoStyle).name,
         soundEffects = f.sound.effects,
         soundVolume = f.sound.effectsVolume.finiteOr(D.soundVolume).coerceIn(0f, 1f),
         cueVolume = f.sound.cueVolume.volumeOr(f.sound.effectsVolume.finiteOr(D.soundVolume)),

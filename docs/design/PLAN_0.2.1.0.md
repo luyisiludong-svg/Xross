@@ -10,7 +10,7 @@ Sizes: **XS** under an hour · **S** half a day · **M** one to two days · **L*
 | --- | --- | --- | --- |
 | 1 | Hide the file format in game rows | XS | ✅ `bda8885`, unit-tested |
 | 2 | Turn off the game tile glow | S | ✅ `948ee50`, unit-tested; frame timing not measured |
-| 3 | Console logos on system folders | S–M | ✅ `510c9bb`, unit-tested; Default pack ships no logos |
+| 3 | Console logos on system folders | S–M | ✅ `510c9bb`; Dan Patrick's logos bundled in eight styles, unit-tested and checked on the A55 |
 | 4a | ARMSX2 recipe (PS2) | S | ✅ `45d0ecc`, stub-verified only |
 | 4b | ARMSX3 recipe and a PS3 platform | M | ✅ `f8a4a19`, unit-tested and stub only |
 | 5 | Custom launch recipes and custom systems | M–L | Planned (candidate for 0.2.2.0) |
@@ -44,6 +44,13 @@ Apps saves `apps.homes` and takes the row out; a `.ps3` test file lists under Pl
 (between PS1 and PSP) and its launch says "No emulator for PS3 — install ARMSX3". Not covered: a
 real ARMSX3 or ARMSX2 boot (no ARMSX3 installed, no PS2 `.iso`/`.chd` on the phone) and frame
 timing.
+
+**Device pass, console logos (2026-11-19, Galaxy A55, release-signed 0.2.1.0-beta over
+0.2.0.4):** with the Xross pack, All Games shows Dan Patrick's logos on every system folder
+(Super Nintendo, PlayStation, PSP, Nintendo 3DS, Arcade) in the default Theme pack style (bundled
+White, glossed); wide logos keep their shape and the titles move right to clear them. Color, set
+in `display.systemLogoStyle`, draws the logos in their own colors. The API 37 emulator also showed
+White, Color and Color, outlined. Not covered: frame timing on the profiling build.
 
 **Order:** 1–3 land together as one PR (small, settings and theme only). 4b next, then 6, then 5
 and 7. If the release has to shrink, 7 moves to 0.2.2.0 before 5 does: custom recipes also answer

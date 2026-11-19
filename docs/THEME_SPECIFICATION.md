@@ -262,6 +262,7 @@ from Settings ▸ Theme; editing the file by hand works too and is picked up on 
 | `buttonHints` | `true` / `false` | Hides or shows the button-hint pill |
 | `showFileFormat` | `true` / `false` | File format in game rows (Menu and profile) |
 | `showSystemLogos` | `true` / `false` | Console logos on system folders (Menu and profile, §14) |
+| `systemLogoStyle` | `PACK`, `WHITE`, `COLOR`, `MONO`, `OUTLINED`, `DARK_COLOR`, `DARK_MONO`, `BLACK` | Which logos: the pack's, or one of Xross's bundled sets (§14) |
 
 Outside `display`, `profile.avatarStyle` holds the avatar's border and glow (Settings ▸ Theme ▸
 Profile customization).
@@ -553,13 +554,26 @@ same system. An SVG is drawn like any pack icon (white, tinted with the menu); a
 its own colors. A name that isn't a system and a file that can't be read are reported; the rest
 still load.
 
-A pack without a logo for a system inherits the Default pack's, and a system with none anywhere
-shows the generic glyph. *Settings ▸ Theme ▸ Menu and profile ▸ Console logos on system folders*
-(`display.showSystemLogos`) turns them all off.
+A pack without a logo for a system inherits the Default pack's, and a system with none in either
+gets Xross's bundled White logo. *Settings ▸ Theme ▸ Menu and profile ▸ Console logos on system
+folders* picks what folders show (`display.systemLogoStyle`), or turns logos off
+(`display.showSystemLogos`):
 
-Console logos are their makers' trademarks, so Xross's bundled packs ship none; the Default pack
-keeps the generic glyph. A third-party pack that brings real logos is responsible for its own
-right to use them.
+| Style | Shows |
+| --- | --- |
+| Theme pack (`PACK`, the default) | The pack's `icons/systems/` logos, else bundled White |
+| White, Color, Black & white | Bundled sets for dark backgrounds |
+| Color, outlined | Color logos with a white outline, visible on any background |
+| Color / Black & white for light backgrounds, Black | Bundled sets for light backgrounds |
+
+Any style other than Theme pack ignores the pack's logos. White and the pack's logos get the
+XMB's white-to-silver fill like any icon; the other bundled sets keep their colors. A logo wider
+than about 1.25:1 keeps its shape: it is drawn up to 2.4 icon slots wide and 0.8 tall, and the
+title moves right to make room, as it does beside a game tile.
+
+The bundled logos are Dan Patrick's (see `CREDITS.md`), in `assets/system_logos/<style>/<id>.webp`,
+made by `tools/system_logos/import_logos.py`. Console logos are their makers' trademarks; a pack
+that brings its own is responsible for its right to use them.
 
 The Phosphor icons are committed as pack SVGs; each names its source icon in a comment. To change
 one, download it from [phosphoricons.com](https://phosphoricons.com) and replace the file.

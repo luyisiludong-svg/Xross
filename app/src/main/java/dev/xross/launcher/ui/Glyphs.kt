@@ -109,19 +109,6 @@ private val Blank = ColorPainter(Color.Transparent)
  * Packs that lack an icon inherit the Default pack's (XMB-style glyphs in
  * assets/themes/default/icons), so every key resolves while a pack is active.
  */
-/**
- * The active pack's console logo for [platformId] (`icons/systems/`, 0.2.1.0), drawn like a pack
- * icon; null when neither the pack nor the Default pack has one.
- */
-@Composable
-fun systemPainter(platformId: String): Painter? {
-    return when (val icon = LocalThemePack.current?.systemIcons?.get(platformId)) {
-        is VectorIcon -> rememberVectorPainter(icon.image)
-        is BitmapIcon -> remember(icon) { BitmapPainter(icon.image) }
-        else -> null
-    }
-}
-
 @Composable
 fun glyphPainter(key: GlyphKey): Painter {
     return when (val icon = LocalThemePack.current?.icons?.get(key)) {

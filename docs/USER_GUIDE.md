@@ -103,12 +103,17 @@ in platform subfolders (`snes/`, `psx/`, `gba/`, …). See `PlatformRegistry` in
 folder alias and extension.
 
 **Base ROMs folder:** **Settings ▸ Library ▸ Base ROMs folder…** (default `Xross/roms`) is always
-scanned; **Create system folders** makes `snes/`, `psx/`, … for all 22 systems. Auto-detected
+scanned; **Create system folders** makes `snes/`, `psx/`, … for all 23 systems. Auto-detected
 `ROMs/` folders and folders you add keep working.
 
 Removed drives keep their games in the library (hot-swap), and `.cue`/`.gdi`/`.m3u` sets are
 de-duplicated. Favorites, Recently Played and playtime (shown under each game's title) are kept
 per game.
+
+Each system's folder shows its console logo. **Settings ▸ Theme ▸ Menu and profile ▸ Console
+logos on system folders** picks the style (the theme pack's own, White, Color, Black & white,
+Color outlined, or a set for light backgrounds) or turns them off; Options on the row lists every
+style.
 
 ### Emulators
 
@@ -285,7 +290,7 @@ What works today, by area. [`Roadmap.md`](../Roadmap.md) tracks what is left and
 | Theme packs | Done. `Xross/themes/<id>/` with a v2 `theme.json` (imports, palette roles, font roles, surfaces), fonts, SVG/PNG icons and sounds, reloaded live when edited; the bundled icons and sounds are the built-in Default pack |
 | RetroAchievements | Done. Account linking, status bar avatar with an expanding mini-HUD, User Card, Games ▸ RetroAchievements dashboard, per-game telemetry and achievement lists, unlock toasts. Linking and lists verified live on an emulator and the Galaxy A55; the 2b.1 HUD and dashboard are unit-tested only; unlock toasts not yet seen after a real session |
 | Library organization | Done. Hide apps (Options ▸ Hide, Settings ▸ Apps ▸ Hidden apps, Hide system apps), app folders (Emulators, Streaming, Tools or your own name, with emulators suggested), base ROMs folder with Create system folders, and custom Photo/Video folders that also find files MediaStore skips. Tested on the Galaxy A55 |
-| Customization | 16:9 XMB game tiles (logo, wide art or a title plate); Settings ▸ Theme ▸ Menu and profile ▸ Profile customization for the avatar's border and glow (Glow off also drops the halo on a focused avatar, friends' included; `profile.avatarStyle` in `settings.json`). Theme 2.0 packs with variants, overrides and context rules, palettes from game art, an hourly circadian curve, a battery tint and quick profiles (OLED True Black, Y2K Cyber-Pastel, Monochrome E-Ink); background shader presets and a pack's own `shader.frag` (music-reactive through Xross's player), a pack wallpaper or a picture set as Xross wallpaper, frosted surfaces over art and wallpapers, focus frames, icon masks, ambient particles, a GL background filter (scanlines, CRT, LCD grid) and an experimental AGSL filter over the menu on Android 13+, each also pickable in Settings ▸ Theme; a pack's ambient music loop (only while nothing else plays), boot video or shader intro, and launch curtain; a status bar arranged from Settings ▸ Theme ▸ Components (logo, network, volume, battery with time to full, clock formats, the avatar, the friends you follow on RetroAchievements), with the mini player as a card, a status-bar ticker or off, a button-glyph style and badges beside the focused title. Haptics are on hold (Roadmap §4.8, Icebox) |
+| Customization | 16:9 XMB game tiles (logo, wide art or a title plate); console logos on system folders in eight styles; Settings ▸ Theme ▸ Menu and profile ▸ Profile customization for the avatar's border and glow (Glow off also drops the halo on a focused avatar, friends' included; `profile.avatarStyle` in `settings.json`). Theme 2.0 packs with variants, overrides and context rules, palettes from game art, an hourly circadian curve, a battery tint and quick profiles (OLED True Black, Y2K Cyber-Pastel, Monochrome E-Ink); background shader presets and a pack's own `shader.frag` (music-reactive through Xross's player), a pack wallpaper or a picture set as Xross wallpaper, frosted surfaces over art and wallpapers, focus frames, icon masks, ambient particles, a GL background filter (scanlines, CRT, LCD grid) and an experimental AGSL filter over the menu on Android 13+, each also pickable in Settings ▸ Theme; a pack's ambient music loop (only while nothing else plays), boot video or shader intro, and launch curtain; a status bar arranged from Settings ▸ Theme ▸ Components (logo, network, volume, battery with time to full, clock formats, the avatar, the friends you follow on RetroAchievements), with the mini player as a card, a status-bar ticker or off, a button-glyph style and badges beside the focused title. Haptics are on hold (Roadmap §4.8, Icebox) |
 | Extras | Android apps (games sorted into Games ▸ Android Games, media apps into Video, Music and Photo), 8 color themes including Original (a color per month), busy indicator, optional button hints, Information screen, can be set as the HOME launcher, Android TV leanback entry |
 | XMB fidelity | Closer. The home menu's layout, motion, navigation, status bar and options panel match the XMB; games show their own tiles, and focusing one brings up its art and video. An XMB-style typeface, Resume/Quit Game and the folder drill-down are missing. Details in [`XMB_FIDELITY.md`](XMB_FIDELITY.md) |
 | Not started | Dual screen, Xross Portal, FTPS. On hold: haptics and the on-screen controller (Roadmap §4.8, Icebox) |
