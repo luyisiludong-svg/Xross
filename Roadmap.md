@@ -64,8 +64,8 @@ Merged into this file on 2026-11-11 (the originals are in git history):
 | **XMB fidelity** | Look and feel exactly like the XMB, plus Xross's extras | ◐ Layout, motion, navigation, status bar, game art and backgrounds, the monthly color, the busy icon and the sound roles match. The typeface, Resume/Quit Game, the folder drill-down and the playback control panel don't yet (§4.6) |
 
 **Codebase at a glance:** Kotlin + Jetpack Compose, one `:app` module (plus the test-only
-`:emulator-stub`), minSdk 28 / targetSdk 36, version `0.2.0.4-beta`. Room database at schema v5,
-22 platforms, 12 emulator launch recipes, 8 color themes (one follows the month), three metadata
+`:emulator-stub`), minSdk 28 / targetSdk 36, version `0.2.1.0-beta`. Room database at schema v5,
+23 platforms, 12 emulator launch recipes, 8 color themes (one follows the month), three metadata
 services (Hasheous, SteamGridDB, ScreenScraper) plus RetroAchievements, settings in three JSON files
 in `Xross/config/` (kotlinx.serialization), art in `Xross/media` in ES-DE's layout, theme packs in
 `Xross/themes/`. **495 unit tests** (491 run by default, 4 opt-in live-service tests), an
@@ -107,7 +107,7 @@ been tested yet.
 | Feature | State | Notes |
 | --- | --- | --- |
 | ROM scanning into Room with incremental rescan | ✅ | 5,000 ROMs: first scan 1.9 s, rescan ~1 s (emulator) |
-| 22 platforms with folder-name aliases and extension filters | ✅ | NES through Saturn, Arcade, 3DS, Switch, ScummVM |
+| 23 platforms with folder-name aliases and extension filters | ✅ | NES through Saturn, PS3, Arcade, 3DS, Switch, ScummVM |
 | `.cue` / `.gdi` / `.m3u` track de-duplication | ✅ | |
 | Auto-detect `ROMs`, `Games`, `Emulation`, `Retro` folders on every drive | ✅ | Plus custom folders through the system picker |
 | Multiple volumes: internal, microSD, USB-OTG | ✅ 🧪 | |
@@ -137,7 +137,7 @@ been tested yet.
 | ROM access for emulators | ✅ | File path extra plus a `content://` URI with a read grant |
 | `GameLauncher` interface | ✅ | UI and repositories see launch plans only; Intents, `content://` grants and package queries live in `AndroidIntentGameLauncher`. A failed start doesn't count as playtime |
 | Android games and apps | ✅ | Games (`CATEGORY_GAME`) go to Games ▸ Android Games; video, audio and image apps (declared category, else a built-in list) to an Apps folder in Video, Music and Photo; everything else to Apps |
-| Media apps sorting (0.2.1.0) | ✅ | Options ▸ Move to Apps / Video / Music / Photo, recorded as `apps.homes`; Settings ▸ Apps ▸ Sort media apps (`apps.autoSort`). Unit-tested; not yet checked on the A55 |
+| Media apps sorting (0.2.1.0) | ✅ | Options ▸ Move to Apps / Video / Music / Photo, recorded as `apps.homes`; Settings ▸ Apps ▸ Sort media apps (`apps.autoSort`). Unit-tested and checked on the A55 (2026-11-19) |
 | Hide apps | ✅ 📱 | Options ▸ Hide on any app in Apps or Games ▸ Android Games; Settings ▸ Apps ▸ Hidden apps shows them again (one by one or all); Hide system apps switch. Stored as `apps.hidden` in `settings.json` |
 | App folders | ✅ 📱 | Options ▸ Move to folder: Emulators, Streaming, Tools, folders already in use, or New folder… typed on the gamepad keyboard. Known emulator packages are suggested for Emulators, and a "Group emulators" row moves them all at once. Folders sit at the top of Apps while they hold an app |
 

@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.1.0-beta — 2026-11-19
 
 - **A `bios` folder in the Xross folder.** A single place to keep your own BIOS files next to
   your ROMs, so they travel with the rest of your setup. Xross only creates it; it never reads or
@@ -24,9 +24,13 @@
   game rows drops "ISO", "CHD" and the like from under each title; Information still shows it.
 - **Game tile glow can be turned off.** Settings ▸ Theme ▸ Components ▸ Game tile glow: follow the
   theme pack, on or off. Packs set it with `components.tileGlow`.
-- **Console logos on system folders.** A theme pack can bring a logo for each system
-  (`icons/systems/snes.svg`…), shown on the system's folder in Games. Turn them off in
-  Settings ▸ Theme ▸ Menu and profile. Xross's own packs ship none.
+- **Console logos on system folders.** Every system folder in Games now shows its console's
+  logo instead of the same icon for all. Pick the look in Settings ▸ Theme ▸ Menu and profile ▸
+  Console logos on system folders: Theme pack (the pack's own logos, else White), White, Color,
+  Black & white, Color outlined, three styles for light backgrounds, or Off. Wide logos keep
+  their shape instead of shrinking into the square icon slot. The logos are by
+  [Dan Patrick](https://forums.launchbox-app.com/profile/85709-dan-patrick/), shared on the
+  LaunchBox Community Forums. A theme pack can bring its own (`icons/systems/snes.svg`…).
 
 ## 0.2.0.4-beta — 2026-11-17
 
