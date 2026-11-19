@@ -13,6 +13,9 @@
   folder, and games installed inside ARMSX3 through a `.ps3` file holding the game's serial.
   ARMSX3 opens games by path, so it needs its own storage access. PS3 games scrape from
   ScreenScraper; there are no RetroAchievements for PS3.
+- **Media apps in Video, Music and Photo.** Streaming, music and gallery apps now sit in an Apps
+  folder at the end of those categories instead of in Apps. Options moves an app back to Apps (or
+  from Apps into any of the three); Settings ▸ Apps ▸ Sort media apps turns the sorting off.
 - **Hide the file format in game rows.** Settings ▸ Theme ▸ Menu and profile ▸ File format in
   game rows drops "ISO", "CHD" and the like from under each title; Information still shows it.
 - **Game tile glow can be turned off.** Settings ▸ Theme ▸ Components ▸ Game tile glow: follow the

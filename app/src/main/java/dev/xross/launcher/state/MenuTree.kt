@@ -1,6 +1,8 @@
 package dev.xross.launcher.state
 
 import dev.xross.launcher.model.GlyphKey
+import dev.xross.launcher.model.AppHome
+import dev.xross.launcher.state.AppSorting.label
 import dev.xross.launcher.audio.AudioMixer
 import dev.xross.launcher.data.MusicUnderSnaps
 import dev.xross.launcher.audio.VolumeChannel
@@ -197,7 +199,7 @@ class MenuTree(private val s: MenuSnapshot) {
     val media by lazy { MediaMenus(s.media, s.storageGranted, s.playlists, s.settings.songSort, s.settings.albumSort, s.settings.wallpaperFit) }
 
     /** Music root with the live Now Playing row. Not cached. */
-    fun musicRoot(now: NowPlaying): List<XmbNode> = media.musicRoot(now)
+    fun musicRoot(now: NowPlaying): List<XmbNode> = media.musicRoot(now) + mediaAppsRow(AppHome.MUSIC)
 
     /** Lists are memoized: a tree is rebuilt only when the snapshot changes, not per keypress. */
     fun list(key: String): List<XmbNode> = cache.getOrPut(key) { build(key) }
@@ -207,9 +209,11 @@ class MenuTree(private val s: MenuSnapshot) {
         key == Categories.rootKey(Categories.APPS) -> appsRoot()
         key.startsWith(APP_FOLDER_PREFIX) -> appFolder(key.removePrefix(APP_FOLDER_PREFIX))
         key == Categories.rootKey(Categories.SETTINGS) -> settingsRoot()
-        key == Categories.rootKey(Categories.PHOTO) -> media.photoRoot()
-        key == Categories.rootKey(Categories.VIDEO) -> media.videoRoot()
-        key == Categories.rootKey(Categories.MUSIC) -> media.musicRoot(NowPlaying())
+        key == Categories.rootKey(Categories.PHOTO) -> media.photoRoot() + mediaAppsRow(AppHome.PHOTO)
+        key == Categories.rootKey(Categories.VIDEO) -> media.videoRoot() + mediaAppsRow(AppHome.VIDEO)
+        key == Categories.rootKey(Categories.MUSIC) -> musicRoot(NowPlaying())
+        key.startsWith(MEDIA_APPS_PREFIX) -> AppHome.entries.firstOrNull { it.name.lowercase(Locale.ROOT) == key.removePrefix(MEDIA_APPS_PREFIX) }
+            ?.let { home -> AppSorting.appsIn(home, s.apps, s.settings).map { appNode(it, home = home) } }.orEmpty()
         media.handles(key) -> media.list(key)
         key == RECENT -> s.games.filter { it.lastPlayed != null }
             .sortedByDescending { it.lastPlayed }.take(30).map { gameNode(it, showPlatform = true) }
@@ -487,14 +491,21 @@ class MenuTree(private val s: MenuSnapshot) {
     private fun emulatorLabel(option: EmulatorOption): String =
         (EmulatorRegistry.byId(option.emulatorId)?.name ?: option.emulatorId) + (option.core?.let { " · $it" } ?: "")
 
-    private fun appNode(app: AppEntry, inGames: Boolean = false) = XmbNode(
+    private fun appNode(app: AppEntry, inGames: Boolean = false, home: AppHome = AppHome.APPS) = XmbNode(
         id = "app:${app.packageName}/${app.activityName}",
         title = app.label,
         subtitle = app.packageName,
         icon = NodeIcon.App(app.packageName),
         action = NodeAction.LaunchApp(app.packageName, app.activityName),
-        menu = appMenu(app, inGames),
+        menu = appMenu(app, inGames, home),
     )
+
+    /** The "Apps" folder at the end of Video, Music or Photo (0.2.1.0), while it holds an app. */
+    private fun mediaAppsRow(home: AppHome): List<XmbNode> {
+        val n = AppSorting.appsIn(home, s.apps, s.settings).size
+        if (n == 0) return emptyList()
+        return listOf(folder(MEDIA_APPS_PREFIX + home.name.lowercase(Locale.ROOT), "Apps", GlyphKey.APPS, countOf(n, "app")))
+    }
 
     // region Apps
 
@@ -503,7 +514,7 @@ class MenuTree(private val s: MenuSnapshot) {
      * (presets first), then the apps that aren't in one.
      */
     private fun appsRoot(): List<XmbNode> = buildList {
-        val apps = visibleApps.filterNot { it.isGame }
+        val apps = AppSorting.appsIn(AppHome.APPS, s.apps, s.settings)
         val folders = s.settings.appFolders
         val loose = AppFolders.ungroupedEmulators(s.apps, s.settings)
         if (loose.isNotEmpty()) {
@@ -526,10 +537,16 @@ class MenuTree(private val s: MenuSnapshot) {
     private fun appFolder(name: String): List<XmbNode> =
         visibleApps.filter { !it.isGame && s.settings.appFolders[it.packageName] == name }.map { appNode(it) }
 
-    /** Options for an app: open, move to a folder (Apps only), hide. */
-    private fun appMenu(app: AppEntry, inGames: Boolean): List<MenuOption> = buildList {
+    /**
+     * Options for an app: open, move to a folder (Apps only), move between Apps and the media
+     * categories ([AppSorting]), hide.
+     */
+    private fun appMenu(app: AppEntry, inGames: Boolean, home: AppHome = AppHome.APPS): List<MenuOption> = buildList {
         add(MenuOption("Open", command = Command.LaunchApp(app.packageName, app.activityName)))
-        if (!inGames) {
+        if (home != AppHome.APPS) {
+            add(MenuOption("Move to Apps", detail = "Keep it in Apps from now on", command = Command.SetAppHome(app.packageName, AppHome.APPS)))
+        }
+        if (!inGames && home == AppHome.APPS) {
             val current = s.settings.appFolders[app.packageName]
             val suggested = AppFolders.suggestedFolder(app.packageName)
             val names = AppFolders.offeredNames(s.settings).let { all -> listOfNotNull(suggested) + all.filter { it != suggested } }
@@ -554,6 +571,22 @@ class MenuTree(private val s: MenuSnapshot) {
                 ),
             )
         }
+        if (!inGames && home == AppHome.APPS) {
+            val natural = AppSorting.natural(app)
+            val manual = s.settings.appHomes[app.packageName]
+            add(
+                MenuOption(
+                    "Move to Video, Music or Photo",
+                    detail = if (natural != AppHome.APPS) "Suggested: ${natural.label}" else "Listed with that category's media",
+                    submenu = buildList {
+                        for (h in listOf(AppHome.VIDEO, AppHome.MUSIC, AppHome.PHOTO)) {
+                            add(MenuOption(h.label, detail = if (h == natural) "Suggested" else null, command = Command.SetAppHome(app.packageName, h)))
+                        }
+                        if (manual != null) add(MenuOption("Sort automatically", detail = "Forget where you put it", command = Command.SetAppHome(app.packageName, null)))
+                    },
+                ),
+            )
+        }
         add(MenuOption("Hide", detail = "Settings ▸ Apps ▸ Hidden apps shows it again", command = Command.HideApp(app.packageName)))
     }
 
@@ -573,6 +606,13 @@ class MenuTree(private val s: MenuSnapshot) {
         if (loose.isNotEmpty()) {
             add(setting("apps:group", "Group emulators", "Move ${countOf(loose.size, "emulator")} into Emulators", GlyphKey.EMULATORS, Command.GroupEmulators))
         }
+        add(
+            setting(
+                "apps:autosort", "Sort media apps",
+                if (st.autoSortApps) "On — video, music and photo apps are in those categories" else "Off — every app is in Apps",
+                GlyphKey.APPS, Command.ToggleAutoSortApps,
+            ),
+        )
         if (st.appFolders.isNotEmpty()) {
             val folders = AppFolders.folderNames(st.appFolders.values)
             add(setting("apps:clear-folders", "Remove all app folders", folders.joinToString(", "), GlyphKey.REFRESH, Command.ClearAppFolders))
@@ -683,6 +723,7 @@ class MenuTree(private val s: MenuSnapshot) {
             add(if (hidden == 0) "No hidden apps" else "${countOf(hidden, "app")} hidden")
             if (folders > 0) add(countOf(folders, "folder"))
             if (s.settings.hideSystemApps) add("system apps hidden")
+            if (!s.settings.autoSortApps) add("media apps not sorted")
         }.joinToString(" · ")
     }
 
@@ -1660,6 +1701,9 @@ class MenuTree(private val s: MenuSnapshot) {
         const val PHOTO_FOLDERS = "settings:media:photo-folders"
         const val VIDEO_FOLDERS = "settings:media:video-folders"
         const val APP_FOLDER_PREFIX = "apps:folder:"
+
+        /** The Apps folder of Video, Music or Photo: `media:apps:video`. */
+        const val MEDIA_APPS_PREFIX = "media:apps:"
         private val DISC_EXTENSIONS = setOf("iso", "cue", "chd", "cso", "rvz", "gcz", "wbfs", "cdi", "gdi", "pbp", "m3u")
         const val SYSTEM = "settings:system"
         const val ACCOUNTS = "settings:accounts"

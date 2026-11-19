@@ -158,6 +158,10 @@ data class XrossSettings(
     val hideSystemApps: Boolean = false,
     /** Package name → the Apps folder it's in. */
     val appFolders: Map<String, String> = emptyMap(),
+    /** Video, music and photo apps are listed in those categories ([dev.xross.launcher.state.AppSorting]). */
+    val autoSortApps: Boolean = true,
+    /** Package name → where the user moved it (Options ▸ Move to Apps / Video / Music / Photo); wins over sorting. */
+    val appHomes: Map<String, dev.xross.launcher.model.AppHome> = emptyMap(),
     /** The library's home folder; empty means `roms/` in the Xross folder ([dev.xross.launcher.storage.XrossLayout.roms]). */
     val baseRomsFolder: String = "",
     /** Photo shows only these folders; empty means everything MediaStore knows. */

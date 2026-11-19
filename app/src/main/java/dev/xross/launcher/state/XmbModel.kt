@@ -204,6 +204,9 @@ sealed interface Command {
     data object ToggleHideSystemApps : Command
     /** [folder] null takes the app out of its folder. */
     data class MoveAppToFolder(val packageName: String, val folder: String?) : Command
+    /** Lists the app in [home] for good; null goes back to automatic sorting. */
+    data class SetAppHome(val packageName: String, val home: dev.xross.launcher.model.AppHome?) : Command
+    data object ToggleAutoSortApps : Command
     /** Type a new folder name on the gamepad keyboard, then move the app into it. */
     data class NewAppFolder(val packageName: String) : Command
     /** Moves every installed emulator that isn't in a folder into Emulators. */

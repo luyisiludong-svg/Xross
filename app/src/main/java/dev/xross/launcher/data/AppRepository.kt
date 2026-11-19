@@ -22,6 +22,8 @@ data class AppEntry(
     val isGame: Boolean,
     /** Preinstalled with the system (including updated system apps); Settings ▸ Apps can hide these. */
     val isSystem: Boolean = false,
+    /** `ApplicationInfo.category` (`CATEGORY_VIDEO`, `CATEGORY_AUDIO`, …); -1 when the app declares none. */
+    val category: Int = -1,
 ) {
     val component: ComponentName get() = ComponentName(packageName, activityName)
 }
@@ -70,6 +72,7 @@ class AppRepository(
                     label = info.loadLabel(pm).toString(),
                     isGame = appInfo.isGame(),
                     isSystem = appInfo.flags and ApplicationInfo.FLAG_SYSTEM != 0,
+                    category = appInfo.category,
                 )
             }
             .distinctBy { it.packageName to it.activityName }

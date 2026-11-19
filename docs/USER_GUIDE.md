@@ -258,6 +258,13 @@ Games**. Options (△ / Y) on an app hides it or moves it into a folder; Setting
 hidden apps and can hide every system app. App icons can be masked and recoloured by the theme
 (see [Focus frames and app icons](THEME_SPECIFICATION.md#focus-frames-and-app-icons)).
 
+Video, music and photo apps (YouTube, Netflix, Spotify, Google Photos…) are sorted into an
+**Apps** folder at the end of Video, Music and Photo. Xross goes by the category an app declares,
+and by a built-in list of well-known apps for those that declare none. Options on an app there
+offers **Move to Apps**; in Apps, **Move to Video, Music or Photo** puts any app in one of them,
+and **Sort automatically** forgets that choice. An app you put in an Apps folder stays in Apps.
+Settings ▸ Apps ▸ Sort media apps turns the sorting off (your own moves still apply).
+
 ## 8. Feature status
 
 What works today, by area. [`Roadmap.md`](../Roadmap.md) tracks what is left and
@@ -279,6 +286,6 @@ What works today, by area. [`Roadmap.md`](../Roadmap.md) tracks what is left and
 | RetroAchievements | Done. Account linking, status bar avatar with an expanding mini-HUD, User Card, Games ▸ RetroAchievements dashboard, per-game telemetry and achievement lists, unlock toasts. Linking and lists verified live on an emulator and the Galaxy A55; the 2b.1 HUD and dashboard are unit-tested only; unlock toasts not yet seen after a real session |
 | Library organization | Done. Hide apps (Options ▸ Hide, Settings ▸ Apps ▸ Hidden apps, Hide system apps), app folders (Emulators, Streaming, Tools or your own name, with emulators suggested), base ROMs folder with Create system folders, and custom Photo/Video folders that also find files MediaStore skips. Tested on the Galaxy A55 |
 | Customization | 16:9 XMB game tiles (logo, wide art or a title plate); Settings ▸ Theme ▸ Menu and profile ▸ Profile customization for the avatar's border and glow (Glow off also drops the halo on a focused avatar, friends' included; `profile.avatarStyle` in `settings.json`). Theme 2.0 packs with variants, overrides and context rules, palettes from game art, an hourly circadian curve, a battery tint and quick profiles (OLED True Black, Y2K Cyber-Pastel, Monochrome E-Ink); background shader presets and a pack's own `shader.frag` (music-reactive through Xross's player), a pack wallpaper or a picture set as Xross wallpaper, frosted surfaces over art and wallpapers, focus frames, icon masks, ambient particles, a GL background filter (scanlines, CRT, LCD grid) and an experimental AGSL filter over the menu on Android 13+, each also pickable in Settings ▸ Theme; a pack's ambient music loop (only while nothing else plays), boot video or shader intro, and launch curtain; a status bar arranged from Settings ▸ Theme ▸ Components (logo, network, volume, battery with time to full, clock formats, the avatar, the friends you follow on RetroAchievements), with the mini player as a card, a status-bar ticker or off, a button-glyph style and badges beside the focused title. Haptics are on hold (Roadmap §4.8, Icebox) |
-| Extras | Android apps (games sorted into Games ▸ Android Games), 8 color themes including Original (a color per month), busy indicator, optional button hints, Information screen, can be set as the HOME launcher, Android TV leanback entry |
+| Extras | Android apps (games sorted into Games ▸ Android Games, media apps into Video, Music and Photo), 8 color themes including Original (a color per month), busy indicator, optional button hints, Information screen, can be set as the HOME launcher, Android TV leanback entry |
 | XMB fidelity | Closer. The home menu's layout, motion, navigation, status bar and options panel match the XMB; games show their own tiles, and focusing one brings up its art and video. An XMB-style typeface, Resume/Quit Game and the folder drill-down are missing. Details in [`XMB_FIDELITY.md`](XMB_FIDELITY.md) |
 | Not started | Dual screen, Xross Portal, FTPS. On hold: haptics and the on-screen controller (Roadmap §4.8, Icebox) |

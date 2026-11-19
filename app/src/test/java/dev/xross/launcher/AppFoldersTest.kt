@@ -50,7 +50,7 @@ class AppFoldersTest {
 
     @Test fun everyAppOffersHideAndAndroidGamesHaveNoFolders() {
         val notesRow = tree().apps().single { it.title == "Notes" }
-        assertEquals(listOf("Open", "Move to folder", "Hide"), notesRow.menu.map { it.label })
+        assertEquals(listOf("Open", "Move to folder", "Move to Video, Music or Photo", "Hide"), notesRow.menu.map { it.label })
         assertEquals(Command.HideApp(notes.packageName), notesRow.menu.last().command)
         val game = tree().list(MenuTree.ANDROID_GAMES).single()
         assertEquals(listOf("Open", "Hide"), game.menu.map { it.label })

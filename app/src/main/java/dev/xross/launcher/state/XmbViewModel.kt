@@ -1267,6 +1267,26 @@ class XmbViewModel(
         toast(if (name == null) "${appLabel(packageName)} is out of its folder" else "${appLabel(packageName)} moved to $name")
     }
 
+    /** Options ▸ Move to Apps / Video / Music / Photo; null forgets the choice ([AppSorting]). */
+    private fun setAppHome(packageName: String, home: dev.xross.launcher.model.AppHome?) {
+        settingsStore.update { s ->
+            s.copy(
+                appHomes = if (home == null) s.appHomes - packageName else s.appHomes + (packageName to home),
+                // A folder in Apps would keep it there: moving it to a category takes it out.
+                appFolders = if (home != null && home != dev.xross.launcher.model.AppHome.APPS) s.appFolders - packageName else s.appFolders,
+            )
+        }
+        sounds.play(UiSound.OK)
+        val label = appLabel(packageName)
+        toast(
+            when (home) {
+                null -> "$label is sorted automatically again"
+                dev.xross.launcher.model.AppHome.APPS -> "$label moved to Apps"
+                else -> with(AppSorting) { "$label moved to ${home.label} ▸ Apps" }
+            },
+        )
+    }
+
     /** A name typed on the gamepad keyboard ([SearchController]) and confirmed. */
     private fun submitName(purpose: NamePurpose, text: String) {
         when (purpose) {
@@ -1649,6 +1669,8 @@ class XmbViewModel(
             }
             Command.ToggleHideSystemApps -> settingsStore.update { it.copy(hideSystemApps = !it.hideSystemApps) }
             is Command.MoveAppToFolder -> moveAppToFolder(command.packageName, command.folder)
+            is Command.SetAppHome -> setAppHome(command.packageName, command.home)
+            Command.ToggleAutoSortApps -> settingsStore.update { it.copy(autoSortApps = !it.autoSortApps) }
             is Command.NewAppFolder -> {
                 sounds.play(UiSound.OPTION)
                 typing.openNameEntry(NameEntry("New folder for ${appLabel(command.packageName)}", NamePurpose.NewAppFolder(command.packageName)))

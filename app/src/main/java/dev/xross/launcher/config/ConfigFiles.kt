@@ -178,6 +178,10 @@ data class SettingsFile(
         val hideSystemApps: Boolean = D.hideSystemApps,
         /** Package name → folder name in Apps. */
         val folders: Map<String, String> = D.appFolders,
+        /** Video, music and photo apps go to the Apps folder of those categories. */
+        val autoSort: Boolean = D.autoSortApps,
+        /** Package name → APPS, VIDEO, MUSIC or PHOTO: where the user moved it. */
+        val homes: Map<String, String> = emptyMap(),
     )
 
     /** Empty [customFolders]: every photo or video MediaStore knows. Otherwise only these folders. */
@@ -319,7 +323,11 @@ object ConfigCodec {
         metadata = SettingsFile.Metadata(
             s.scrapeAutomatically, s.scrapeWifiOnly, s.scrapeVideos, s.scrapeRegion, s.scrapeLanguage, s.hasheousEnabled,
         ),
-        apps = SettingsFile.Apps(s.hiddenApps.sorted(), s.hideSystemApps, s.appFolders.toSortedMap()),
+        apps = SettingsFile.Apps(
+            s.hiddenApps.sorted(), s.hideSystemApps, s.appFolders.toSortedMap(),
+            autoSort = s.autoSortApps,
+            homes = s.appHomes.mapValues { it.value.name }.toSortedMap(),
+        ),
         photo = SettingsFile.MediaFolders(s.photoFolders),
         video = SettingsFile.MediaFolders(s.videoFolders),
         profile = SettingsFile.Profile(s.avatarStyle),
@@ -395,6 +403,11 @@ object ConfigCodec {
         appFolders = f.apps.folders.mapNotNull { (pkg, folder) ->
             val name = FolderNames.normalize(folder) ?: return@mapNotNull null
             pkg.trim().takeIf { it.isNotEmpty() }?.let { it to name }
+        }.toMap(),
+        autoSortApps = f.apps.autoSort,
+        appHomes = f.apps.homes.mapNotNull { (pkg, home) ->
+            val h = dev.xross.launcher.model.AppHome.entries.firstOrNull { it.name.equals(home.trim(), ignoreCase = true) } ?: return@mapNotNull null
+            pkg.trim().takeIf { it.isNotEmpty() }?.let { it to h }
         }.toMap(),
         photoFolders = cleanFolders(f.photo.customFolders),
         videoFolders = cleanFolders(f.video.customFolders),

@@ -136,7 +136,8 @@ been tested yet.
 | Emulator per game (Options ▸ Emulator) | ✅ | Game override → platform choice → first installed |
 | ROM access for emulators | ✅ | File path extra plus a `content://` URI with a read grant |
 | `GameLauncher` interface | ✅ | UI and repositories see launch plans only; Intents, `content://` grants and package queries live in `AndroidIntentGameLauncher`. A failed start doesn't count as playtime |
-| Android games and apps | ✅ | Games (`CATEGORY_GAME`) go to Games ▸ Android Games; everything else to Apps |
+| Android games and apps | ✅ | Games (`CATEGORY_GAME`) go to Games ▸ Android Games; video, audio and image apps (declared category, else a built-in list) to an Apps folder in Video, Music and Photo; everything else to Apps |
+| Media apps sorting (0.2.1.0) | ✅ | Options ▸ Move to Apps / Video / Music / Photo, recorded as `apps.homes`; Settings ▸ Apps ▸ Sort media apps (`apps.autoSort`). Unit-tested; not yet checked on the A55 |
 | Hide apps | ✅ 📱 | Options ▸ Hide on any app in Apps or Games ▸ Android Games; Settings ▸ Apps ▸ Hidden apps shows them again (one by one or all); Hide system apps switch. Stored as `apps.hidden` in `settings.json` |
 | App folders | ✅ 📱 | Options ▸ Move to folder: Emulators, Streaming, Tools, folders already in use, or New folder… typed on the gamepad keyboard. Known emulator packages are suggested for Emulators, and a "Group emulators" row moves them all at once. Folders sit at the top of Apps while they hold an app |
 
