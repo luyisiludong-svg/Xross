@@ -148,6 +148,8 @@ data class XrossSettings(
     val allGamesFolder: Boolean = true,
     /** The file type ("ISO", "CHD") at the end of a game row's subtitle. */
     val showFileFormat: Boolean = true,
+    /** System folders show the theme pack's console logo when it has one (else the platform glyph). */
+    val showSystemLogos: Boolean = true,
     /** platformId → the user's extra folder names and extensions (systems.json). */
     val systemOverrides: Map<String, SystemOverride> = emptyMap(),
     /** Package names hidden from Apps and Games ▸ Android Games. */

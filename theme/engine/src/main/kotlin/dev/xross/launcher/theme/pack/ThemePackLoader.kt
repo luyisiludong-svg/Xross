@@ -74,6 +74,12 @@ data class LoadedTheme(
     val palette: ThemePalette?,
     val wave: ThemeManifest.WaveDefaults?,
     val icons: Map<GlyphKey, ThemeIcon>,
+    /**
+     * Console logos for system folders (0.2.1.0), by Xross platform id: `icons/systems/<id>.svg`
+     * (or a folder alias: `ps1.png` is `psx`), then the Default pack's. A system with none here
+     * shows the generic `platform` glyph.
+     */
+    val systemIcons: Map<String, ThemeIcon> = emptyMap(),
     val fonts: ThemeFonts,
     val sounds: Map<SoundRole, SoundSource>,
     /** Each role's gain in the pack's base look; variants, overrides and rules change it ([ThemeLook.gains]). */
@@ -456,6 +462,8 @@ class ThemePackLoader(
             (icon ?: base?.icons?.get(key))?.let { icons[key] = it }
         }
 
+        val systemIcons = LinkedHashMap(base?.systemIcons.orEmpty()).apply { putAll(systemIcons(pack, problems, files)) }
+
         val fonts = fonts(pack, m.typography, base?.fonts, problems, files)
         val palette = m.palette?.takeIf { it.hasColors }?.let { p ->
             p.toPalette(m.wave).also { if (it == null) problems += "Palette needs a canvas color, and colors must be #RRGGBB" }
@@ -521,6 +529,7 @@ class ThemePackLoader(
             palette = palette,
             wave = m.wave,
             icons = icons,
+            systemIcons = systemIcons,
             fonts = fonts,
             sounds = audio.sounds,
             gains = audio.gains,
@@ -645,6 +654,51 @@ class ThemePackLoader(
             if (icon != null) return icon
         }
         return null
+    }
+
+    /**
+     * The pack's own `icons/systems/` files by platform id. A name is a platform id or one of its
+     * folder aliases (`ps1`, `megadrive`); an exact id beats an alias, and the first file type in
+     * [ICON_TYPES] order wins a tie. Unknown names and unreadable files are reported.
+     */
+    private fun systemIcons(pack: ThemePackInfo, problems: MutableList<String>, files: MutableSet<String>): Map<String, ThemeIcon> {
+        val names: List<String> = when (val s = pack.source) {
+            is PackSource.Builtin -> runCatching { platform.listAssets("${s.dir}/$SYSTEM_ICONS") }.getOrNull().orEmpty()
+            is PackSource.Folder -> inside(s.dir, SYSTEM_ICONS)?.listFiles()?.filter { it.isFile }?.map { it.name }.orEmpty()
+        }.filter { !it.startsWith(".") }
+        if (names.isEmpty()) return emptyMap()
+        val byId = LinkedHashMap<String, Pair<String, Boolean>>() // id → (file name, exact)
+        for (name in names.sortedBy { ICON_TYPES.indexOf(it.substringAfterLast('.', "").lowercase(Locale.ROOT)) }) {
+            val ext = name.substringAfterLast('.', "").lowercase(Locale.ROOT)
+            if (ext !in ICON_TYPES) {
+                problems += "$SYSTEM_ICONS/$name: use an SVG, PNG or WebP"
+                continue
+            }
+            val stem = name.substringBeforeLast('.')
+            val id = platformIdOf(stem)
+            if (id == null) {
+                problems += "$SYSTEM_ICONS/$name: no system called $stem"
+                continue
+            }
+            val exact = stem.equals(id, ignoreCase = true)
+            val held = byId[id]
+            if (held == null || (exact && !held.second)) byId[id] = name to exact
+        }
+        val out = LinkedHashMap<String, ThemeIcon>()
+        for ((id, picked) in byId) {
+            val name = picked.first
+            val ext = name.substringAfterLast('.', "").lowercase(Locale.ROOT)
+            val path = "$SYSTEM_ICONS/$name"
+            val icon = when (val s = pack.source) {
+                is PackSource.Builtin -> runCatching { platform.openAsset("${s.dir}/$path").use { stream -> readIcon(ext, "system $id") { stream.readBytes() } } }
+                    .getOrNull()?.also { files += path }
+                is PackSource.Folder -> inside(s.dir, path)?.let { file ->
+                    readIcon(ext, "system $id") { file.readBytes() }?.also { relativePath(s.dir, file)?.let(files::add) }
+                }
+            }
+            if (icon == null) problems += "$path: can't read it (or it is over ${MAX_ICON_BYTES / 1024} KB)" else out[id] = icon
+        }
+        return out
     }
 
     /** `components.logo` at [path] from the pack root, through the same checks as icons (type, size, inside the pack). */
@@ -817,6 +871,9 @@ class ThemePackLoader(
         const val MANIFEST = "theme.json"
         const val SOUNDS = "sounds"
         const val ICONS = "icons"
+
+        /** Console logos for system folders: `icons/systems/<platform id>.svg`. */
+        const val SYSTEM_ICONS = "icons/systems"
         const val FONTS = "fonts"
         val ICON_TYPES = listOf("svg", "png", "webp")
         val FONT_TYPES = setOf("ttf", "otf")

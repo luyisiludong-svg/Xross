@@ -593,6 +593,7 @@ class XmbViewModel(
         val folder = stack.getOrNull(stack.size - 2)?.let { parent ->
             when (val icon = itemsOf(parent.key).getOrNull(parent.index)?.icon) {
                 is NodeIcon.Glyph -> icon.key
+                is NodeIcon.System -> icon.fallback
                 is NodeIcon.Art -> icon.fallback
                 is NodeIcon.Tile -> icon.fallback
                 is NodeIcon.Thumb -> icon.fallback
@@ -1631,6 +1632,7 @@ class XmbViewModel(
             Command.ToggleVideoLoop -> settingsStore.update { it.copy(videoLoop = !it.videoLoop) }
             Command.ToggleAllGamesFolder -> settingsStore.update { it.copy(allGamesFolder = !it.allGamesFolder) }
             Command.ToggleFileFormat -> settingsStore.update { it.copy(showFileFormat = !it.showFileFormat) }
+            Command.ToggleSystemLogos -> settingsStore.update { it.copy(showSystemLogos = !it.showSystemLogos) }
             is Command.LaunchApp -> launchApp(command.packageName, command.activityName)
             is Command.HideApp -> {
                 settingsStore.update { it.copy(hiddenApps = it.hiddenApps + command.packageName) }

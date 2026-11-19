@@ -18,6 +18,12 @@ import dev.xross.launcher.theme.pack.StatusSlot
 /** Icon identifiers; the UI layer maps these to vectors or loads app icons. */
 sealed interface NodeIcon {
     data class Glyph(val key: GlyphKey) : NodeIcon
+
+    /**
+     * A system folder (0.2.1.0): the theme pack's logo for [platformId]
+     * ([dev.xross.launcher.theme.pack.LoadedTheme.systemIcons]), else the [fallback] glyph.
+     */
+    data class System(val platformId: String, val fallback: GlyphKey = GlyphKey.PLATFORM) : NodeIcon
     data class App(val packageName: String) : NodeIcon
     /** Photo/video thumbnail or embedded album art, with a glyph to show until it loads. */
     data class Thumb(val kind: ThumbKind, val id: Long, val fallback: GlyphKey) : NodeIcon
@@ -182,6 +188,7 @@ sealed interface Command {
     data object ToggleVideoLoop : Command
     data object ToggleAllGamesFolder : Command
     data object ToggleFileFormat : Command
+    data object ToggleSystemLogos : Command
     /** Moves the Xross folder to the next mounted volume (primary storage, SD card, …). */
     data object CycleXrossVolume : Command
     data object BackupNow : Command

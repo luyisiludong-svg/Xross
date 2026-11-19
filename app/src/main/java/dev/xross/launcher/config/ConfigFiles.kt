@@ -125,6 +125,8 @@ data class SettingsFile(
         val allGamesFolder: Boolean = D.allGamesFolder,
         /** The file type ("ISO", "CHD") in game rows; the Information screen shows it either way. */
         val showFileFormat: Boolean = D.showFileFormat,
+        /** The theme pack's console logo on system folders (`icons/systems/`), else the platform glyph. */
+        val showSystemLogos: Boolean = D.showSystemLogos,
     )
 
     /** `#RRGGBB` gradient for the CUSTOM wave tint. */
@@ -300,6 +302,7 @@ object ConfigCodec {
             buttonHints = s.showButtonHints,
             allGamesFolder = s.allGamesFolder,
             showFileFormat = s.showFileFormat,
+            showSystemLogos = s.showSystemLogos,
         ),
         sound = SettingsFile.Sound(
             effects = s.soundEffects,
@@ -366,6 +369,7 @@ object ConfigCodec {
         showButtonHints = f.display.buttonHints,
         allGamesFolder = f.display.allGamesFolder,
         showFileFormat = f.display.showFileFormat,
+        showSystemLogos = f.display.showSystemLogos,
         soundEffects = f.sound.effects,
         soundVolume = f.sound.effectsVolume.finiteOr(D.soundVolume).coerceIn(0f, 1f),
         cueVolume = f.sound.cueVolume.volumeOr(f.sound.effectsVolume.finiteOr(D.soundVolume)),

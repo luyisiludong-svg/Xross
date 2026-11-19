@@ -57,6 +57,7 @@ Xross/themes/<theme_id>/
 ├── surfaces.json   optional: any JSON file listed in "imports" is merged under theme.json
 ├── fonts/          .ttf/.otf; "typography" names one per role (display, body, mono)
 ├── icons/          <icon id>.svg / .png / .webp, e.g. settings.svg, games.png
+│   └── systems/    console logos for system folders: <platform id>.svg / .png / .webp (§14)
 ├── sounds/         cursor.wav, category_switch.wav, confirm.wav, drill_in.wav, drill_out.wav,
 │                   back.wav, option.wav, ok.wav, system_ng.wav, trophy.wav, 01. opening.wav,
 │                   gameboot.wav
@@ -259,6 +260,8 @@ from Settings ▸ Theme; editing the file by hand works too and is picked up on 
 | `wave` | `true` / `false` | Wave background on or off |
 | `waveSpeed`, `waveLines`, `waveTurbulence`, `waveThickness`, `waveTint`, `waveColors` | see §6 | Wave settings (§6) |
 | `buttonHints` | `true` / `false` | Hides or shows the button-hint pill |
+| `showFileFormat` | `true` / `false` | File format in game rows (Menu and profile) |
+| `showSystemLogos` | `true` / `false` | Console logos on system folders (Menu and profile, §14) |
 
 Outside `display`, `profile.avatarStyle` holds the avatar's border and glow (Settings ▸ Theme ▸
 Profile customization).
@@ -539,6 +542,24 @@ surfaces with Phosphor icons (MIT, credited in [`CREDITS.md`](../CREDITS.md)), a
 [`app/src/main/assets/themes/blackhole/`](../app/src/main/assets/themes/blackhole): an ASCII black
 hole shader set in Redaction 50 (OFL, also credited there). Bundled packs are listed right
 after Default, load from the APK, and their ids are reserved (`ThemePackLoader.BUNDLED_IDS`).
+
+### Console logos on system folders
+
+A pack may draw each system folder (Super Nintendo, PlayStation 2…) with its own logo instead of
+the generic `platform` icon: `icons/systems/<name>.svg`, `.png` or `.webp`, where `<name>` is the
+Xross platform id (`snes`, `ps2`, `psx`, `megadrive`…) or one of the folder names Xross scans for
+that system (`ps1.png` is `psx`, `genesis.svg` is `megadrive`). An exact id beats an alias for the
+same system. An SVG is drawn like any pack icon (white, tinted with the menu); a PNG or WebP keeps
+its own colors. A name that isn't a system and a file that can't be read are reported; the rest
+still load.
+
+A pack without a logo for a system inherits the Default pack's, and a system with none anywhere
+shows the generic glyph. *Settings ▸ Theme ▸ Menu and profile ▸ Console logos on system folders*
+(`display.showSystemLogos`) turns them all off.
+
+Console logos are their makers' trademarks, so Xross's bundled packs ship none; the Default pack
+keeps the generic glyph. A third-party pack that brings real logos is responsible for its own
+right to use them.
 
 The Phosphor icons are committed as pack SVGs; each names its source icon in a comment. To change
 one, download it from [phosphoricons.com](https://phosphoricons.com) and replace the file.

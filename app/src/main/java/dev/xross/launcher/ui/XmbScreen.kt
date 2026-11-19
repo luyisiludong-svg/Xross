@@ -978,6 +978,13 @@ private fun ItemRow(
                     focusScale = scale,
                     glow = glow,
                 )
+                is NodeIcon.System -> XmbIcon(
+                    painter = systemPainter(icon.platformId) ?: glyphPainter(icon.fallback),
+                    size = iconSize,
+                    focus = focus,
+                    focusScale = scale,
+                    glow = glow,
+                )
                 is NodeIcon.App -> AppIcon(icon.packageName, iconSize, focus, scale, loadAppIcon)
                 is NodeIcon.Thumb -> ThumbIcon(icon, iconSize, thumbAspect!!, focus, scale, glow, loadThumb)
                 is NodeIcon.Art -> ArtIcon(icon, iconSize, focus, scale, glow, loadArt)

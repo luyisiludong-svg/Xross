@@ -335,7 +335,12 @@ class MenuTree(private val s: MenuSnapshot) {
      */
     private fun platformFolders(): List<XmbNode> = PlatformRegistry.all.mapNotNull { platform ->
         val count = gamesByPlatform[platform.id]?.size ?: 0
-        if (count == 0) null else folder(PLATFORM_PREFIX + platform.id, platform.name, GlyphKey.PLATFORM, countLabel(count))
+        if (count == 0) {
+            null
+        } else {
+            val node = folder(PLATFORM_PREFIX + platform.id, platform.name, GlyphKey.PLATFORM, countLabel(count))
+            if (s.settings.showSystemLogos) node.copy(icon = NodeIcon.System(platform.id)) else node
+        }
     }
 
     private fun allGamesSummary(platforms: Int): String {
@@ -1192,6 +1197,13 @@ class MenuTree(private val s: MenuSnapshot) {
             if (s.settings.showFileFormat) "Shown (ISO, CHD…)" else "Hidden",
             GlyphKey.GAMES,
             Command.ToggleFileFormat,
+        ),
+        setting(
+            "disp:systemlogos",
+            "Console logos on system folders",
+            if (s.settings.showSystemLogos) "The theme pack's logos, where it has them" else "Off: the same icon for every system",
+            GlyphKey.PLATFORM,
+            Command.ToggleSystemLogos,
         ),
     )
 
