@@ -35,6 +35,16 @@ plan left room. None has had its device check yet.
 - 8: `Flat Shelf` in the theme packs folder: glow off and per-kind system icons copied from the
   Default pack's glyphs.
 
+**Device pass (2026-11-19, Galaxy A55, release-signed build over 0.2.0.4):** with the Flat
+Shelf pack, system folders show the cartridge, disc and handheld icons; the focused game tile has
+no frame with the glow off and the pack's hard shadow with it on; the file format leaves the row
+with its switch off; Photo, Music and Video end with an Apps folder (3, 12 and 5 apps on that
+phone: apps declaring the audio category include tuners and a recorder, as designed), and Move to
+Apps saves `apps.homes` and takes the row out; a `.ps3` test file lists under PlayStation 3
+(between PS1 and PSP) and its launch says "No emulator for PS3 — install ARMSX3". Not covered: a
+real ARMSX3 or ARMSX2 boot (no ARMSX3 installed, no PS2 `.iso`/`.chd` on the phone) and frame
+timing.
+
 **Order:** 1–3 land together as one PR (small, settings and theme only). 4b next, then 6, then 5
 and 7. If the release has to shrink, 7 moves to 0.2.2.0 before 5 does: custom recipes also answer
 every future "please add emulator X" request.
