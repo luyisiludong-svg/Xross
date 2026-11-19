@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- **ARMSX2 for PlayStation 2.** Pick it for PS2 in Settings ▸ Emulators, or per game in Options ▸
+  Emulator; NetherSX2 stays the default. The stable and nightly builds are both found. A cue+bin
+  game is handed to ARMSX2 as its first track, because ARMSX2 can't boot a `.cue` it can't see
+  the tracks of.
+
 ## 0.2.0.4-beta — 2026-11-17
 
 - **Music playlists.** Make playlists under Music ▸ Playlists and add songs from any song's

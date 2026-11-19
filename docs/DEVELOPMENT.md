@@ -80,8 +80,8 @@ build.
 
 ### Emulator stand-ins
 
-`tools/emulator-stub` builds test-only stand-ins for eleven emulators (RetroArch, DuckStation,
-NetherSX2, Dolphin, PPSSPP, Azahar, Eden, Flycast, M64Plus FZ, melonDS, ScummVM) that log the
+`tools/emulator-stub` builds test-only stand-ins for twelve emulators (RetroArch, DuckStation,
+NetherSX2, ARMSX2, Dolphin, PPSSPP, Azahar, Eden, Flycast, M64Plus FZ, melonDS, ScummVM) that log the
 launch intent they receive. Never install them alongside real emulators.
 
 ## Source layout

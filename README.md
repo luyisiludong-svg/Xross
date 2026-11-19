@@ -108,7 +108,7 @@ screen.
   ScreenScraper account for your own daily quota (the login is checked as you save it).
 - RetroAchievements: a status-bar avatar with a mini-HUD, a User Card, a dashboard, per-game badge
   grids and unlock toasts.
-- One-press launch into RetroArch, DuckStation, NetherSX2, Dolphin, PPSSPP and six more emulators,
+- One-press launch into RetroArch, DuckStation, NetherSX2, Dolphin, PPSSPP and seven more emulators,
   chosen per system or per game.
 
 ### 🎨 Theme 2.0 engine

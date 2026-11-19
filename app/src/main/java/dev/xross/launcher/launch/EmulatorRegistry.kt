@@ -22,6 +22,11 @@ data class EmulatorDef(
     val name: String,
     /** Package IDs in preference order (e.g. RetroArch 64-bit before the universal build). */
     val packages: List<String>,
+    /**
+     * The emulator can't boot a `.cue` it is handed as a single-file URI, so a `.cue` is swapped
+     * for its first track ([CueSheet.firstTrack]) before the launch.
+     */
+    val resolveCue: Boolean = false,
     val buildIntent: (LaunchRequest) -> Intent,
 )
 
@@ -79,6 +84,21 @@ object EmulatorRegistry {
         ) { req ->
             explicit(req.packageName, "xyz.aethersx2.android.EmulationActivity")
                 .putExtra("bootPath", req.romPath)
+                .withGrantedData(req)
+        },
+        EmulatorDef(
+            // From ARMSX2's own source (github.com/ARMSX2/ARMSX2, MainActivityRuntime.extractLaunchUri):
+            // Main reads the intent data first, then EXTRA_STREAM, clip data, and a "path" string
+            // extra. It needs a cue sheet's tracks beside it, which a single-file URI can't reach.
+            id = "armsx2",
+            name = "ARMSX2",
+            packages = listOf("com.armsx2", "com.armsx2.nightly"),
+            resolveCue = true,
+        ) { req ->
+            Intent(Intent.ACTION_VIEW)
+                .setComponent(ComponentName(req.packageName, "com.armsx2.Main"))
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                .putExtra("path", req.romPath)
                 .withGrantedData(req)
         },
         EmulatorDef(

@@ -65,7 +65,7 @@ Merged into this file on 2026-11-11 (the originals are in git history):
 
 **Codebase at a glance:** Kotlin + Jetpack Compose, one `:app` module (plus the test-only
 `:emulator-stub`), minSdk 28 / targetSdk 36, version `0.2.0.4-beta`. Room database at schema v5,
-22 platforms, 11 emulator launch recipes, 8 color themes (one follows the month), three metadata
+22 platforms, 12 emulator launch recipes, 8 color themes (one follows the month), three metadata
 services (Hasheous, SteamGridDB, ScreenScraper) plus RetroAchievements, settings in three JSON files
 in `Xross/config/` (kotlinx.serialization), art in `Xross/media` in ES-DE's layout, theme packs in
 `Xross/themes/`. **495 unit tests** (491 run by default, 4 opt-in live-service tests), an
@@ -129,6 +129,7 @@ been tested yet.
 | --- | --- | --- |
 | RetroArch with a core per platform | ✅ 🧪 | |
 | DuckStation, NetherSX2, Dolphin, PPSSPP | ✅ 🧪 | |
+| ARMSX2 | ✅ 🧪 | Recipe from ARMSX2's own launch code; a `.cue` is handed over as its first track, since ARMSX2 can't reach a sheet's tracks through a single-file URI |
 | Azahar, Eden, Flycast, M64Plus FZ, melonDS, ScummVM | ✅ 🧪 | Launch recipes from ES-DE's published Android rules |
 | Emulator per platform (Settings ▸ Emulators) | ✅ | |
 | Emulator per game (Options ▸ Emulator) | ✅ | Game override → platform choice → first installed |
@@ -138,7 +139,7 @@ been tested yet.
 | Hide apps | ✅ 📱 | Options ▸ Hide on any app in Apps or Games ▸ Android Games; Settings ▸ Apps ▸ Hidden apps shows them again (one by one or all); Hide system apps switch. Stored as `apps.hidden` in `settings.json` |
 | App folders | ✅ 📱 | Options ▸ Move to folder: Emulators, Streaming, Tools, folders already in use, or New folder… typed on the gamepad keyboard. Known emulator packages are suggested for Emulators, and a "Group emulators" row moves them all at once. Folders sit at the top of Apps while they hold an app |
 
-All 11 recipes are verified only against the test stand-ins, not real emulator installs.
+All 12 recipes are verified only against the test stand-ins, not real emulator installs.
 
 ### 2.4 Media hub
 

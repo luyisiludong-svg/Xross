@@ -2,6 +2,7 @@ package dev.xross.launcher
 
 import android.content.Intent
 import android.net.Uri
+import dev.xross.launcher.launch.CueSheet
 import dev.xross.launcher.launch.EmulatorRegistry
 import dev.xross.launcher.launch.LaunchRequest
 import org.junit.Assert.assertEquals
@@ -52,6 +53,42 @@ class EmulatorIntentTest {
             assertEquals(id, uri, i.data)
             assertTrue(id, i.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0)
         }
+    }
+
+    @Test fun armsx2ViewsTheGrantedRomWithAPathFallback() {
+        for (pkg in listOf("com.armsx2", "com.armsx2.nightly")) {
+            val i = build("armsx2", pkg)
+            assertEquals(Intent.ACTION_VIEW, i.action)
+            assertEquals(pkg, i.component?.packageName)
+            assertEquals("com.armsx2.Main", i.component?.className)
+            assertEquals("/storage/emulated/0/ROMs/snes/Game.sfc", i.getStringExtra("path"))
+            assertEquals(uri, i.data)
+            assertTrue(i.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0)
+            assertTrue(i.flags and Intent.FLAG_ACTIVITY_NEW_TASK != 0)
+        }
+        assertTrue(EmulatorRegistry.byId("armsx2")!!.resolveCue)
+        // Only ARMSX2 swaps a cue for its track: DuckStation and RetroArch need the sheet itself.
+        assertEquals(listOf("armsx2"), EmulatorRegistry.all.filter { it.resolveCue }.map { it.id })
+        assertEquals(listOf("nethersx2", "armsx2"), PlatformRegistry.byId("ps2")!!.emulators.map { it.key })
+    }
+
+    @Test fun cueSheetResolvesItsFirstTrack() {
+        assertEquals("Game (Track 1).bin", CueSheet.firstTrackName("FILE \"Game (Track 1).bin\" BINARY\n  TRACK 01 MODE2/2352"))
+        assertEquals("game.bin", CueSheet.firstTrackName("REM x\r\nfile game.bin BINARY\r\nFILE \"two.bin\" BINARY"))
+        assertEquals("disc.iso", CueSheet.firstTrackName("FILE \"sub\\dir/disc.iso\" BINARY"))
+        assertEquals(null, CueSheet.firstTrackName("TRACK 01 AUDIO"))
+
+        val dir = java.nio.file.Files.createTempDirectory("cue").toFile()
+        val bin = java.io.File(dir, "Game (Track 1).BIN").apply { writeText("data") }
+        val cue = java.io.File(dir, "Game.cue").apply { writeText("FILE \"Game (Track 1).bin\" BINARY\n") }
+        // Found beside the sheet whatever the case (on a case-insensitive disk, by the exact name).
+        val track = CueSheet.firstTrack(cue)
+        assertEquals(dir, track?.parentFile)
+        assertTrue(track!!.name.equals(bin.name, ignoreCase = true))
+
+        val missing = java.io.File(dir, "Missing.cue").apply { writeText("FILE \"gone.bin\" BINARY\n") }
+        assertEquals(null, CueSheet.firstTrack(missing))
+        assertEquals(null, CueSheet.firstTrack(bin)) // not a cue sheet
     }
 
     @Test fun ppssppOpensTheRomAsViewData() {

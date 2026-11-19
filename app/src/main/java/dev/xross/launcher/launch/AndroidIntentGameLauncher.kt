@@ -68,7 +68,17 @@ class AndroidIntentGameLauncher(private val context: Context) : GameLauncher {
             ?: return LaunchPlan.Failed("Unknown emulator ${option.emulatorId}")
         val pkg = installedPackage(def)
             ?: return LaunchPlan.Failed("${def.name} is not installed")
-        val intent = def.buildIntent(LaunchRequest(game.path, uri, mime, pkg, option.core))
+        val request = if (def.resolveCue && file.extension.equals("cue", ignoreCase = true)) {
+            val track = CueSheet.firstTrack(file)
+                ?: return LaunchPlan.Failed("${def.name} needs the disc's tracks — ${file.name} lists none that are here")
+            val trackUri = runCatching {
+                FileProvider.getUriForFile(context, "${context.packageName}.files", track)
+            }.getOrElse { return LaunchPlan.Failed("Can't share ${track.name}") }
+            LaunchRequest(track.path, trackUri, "application/octet-stream", pkg, option.core)
+        } else {
+            LaunchRequest(game.path, uri, mime, pkg, option.core)
+        }
+        val intent = def.buildIntent(request)
         return LaunchPlan.Ready(def.name + (option.core?.let { " · $it" } ?: ""), IntentTarget(intent))
     }
 

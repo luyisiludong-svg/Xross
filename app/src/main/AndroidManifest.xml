@@ -54,6 +54,8 @@
         <package android:name="com.retroarch.ra32" />
         <package android:name="com.github.stenzek.duckstation" />
         <package android:name="xyz.aethersx2.android" />
+        <package android:name="com.armsx2" />
+        <package android:name="com.armsx2.nightly" />
         <package android:name="org.dolphinemu.dolphinemu" />
         <package android:name="org.ppsspp.ppsspp" />
         <package android:name="org.ppsspp.ppssppgold" />

@@ -124,7 +124,7 @@ object PlatformRegistry {
             "ps2", "PlayStation 2", "PS2",
             setOf("ps2", "playstation2", "sonyplaystation2"),
             setOf("iso", "chd", "cso", "gz", "bin", "cue"),
-            listOf(EmulatorOption("nethersx2")),
+            listOf(EmulatorOption("nethersx2"), EmulatorOption("armsx2")),
             isDiscBased = true,
         ),
         Platform(
