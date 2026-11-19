@@ -40,6 +40,7 @@ Everything you'd want to back up or carry to another device lives in one folder,
 
 ```
 Xross/
+  bios/     your own BIOS files, one place to keep them with your ROMs (Xross never reads or changes them)
   config/   settings.json, controllers.json, systems.json (hand-editable; picked up on resume)
   data/     xross.db, a backup snapshot of the library database;
             retroachievements.json and ra/ (public profile, game lists and progress caches)
@@ -50,6 +51,12 @@ Xross/
   roms/     the default base ROMs folder, one folder per system
   themes/   theme packs, one folder each (has a .nomedia; see the Theme 2.0 specification)
 ```
+
+`bios/` is only a place to keep the BIOS files you dumped from your own consoles next to your
+ROMs, so the Xross folder carries both. Xross creates it and leaves it alone: it doesn't read,
+check, rename or move anything in it, and it doesn't supply BIOS files. Each emulator still needs
+to find its BIOS, so point the emulator's own BIOS or system folder setting at `Xross/bios`, or
+import the files from there if the emulator copies them into its own storage.
 
 Theme packs in `themes/` are described in the [Theme 2.0 specification](THEME_SPECIFICATION.md).
 

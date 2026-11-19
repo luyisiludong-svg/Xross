@@ -14,6 +14,7 @@ import java.io.IOException
  *
  * ```
  * Xross/
+ *   bios/     the user's own BIOS files; Xross only creates the folder and never reads it
  *   config/   settings.json, controllers.json, systems.json
  *   data/     xross.db (a backup snapshot; the live database stays in app-private storage),
  *             retroachievements.json (public profile cache; the API key is never here)
@@ -27,6 +28,7 @@ import java.io.IOException
  * layout then lives in app-private storage, and moves to shared storage once access is granted.
  */
 data class XrossLayout(val root: File, val portable: Boolean) {
+    val bios: File get() = File(root, BIOS)
     val config: File get() = File(root, CONFIG)
     val data: File get() = File(root, DATA)
     val dats: File get() = File(root, DATS)
@@ -49,6 +51,7 @@ data class XrossLayout(val root: File, val portable: Boolean) {
     val profileCache: File get() = File(data, "retroachievements.json")
 
     companion object {
+        const val BIOS = "bios"
         const val CONFIG = "config"
         const val DATA = "data"
         const val DATS = "dats"
@@ -61,7 +64,7 @@ data class XrossLayout(val root: File, val portable: Boolean) {
         val NOMEDIA_DIRS = listOf(MEDIA, THEMES)
 
         /** Created after the [NOMEDIA_DIRS]. */
-        val OTHER_DIRS = listOf(CONFIG, DATA, DATS, ROMS)
+        val OTHER_DIRS = listOf(BIOS, CONFIG, DATA, DATS, ROMS)
     }
 }
 

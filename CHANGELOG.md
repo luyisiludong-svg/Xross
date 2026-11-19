@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- **A `bios` folder in the Xross folder.** A single place to keep your own BIOS files next to
+  your ROMs, so they travel with the rest of your setup. Xross only creates it; it never reads or
+  changes what you put there. Point each emulator's BIOS setting at `Xross/bios`.
 - **ARMSX2 for PlayStation 2.** Pick it for PS2 in Settings ▸ Emulators, or per game in Options ▸
   Emulator; NetherSX2 stays the default. The stable and nightly builds are both found. A cue+bin
   game is handed to ARMSX2 as its first track, because ARMSX2 can't boot a `.cue` it can't see

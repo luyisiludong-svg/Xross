@@ -17,6 +17,7 @@ Sizes: **XS** under an hour · **S** half a day · **M** one to two days · **L*
 | 6 | Sort Android apps into Video, Music and Photo | M | Planned |
 | 7 | Choose a game's media from the scraper's offers | L | Planned (candidate for 0.2.2.0) |
 | 8 | New theme packs to show off the above | — | Alongside 2 and 3 |
+| 9 | A `bios` folder in the Xross folder | XS | ✅ Done; Xross creates it and never reads it |
 
 **Order:** 1–3 land together as one PR (small, settings and theme only). 4b next, then 6, then 5
 and 7. If the release has to shrink, 7 moves to 0.2.2.0 before 5 does: custom recipes also answer

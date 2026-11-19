@@ -153,7 +153,7 @@ Then on the device:
    Settings ▸ Library ▸ Base ROMs folder ▸ Create system folders makes them all for you.
 3. **Optional:** drop DATs in `Xross/dats/` and import them, turn on scraping in Settings ▸
    Library ▸ Metadata & artwork, link your accounts in Settings ▸ Accounts, or copy a theme pack
-   into `Xross/themes/`.
+   into `Xross/themes/`. Keep your own BIOS files in `Xross/bios/` and point your emulators there.
 
 ### Building from source
 

@@ -49,7 +49,7 @@ class XrossEnvironmentTest {
         assertTrue(XrossEnvironment.bootstrap(root))
         assertTrue(File(root, "media/.nomedia").isFile)
         assertTrue(File(root, "themes/.nomedia").isFile)
-        for (dir in listOf("config", "data", "dats", "roms")) assertFalse(File(root, "$dir/.nomedia").exists())
+        for (dir in listOf("bios", "config", "data", "dats", "roms")) assertFalse(File(root, "$dir/.nomedia").exists())
         // Bootstrapping again is harmless and keeps the markers.
         assertTrue(XrossEnvironment.bootstrap(root))
         assertTrue(File(root, "media/.nomedia").isFile)
@@ -103,7 +103,7 @@ class XrossEnvironmentTest {
     }
 
     private fun assertBootstrapped(root: File) {
-        for (dir in listOf("config", "data", "dats", "media", "roms", "themes")) {
+        for (dir in listOf("bios", "config", "data", "dats", "media", "roms", "themes")) {
             assertTrue("$dir/ exists", File(root, dir).isDirectory)
         }
         assertTrue(File(root, "media/.nomedia").isFile)
