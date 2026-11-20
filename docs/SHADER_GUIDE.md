@@ -4,6 +4,8 @@ How Xross draws its background, how to write a shader for it (a built-in preset 
 `shader.frag`), the two optional extra passes (feedback and the field pass), the frame budget, and
 the `BLACK_HOLE` preset as a worked example with every value that shapes its look.
 
+New to shaders? Start with the [shader tutorial](SHADER_TUTORIAL.md) and its starter template.
+
 Related documents: the [theme specification](THEME_SPECIFICATION.md) (§6 the wave and its
 settings, §8 `shaderPreset` / `shaderPath` and the rest of the `effects` keys),
 [`DEVELOPMENT.md`](DEVELOPMENT.md) (builds and tests), [`STATUS.md`](STATUS.md) (measurements:

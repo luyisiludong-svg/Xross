@@ -10,6 +10,7 @@ and links back to it.
 | [`USER_GUIDE.md`](USER_GUIDE.md) | Using Xross: the `Xross/` folder, library, metadata, RetroAchievements, media, apps |
 | [`THEME_SPECIFICATION.md`](THEME_SPECIFICATION.md) | The theme pack format as implemented (`theme.json` v2, rules, effects, `.xtheme`) |
 | [`SHADER_GUIDE.md`](SHADER_GUIDE.md) | Writing background shaders: uniforms, feedback and field passes, the frame budget, the `BLACK_HOLE` preset and its tunables |
+| [`SHADER_TUTORIAL.md`](SHADER_TUTORIAL.md) | Making your own shaders: a starter template, the preview-to-phone loop, which built-in to learn each technique from |
 | [`DEVELOPMENT.md`](DEVELOPMENT.md) | Building, unit/live/device tests, emulator stand-ins, source layout |
 | [`HARDWARE_TESTING.md`](HARDWARE_TESTING.md) | Checklist for a real handheld, and what to send back |
 | [`XMB_FIDELITY.md`](XMB_FIDELITY.md) | How close Xross is to the real XMB, against the PS3 and PSP manuals |

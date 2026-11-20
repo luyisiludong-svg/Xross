@@ -176,6 +176,7 @@ Upgrading from **Wave**? The project was renamed on 2026-11-11 and the app ID ch
 | [Changelog](CHANGELOG.md) | What changed in each release |
 | [Theme 2.0 specification](docs/THEME_SPECIFICATION.md) | Pack layout, `theme.json` v2, surfaces, sounds, Wave settings, effects, rules, quick profiles, `.xtheme` |
 | [Shader guide](docs/SHADER_GUIDE.md) | Writing background shaders, their uniforms, and previewing them in the browser |
+| [Shader tutorial](docs/SHADER_TUTORIAL.md) | Making your own shaders, starting from a template |
 | [Developer guide](docs/DEVELOPMENT.md) | Building, unit/live/device tests, emulator stand-ins, source layout |
 | [Roadmap and backlog](Roadmap.md) | The plan: what is done, known issues, order of work, scope decisions and upcoming specs |
 | [Implementation status](docs/STATUS.md) | The status dashboard, with per-phase evidence under `docs/phase-*/` and `docs/status/` (test suites, device runs, frame timings, bugs found and fixed) |
