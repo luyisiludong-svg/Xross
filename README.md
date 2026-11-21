@@ -7,7 +7,7 @@
 ![Android API 28+](https://img.shields.io/badge/Android-API%2028%2B-3DDC84?logo=android&logoColor=white)
 ![Jetpack Compose](https://img.shields.io/badge/Jetpack-Compose-4285F4?logo=jetpackcompose&logoColor=white)
 ![OpenGL ES 3.0](https://img.shields.io/badge/OpenGL%20ES-3.0-5586A4?logo=opengl&logoColor=white)
-![Release](https://img.shields.io/badge/release-0.2.1.0--beta-orange)
+![Release](https://img.shields.io/badge/release-0.2.2.0--beta-orange)
 ![Unit tests](https://img.shields.io/badge/unit%20tests-990%2B%20passing-brightgreen)
 ![Architecture](https://img.shields.io/badge/architecture-MVVM%20%C2%B7%20multi--module-blueviolet)
 ![License](https://img.shields.io/badge/license-Apache%202.0-blue)
@@ -19,7 +19,7 @@
 **A 100% FOSS, XMB-style launcher for Android handhelds and TVs — no paywalls, no closed binaries, no telemetry.**
 
 
-> **Status: 0.2.1.0-beta.** The library, scraping, RetroAchievements and
+> **Status: 0.2.2.0-beta.** The library, scraping, RetroAchievements and
 > the full Theme 2.0 engine are in. Expect rough edges: so far it has been tested on the Android
 > emulator and on a Samsung Galaxy A55, but not yet on a gaming handheld or with a physical
 > controller. See [`CHANGELOG.md`](CHANGELOG.md) for what changed, [`Roadmap.md`](Roadmap.md) for
@@ -103,8 +103,11 @@ screen.
   ScreenScraper account for your own daily quota (the login is checked as you save it).
 - RetroAchievements: a status-bar avatar with a mini-HUD, a User Card, a dashboard, per-game badge
   grids and unlock toasts.
-- One-press launch into RetroArch, DuckStation, NetherSX2, Dolphin, PPSSPP and seven more emulators,
-  chosen per system or per game.
+- One-press launch into RetroArch, DuckStation, NetherSX2, Dolphin, PPSSPP and eight more emulators,
+  chosen per system or per game. Add any other emulator or system on the device (Settings ▸
+  Emulators ▸ Add emulator… / Add system…) or in `emulators.json`, in ES-DE's launch syntax.
+- Fix a game's art and description in the Metadata & Media editor, choosing from every
+  ScreenScraper and SteamGridDB image, and go through a whole system with **Fix media…**.
 
 ### 🎨 Theme 2.0 engine
 
@@ -117,7 +120,10 @@ screen.
 - Background shaders (Wave, MECHA, Black Hole, Starfield, Bokeh, ASCII Matrix), your own
   `shader.frag`, and audio-reactive uniforms driven by Xross's music player. A
   [browser preview](tools/shader-preview/index.html) shows a shader or pack on the desktop.
-- Frosted-glass surfaces, wallpapers, focus frames, app icon masks and ambient particles.
+- Frosted-glass surfaces, wallpapers (one picture, or a folder or Photo album taking turns), focus
+  frames, app icon masks and ambient particles.
+- Theme music from the pack, or your own: a file, a folder or a Music playlist, crossfading and
+  shuffled or in order.
 - Scanline, CRT and LCD-grid filters in GL, and AGSL UI filters on Android 13+.
 - Context rules (category, system, battery, time of day), a circadian color curve, palettes taken
   from game art, and quick profiles: OLED True Black, Y2K Cyber-Pastel and Monochrome E-Ink.

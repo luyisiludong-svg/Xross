@@ -2,7 +2,8 @@
 
 The two features moved from `PLAN_0.2.1.0.md` (items 5 and 7), with 5 widened into on-device
 system and emulator setup and 7 widened into a Metadata & Media editor, plus a bulk library
-browser and theme music choices. Checked against `main` at `02df328` (2026-11-21). Everything is
+browser and theme music choices. **Shipped as 0.2.2.0-beta on 2026-11-21.** Checked against
+`main` at `02df328` (2026-11-21). Everything is
 built (see each "As built" note) and unit-tested; § 1–§ 5b were checked on the API 37 emulator with
 stub apps, and the upgrade from 0.2.1.0-beta, Fix media… and the Settings rows on the A55. Still
 open: launches with real emulators, the § 2 picker checks, frame timing and idle CPU (release
@@ -386,6 +387,12 @@ the missing piece is the game list. S for launcher files, M with shortcut import
   idle CPU with wallpaper rotation on, if built (see `docs/status/PERFORMANCE.md`).
 - `CHANGELOG.md`, `Roadmap.md`, `docs/USER_GUIDE.md` and `THEME_SPECIFICATION.md` (new badge
   glyphs, `audio.bgmFiles`, `audio.bgmOrder`) updated; version `0.2.2.0`.
+
+**State at release (0.2.2.0-beta, 2026-11-21):** done: the check and builds (1,040 + 91 tests;
+the count is in `docs/STATUS.md`), schema v6 and the real v5 → v6 upgrade on the A55, the docs,
+version `0.2.2.0-beta` (code 220). Shipped as a beta without: real emulators added on the A55,
+the media picker and quota checks, theme music by ear, frame timing and idle CPU. Badge glyphs
+stayed text pills. These carry over to the next release.
 
 ---
 

@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased (0.2.2.0)
+## 0.2.2.0-beta — 2026-11-21
 
 - **Metadata & Media editor.** Options ▸ Metadata & Media now opens a full screen for the game
   instead of a submenu. Edit the title or the description, find a match, scrape again or reset,

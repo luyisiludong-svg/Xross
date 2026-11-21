@@ -24,6 +24,11 @@ Legend: ✅ done and verified · ◐ partial · ❌ not started · 🧊 iced · 
 | Phase 3 — release candidate | ◐ RetroAchievements linking, User Card, achievement lists and unlock toasts done and live; hot-swap and live resolution change done; dual screen, docking, Portal and FTPS not started | [Phase 2 evidence §3.12–§3.14](phase-2/STATUS.md#s3.12) |
 | Phase 4 — v1.0 | ◐ app triage and performance work started | [Performance](status/PERFORMANCE.md) |
 
+**Release 0.2.2.0-beta (2026-11-21):** everything below plus Photo albums as the rotating
+wallpaper and playlists as theme music (`MediaAsBackgroundTest`, checked on the API 37 emulator).
+`./gradlew check assembleDebug assembleProfiling` passes with 1,040 `:app` tests and 91 in
+`:theme:engine`.
+
 **Verification (2026-11-21, rest of 0.2.2.0):** `./gradlew check assembleDebug assembleProfiling`
 passes; 1,124 unit tests (1,033 in `:app`, 4 opt-in live tests skipped; 91 in `:theme:engine`),
 0 failures. New suites: `CustomEmulatorsTest` (20), `WizardTest` (12), `ThemeMusicTest` (8),

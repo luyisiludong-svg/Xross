@@ -86,9 +86,9 @@ android {
         applicationId = "dev.xross.launcher"
         minSdk = 28
         targetSdk = 36
-        // 0.2.1.0 → 210 (major·1000 + minor·100 + patch·10 + build).
-        versionCode = 210
-        versionName = "0.2.1.0-beta"
+        // 0.2.2.0 → 220 (major·1000 + minor·100 + patch·10 + build).
+        versionCode = 220
+        versionName = "0.2.2.0-beta"
     }
 
     buildTypes {
