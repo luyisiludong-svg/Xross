@@ -1,0 +1,36 @@
+// systems.example.json — a sample, not read by Xross. Copy an entry into the "systems" object of
+// systems.json (same folder). An id Xross doesn't ship makes a custom system: it scans, launches
+// and scrapes by name like a built-in one, but gets no RetroAchievements or DAT matching.
+//   name, shortName    as shown on the folder
+//   folders            folder names in your ROM folders (default: the id)
+//   extensions         file types to list
+//   emulators          recipe keys, first installed wins: a built-in one ("retroarch:mgba",
+//                      "dolphin") or an id from emulators.json
+// UNTESTED package names: add the emulator itself in emulators.json, or with
+// Settings ▸ Emulators ▸ Add emulator…, after checking its package on your device.
+{
+  "version": 1,
+  "systems": {
+    "xbox": {
+      "name": "Microsoft Xbox",
+      "shortName": "XBOX",
+      "folders": ["xbox"],
+      "extensions": ["iso", "xiso"],
+      "emulators": ["mypathemulator"]
+    },
+    "xbox360": {
+      "name": "Microsoft Xbox 360",
+      "shortName": "X360",
+      "folders": ["xbox360"],
+      "extensions": ["iso", "xex", "zar"],
+      "emulators": []
+    },
+    "pc98": {
+      "name": "NEC PC-98",
+      "shortName": "PC98",
+      "folders": ["pc98", "pc-9801"],
+      "extensions": ["hdi", "fdi", "d88", "hdm", "nhd", "zip"],
+      "emulators": ["retroarch:np2kai"]
+    }
+  }
+}

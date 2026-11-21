@@ -29,6 +29,8 @@ class UserLookTest {
         UserLook(adaptiveGamePalette = false) to "1 color layer",
         UserLook(circadianCurve = true) to "1 color layer",
         UserLook(batteryTint = true) to "1 color layer",
+        UserLook(themeMusic = "none") to "theme music",
+        UserLook(wallpaperFolder = "/storage/emulated/0/Pictures/Walls") to "wallpaper",
     )
 
     @Test

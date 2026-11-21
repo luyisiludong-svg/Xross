@@ -34,6 +34,23 @@ object SystemLogos {
         }
         return hit as? ImageBitmap
     }
+
+    /** A custom system's own logo file (Add system ▸ Console logo), decoded once per path and change. */
+    fun loadFile(path: String): ImageBitmap? {
+        val file = java.io.File(path)
+        val key = "file:$path:${file.lastModified()}"
+        val hit = cache.getOrPut(key) {
+            runCatching {
+                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                BitmapFactory.decodeFile(path, bounds)
+                // Folder icons are small: decode at most ~256 px.
+                var sample = 1
+                while (bounds.outWidth / (sample * 2) >= 256 && bounds.outHeight / (sample * 2) >= 256) sample *= 2
+                BitmapFactory.decodeFile(path, BitmapFactory.Options().apply { inSampleSize = sample })
+            }.getOrNull()?.asImageBitmap() ?: NONE
+        }
+        return hit as? ImageBitmap
+    }
 }
 
 /** A system folder's logo and whether it is drawn in its own colors (no XMB gloss). */
@@ -55,7 +72,9 @@ fun systemLogo(platformId: String, style: SystemLogoStyle): SystemLogo? {
     }
     val bundled = if (style == SystemLogoStyle.PACK) SystemLogoStyle.PACK_FALLBACK else style
     val assets = LocalContext.current.assets
-    return remember(platformId, bundled) {
+    val own = dev.xross.launcher.model.PlatformRegistry.byId(platformId)?.logo
+    return remember(platformId, bundled, own) {
         SystemLogos.load(assets, bundled, platformId)?.let { SystemLogo(BitmapPainter(it), bundled.keepsColors) }
+            ?: own?.let { path -> SystemLogos.loadFile(path)?.let { SystemLogo(BitmapPainter(it), keepsColors = true) } }
     }
 }

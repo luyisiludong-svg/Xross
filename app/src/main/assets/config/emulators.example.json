@@ -1,0 +1,42 @@
+// emulators.example.json — a sample, not read by Xross. UNTESTED: check every package and
+// activity on your own install before relying on it:
+//   adb shell dumpsys package <package> | grep -A1 MAIN
+// Copy the entries you want into emulators.json (same folder), keep the outer braces, restart
+// Xross or come back to it, and look at Settings ▸ Emulators for any problems with an entry.
+//
+// command uses ES-DE's Android syntax without the %EMULATOR_X% part:
+//   %ACTION%=x  %CATEGORY%=x  %DATA%=v
+//   %EXTRA_k%=v  %EXTRABOOL_k%=true  %EXTRAINTEGER_k%=1  %EXTRAARRAY_k%=a,b
+//   %ACTIVITY_CLEAR_TASK%  %ACTIVITY_CLEAR_TOP%  %ACTIVITY_NO_HISTORY%
+//   %INJECT%=%BASENAME%.json   (more tags read from a file beside the game)
+// Values may use %ROM% (path), %ROMPROVIDER% / %ROMSAF% (Xross's content:// URI with a read
+// grant), %BASENAME%, %FILENAME%, %ROMPATH%, %EXTERNALDATA%, %ANDROIDPACKAGE%.
+{
+  "version": 1,
+  "emulators": {
+    // From the 0.2.2.0 plan; Citron keeps the yuzu activity name under its own package.
+    "citron": {
+      "name": "Citron",
+      "packages": ["org.citron.citron_emu", "org.citron.citron_emu.ea"],
+      "activity": "org.yuzu.yuzu_emu.activities.EmulationActivity",
+      "systems": ["switch"],
+      "command": "%ACTION%=android.nfc.action.TECH_DISCOVERED %DATA%=%ROMPROVIDER%"
+    },
+    // A template: an emulator that opens a file it is sent with VIEW.
+    "myemulator": {
+      "name": "My emulator",
+      "packages": ["com.example.emulator"],
+      "activity": ".MainActivity",
+      "systems": ["gba"],
+      "command": "%ACTION%=android.intent.action.VIEW %DATA%=%ROMPROVIDER%"
+    },
+    // A template: an emulator that reads a plain path from an extra (it needs its own storage access).
+    "mypathemulator": {
+      "name": "My path emulator",
+      "packages": ["com.example.pathemulator"],
+      "activity": "com.example.pathemulator.EmulationActivity",
+      "systems": ["xbox"],
+      "command": "%EXTRA_bootPath%=%ROM% %ACTIVITY_CLEAR_TASK%"
+    }
+  }
+}

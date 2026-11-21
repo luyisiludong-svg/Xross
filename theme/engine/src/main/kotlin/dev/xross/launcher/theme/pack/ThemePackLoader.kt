@@ -192,7 +192,10 @@ data class LoadedTheme(
     val hasBgm: Boolean get() = bgmFiles.isNotEmpty()
 
     /** The loop [ref] names (the look's music); null for none or a file that wasn't found. */
-    fun bgmTrack(ref: BgmRef): BgmTrack? = ref.path?.let(bgmFiles::get)?.let(::BgmTrack)
+    fun bgmTrack(ref: BgmRef): BgmTrack? {
+        if (ref.more.isEmpty()) return ref.path?.let(bgmFiles::get)?.let { BgmTrack(it) }
+        return BgmTrack.of(ref.paths.mapNotNull(bgmFiles::get), ref.shuffle)
+    }
 
     /**
      * The components with variant [variantId] (blank or unknown: the base) over the pack's own,
@@ -503,7 +506,8 @@ class ThemePackLoader(
             (categoryPatches.values + systemPatches.values).mapNotNull { it.wallpaper } + rules.mapNotNull { it.patch?.wallpaper }
         val wallpapers = wallpaperFiles(folder, wallpaperRefs, problems).also { it.values.forEach(::keep) }
         val bgm = BgmRef.of("theme", m.audio?.bgmFile, problems)
-            ?: folder?.let(BgmRef::defaultIn)?.let(::BgmRef)
+            ?: BgmRef.ofList("theme", m.audio?.bgmFiles, m.audio?.bgmOrder, problems)
+            ?: folder?.let(BgmRef::defaultIn)?.let { BgmRef(it) }
             ?: BgmRef.NONE
         val bgmRefs = listOf(bgm) + variants.mapNotNull { it.bgm } +
             (categoryPatches.values + systemPatches.values).mapNotNull { it.bgm } + rules.mapNotNull { it.patch?.bgm }

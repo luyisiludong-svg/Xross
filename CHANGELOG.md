@@ -14,6 +14,28 @@
   is nothing to choose from, the picker says why (no SteamGridDB key, quota used up, no match).
 - **Your own description.** It shows on Details instead of the scraped one; an empty one brings
   the scraped description back. Reset metadata clears it with your title and match.
+- **Your own emulators and systems.** `Xross/config/emulators.json` takes launch recipes in
+  ES-DE's command syntax (`%ACTION%`, `%DATA%`, typed `%EXTRA…%` tags, flags, `%INJECT%`), and an
+  id in `systems.json` that Xross doesn't ship, with a name and file types, is a system of its own.
+  Comments are allowed. A bad entry is skipped and its problem shown in Settings ▸ Emulators; the
+  rest still load. A recipe counts as installed only when its package and its activity exist.
+  Commented samples are written beside the files.
+- **Add emulator… and Add system…** in Settings ▸ Emulators, without editing JSON: pick an app,
+  its activity, how it gets the game and its systems, **Try it** on a real game, then save; or
+  pick a folder (unclaimed ones first), its name, file types, logo and emulator. Xross writes the
+  files and only ever touches entries it made (`"source": "device"`); your hand-written text and
+  comments stay as they are.
+- ES-DE's PC Engine CD folders (`pcenginecd`, `tg-cd`, `turbografxcd`, `supercd`) scan as PC Engine.
+- **Theme music, your way.** Settings ▸ Theme ▸ Theme music: the theme pack's, a file, a folder of
+  up to 50 tracks (crossfading, shuffled or in order) or off. Theme packs can list several tracks
+  too (`audio.bgmFiles`, `audio.bgmOrder`). After a game a list continues with its next track.
+- **Missing art filter.** Options on a system folder ▸ Show ▸ Missing art lists only the games
+  without box art, a hero or a logo, and Metadata & Media pages through just those.
+- **Fix media…** goes through a whole system: a console strip, filters for what's missing, and a
+  badge per art kind on every game; Confirm opens Metadata & Media, Back returns to the same game.
+- **Wallpaper rotation.** Xross wallpaper ▸ Pick a folder… lets its pictures take turns, every few
+  minutes or each time Xross comes to the front, crossfading; a change waits for your next input,
+  so it never wakes a resting screen.
 - The library database moves to version 6 (three new columns; nothing existing changes). The
   first start after updating checks once which art each game has.
 

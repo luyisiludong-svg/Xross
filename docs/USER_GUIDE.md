@@ -87,7 +87,14 @@ excluded from backups.
 ### Config files
 
 * **`systems.json`** sets the emulator per system and lets you add folder names and file
-  extensions; each system's `builtIn` block is there for reference and is rewritten on save.
+  extensions; each system's `builtIn` block is there for reference and is rewritten on save. An
+  id Xross doesn't ship, with a `name` and `extensions`, is a **custom system** (see
+  [Emulators](#emulators)).
+* **`emulators.json`** holds launch recipes for emulators Xross doesn't know, in ES-DE's command
+  syntax. Comments are allowed, and Xross never rewrites what you wrote by hand: it only adds,
+  edits and deletes the entries it made itself (`"source": "device"`).
+* `emulators.example.json` and `systems.example.json` beside them are commented samples, never
+  read; copy entries from them.
 * Settings saved by earlier versions are moved into these files on first start.
 * The `display` block of `settings.json` holds the look-related keys, documented in the
   [Theme 2.0 specification](THEME_SPECIFICATION.md#7-settingsjson-display-keys).
@@ -121,6 +128,27 @@ Each system launches in an emulator chosen per platform (in `systems.json` or Se
 game: RetroArch (per-platform core), DuckStation, NetherSX2, ARMSX2, ARMSX3, Dolphin, PPSSPP, Azahar,
 Eden, Flycast, M64Plus FZ, melonDS and ScummVM. ROMs go out as a path extra plus a `content://` URI
 with a read grant.
+
+**Settings ▸ Emulators** lists every system with its emulator (Confirm cycles, Options lists all
+of them), then your own emulators and systems with anything wrong with them, so a typo in a file
+shows on the device. It also has:
+
+* **Add emulator…**: pick an installed app (known emulators first), its activity (the launcher
+  one by default), how it gets the game (file URI with a read grant; file path as data; file path
+  as an extra whose name you type; or an ES-DE command line), and which systems it runs.
+  **Try it** launches the first game of the first system with the recipe before it is saved;
+  **Save** writes it to `emulators.json`. Confirm on an emulator you made reopens it to edit or
+  delete.
+* **Add system…**: pick a folder (folders in your ROM folders that no system claims come first,
+  or any folder on the device), check the name and the file types (filled in from what it
+  holds), optionally pick an image as its console logo, and pick the emulator: one Xross has, an
+  installed app (it gets a recipe that hands over the file URI), or Android's "Open with". Saving
+  writes `systems.json` and rescans.
+
+Custom systems scan, launch and scrape by name like built-in ones, but get no RetroAchievements or
+DAT matching. A custom emulator counts as installed only when its package **and** its activity are
+there (some ES-DE rules borrow other apps' package names). ES-DE's PC Engine CD folders
+(`pcenginecd`, `tg-cd`, `turbografxcd`, `supercd`) scan as PC Engine.
 
 PlayStation 3 games go to ARMSX3: put disc images (`.iso`, `.chd`) in a `ps3` folder. A game
 installed inside ARMSX3 is listed through a `.ps3` file whose first line is its serial
@@ -179,6 +207,14 @@ FAT32/exFAT cards. Art from earlier versions is moved here once, in the backgrou
   * L1 / R1 move to the previous or next game of the list and keep the cursor on the same row.
     Back returns to the game's Options.
 * **Options ▸ Information** for the file, hashes, DAT match and playtime.
+* **Options on a system folder ▸ Show ▸ Missing art** lists only the games without box art, a hero
+  or a logo; Metadata & Media opened from there pages through just those.
+* **Fix media…** (Settings ▸ Library ▸ Metadata & artwork, or Options on a system folder) goes
+  through a whole system: a strip of consoles at the top (L1 / R1 or ← / →), filters (All,
+  Missing anything, Missing box art, Missing hero, Missing logo; ↑ from the first game reaches
+  them), and every game with a badge per art kind: filled when it has the file, hollow when it
+  doesn't, underlined when you chose it. Confirm opens Metadata & Media on that game, paging
+  within the system; Back returns to the same game.
 
 Resting on a scraped game brings up its hero art and video snap behind the menu; timing and
 audio behaviour are described under
@@ -221,13 +257,18 @@ badges in `Xross/media/avatars/` and `Xross/media/ra/badges/`.
 * **Photo:** viewer with zoom, pan and slideshow. **Photo ▸ Options ▸ Set as Xross wallpaper** (in
   a photo list or the viewer) puts a photo behind the menu instead of the theme's (details in the
   [Theme 2.0 specification](THEME_SPECIFICATION.md#wallpaper)); it can also be set as the Android
-  wallpaper.
+  wallpaper. **Settings ▸ Theme ▸ Xross wallpaper ▸ Pick a folder…** lets a folder's pictures take
+  turns (**Change**: every 1, 5, 15 or 60 minutes, or each time Xross comes to the front); a change
+  waits for your next button press, so a resting screen stays still.
 * **Music:** background music player with media-session controls. Select (or a held Guide button)
   opens the media controls. Music pauses for games and videos, and for a game's video snap once
   the snap's sound starts (it fades back in when the cursor moves on; a song you paused stays
   paused). **Settings ▸ Sound ▸ Music during video snaps ▸ Lower** keeps it playing at 20% instead.
   In Now Playing, ↓ stops the music and empties the queue.
-* **Theme music:** a theme pack can bring an ambient loop (`bgm.ogg`). It plays only while nothing
+* **Theme music:** a theme pack can bring an ambient loop (`bgm.ogg`) or a list of tracks, or you
+  choose in **Settings ▸ Theme ▸ Theme music**: the theme pack's, **Pick a file…** (one track,
+  looped), **Pick a folder…** (up to 50 tracks, crossfading, shuffled or in order) or **Off**.
+  After a game a list goes on with its next track. It plays only while nothing
   else does: it stops when you start a song (a paused song counts; stop it from Now Playing to
   hear the theme's music again), stays silent while another app plays media, pauses under a game's
   video snap and stops for a game. It never takes audio focus, so it doesn't pause other apps.

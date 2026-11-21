@@ -73,6 +73,13 @@ sealed interface Command {
     data object StartRemap : Command
     data object ResetRemap : Command
     data class CycleEmulator(val platformId: String) : Command
+    data class SetEmulatorChoice(val platformId: String, val key: String) : Command
+    /** Settings ▸ Emulators ▸ Add emulator… (0.2.2.0 § 1b); [forSystem] ticks that system. */
+    data class OpenEmulatorWizard(val forSystem: String? = null) : Command
+    data class EditCustomEmulator(val id: String) : Command
+    /** Add system…; [folder] starts on that folder (Options on an unknown folder). */
+    data class OpenSystemWizard(val folder: String? = null) : Command
+    data class EditCustomSystem(val id: String) : Command
     data object ToggleWave : Command
     data object OpenWaveSettings : Command
     /** Settings ▸ Theme ▸ Layout (2b.8a): the crosshair, UI scale, spacing and focus panel. */
@@ -159,6 +166,18 @@ sealed interface Command {
      * theme color, quick profile and wave settings.
      */
     data object ResetThemeDefaults : Command
+
+    /** Xross wallpaper ▸ Pick a folder… and its interval (0.2.2.0 § 5b). */
+    data object PickWallpaperFolder : Command
+    data class SetWallpaperInterval(val interval: RotationInterval) : Command
+
+    /** Settings ▸ Theme ▸ Theme music (0.2.2.0 § 5). */
+    data object OpenThemeMusicMenu : Command
+    data object PickThemeMusicFile : Command
+    data object PickThemeMusicFolder : Command
+    /** "" for the theme pack's, `none` for off. */
+    data class SetThemeMusic(val value: String) : Command
+    data class SetThemeMusicOrder(val order: String) : Command
     /** Settings ▸ Theme ▸ Export theme… (2b.8b): the scopes the active pack can be exported in. */
     data object ExportTheme : Command
     /** The Theme pack row's Options ▸ Export a pack…: the scopes pack [id] can be exported in. */
@@ -266,6 +285,10 @@ sealed interface Command {
     data class ResetMetadata(val gameId: Long) : Command
     /** Options ▸ Metadata & Media: the full-screen editor on this game. */
     data class OpenMetadataEditor(val gameId: Long) : Command
+    /** Options on a system folder ▸ Show ▸ Missing art (0.2.2.0 § 4). */
+    data class SetMissingArtFilter(val platformId: String, val on: Boolean) : Command
+    /** Settings ▸ Metadata ▸ Fix media…, or a system folder's Options ▸ Fix media… (§ 3); null opens on All. */
+    data class OpenLibraryBrowser(val platformId: String? = null) : Command
 }
 
 sealed interface NodeAction {

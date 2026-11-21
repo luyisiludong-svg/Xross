@@ -113,6 +113,7 @@ class MainActivity : ComponentActivity() {
 
     /** Any key, stick or touch input: wakes both idle timers. */
     private fun noteInput() {
+        viewModel.onUserInput()
         inactivity.onInput()
         particleInactivity.onInput()
     }
@@ -153,6 +154,29 @@ class MainActivity : ComponentActivity() {
     /** Metadata & Media ▸ a slot ▸ Use a file…: an image, or an MP4 for the video slot. */
     private val pickMediaFile = registerForActivityResult(ActivityResultContracts.OpenDocument()) {
         viewModel.onMediaFilePicked(it)
+    }
+
+    /** Settings ▸ Theme ▸ Xross wallpaper ▸ Pick a folder… */
+    private val pickWallpaperFolder = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) {
+        viewModel.onWallpaperFolderPicked(it)
+    }
+
+    /** Settings ▸ Theme ▸ Theme music ▸ Pick a file… / Pick a folder… */
+    private val pickThemeMusicFile = registerForActivityResult(ActivityResultContracts.OpenDocument()) {
+        viewModel.onThemeMusicFilePicked(it)
+    }
+    private val pickThemeMusicFolder = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) {
+        viewModel.onThemeMusicFolderPicked(it)
+    }
+
+    /** Settings ▸ Emulators ▸ Add system ▸ Pick another folder… */
+    private val pickWizardFolder = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) {
+        viewModel.onWizardFolderPicked(it)
+    }
+
+    /** Add system ▸ Console logo. */
+    private val pickWizardLogo = registerForActivityResult(ActivityResultContracts.OpenDocument()) {
+        viewModel.onWizardLogoPicked(it)
     }
 
     private val pickBaseRomsFolder = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) {
@@ -231,6 +255,7 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val state by viewModel.state.collectAsStateWithLifecycle()
+            val rotating by viewModel.rotatingWallpaper.collectAsStateWithLifecycle()
             val pack by container.themes.active.collectAsStateWithLifecycle()
             // The theme pack's fonts for every launcher text style.
             val typography = androidx.compose.runtime.remember(pack) { ThemeTypography.of(pack.fonts) }
@@ -258,7 +283,21 @@ class MainActivity : ComponentActivity() {
             // Sound levels follow the look too (variant, category, system, rules: 2b.5a).
             androidx.compose.runtime.LaunchedEffect(pack, look.gains) { container.sounds.useLook(pack, look) }
             // So does the theme music loop (a category override can give Games its own, 2b.5c).
-            androidx.compose.runtime.LaunchedEffect(pack, look.bgm) { container.audio.onBgmTrack(pack.bgmTrack(look.bgm)) }
+            // Settings ▸ Theme ▸ Theme music (0.2.2.0 § 5) wins over the pack's cascade.
+            val musicChoice = state.settings.themeMusic
+            val musicOrder = state.settings.themeMusicOrder
+            androidx.compose.runtime.LaunchedEffect(pack, look.bgm, musicChoice, musicOrder) {
+                val own = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    dev.xross.launcher.data.ThemeMusic.resolve(musicChoice, musicOrder)
+                }
+                container.audio.onBgmTrack(
+                    when (own) {
+                        dev.xross.launcher.data.ThemeMusic.Choice.Theme -> pack.bgmTrack(look.bgm)
+                        dev.xross.launcher.data.ThemeMusic.Choice.Off -> null
+                        is dev.xross.launcher.data.ThemeMusic.Choice.Own -> own.track
+                    },
+                )
+            }
             // This composition's draw-phase theme state (Assessment §7.5): the surface, the accent
             // morph and the frosted backdrops, read while drawing, so a change redraws without
             // recomposing. Created here, once, so no other composition shares them.
@@ -373,8 +412,8 @@ class MainActivity : ComponentActivity() {
                     },
                     loadBadge = { name, px -> badgeImages.load(name, px) },
                     loadOfferThumb = { offer, px -> viewModel.mediaThumbnail(offer)?.let { container.art.loadFile(it, px) } },
-                    wallpaper = androidx.compose.runtime.remember(state.settings.customWallpaper, pack, look) {
-                        WallpaperSource.resolve(state.settings.customWallpaper, pack, look)
+                    wallpaper = androidx.compose.runtime.remember(rotating, state.settings.customWallpaper, pack, look) {
+                        WallpaperSource.resolve(rotating ?: state.settings.customWallpaper, pack, look)
                     },
                     packWallpaper = androidx.compose.runtime.remember(pack, look) {
                         WallpaperSource.packWallpaper(pack, look)
@@ -481,6 +520,11 @@ class MainActivity : ComponentActivity() {
                 pickMediaFile.launch(if (effect.video) arrayOf("video/mp4") else arrayOf("image/png", "image/jpeg", "image/webp"))
             }
             UiEffect.PickWallpaperImage -> runCatching { pickWallpaperImage.launch(arrayOf("image/png", "image/jpeg", "image/webp")) }
+            UiEffect.PickWizardFolder -> runCatching { pickWizardFolder.launch(null) }
+            UiEffect.PickWallpaperFolder -> runCatching { pickWallpaperFolder.launch(null) }
+            UiEffect.PickThemeMusicFile -> runCatching { pickThemeMusicFile.launch(arrayOf("audio/*")) }
+            UiEffect.PickThemeMusicFolder -> runCatching { pickThemeMusicFolder.launch(null) }
+            UiEffect.PickWizardLogo -> runCatching { pickWizardLogo.launch(arrayOf("image/png", "image/jpeg", "image/webp")) }
             is UiEffect.PickMediaFolder -> {
                 pendingMediaFolder = effect.kind
                 runCatching { pickMediaFolder.launch(null) }

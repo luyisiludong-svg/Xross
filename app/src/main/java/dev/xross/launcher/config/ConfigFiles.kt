@@ -17,6 +17,7 @@ import dev.xross.launcher.theme.pack.ThemeManifest
 import dev.xross.launcher.theme.pack.ThemePackLoader
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
 import dev.xross.launcher.data.MusicUnderSnaps
 import dev.xross.launcher.model.FolderNames
@@ -129,7 +130,17 @@ data class SettingsFile(
         val showSystemLogos: Boolean = D.showSystemLogos,
         /** PACK, WHITE, COLOR, MONO, OUTLINED, DARK_COLOR, DARK_MONO or BLACK. */
         val systemLogoStyle: String = D.systemLogoStyle,
+        /** Wallpaper rotation (0.2.2.0 § 5b): a folder of pictures and how often they change. */
+        val wallpaperRotation: WallpaperRotation = WallpaperRotation(D.wallpaperFolder, D.wallpaperInterval),
+        /** Theme music (0.2.2.0 § 5): an audio file, a folder, or `none`; empty = the theme pack's. */
+        val bgm: String = D.themeMusic,
+        /** SHUFFLE or IN_ORDER, for a folder of tracks. */
+        val bgmOrder: String = D.themeMusicOrder,
     )
+
+    /** `interval`: OFF, MIN_1, MIN_5, MIN_15, MIN_60 or FRONT. */
+    @Serializable
+    data class WallpaperRotation(val folder: String = "", val interval: String = "OFF")
 
     /** `#RRGGBB` gradient for the CUSTOM wave tint. */
     @Serializable
@@ -242,12 +253,27 @@ data class SystemsFile(
     val version: Int = ConfigCodec.VERSION,
     val systems: Map<String, System> = emptyMap(),
 ) {
+    /**
+     * A built-in system uses [emulator], [extraFolders] and [extraExtensions]. An id Xross doesn't
+     * ship is a **custom system** (0.2.2.0 § 1): it needs [name] and [extensions]; [folders]
+     * defaults to the id; [emulators] are launch recipe keys (built-in like "retroarch:mgba", or
+     * an `emulators.json` id), first installed wins. [source] is "device" for one made in Settings.
+     */
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
     @Serializable
     data class System(
         val emulator: String? = null,
         val extraFolders: List<String> = emptyList(),
         val extraExtensions: List<String> = emptyList(),
         @SerialName("builtIn") val builtIn: BuiltIn? = null,
+        // Written only when set, so a built-in system's entry stays as short as before.
+        @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER) val name: String? = null,
+        @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER) val shortName: String? = null,
+        @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER) val folders: List<String>? = null,
+        @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER) val extensions: List<String>? = null,
+        @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER) val emulators: List<String>? = null,
+        @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER) val logo: String? = null,
+        @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER) val source: String? = null,
     )
 
     @Serializable
@@ -262,9 +288,59 @@ data class SystemsFile(
 
 // endregion
 
-/** Converts between [XrossSettings] and the three config files. */
+// region emulators.json
+
+/**
+ * `Xross/config/emulators.json` (0.2.2.0 § 1): launch recipes for emulators Xross doesn't ship,
+ * keyed by an id of the user's choosing. [CustomEmulator.command] is ES-DE's syntax
+ * ([dev.xross.launcher.launch.EsdeCommand]). Comments (`//`, `/* */`) are allowed; Xross only
+ * rewrites the entries it made itself (`"source": "device"`) and leaves the rest of the file as
+ * the user wrote it.
+ */
+@Serializable
+data class EmulatorsFile(
+    val version: Int = ConfigCodec.VERSION,
+    val emulators: Map<String, CustomEmulator> = emptyMap(),
+)
+
+@Serializable
+data class CustomEmulator(
+    val name: String = "",
+    /** Package ids in preference order; the first installed one with [activity] runs. */
+    val packages: List<String> = emptyList(),
+    /** Fully qualified, or starting with "." for one inside the package. */
+    val activity: String = "",
+    /** System ids this emulator runs (built-in or custom). */
+    val systems: List<String> = emptyList(),
+    val command: String = "",
+    /** "device" when made in Settings ▸ Emulators ▸ Add emulator; null for hand-written. */
+    val source: String? = null,
+) {
+    val fromDevice: Boolean get() = source == ConfigCodec.SOURCE_DEVICE
+}
+
+/** A custom system from `systems.json`, as Settings keeps it. */
+data class CustomSystem(
+    val name: String,
+    val shortName: String,
+    val folders: List<String>,
+    val extensions: List<String>,
+    val emulators: List<String>,
+    /** An image file shown as the system's console logo; empty for none. */
+    val logo: String = "",
+    val source: String? = null,
+) {
+    val fromDevice: Boolean get() = source == ConfigCodec.SOURCE_DEVICE
+}
+
+// endregion
+
+/** Converts between [XrossSettings] and the config files. */
 object ConfigCodec {
     const val VERSION = 1
+
+    /** `"source"` of an entry made on the device; Xross edits and deletes only those. */
+    const val SOURCE_DEVICE = "device"
 
     /** A hand-edited `display.customWallpaper` longer than this is cut (URIs and paths are far shorter). */
     const val MAX_WALLPAPER_CHARS = 1024
@@ -277,6 +353,8 @@ object ConfigCodec {
         explicitNulls = true
         coerceInputValues = true
         isLenient = true
+        allowComments = true
+        allowTrailingComma = true
     }
 
     // region settings.json
@@ -310,6 +388,9 @@ object ConfigCodec {
             showFileFormat = s.showFileFormat,
             showSystemLogos = s.showSystemLogos,
             systemLogoStyle = s.systemLogoStyle,
+            wallpaperRotation = SettingsFile.WallpaperRotation(s.wallpaperFolder, s.wallpaperInterval),
+            bgm = s.themeMusic,
+            bgmOrder = s.themeMusicOrder,
         ),
         sound = SettingsFile.Sound(
             effects = s.soundEffects,
@@ -382,6 +463,12 @@ object ConfigCodec {
         showFileFormat = f.display.showFileFormat,
         showSystemLogos = f.display.showSystemLogos,
         systemLogoStyle = dev.xross.launcher.data.SystemLogoStyle.of(f.display.systemLogoStyle).name,
+        themeMusic = f.display.bgm.trim().take(MAX_WALLPAPER_CHARS),
+        wallpaperFolder = f.display.wallpaperRotation.folder.trim().trimEnd('/').take(MAX_WALLPAPER_CHARS),
+        wallpaperInterval = f.display.wallpaperRotation.interval.trim().uppercase().let { i ->
+            if (i in setOf("OFF", "MIN_1", "MIN_5", "MIN_15", "MIN_60", "FRONT")) i else "OFF"
+        },
+        themeMusicOrder = dev.xross.launcher.data.ThemeMusic.normalizeOrder(f.display.bgmOrder),
         soundEffects = f.sound.effects,
         soundVolume = f.sound.effectsVolume.finiteOr(D.soundVolume).coerceIn(0f, 1f),
         cueVolume = f.sound.cueVolume.volumeOr(f.sound.effectsVolume.finiteOr(D.soundVolume)),
@@ -515,6 +602,17 @@ object ConfigCodec {
                     emulators = p.emulators.map { it.key },
                 ),
             )
+        } + s.customSystems.mapValues { (id, c) ->
+            SystemsFile.System(
+                name = c.name,
+                shortName = c.shortName,
+                folders = c.folders,
+                extensions = c.extensions,
+                emulators = c.emulators,
+                logo = c.logo.ifEmpty { null },
+                source = c.source,
+                emulator = s.emulatorChoice[id],
+            )
         },
     )
 
@@ -523,22 +621,86 @@ object ConfigCodec {
         val known = platforms.associateBy { it.id }
         val choices = HashMap<String, String>()
         val overrides = HashMap<String, SystemOverride>()
+        val custom = LinkedHashMap<String, CustomSystem>()
         for ((id, entry) in f.systems) {
-            val platform = known[id] ?: continue
-            entry.emulator?.takeIf { key -> platform.emulators.any { it.key == key } }?.let { choices[id] = it }
+            val platform = known[id]
+            if (platform == null) {
+                val system = customSystem(id, entry) ?: continue
+                custom[id] = system
+                // Checked against the merged registry when it is installed.
+                entry.emulator?.takeIf { it.isNotBlank() }?.let { choices[id] = it.trim() }
+                continue
+            }
+            // A custom emulator (emulators.json, read before this file) may be chosen for a built-in system.
+            entry.emulator?.takeIf { key -> platform.emulators.any { it.key == key } || key in base.customEmulators }?.let { choices[id] = it }
             val o = SystemOverride(
                 extraFolders = entry.extraFolders.map { it.trim() }.filter { it.isNotEmpty() }.toSet(),
                 extraExtensions = entry.extraExtensions.map(SystemOverride::normalizeExtension).filter { it.isNotEmpty() }.toSet(),
             )
             if (!o.isEmpty) overrides[id] = o
         }
-        return base.copy(emulatorChoice = choices, systemOverrides = overrides)
+        return base.copy(emulatorChoice = choices, systemOverrides = overrides, customSystems = custom)
+    }
+
+    /** A custom system entry, or null when it has no name (an override of a system this build lacks). */
+    fun customSystem(id: String, e: SystemsFile.System): CustomSystem? {
+        val name = e.name?.trim().orEmpty()
+        if (name.isEmpty() && e.extensions.isNullOrEmpty()) return null
+        return CustomSystem(
+            name = name.ifEmpty { id },
+            shortName = e.shortName?.trim().orEmpty().ifEmpty { id.uppercase().take(4) },
+            folders = (e.folders ?: listOf(id)).map { it.trim() }.filter { it.isNotEmpty() }.distinct(),
+            extensions = e.extensions.orEmpty().map(SystemOverride::normalizeExtension).filter { it.isNotEmpty() }.distinct(),
+            emulators = e.emulators.orEmpty().map { it.trim() }.filter { it.isNotEmpty() }.distinct(),
+            logo = e.logo?.trim().orEmpty(),
+            source = e.source,
+        )
     }
 
     fun encodeSystems(s: XrossSettings): String = json.encodeToString(SystemsFile.serializer(), systemsFile(s)) + "\n"
 
     fun decodeSystems(base: XrossSettings, text: String): XrossSettings =
         applySystems(base, json.decodeFromString(SystemsFile.serializer(), text))
+
+    // endregion
+
+    // region emulators.json
+
+    fun decodeEmulators(base: XrossSettings, text: String): XrossSettings =
+        base.copy(customEmulators = json.decodeFromString(EmulatorsFile.serializer(), text).emulators.mapKeys { it.key.trim() })
+
+    /**
+     * The text of emulators.json for [s]. [previous] is the file as last read or written: when its
+     * entries are still what [s] holds it comes back unchanged (comments and layout kept); when
+     * only device entries changed, those are spliced in and hand-written text stays as it is.
+     */
+    fun encodeEmulators(s: XrossSettings, previous: String?): String {
+        val wanted = s.customEmulators
+        if (previous != null) {
+            val before = runCatching { json.decodeFromString(EmulatorsFile.serializer(), previous).emulators }.getOrNull()
+            if (before != null) {
+                if (before == wanted) return previous
+                val handBefore = before.filterValues { !it.fromDevice }
+                val handNow = wanted.filterValues { !it.fromDevice }
+                if (handBefore == handNow) {
+                    val device = wanted.filterValues { it.fromDevice }
+                    JsonSplice.replaceMembers(previous, "emulators", drop = before.filterValues { it.fromDevice }.keys) { indent ->
+                        device.map { (id, e) -> encodeMember(id, e, indent) }
+                    }?.let { out ->
+                        val check = runCatching { json.decodeFromString(EmulatorsFile.serializer(), out).emulators }.getOrNull()
+                        if (check == wanted) return out
+                    }
+                }
+            }
+        }
+        return json.encodeToString(EmulatorsFile.serializer(), EmulatorsFile(emulators = wanted)) + "\n"
+    }
+
+    private fun encodeMember(id: String, e: CustomEmulator, indent: String): String {
+        val body = json.encodeToString(CustomEmulator.serializer(), e).lines()
+        val key = json.encodeToString(String.serializer(), id)
+        return indent + key + ": " + body.first() + body.drop(1).joinToString("") { "\n" + indent + it }
+    }
 
     // endregion
 

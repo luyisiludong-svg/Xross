@@ -195,7 +195,7 @@ object LookExporter {
      */
     private fun usedFiles(pack: LoadedTheme, body: JsonObject, ignoreWallpapers: Boolean = false): List<String> {
         val sourceBaseWallpaper = pack.info.manifest.effects?.wallpaperPath.isNullOrBlank()
-        val sourceBaseBgm = pack.info.manifest.audio?.bgmFile.isNullOrBlank()
+        val sourceBaseBgm = pack.info.manifest.audio?.bgmFile.isNullOrBlank() && pack.info.manifest.audio?.bgmFiles.isNullOrEmpty()
         val defaults = Defaults(
             wallpaper = pack.wallpaper.path.takeIf { sourceBaseWallpaper },
             bgm = pack.bgm.path.takeIf { sourceBaseBgm },
@@ -226,7 +226,8 @@ object LookExporter {
         }
         fun audio(a: ThemeManifest.Audio?, base: Boolean) {
             val b = BgmRef.of("x", a?.bgmFile, ignored)
-            (if (b == null && base) d.bgm else b?.path)?.let { all += it }
+                ?: if (base) BgmRef.ofList("x", a?.bgmFiles, a?.bgmOrder, ignored) else null
+            if (b == null && base) d.bgm?.let { all += it } else b?.paths?.let { all += it }
         }
         fun logo(c: Components?) {
             ComponentsPatch.of("x", c, ignored)?.logo?.takeIf { it.isNotEmpty() }?.let { all += it }

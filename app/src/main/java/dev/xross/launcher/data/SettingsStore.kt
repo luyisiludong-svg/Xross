@@ -154,6 +154,21 @@ data class XrossSettings(
     val systemLogoStyle: String = SystemLogoStyle.PACK.name,
     /** platformId → the user's extra folder names and extensions (systems.json). */
     val systemOverrides: Map<String, SystemOverride> = emptyMap(),
+    /**
+     * Settings ▸ Theme ▸ Theme music (0.2.2.0 § 5): blank = the theme pack's, [ThemeMusic.OFF], or
+     * an audio file's or a folder's path. Wins over the pack's music cascade.
+     */
+    val themeMusic: String = "",
+    /** Xross wallpaper ▸ Pick a folder… (0.2.2.0 § 5b): its pictures take turns; wins over [customWallpaper]. */
+    val wallpaperFolder: String = "",
+    /** [dev.xross.launcher.state.RotationInterval] name. */
+    val wallpaperInterval: String = "OFF",
+    /** A list of tracks (a folder): [ThemeMusic.SHUFFLE] or [ThemeMusic.IN_ORDER]. */
+    val themeMusicOrder: String = ThemeMusic.SHUFFLE,
+    /** Systems the user defined in systems.json (0.2.2.0 § 1), by id, in file order. */
+    val customSystems: Map<String, dev.xross.launcher.config.CustomSystem> = emptyMap(),
+    /** Launch recipes from emulators.json (0.2.2.0 § 1), by id, in file order; bad ones included. */
+    val customEmulators: Map<String, dev.xross.launcher.config.CustomEmulator> = emptyMap(),
     /** Package names hidden from Apps and Games ▸ Android Games. */
     val hiddenApps: Set<String> = emptySet(),
     /** Also hide apps that came with the system (preinstalled or updated system apps). */
@@ -187,8 +202,11 @@ data class XrossSettings(
 class SettingsStore(
     context: Context,
     private val environment: XrossEnvironment = XrossEnvironment(context),
+    /** Installs the custom emulators (emulators.json) before settings that use them are published. */
+    private val configureEmulators: (XrossSettings) -> Unit = {},
 ) {
     private val legacy: SharedPreferences = context.getSharedPreferences(LEGACY_PREFS, Context.MODE_PRIVATE)
+    private val assets = context.assets
     private val lock = Any()
 
     @Volatile private var layout: XrossLayout = environment.current
@@ -229,6 +247,7 @@ class SettingsStore(
         val result = if (adopt) read(next, _settings.value) else _settings.value
         apply(result, _settings.value)
         persist(next, result)
+        writeExamples(next)
         adopt
     }
 
@@ -255,8 +274,13 @@ class SettingsStore(
 
     /** Publishes [next] (except while the store is still being constructed) and applies its system overrides. */
     private fun apply(next: XrossSettings, previous: XrossSettings?) {
-        if (previous == null || next.systemOverrides != previous.systemOverrides) {
-            PlatformRegistry.applyOverrides(next.systemOverrides)
+        if (previous == null || next.customEmulators != previous.customEmulators || next.customSystems != previous.customSystems) {
+            configureEmulators(next)
+        }
+        if (previous == null || next.systemOverrides != previous.systemOverrides ||
+            next.customSystems != previous.customSystems || next.customEmulators != previous.customEmulators
+        ) {
+            PlatformRegistry.install(CustomSystems.platforms(next))
         }
         if (previous != null) _settings.value = next
     }
@@ -267,6 +291,7 @@ class SettingsStore(
         val loaded = migrated ?: read(at, XrossSettings())
         apply(loaded, null)
         persist(at, loaded)
+        writeExamples(at)
         if (migrated != null) {
             // Clear the old preferences only once the JSON files are safely on disk.
             ConfigWriter.awaitIdle()
@@ -283,6 +308,8 @@ class SettingsStore(
         var s = base
         s = readOne(at.settingsFile, s, ConfigCodec::decodeSettings)
         s = readOne(at.controllersFile, s, ConfigCodec::decodeControllers)
+        // Before systems.json: a system's emulator choice may name a custom emulator.
+        s = readOne(at.emulatorsFile, s, ConfigCodec::decodeEmulators)
         s = readOne(at.systemsFile, s, ConfigCodec::decodeSystems)
         return s
     }
@@ -311,11 +338,22 @@ class SettingsStore(
         known.remove(file.absolutePath)
     }
 
+    /** The commented samples beside the config files, written when missing (never read back). */
+    private fun writeExamples(at: XrossLayout) {
+        for (name in EXAMPLES) {
+            val target = File(at.config, name)
+            if (target.isFile) continue
+            val text = runCatching { assets.open("config/$name").bufferedReader().use { it.readText() } }.getOrNull() ?: continue
+            ConfigWriter.write(target, text)
+        }
+    }
+
     /** Queues a write for each file whose content changed. */
     private fun persist(at: XrossLayout, s: XrossSettings) {
         write(at.settingsFile, ConfigCodec.encodeSettings(s))
         write(at.controllersFile, ConfigCodec.encodeControllers(s))
         write(at.systemsFile, ConfigCodec.encodeSystems(s))
+        write(at.emulatorsFile, ConfigCodec.encodeEmulators(s, known[at.emulatorsFile.absolutePath]))
     }
 
     private fun write(file: File, text: String) {
@@ -337,6 +375,7 @@ class SettingsStore(
         const val LEGACY_PREFS = "xross_settings"
         const val KEY_MIGRATED = "migrated_to_json"
         const val BAD_SUFFIX = ".bad"
+        val EXAMPLES = listOf("emulators.example.json", "systems.example.json")
 
         const val KEY_FOLDERS = "rom_folders"
         const val KEY_AUTO_DETECT = "auto_detect_folders"

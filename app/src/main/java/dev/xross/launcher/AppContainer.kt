@@ -56,7 +56,7 @@ class AppContainer(context: Context) {
     val apps: AppRepository by lazy { AppRepository(appContext) }
     /** The portable Xross folder (config, database backup, DATs, media, themes). */
     val environment: XrossEnvironment by lazy { XrossEnvironment(appContext) }
-    val settings: SettingsStore by lazy { SettingsStore(appContext, environment) }
+    val settings: SettingsStore by lazy { SettingsStore(appContext, environment, dev.xross.launcher.launch.EmulatorRegistry::install) }
     val backups: DatabaseBackupManager by lazy {
         DatabaseBackupManager(appContext, database = { database }, layout = { environment.current })
     }

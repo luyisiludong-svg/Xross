@@ -2,6 +2,7 @@ package dev.xross.launcher.launch
 
 import android.app.Activity
 import android.content.ActivityNotFoundException
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.webkit.MimeTypeMap
@@ -24,7 +25,18 @@ internal data class IntentTarget(
  */
 class AndroidIntentGameLauncher(private val context: Context) : GameLauncher {
 
-    fun installedPackage(def: EmulatorDef): String? = def.packages.firstOrNull { isInstalled(it) }
+    /**
+     * The first of [def]'s packages that is installed. A custom recipe also needs its activity in
+     * that package: some ES-DE rules use other apps' package names (benchmark apps, big games) so
+     * phone makers give the build their performance boost, and the real app of that name must not
+     * count.
+     */
+    fun installedPackage(def: EmulatorDef): String? = def.packages.firstOrNull { pkg ->
+        isInstalled(pkg) && (def.activity == null || hasActivity(pkg, RecipeIntents.className(pkg, def.activity)))
+    }
+
+    private fun hasActivity(pkg: String, className: String) =
+        runCatching { context.packageManager.getActivityInfo(ComponentName(pkg, className), 0) }.isSuccess
 
     override fun installedEmulatorIds(): Set<String> =
         EmulatorRegistry.all.filter { installedPackage(it) != null }.mapTo(HashSet()) { it.id }
@@ -38,6 +50,9 @@ class AndroidIntentGameLauncher(private val context: Context) : GameLauncher {
             LaunchResult.Failed("${plan.emulatorName} couldn't be started${target.failHint}")
         } catch (_: SecurityException) {
             LaunchResult.Failed("${plan.emulatorName} refused the launch${target.failHint}")
+        } catch (e: RuntimeException) {
+            // A custom recipe can build an intent the system rejects (a bad data URI, say).
+            LaunchResult.Failed("${plan.emulatorName} couldn't be started: ${e.message ?: e.javaClass.simpleName}")
         }
     }
 
@@ -70,8 +85,20 @@ class AndroidIntentGameLauncher(private val context: Context) : GameLauncher {
 
         val def = EmulatorRegistry.byId(option.emulatorId)
             ?: return LaunchPlan.Failed("Unknown emulator ${option.emulatorId}")
+        return planWith(game, def, option.core)
+    }
+
+    override fun planWith(game: GameEntity, def: EmulatorDef, core: String?): LaunchPlan {
+        val file = File(game.path)
+        if (!file.exists()) return LaunchPlan.Failed("File not found — is the storage mounted?")
+        val uri = runCatching {
+            FileProvider.getUriForFile(context, "${context.packageName}.files", file)
+        }.getOrElse { return LaunchPlan.Failed("Can't share ${file.name}") }
+        val mime = MimeTypeMap.getSingleton().getMimeTypeFromExtension(file.extension.lowercase()) ?: "application/octet-stream"
         val pkg = installedPackage(def)
-            ?: return LaunchPlan.Failed("${def.name} is not installed")
+            ?: return LaunchPlan.Failed(
+                if (def.custom && def.packages.any { isInstalled(it) }) "${def.name}: ${def.activity} isn't in the app" else "${def.name} is not installed",
+            )
         def.check(file)?.let { return LaunchPlan.Failed(it) }
         val request = if (def.resolveCue && file.extension.equals("cue", ignoreCase = true)) {
             val track = CueSheet.firstTrack(file)
@@ -79,13 +106,13 @@ class AndroidIntentGameLauncher(private val context: Context) : GameLauncher {
             val trackUri = runCatching {
                 FileProvider.getUriForFile(context, "${context.packageName}.files", track)
             }.getOrElse { return LaunchPlan.Failed("Can't share ${track.name}") }
-            LaunchRequest(track.path, trackUri, "application/octet-stream", pkg, option.core)
+            LaunchRequest(track.path, trackUri, "application/octet-stream", pkg, core)
         } else {
-            LaunchRequest(game.path, uri, mime, pkg, option.core)
+            LaunchRequest(game.path, uri, mime, pkg, core)
         }
-        val intent = def.buildIntent(request)
+        val intent = runCatching { def.buildIntent(request) }.getOrElse { return LaunchPlan.Failed("${def.name}: ${it.message ?: "bad recipe"}") }
         val hint = if (def.needsStorageAccess) " — grant ${def.name} storage access" else ""
-        return LaunchPlan.Ready(def.name + (option.core?.let { " · $it" } ?: ""), IntentTarget(intent, hint))
+        return LaunchPlan.Ready(def.name + (core?.let { " · $it" } ?: ""), IntentTarget(intent, hint))
     }
 
     private fun isInstalled(pkg: String) =

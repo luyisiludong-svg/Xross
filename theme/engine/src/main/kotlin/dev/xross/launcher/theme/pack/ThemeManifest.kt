@@ -192,6 +192,13 @@ data class ThemeManifest(
          */
         @kotlinx.serialization.json.JsonNames("bgm") val bgmFile: String? = null,
         /**
+         * Several tracks played as a list (0.2.2.0 § 5): audio files from the pack root, at most
+         * [BgmRef.MAX_TRACKS]. [bgmFile] wins when both are set. Only the pack's base reads it.
+         */
+        val bgmFiles: List<String>? = null,
+        /** `SHUFFLE` (default) or `IN_ORDER`, for [bgmFiles]. */
+        val bgmOrder: String? = null,
+        /**
          * The boot video (2b.5d, [BootVideoRef]): a video file from the pack root, or `none`.
          * Unset: the pack's `boot.mp4` if it has one. Only the pack's base reads it.
          */
@@ -199,7 +206,7 @@ data class ThemeManifest(
     ) {
         companion object {
             /** Every property `audio` recognizes; others are reported like unknown `effects` keys. */
-            val KEYS: Set<String> = setOf("sounds", "soundGains", "panAmount", "cursorJitter", "bgmFile", "bgm", "bootVideo", "boot")
+            val KEYS: Set<String> = setOf("sounds", "soundGains", "panAmount", "cursorJitter", "bgmFile", "bgm", "bgmFiles", "bgmOrder", "bootVideo", "boot")
 
             /** Problems for the keys of every `audio` block in [root] that aren't in [KEYS]. */
             fun unknownKeys(root: JsonObject): List<String> = blockProblems(root, "audio") { where, key ->

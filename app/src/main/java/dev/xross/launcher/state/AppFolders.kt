@@ -21,7 +21,8 @@ object AppFolders {
     const val MAX_NAME = FolderNames.MAX_NAME
 
     /** Every package of every emulator Xross can launch. */
-    val emulatorPackages: Set<String> by lazy { EmulatorRegistry.all.flatMapTo(HashSet()) { it.packages } }
+    // Built-in recipes only: a custom recipe may use a spoofed package (a benchmark app's name).
+    val emulatorPackages: Set<String> by lazy { EmulatorRegistry.builtIn.flatMapTo(HashSet()) { it.packages } }
 
     fun isHidden(app: AppEntry, s: XrossSettings): Boolean =
         app.packageName in s.hiddenApps || (s.hideSystemApps && app.isSystem)

@@ -134,6 +134,7 @@ been tested yet.
 | Azahar, Eden, Flycast, M64Plus FZ, melonDS, ScummVM | ✅ 🧪 | Launch recipes from ES-DE's published Android rules |
 | Emulator per platform (Settings ▸ Emulators) | ✅ | |
 | Emulator per game (Options ▸ Emulator) | ✅ | Game override → platform choice → first installed |
+| Custom emulators and systems (0.2.2.0 § 1, § 1b) | ✅ 🧪 | `emulators.json` in ES-DE syntax, custom systems in `systems.json`, Add emulator… / Add system… wizards with Try it; problems listed in Settings ▸ Emulators. Checked on the API 37 emulator with stub apps; no real emulator yet |
 | ROM access for emulators | ✅ | File path extra plus a `content://` URI with a read grant |
 | `GameLauncher` interface | ✅ | UI and repositories see launch plans only; Intents, `content://` grants and package queries live in `AndroidIntentGameLauncher`. A failed start doesn't count as playtime |
 | Android games and apps | ✅ | Games (`CATEGORY_GAME`) go to Games ▸ Android Games; video, audio and image apps (declared category, else a built-in list) to an Apps folder in Video, Music and Photo; everything else to Apps |
@@ -216,6 +217,7 @@ All 12 recipes are verified only against the test stand-ins, not real emulator i
 | Game Details screen | ✅ 📱 | Options ▸ Details or → on a game: background art, box art, logo, release facts, rating, playtime, description, achievements summary. Paging between games added in 2b.1 (§2.9) |
 | Manual match and title override | ✅ 📱 | Options ▸ Metadata & Media: Edit title, Find match, Scrape again, Reset metadata |
 | Metadata & Media editor (0.2.2.0 § 2) | ✅ | Edit description; choose each art slot from every ScreenScraper and SteamGridDB offer or a file; chosen art is pinned against rescrapes. Unit-tested; device check on the A55 to do |
+| Library browser and Missing art filter (0.2.2.0 § 3, § 4) | ✅ 🧪 | Fix media… (console strip, filters, art badges, editor round trip) and Options ▸ Show ▸ Missing art on system folders; unit-tested and checked on the API 37 emulator |
 | Service credentials | ✅ | Stored apart from settings and excluded from backup; `.env` pre-fills them in debug builds only (see `.env.example`) |
 
 ### 2.9 Profile, RetroAchievements and Phase 2b.1

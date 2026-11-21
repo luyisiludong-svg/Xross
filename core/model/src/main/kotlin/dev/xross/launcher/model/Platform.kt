@@ -18,6 +18,13 @@ data class Platform(
     /** Ordered by preference; the first installed one is the default. */
     val emulators: List<EmulatorOption>,
     val isDiscBased: Boolean = false,
+    /**
+     * A system the user defined in `systems.json` (0.2.2.0 § 1). It scans, launches and scrapes
+     * by name like a built-in one, but gets no RetroAchievements or DAT matching.
+     */
+    val custom: Boolean = false,
+    /** A custom system's console logo: an image file path, or null. */
+    val logo: String? = null,
 )
 
 fun normalizeFolderName(name: String): String =
@@ -114,7 +121,8 @@ object PlatformRegistry {
         ),
         Platform(
             "pcengine", "PC Engine / TurboGrafx-16", "PCE",
-            setOf("pcengine", "pce", "tg16", "turbografx16", "turbografx"),
+            // ES-DE keeps CD games in their own folders; they are the same system here.
+            setOf("pcengine", "pce", "tg16", "turbografx16", "turbografx", "pcenginecd", "tgcd", "turbografxcd", "supercd"),
             setOf("pce", "cue", "chd") + archives,
             ra("mednafen_pce_fast", "mednafen_pce"),
             isDiscBased = true,
@@ -225,6 +233,18 @@ object PlatformRegistry {
     /** Applies the user's additions (unknown system ids are ignored). Takes effect for the next scan. */
     fun applyOverrides(overrides: Map<String, SystemOverride>) {
         index = Index(withOverrides(builtIn, overrides), builtInAliases)
+    }
+
+    /**
+     * Installs the full list: built-ins (with overrides and any extra emulator options) followed by
+     * the user's custom systems. A custom system whose id is a built-in one is dropped, and a
+     * built-in folder name always stays with its built-in system.
+     */
+    fun install(platforms: List<Platform>) {
+        val builtInIds = builtIn.mapTo(HashSet()) { it.id }
+        val seen = HashSet<String>()
+        val kept = platforms.filter { p -> (!p.custom || p.id !in builtInIds) && seen.add(p.id) }
+        index = Index(kept, builtInAliases)
     }
 
     fun withOverrides(platforms: List<Platform>, overrides: Map<String, SystemOverride>): List<Platform> =

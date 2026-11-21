@@ -63,6 +63,13 @@ class StorageVolumes(private val context: Context) {
         return docIdToPath(docId, mountedRoots().map { it.absolutePath })
     }
 
+    /** A document picked with OpenDocument as a path on a mounted volume, when its provider is the storage one. */
+    fun documentUriToPath(uri: Uri): String? {
+        if (uri.authority != "com.android.externalstorage.documents") return null
+        val docId = runCatching { DocumentsContract.getDocumentId(uri) }.getOrNull() ?: return null
+        return docIdToPath(docId, mountedRoots().map { it.absolutePath })
+    }
+
     private fun appDirRoots(): List<File> =
         context.getExternalFilesDirs(null).filterNotNull().mapNotNull { appDir ->
             val path = appDir.absolutePath

@@ -2,21 +2,24 @@
 
 The two features moved from `PLAN_0.2.1.0.md` (items 5 and 7), with 5 widened into on-device
 system and emulator setup and 7 widened into a Metadata & Media editor, plus a bulk library
-browser and theme music choices. Checked against `main` at `02df328` (2026-11-21). § 2 is built
-(see its "As built" note); the rest is not started.
+browser and theme music choices. Checked against `main` at `02df328` (2026-11-21). Everything is
+built (see each "As built" note) and unit-tested; § 1–§ 5b were checked on the API 37 emulator with
+stub apps, and the upgrade from 0.2.1.0-beta, Fix media… and the Settings rows on the A55. Still
+open: launches with real emulators, the § 2 picker checks, frame timing and idle CPU (release
+checklist).
 
 Sizes: **XS** under an hour · **S** half a day · **M** one to two days · **L** three days or more.
 
 | # | Feature | Size | Status |
 | --- | --- | --- | --- |
-| 1 | Custom launch recipes and custom systems | M–L | Planned (was 0.2.1.0 item 5) |
-| 1b | Add a system or emulator on the device; PC Engine CD folders; more emulators | M + XS | Planned |
+| 1 | Custom launch recipes and custom systems | M–L | ✅ Built, unit-tested, emulator-checked with stubs |
+| 1b | Add a system or emulator on the device; PC Engine CD folders; more emulators | M + XS | ✅ Wizards and PCE-CD built and emulator-checked; no new built-in emulators (none read from a real install) |
 | 2 | Metadata & Media editor for one game | L + S | 🟡 Built and unit-tested; device check on the A55 still to do |
-| 3 | Library browser: fix media across a whole system | M | Stretch; moves to 0.2.3.0 if the release has to shrink |
-| 4 | "Missing art" filter on game lists | S | Planned; the cheap fallback if 3 slips |
-| 5 | Theme music: choose it in Settings, shuffle several tracks | S–M | Planned |
-| 5b | Wallpaper rotation | S–M | Stretch |
-| 6 | GameNative PC shortcuts | — | Research spike; no promise for this release |
+| 3 | Library browser: fix media across a whole system | M | ✅ Built, unit-tested, emulator-checked |
+| 4 | "Missing art" filter on game lists | S | ✅ Built, unit-tested, emulator-checked |
+| 5 | Theme music: choose it in Settings, shuffle several tracks | S–M | ✅ Built, unit-tested, emulator-checked (by log, not by ear) |
+| 5b | Wallpaper rotation | S–M | ✅ Built, unit-tested, emulator-checked; idle CPU not measured |
+| 6 | GameNative PC shortcuts | — | ✅ Spike done: [`GAMENATIVE_SPIKE.md`](GAMENATIVE_SPIKE.md); building it is 0.2.3.0 |
 
 **Order:** 2 first (the biggest, and 3 and 4 build on its media status), then 1 and 1b, then 5,
 then 4, then 3 and 5b. 6 can run any time as a half-day spike.
@@ -33,6 +36,27 @@ Unchanged from `PLAN_0.2.1.0.md` § 5: `Xross/config/emulators.json` in ES-DE's 
 user-defined systems in `systems.json`, `EsdeCommand.kt` parser, merged `EmulatorRegistry` and
 `PlatformRegistry`, per-entry problems listed in Settings ▸ Emulators, package **and** activity
 match against spoofed packages. Read that section for the design, tags and tests.
+
+**As built (2026-11-21).**
+- `ConfigFiles`: `EmulatorsFile` / `CustomEmulator`; `SystemsFile.System` gains `name`,
+  `shortName`, `folders`, `extensions`, `emulators`, `logo`, `source`. The JSON reader allows
+  comments and trailing commas. `emulators.json` is read before `systems.json`, so a built-in
+  system may choose a custom emulator.
+- Hand-written text is kept by `config/JsonSplice.kt`: `emulators.json` is not rewritten while
+  its entries are unchanged, and when only device entries change they are spliced in as text
+  (checked by decoding the result; otherwise the file is written whole). `systems.json` is still
+  regenerated on save, as before (its `builtIn` blocks always were).
+- `launch/EsdeCommand.kt` (pure parser and resolver) and `launch/RecipeIntents.kt` (the Intent).
+  Extra tags beyond the plan: `%ACTIVITY_NO_HISTORY%`, `%FILENAME%`, `%ROMPATH%`. A URI only in an
+  extra is granted through clip data. A recipe that hands over a plain path is flagged as needing
+  the emulator's own storage access.
+- `EmulatorRegistry.builtIn` plus installed custom defs (`EmulatorRegistry.install`, called by
+  `SettingsStore` through a hook so `data` doesn't depend on `launch`); `data/CustomSystems.kt`
+  builds the merged platform list (`PlatformRegistry.install`). An unknown system in an emulator's
+  `systems` is a warning, not a reason to skip it. `AppFolders.emulatorPackages` uses built-ins
+  only. `<queries>` already had the intent-based entries; no `QUERY_ALL_PACKAGES`.
+- Commented `emulators.example.json` and `systems.example.json` are written to `Xross/config/`
+  when missing (from `assets/config/`).
 
 ## 1b. Add a system or emulator on the device (M + XS)
 
@@ -96,6 +120,24 @@ A55 with one real emulator, launch a game, then check the JSON by hand.
 
 **Watch for.** Users picking a non-emulator app (allowed, but "Try it" should show the launch
 error clearly); exported activities that crash without extras.
+
+**As built (2026-11-21).**
+- Both wizards live in **Settings ▸ Emulators** (Add emulator…, Add system…, and "Add emulator
+  for <system>…" in a system row's Options); there is no Settings ▸ Games ▸ Systems. Options on an
+  unknown folder isn't built: unknown folders aren't in the menu, so the folder step lists the
+  unclaimed folders of the ROM folders first instead.
+- Text steps use the system text dialog (`TextPrompt.WizardText`), not the gamepad keyboard.
+- The system wizard's emulator step lists Xross's recipes (installed first), then installed apps
+  without one (they get a device recipe with the file-URI preset and the launcher activity when
+  the system is saved), then Android's chooser. A picked logo is copied to `Xross/config/logos/`
+  and shown on the folder when there is no bundled logo.
+- A device emulator or system opens again from its row to edit or delete. Saving a system adds an
+  outside folder to the ROM folders and rescans.
+- Code: `state/Wizard.kt` (shared rows), `state/EmulatorWizard.kt`, `state/SystemWizard.kt`,
+  `state/WizardController.kt`, `storage/FolderSurvey.kt`, `ui/WizardScreens.kt`;
+  `GameLauncher.planWith` for Try it.
+- More emulators: none added; none was read from a real install. The commented samples cover the
+  plan's examples with placeholder packages where unknown.
 
 ---
 
@@ -228,6 +270,12 @@ round trip) and `ui/LibraryBrowserScreen.kt`. One query per platform from `GameD
 **Tests.** State tests for strip navigation, filters, and return position after the editor.
 Device check: a 1,000-game All list scrolls at 60 fps on the profiling build.
 
+**As built (2026-11-21).** Settings entry is Settings ▸ Library ▸ Metadata & artwork ▸ Fix
+media… (the metadata settings live there). Badges are text pills (BOX, 3D, CAP, HERO, LOGO, SHOT),
+not theme glyphs: `GlyphKey` has no per-art-kind icons yet, and adding them means new drawables
+and theme-spec entries; a 0.2.3.0 item. ↑ from the first game reaches the filter row; ←/→ there
+change the filter. `state/MediaFilter.kt` is shared with § 4. Not measured: the 1,000-game scroll.
+
 ---
 
 ## 4. "Missing art" filter on game lists (S)
@@ -237,6 +285,9 @@ limits that folder to games whose `mediaStatus` lacks box art, hero or logo. The
 opened from there pages through only the filtered games.
 
 **Tests.** Filter over `mediaStatus` combinations; editor paging over the filtered list.
+
+**As built (2026-11-21).** The filter is per session (not saved). A folder with nothing missing
+shows one row that turns the filter off. The same Options menu has **Fix media…** (§ 3).
 
 ---
 
@@ -272,6 +323,13 @@ feeds the BGM player. `ThemeLookResolver` resolves `bgmFiles`; `ConfigCodec` rea
 with `bgmFile` and `bgmFiles` together; `ThemeRoundTripTest` with a list. By-ear check on the
 A55: crossfade, a pause under a song and the resume.
 
+**As built (2026-11-21).** The choice is resolved by `data/ThemeMusic.kt`; Settings keeps it as
+`themeMusic` / `themeMusicOrder` (`display.bgm` / `display.bgmOrder` in the file). A picked file on
+shared storage is used where it is; one only reachable through its provider is copied to
+`Xross/media/bgm/`. `BgmTrack` carries the list; `ThemeBgm` crossfades on a second player and
+logs each track change (`XrossBgm: next track n/m`). The list round trip is in
+`LookExporterTest` rather than `ThemeRoundTripTest`. Reset to theme defaults clears the choice.
+
 ## 5b. Wallpaper rotation (S–M, stretch)
 
 - Xross wallpaper ▸ Pick a folder… plus an interval (Off, 1, 5, 15, 60 minutes, or each time
@@ -283,6 +341,11 @@ A55: crossfade, a pause under a song and the resume.
   measure it on the A55 with rotation on.
 - **Tests.** Rotation state (interval, order, a missing file skipped); idle check on the
   profiling build.
+- **As built (2026-11-21).** `state/WallpaperRotator.kt` (no timer: `onInput` from the Activity's
+  input hook, `onFront` from `onStart`); interval names `OFF`, `MIN_1`, `MIN_5`, `MIN_15`, `MIN_60`,
+  `FRONT`, saved as `display.wallpaperRotation` `{folder, interval}`. Picking a folder sets 15
+  minutes if the interval was Off. The crossfade is in `WallpaperBackdrop`; the frosted layer
+  switches to the new picture as it starts fading in. Idle CPU not yet measured.
 
 ---
 
@@ -299,6 +362,10 @@ don't reach them. Before promising anything, find out in half a day:
 
 **Outcome:** a short note in `docs/design/` with the answer and a size. Building it is a 0.2.3.0
 item unless the spike shows it is under half a day.
+
+**Result (2026-11-21):** [`GAMENATIVE_SPIKE.md`](GAMENATIVE_SPIKE.md). GameNative exposes a public
+`app.gamenative.LAUNCH_GAME` intent (app id + store), so no shortcut access is needed to launch;
+the missing piece is the game list. S for launcher files, M with shortcut import; 0.2.3.0.
 
 ---
 

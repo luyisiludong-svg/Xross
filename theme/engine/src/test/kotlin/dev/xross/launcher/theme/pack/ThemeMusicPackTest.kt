@@ -121,4 +121,53 @@ class ThemeMusicPackTest {
         val after = loader.load("edit").let { it.bgmTrack(it.look().bgm)!! }
         assertTrue(before != after)
     }
+
+    // region 0.2.2.0 § 5: several tracks
+
+    @Test fun bgmFilesPlayAsAListInTheWrittenOrder() {
+        val theme = pack(
+            "list",
+            """{"name": "List", "audio": {"bgmFiles": ["music/a.ogg", "music/b.mp3", "music/c.ogg"], "bgmOrder": "IN_ORDER"}}""",
+            mapOf("music/a.ogg" to 100, "music/b.mp3" to 100, "music/c.ogg" to 100, "bgm.ogg" to 100),
+        )
+        assertTrue(theme.problems.toString(), theme.problems.isEmpty())
+        val track = theme.bgmTrack(theme.look().bgm)!!
+        assertTrue(track.isList)
+        assertEquals(listOf("a.ogg", "b.mp3", "c.ogg"), track.files.map { it.name })
+        assertFalse(track.shuffle)
+    }
+
+    @Test fun bgmFileWinsOverBgmFilesAndShuffleIsTheDefault() {
+        val both = pack(
+            "both",
+            """{"name": "Both", "audio": {"bgmFile": "one.ogg", "bgmFiles": ["a.ogg", "b.ogg"]}}""",
+            mapOf("one.ogg" to 100, "a.ogg" to 100, "b.ogg" to 100),
+        )
+        assertEquals("one.ogg", both.track())
+        assertFalse(both.bgmTrack(both.look().bgm)!!.isList)
+        val list = pack("shuffled", """{"name": "Shuffled", "audio": {"bgmFiles": ["a.ogg", "b.ogg"]}}""", mapOf("a.ogg" to 100, "b.ogg" to 100))
+        assertTrue(list.bgmTrack(list.look().bgm)!!.shuffle)
+    }
+
+    @Test fun missingAndBadListEntriesAreReportedAndLeftOut() {
+        val theme = pack(
+            "gaps",
+            """{"name": "Gaps", "audio": {"bgmFiles": ["a.ogg", "gone.ogg", "notes.txt", "../x.ogg"], "bgmOrder": "RANDOMISH"}}""",
+            mapOf("a.ogg" to 100),
+        )
+        assertEquals(listOf("a.ogg"), theme.bgmTrack(theme.look().bgm)!!.files.map { it.name })
+        assertEquals(4, theme.problems.size)
+    }
+
+    @Test fun aVariantStillReplacesTheListWithOneLoop() {
+        val theme = pack(
+            "varied",
+            """{"name": "Varied", "audio": {"bgmFiles": ["a.ogg", "b.ogg"]}, "variants": [{"id": "night", "name": "Night", "audio": {"bgmFile": "night.ogg"}}]}""",
+            mapOf("a.ogg" to 100, "b.ogg" to 100, "night.ogg" to 100),
+        )
+        assertEquals("night.ogg", theme.track("night"))
+        assertTrue(theme.bgmTrack(theme.look().bgm)!!.isList)
+    }
+
+    // endregion
 }

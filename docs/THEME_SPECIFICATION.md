@@ -197,6 +197,14 @@ Sounds (`audio/UiSounds.kt`) come from the active theme pack:
   focus, so it never pauses another app. Under a game's video snap it pauses, or plays at 20% with
   Music during video snaps ▸ Lower; it stops for a game and starts over afterwards. Master loops
   near −16 LUFS like the cues, a little quieter if the pack is meant as a backdrop.
+* **Several tracks** (`audio.bgmFiles`, `audio.bgmOrder`, 0.2.2.0): a list of audio files from the
+  pack root, at most 50, each at most 20 MB, played one after another with a 1.5 s crossfade.
+  `bgmOrder` is `SHUFFLE` (the default: no track repeats until all have played) or `IN_ORDER`.
+  `bgmFile` wins when both are set; only the pack's base reads the list (variants, overrides and
+  rules still name one loop or `none`). After a game the list goes on with the next track instead
+  of starting over. Export theme and Share as `.xtheme` copy every listed file.
+  `"audio": { "bgmFiles": ["music/day.ogg", "music/night.ogg"], "bgmOrder": "IN_ORDER" }`
+* The user's choice in **Settings ▸ Theme ▸ Theme music** (`display.bgm`, §7) wins over all of this.
 * **Boot video** (`audio.bootVideo`, alias `boot`): played full-screen on a cold start in place of
   the `opening` cue (§8, Boot intro). Unset, a `boot.mp4` at the pack root; `"none"` turns it
   off. `.mp4`, `.m4v`, `.webm`, `.mkv` or `.3gp`, at most 30 MB, from the pack root; it is cut at
@@ -253,6 +261,9 @@ from Settings ▸ Theme; editing the file by hand works too and is picked up on 
 | `themeVariant` | a variant id; empty = the pack's base look | Theme variant (§9) |
 | `surfaceStyle` | a built-in or pack surface id; empty = the pack's | Surface style (§4) |
 | `customWallpaper` | a `content://` URI or a file path; empty = the pack's wallpaper | Xross wallpaper (§8) |
+| `wallpaperRotation` | `{ "folder": path, "interval": OFF / MIN_1 / MIN_5 / MIN_15 / MIN_60 / FRONT }`; an empty folder turns it off; wins over `customWallpaper` | Xross wallpaper ▸ Pick a folder… (§8) |
+| `bgm` | an audio file's path, a folder's path, or `none`; empty = the pack's music | Theme music (§5) |
+| `bgmOrder` | `SHUFFLE` or `IN_ORDER`, for a folder | Theme music ▸ Order (§5) |
 | `components` | `statusBarLeft`, `statusBarRight`, `batteryMode`, `clockFormat`, …; `null` = the pack's | Settings ▸ Theme ▸ Components (§15) |
 | `effects` | `shaderPreset`, `backgroundFilter`, `uiFilter`, `focusFrameStyle`, `foregroundParticles`, `iconMask`, `bootIntro`, `launchCurtain`; empty = the pack's | Effect rows (§11) |
 | `quickProfile` | `NONE`, `OLED_TRUE_BLACK`, `Y2K_CYBER_PASTEL`, `MONOCHROME_EINK` | Quick profile (§10) |
@@ -281,6 +292,13 @@ the screen.
 instead of the pack's, saved as `display.customWallpaper` (a `content://` URI or a file path) and
 separate from the Android wallpaper; **Settings ▸ Theme ▸ Xross wallpaper** goes back to the
 theme's.
+
+**Xross wallpaper ▸ Pick a folder…** (0.2.2.0) lets the pictures of a folder (PNG, JPEG, WebP, in
+file-name order) take turns, every 1, 5, 15 or 60 minutes or each time Xross comes to the front
+(**Change**), saved as `display.wallpaperRotation`. A change never wakes a resting screen: when it
+is due it waits for the next button press or touch, or for Xross coming back to the front. The
+next picture is decoded and blurred for the frosted surfaces before it crossfades in over
+600 ms; a deleted picture is skipped. Reset to theme defaults clears it.
 
 ### Focus frames and app icons
 

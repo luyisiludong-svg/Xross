@@ -63,6 +63,21 @@ sealed interface XmbEvent {
         data object Close : MetadataEditor
     }
 
+    /** Settings ▸ Metadata ▸ Fix media…; handled by [LibraryBrowserController]. */
+    sealed interface Browser : XmbEvent {
+        data class RowTap(val index: Int) : Browser
+        data class SystemTap(val index: Int) : Browser
+        data class FilterTap(val index: Int) : Browser
+        data class Scrolled(val firstVisible: Int) : Browser
+        data object Close : Browser
+    }
+
+    /** Add emulator / Add system; handled by [WizardController]. */
+    sealed interface Wizard : XmbEvent {
+        data class RowTap(val index: Int) : Wizard
+        data object Close : Wizard
+    }
+
     /** The Layout panel; handled by [ThemeController]. */
     sealed interface Layout : XmbEvent {
         data class RowTap(val index: Int) : Layout

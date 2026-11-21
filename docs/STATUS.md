@@ -24,6 +24,29 @@ Legend: ✅ done and verified · ◐ partial · ❌ not started · 🧊 iced · 
 | Phase 3 — release candidate | ◐ RetroAchievements linking, User Card, achievement lists and unlock toasts done and live; hot-swap and live resolution change done; dual screen, docking, Portal and FTPS not started | [Phase 2 evidence §3.12–§3.14](phase-2/STATUS.md#s3.12) |
 | Phase 4 — v1.0 | ◐ app triage and performance work started | [Performance](status/PERFORMANCE.md) |
 
+**Verification (2026-11-21, rest of 0.2.2.0):** `./gradlew check assembleDebug assembleProfiling`
+passes; 1,124 unit tests (1,033 in `:app`, 4 opt-in live tests skipped; 91 in `:theme:engine`),
+0 failures. New suites: `CustomEmulatorsTest` (20), `WizardTest` (12), `ThemeMusicTest` (8),
+`LibraryBrowserTest` (10), `WallpaperRotationTest` (7), 4 more in `ThemeMusicPackTest` and 1 in
+`LookExporterTest`. On the API 37 emulator (`xross_test`): smoke 12/12, then a manual pass with stub
+apps: a hand-written `emulators.json` recipe and custom system launched with the right intent
+(VIEW, granted URI, typed extras); a typo entry and a spoofed package showed in Settings ▸
+Emulators; Add system… made a PC-98 system from an unclaimed folder and launched a game; Add
+emulator… Try it launched before saving, and Save spliced the entry into the hand-written file with
+every comment kept; PC Engine CD folder scanned; Missing art filter and Fix media… round trip;
+a theme-music folder played in order with crossfades and continued after a game; a wallpaper
+folder moved on when Xross came to the front. Other device suites not rerun.
+
+**Galaxy A55 (2026-11-21, by hand, no device suites):** the release build installed over
+0.2.1.0-beta (Room v5 → v6) with library, Recently Played and playtime intact (5 systems · 21
+titles before and after); the `mediaStatus` backfill filled every badge of the scraped PSP games in
+Fix media…; filters and the console strip work; Settings ▸ Emulators, both wizards (real app and
+folder lists, Cancel writes nothing) and the Theme music row show as expected; `settings.json`
+only gained the new keys and `systems.json` only the PC Engine CD names. Not done on the A55: any
+launch (its PPSSPP is real), picking music or wallpaper files, the media picker quota and
+thumbnail checks of § 2, frame timing and idle CPU. Config and data backed up to
+`/sdcard/Xross-a55-backup-20261121`.
+
 **Verification (2026-11-21, 0.2.2.0 § 2):** `./gradlew check assembleDebug assembleProfiling`
 passes; 1,061 unit tests (975 JVM/Robolectric in `:app`, 4 opt-in live tests skipped; 86 in
 `:theme:engine`), 0 failures. Device suites not rerun.
@@ -136,6 +159,9 @@ from §3.40; this dashboard only gets its summary row and index entry updated.
 | Asset cache | ✅ 🧪 | `Xross/media/<kind>/<system>/<rom stem>.<ext>` since 2026-11-11 ([§3.10](phase-2/STATUS.md#s3.10)); atomic writes; files accepted only if their bytes are PNG, JPEG, WebP or MP4; art of removed games pruned. The earlier private UUID cache (verified on the Galaxy A55) is moved over once |
 | Game Details screen | ✅ 📱 | Background art (or the playing snap), box art, logo, release facts, rating, playtime, scrollable description |
 | Manual match and override tool | ✅ 📱 | Options ▸ Metadata & Media: Edit title, Find match (results from every service), Scrape again, Reset metadata |
+| Custom emulators and systems | ✅ 🧪 | 0.2.2.0 § 1/§ 1b: `emulators.json` (ES-DE syntax), custom systems, Add emulator / Add system wizards, Try it; package + activity match against spoofed packages (`CustomEmulatorsTest`, `WizardTest`) |
+| Library browser, Missing art filter | ✅ 🧪 | 0.2.2.0 § 3/§ 4 (`LibraryBrowserTest`) |
+| Theme music choice and lists; wallpaper rotation | ✅ 🧪 | 0.2.2.0 § 5/§ 5b (`ThemeMusicTest`, `WallpaperRotationTest`) |
 | Metadata & Media editor | ✅ | 0.2.2.0 § 2: edit description, media picker over every offer, pins, `mediaStatus`; Room v6. Unit-tested (`MetadataEditorTest`, 18); not yet on the A55 |
 | Language priority list | ◐ | One region and one language setting |
 | RetroAchievements account and profile | ✅ 📱 | Settings ▸ Accounts link dialog, status bar avatar, User Card ([§3.12](phase-2/STATUS.md#s3.12)); since 2b.1 the avatar expands into a mini-HUD ([§3.15](phase-2b/2b.1/STATUS.md#s3.15)). Live on the emulator and the Galaxy A55 ([§3.14](phase-2/STATUS.md#s3.14)) |

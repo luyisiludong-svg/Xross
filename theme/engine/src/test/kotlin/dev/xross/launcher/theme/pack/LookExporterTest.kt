@@ -64,6 +64,25 @@ class LookExporterTest {
 
     // region Whole pack
 
+    /** 0.2.2.0 § 5: a pack's `audio.bgmFiles` travel with every export that keeps the base music. */
+    @Test fun aListOfTracksIsCopiedByEveryScope() {
+        val dir = File(themes, "playlist").apply { mkdirs() }
+        File(dir, "theme.json").writeText(
+            """{"schemaVersion": 2, "name": "Playlist", "audio": {"bgmFiles": ["music/a.ogg", "music/b.ogg"], "bgmOrder": "IN_ORDER"}}""",
+        )
+        for (n in listOf("music/a.ogg", "music/b.ogg")) File(dir, n).apply { parentFile!!.mkdirs() }.writeBytes(ByteArray(64))
+        val pack = loader.load("playlist")
+        assertTrue(pack.problems.toString(), pack.problems.isEmpty())
+        for (scope in listOf(ExportScope.WholePack, ExportScope.CurrentLook, ExportScope.Variant(""))) {
+            val e = LookExporter.export(pack, scope, "", date, loader.packFiles(pack.info))
+            checkShape(e)
+            assertTrue(scope.toString(), e.paths().containsAll(listOf("music/a.ogg", "music/b.ogg")))
+            val back = ThemeManifest.JSON.decodeFromJsonElement(ThemeManifest.serializer(), e.manifest)
+            assertEquals(listOf("music/a.ogg", "music/b.ogg"), back.audio?.bgmFiles)
+            assertEquals("IN_ORDER", back.audio?.bgmOrder)
+        }
+    }
+
     @Test fun wholePackIsTheSourceJsonWithItsIdentityAndEveryConventionFile() {
         val pack = stress()
         val all = loader.packFiles(pack.info)

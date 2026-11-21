@@ -13,6 +13,7 @@ import dev.xross.launcher.data.XrossSettings
 import dev.xross.launcher.input.ConfirmLayout
 import dev.xross.launcher.input.ControllerKey
 import dev.xross.launcher.launch.EmulatorRegistry
+import dev.xross.launcher.data.CustomSystems
 import dev.xross.launcher.launch.GameLauncher
 import dev.xross.launcher.model.EmulatorOption
 import dev.xross.launcher.model.Platform
@@ -102,6 +103,8 @@ data class MenuSnapshot(
     val accounts: AccountsSetup = AccountsSetup(),
     /** Theme packs found and the active one, for Settings ▸ Theme. */
     val themes: ThemeSetup = ThemeSetup(),
+    /** Systems whose folder shows only games missing art (Options ▸ Show ▸ Missing art, 0.2.2.0 § 4). */
+    val missingArtOnly: Set<String> = emptySet(),
 )
 
 /** What Settings ▸ Theme shows about theme packs. */
@@ -221,8 +224,7 @@ class MenuTree(private val s: MenuSnapshot) {
         key == FAVORITES -> s.games.filter { it.favorite }.map { gameNode(it, showPlatform = true) }
         key == ANDROID_GAMES -> androidGames.map { appNode(it, inGames = true) }
         key == ALL_GAMES -> platformFolders()
-        key.startsWith(PLATFORM_PREFIX) ->
-            gamesByPlatform[key.removePrefix(PLATFORM_PREFIX)].orEmpty().map { gameNode(it, showPlatform = false) }
+        key.startsWith(PLATFORM_PREFIX) -> platformGames(key.removePrefix(PLATFORM_PREFIX))
         key == LIBRARY -> librarySettings()
         key == DATS -> datSettings()
         key == METADATA -> metadataSettings(ScrapeProgress())
@@ -343,9 +345,49 @@ class MenuTree(private val s: MenuSnapshot) {
         if (count == 0) {
             null
         } else {
-            val node = folder(PLATFORM_PREFIX + platform.id, platform.name, GlyphKey.PLATFORM, countLabel(count))
+            val filtered = platform.id in s.missingArtOnly
+            val subtitle = if (filtered) {
+                val missing = gamesByPlatform[platform.id].orEmpty().count { MediaFilter.MISSING_ART.keeps(s.metadata[it.id]) }
+                "$missing of ${countLabel(count)} · missing art"
+            } else {
+                countLabel(count)
+            }
+            val node = folder(PLATFORM_PREFIX + platform.id, platform.name, GlyphKey.PLATFORM, subtitle)
+                .copy(menu = platformMenu(platform.id, count))
             if (s.settings.showSystemLogos) node.copy(icon = NodeIcon.System(platform.id, style = logoStyle)) else node
         }
+    }
+
+    /** A system's games, or only those missing art while its filter is on (§ 4). */
+    private fun platformGames(platformId: String): List<XmbNode> {
+        val games = gamesByPlatform[platformId].orEmpty()
+        if (platformId !in s.missingArtOnly) return games.map { gameNode(it, showPlatform = false) }
+        val shown = games.filter { MediaFilter.MISSING_ART.keeps(s.metadata[it.id]) }
+        if (shown.isEmpty()) {
+            return listOf(
+                XmbNode(
+                    "platform:allart:$platformId", "Every game has its art", "Box art, hero and logo · Options ▸ Show ▸ All games",
+                    NodeIcon.Glyph(GlyphKey.INFO), NodeAction.Run(Command.SetMissingArtFilter(platformId, false)),
+                ),
+            )
+        }
+        return shown.map { gameNode(it, showPlatform = false) }
+    }
+
+    /** Options on a system folder: what it shows, and fixing its media. */
+    private fun platformMenu(platformId: String, count: Int): List<MenuOption> {
+        val filtered = platformId in s.missingArtOnly
+        val missing = gamesByPlatform[platformId].orEmpty().count { MediaFilter.MISSING_ART.keeps(s.metadata[it.id]) }
+        return listOf(
+            MenuOption(
+                "Show", detail = if (filtered) "Missing art" else "All games",
+                submenu = listOf(
+                    MenuOption("All games", detail = countLabel(count), command = Command.SetMissingArtFilter(platformId, false), selected = !filtered),
+                    MenuOption("Missing art", detail = "$missing without box art, hero or logo", command = Command.SetMissingArtFilter(platformId, true), selected = filtered),
+                ),
+            ),
+            MenuOption("Fix media…", detail = "Every game's art, one system at a time", command = Command.OpenLibraryBrowser(platformId)),
+        )
     }
 
     private fun allGamesSummary(platforms: Int): String {
@@ -631,7 +673,7 @@ class MenuTree(private val s: MenuSnapshot) {
     private fun settingsRoot() = listOf(
         folder(LIBRARY, "Library", GlyphKey.STORAGE, "ROM folders and scanning"),
         folder(CONTROLS, "Controls", GlyphKey.CONTROLS, "Buttons, layout and stick"),
-        folder(EMULATORS, "Emulators", GlyphKey.EMULATORS, "${s.installedEmulators.size} detected"),
+        folder(EMULATORS, "Emulators", GlyphKey.EMULATORS, emulatorsSummary()),
         folder(DISPLAY, "Theme", GlyphKey.DISPLAY, "${s.themes.activeName} pack · ${themeColorLabel().substringBefore(" ·")} · wave background"),
         folder(SOUND, "Sound", GlyphKey.SOUND, if (s.settings.soundEffects) "Effects on" else "Effects off"),
         folder(MEDIA_SETTINGS, "Media", GlyphKey.MUSIC, "Slideshow, music and video playback"),
@@ -639,6 +681,16 @@ class MenuTree(private val s: MenuSnapshot) {
         folder(ACCOUNTS, "Accounts", GlyphKey.USERS, accountsSummary()),
         folder(SYSTEM, "System", GlyphKey.SYSTEM, "Version ${s.versionName}"),
     )
+
+    private fun emulatorsSummary(): String {
+        val bad = EmulatorRegistry.problems.size + CustomSystems.problems(s.settings).map { it.first }.distinct().size
+        return listOfNotNull(
+            "${s.installedEmulators.size} detected",
+            if (s.settings.customEmulators.isNotEmpty()) countOf(s.settings.customEmulators.size, "custom recipe") else null,
+            if (s.settings.customSystems.isNotEmpty()) countOf(s.settings.customSystems.size, "custom system") else null,
+            if (bad > 0) "⚠ ${countOf(bad, "problem")}" else null,
+        ).joinToString(" · ")
+    }
 
     private fun accountsSummary(): String {
         val a = s.accounts
@@ -855,6 +907,16 @@ class MenuTree(private val s: MenuSnapshot) {
             else -> scrapeSummary()
         }
         add(setting("meta:now", "Scrape library now", now, GlyphKey.DOWNLOAD, Command.ScrapeNow))
+        if (s.games.isNotEmpty()) {
+            val missing = s.games.count { MediaFilter.MISSING_ART.keeps(s.metadata[it.id]) }
+            add(
+                setting(
+                    "meta:fix", "Fix media…",
+                    "Every game's art, system by system · $missing missing box art, hero or logo",
+                    GlyphKey.PHOTO, Command.OpenLibraryBrowser(),
+                ),
+            )
+        }
         add(
             setting(
                 "meta:auto", "Scrape automatically",
@@ -977,24 +1039,95 @@ class MenuTree(private val s: MenuSnapshot) {
 
     private fun bindingCount(n: Int) = if (n == 1) "1 custom binding" else "$n custom bindings"
 
-    private fun emulatorSettings() = PlatformRegistry.all.map { platform ->
-        val option = GameLauncher.resolveOption(platform, s.settings.emulatorChoice[platform.id], s.installedEmulators)
-        val explicit = platform.emulators.firstOrNull { it.key == s.settings.emulatorChoice[platform.id] }
+    /**
+     * Settings ▸ Emulators: Add emulator… and Add system…, one row per system (Confirm cycles its
+     * emulator, Options lists them all), then the user's own entries from emulators.json and
+     * systems.json with what is wrong with them, so a typo shows on the device.
+     */
+    private fun emulatorSettings(): List<XmbNode> = buildList {
+        add(setting("emu:add", "Add emulator…", "Pick an installed app and how it gets the game", GlyphKey.ADD, Command.OpenEmulatorWizard()))
+        add(setting("emu:addsys", "Add system…", "A folder of games Xross doesn't know yet", GlyphKey.ADD, Command.OpenSystemWizard()))
+        for (platform in PlatformRegistry.all) add(platformEmulatorRow(platform))
+        for ((id, e) in s.settings.customEmulators) add(customEmulatorRow(id, e))
+        val systemProblems = CustomSystems.problems(s.settings).groupBy({ it.first }, { it.second })
+        for ((id, c) in s.settings.customSystems) {
+            val problems = systemProblems[id].orEmpty()
+            add(
+                XmbNode(
+                    id = "emu:customsys:$id",
+                    title = c.name,
+                    subtitle = problems.firstOrNull()?.let { "⚠ $it" }
+                        ?: ((if (c.fromDevice) "Your system" else "From systems.json") + " · " + c.folders.joinToString() + " · " + c.extensions.joinToString()),
+                    icon = NodeIcon.Glyph(if (problems.isEmpty()) GlyphKey.PLATFORM else GlyphKey.INFO),
+                    action = if (c.fromDevice) NodeAction.Run(Command.EditCustomSystem(id)) else NodeAction.None,
+                    menu = buildList {
+                        if (c.fromDevice) add(MenuOption("Edit…", command = Command.EditCustomSystem(id)))
+                        else add(MenuOption("Written by hand", detail = "Edit systems.json to change it"))
+                        for (p in problems) add(MenuOption(p))
+                    },
+                ),
+            )
+        }
+    }
+
+    private fun platformEmulatorRow(platform: dev.xross.launcher.model.Platform): XmbNode {
+        if (platform.emulators.isEmpty()) {
+            return XmbNode(
+                "emu:${platform.id}", platform.name, "No emulator · opens with any app that takes the file",
+                NodeIcon.Glyph(GlyphKey.EMULATORS),
+                action = NodeAction.Run(Command.OpenEmulatorWizard(platform.id)),
+            )
+        }
+        val choice = s.settings.emulatorChoice[platform.id]
+        val option = GameLauncher.resolveOption(platform, choice, s.installedEmulators)
+        val explicit = platform.emulators.firstOrNull { it.key == choice }
         val shown = option ?: explicit ?: platform.emulators.first()
         val def = EmulatorRegistry.byId(shown.emulatorId)
-        val name = def?.name ?: shown.emulatorId
-        val label = name + (shown.core?.let { " · $it" } ?: "")
         val status = when {
             option == null -> " (not installed)"
             def?.needsStorageAccess == true -> " · needs its own storage access"
             else -> ""
         }
-        setting(
-            "emu:${platform.id}",
-            platform.name,
-            label + status,
-            GlyphKey.EMULATORS,
-            Command.CycleEmulator(platform.id),
+        return XmbNode(
+            id = "emu:${platform.id}",
+            title = platform.name,
+            subtitle = emulatorLabel(shown) + status,
+            icon = NodeIcon.Glyph(GlyphKey.EMULATORS),
+            action = NodeAction.Run(Command.CycleEmulator(platform.id)),
+            menu = platform.emulators.map { o ->
+                MenuOption(
+                    emulatorLabel(o),
+                    detail = if (o.emulatorId in s.installedEmulators) null else "Not installed",
+                    command = Command.SetEmulatorChoice(platform.id, o.key),
+                    selected = o == shown,
+                )
+            } + MenuOption("Add emulator for ${platform.shortName}…", command = Command.OpenEmulatorWizard(platform.id)),
+        )
+    }
+
+    private fun customEmulatorRow(id: String, e: dev.xross.launcher.config.CustomEmulator): XmbNode {
+        val problems = EmulatorRegistry.problems[id].orEmpty()
+        val loaded = EmulatorRegistry.byId(id)?.custom == true
+        val systems = e.systems.mapNotNull { PlatformRegistry.byId(it)?.shortName ?: it }.joinToString()
+        val origin = if (e.fromDevice) "Your emulator" else "From emulators.json"
+        val subtitle = when {
+            !loaded -> "⚠ Not loaded: " + problems.firstOrNull().orEmpty()
+            problems.isNotEmpty() -> "⚠ " + problems.first()
+            id in s.installedEmulators -> "$origin · $systems"
+            else -> "$origin · $systems · not installed"
+        }
+        return XmbNode(
+            id = "emu:custom:$id",
+            title = e.name.ifBlank { id },
+            subtitle = subtitle,
+            icon = NodeIcon.Glyph(if (loaded && problems.isEmpty()) GlyphKey.EMULATORS else GlyphKey.INFO),
+            action = if (e.fromDevice) NodeAction.Run(Command.EditCustomEmulator(id)) else NodeAction.None,
+            menu = buildList {
+                if (e.fromDevice) add(MenuOption("Edit…", command = Command.EditCustomEmulator(id)))
+                else add(MenuOption("Written by hand", detail = "Edit emulators.json to change it"))
+                add(MenuOption("Id", detail = id))
+                for (p in problems) add(MenuOption(p))
+            },
         )
     }
 
@@ -1073,6 +1206,7 @@ class MenuTree(private val s: MenuSnapshot) {
             GlyphKey.DISPLAY, Command.OpenWaveSettings,
         ),
         wallpaperRow(),
+        themeMusicRow(),
         effectRow(EffectSlot.SHADER),
         effectRow(EffectSlot.BACKGROUND_FILTER),
     )
@@ -1351,8 +1485,11 @@ class MenuTree(private val s: MenuSnapshot) {
      * custom one goes back to the theme's; otherwise it says where to set one.
      */
     private fun wallpaperRow(): XmbNode {
-        val custom = s.settings.customWallpaper.isNotBlank()
+        val rotating = s.settings.wallpaperFolder.isNotBlank()
+        val interval = RotationInterval.parse(s.settings.wallpaperInterval)
+        val custom = s.settings.customWallpaper.isNotBlank() || rotating
         val summary = when {
+            rotating -> "Pictures from ${java.io.File(s.settings.wallpaperFolder).name}/ · ${interval.label.lowercase()} · Confirm to use the theme's"
             custom -> "A picture you chose (${s.settings.wallpaperFit.label}) · Confirm to use the theme's"
             s.themes.packWallpaper -> "From ${s.themes.activeName} · Confirm to pick your own"
             else -> "None (the background shader shows) · Confirm to pick one"
@@ -1363,10 +1500,49 @@ class MenuTree(private val s: MenuSnapshot) {
             "disp:wallpaper", "Xross wallpaper", summary, NodeIcon.Glyph(GlyphKey.PHOTO), action,
             menu = listOf(
                 MenuOption("Pick custom…", detail = "Any picture, through the file picker", command = Command.PickXrossWallpaper),
+                MenuOption(
+                    "Pick a folder…",
+                    detail = if (rotating) java.io.File(s.settings.wallpaperFolder).name + "/ · its pictures take turns" else "Its pictures take turns",
+                    command = Command.PickWallpaperFolder,
+                    selected = rotating,
+                ),
+                MenuOption(
+                    "Change", detail = interval.label,
+                    submenu = RotationInterval.entries.map { i ->
+                        MenuOption(i.label, command = Command.SetWallpaperInterval(i), selected = i == interval)
+                    },
+                ),
                 MediaMenus.wallpaperFitMenu(s.settings.wallpaperFit),
                 MenuOption(theirs, command = Command.ResetXrossWallpaper, selected = !custom),
             ),
         )
+    }
+
+    /**
+     * Theme music (0.2.2.0 § 5), built like Xross wallpaper: the pack's, a file, a folder played
+     * as a list, or off. Confirm cycles nothing: it opens the choices.
+     */
+    private fun themeMusicRow(): XmbNode {
+        val choice = s.settings.themeMusic
+        val isFolder = choice.isNotBlank() && !choice.equals(dev.xross.launcher.data.ThemeMusic.OFF, ignoreCase = true) && java.io.File(choice).isDirectory
+        val shuffle = s.settings.themeMusicOrder == dev.xross.launcher.data.ThemeMusic.SHUFFLE
+        val summary = dev.xross.launcher.data.ThemeMusic.describe(choice, s.settings.themeMusicOrder, s.themes.activeName, s.themes.packMusic)
+        val menu = buildList {
+            add(MenuOption("Theme pack", detail = if (s.themes.packMusic) "From ${s.themes.activeName}" else "${s.themes.activeName} has none", command = Command.SetThemeMusic(""), selected = choice.isBlank()))
+            add(MenuOption("Pick a file…", detail = "One track, looped", command = Command.PickThemeMusicFile))
+            add(MenuOption("Pick a folder…", detail = "Up to 50 tracks, played as a list", command = Command.PickThemeMusicFolder, selected = isFolder))
+            add(MenuOption("Off", command = Command.SetThemeMusic(dev.xross.launcher.data.ThemeMusic.OFF), selected = choice.equals(dev.xross.launcher.data.ThemeMusic.OFF, ignoreCase = true)))
+            add(
+                MenuOption(
+                    "Order", detail = if (shuffle) "Shuffle" else "In order",
+                    submenu = listOf(
+                        MenuOption("Shuffle", detail = "No track repeats until all have played", command = Command.SetThemeMusicOrder(dev.xross.launcher.data.ThemeMusic.SHUFFLE), selected = shuffle),
+                        MenuOption("In order", detail = "By file name", command = Command.SetThemeMusicOrder(dev.xross.launcher.data.ThemeMusic.IN_ORDER), selected = !shuffle),
+                    ),
+                ),
+            )
+        }
+        return XmbNode("disp:music", "Theme music", summary, NodeIcon.Glyph(GlyphKey.MUSIC), NodeAction.Run(Command.OpenThemeMusicMenu), menu = menu)
     }
 
     /** Theme variant, only while the active pack has variants; its Options list them all. */

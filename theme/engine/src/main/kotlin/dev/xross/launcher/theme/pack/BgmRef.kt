@@ -14,9 +14,39 @@ import java.util.Locale
  * that names one wins, as for the wallpaper, so a category override can give Games its own loop.
  */
 @Immutable
-data class BgmRef(val path: String?) {
+data class BgmRef(
+    val path: String?,
+    /** The pack's `audio.bgmFiles` (0.2.2.0 § 5): more tracks after [path], played as a list. */
+    val more: List<String> = emptyList(),
+    /** For a list: shuffle (default) or play in the written order. */
+    val shuffle: Boolean = true,
+) {
+    /** Every file this names, [path] first. */
+    val paths: List<String> get() = listOfNotNull(path) + more
+
     companion object {
         val NONE = BgmRef(null)
+
+        /** A list (a pack's `bgmFiles`, or a folder) plays at most this many tracks. */
+        const val MAX_TRACKS = 50
+
+        /**
+         * The pack's `audio.bgmFiles` and `bgmOrder`: null when the list is unset or empty, else a
+         * list ref. Bad paths are reported and left out.
+         */
+        fun ofList(where: String, files: List<String>?, order: String?, problems: MutableList<String>): BgmRef? {
+            if (files.isNullOrEmpty()) return null
+            val paths = files.mapNotNull { of(where, it, problems)?.path }.distinct()
+            if (files.size > MAX_TRACKS) problems += "$where.audio.bgmFiles: only the first $MAX_TRACKS tracks play"
+            val kept = paths.take(MAX_TRACKS)
+            if (kept.isEmpty()) return null
+            val shuffle = when (order?.trim()?.uppercase(Locale.ROOT)) {
+                null, "", "SHUFFLE" -> true
+                "IN_ORDER", "INORDER", "ORDER" -> false
+                else -> { problems += "$where.audio.bgmOrder: $order isn't SHUFFLE or IN_ORDER"; true }
+            }
+            return BgmRef(kept.first(), kept.drop(1), shuffle)
+        }
 
         /** Audio types a loop may be (what ExoPlayer decodes without extensions). */
         val TYPES = listOf("ogg", "mp3", "m4a", "aac", "opus", "flac", "wav")
@@ -59,8 +89,24 @@ data class BgmRef(val path: String?) {
  * `bgm.ogg` restarts it).
  */
 @Immutable
-data class BgmTrack(val file: File, val key: String = "${file.path}:${file.lastModified()}:${file.length()}") {
-    val name: String get() = file.name
+data class BgmTrack(
+    val file: File,
+    val key: String = "${file.path}:${file.lastModified()}:${file.length()}",
+    /** Several files play as a list ([isList]); one file loops gaplessly. [file] is the first. */
+    val files: List<File> = listOf(file),
+    val shuffle: Boolean = true,
+) {
+    val name: String get() = if (isList) "${file.parentFile?.name ?: file.name} (${files.size} tracks)" else file.name
+    val isList: Boolean get() = files.size > 1
+
+    companion object {
+        /** A list of [files] (a single one loops), keyed by all of them. */
+        fun of(files: List<File>, shuffle: Boolean): BgmTrack? {
+            if (files.isEmpty()) return null
+            val key = files.joinToString("|") { "${it.path}:${it.lastModified()}:${it.length()}" } + ":" + shuffle
+            return BgmTrack(files.first(), key, files, shuffle)
+        }
+    }
 }
 
 /**
@@ -69,7 +115,7 @@ data class BgmTrack(val file: File, val key: String = "${file.path}:${file.lastM
  */
 internal fun bgmFiles(dir: File?, refs: Collection<BgmRef>, problems: MutableList<String>): Map<String, File> {
     val out = LinkedHashMap<String, File>()
-    for (path in refs.mapNotNull { it.path }.distinct()) {
+    for (path in refs.flatMap { it.paths }.distinct()) {
         if (dir == null) {
             problems += "Theme music $path: only folder packs can bring theme music"
             continue

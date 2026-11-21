@@ -117,6 +117,9 @@ class ThemeRoundTripTest {
         adaptiveGamePalette = false,
         circadianCurve = true,
         batteryTint = true,
+        // Not exported (the user's files stay on the device), but part of the user layer.
+        themeMusic = "none",
+        wallpaperFolder = "/storage/emulated/0/Pictures/Walls",
     )
 
     private fun photo(): File = File(tmp.root, "DCIM/photo.png").apply {

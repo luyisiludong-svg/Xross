@@ -35,6 +35,9 @@ interface GameLauncher {
     /** Picks the emulator for [game] ([choiceKey]: the platform's chosen [EmulatorOption.key]). */
     fun plan(game: GameEntity, choiceKey: String?): LaunchPlan
 
+    /** Plans [game] with one recipe, registered or not (Add emulator ▸ Try it). */
+    fun planWith(game: GameEntity, def: EmulatorDef, core: String? = null): LaunchPlan = LaunchPlan.Failed("Can't try a recipe here")
+
     /** Starts a plan this launcher made, from the visible launcher screen. */
     fun start(plan: LaunchPlan.Ready, host: Activity): LaunchResult
 

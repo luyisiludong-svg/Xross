@@ -150,6 +150,12 @@ sealed interface TextPrompt {
         override val hint = "Hex color, like #FFB5C5"
     }
 
+    /** A text step of Add emulator / Add system (0.2.2.0 § 1b). */
+    data class WizardText(val field: WizardField, override val initial: String) : TextPrompt {
+        override val title = field.title
+        override val hint = field.hint
+    }
+
     data class MatchQuery(val gameId: Long, val platformId: String, override val initial: String) : TextPrompt {
         override val title = "Find a match"
         override val hint = "Game name"

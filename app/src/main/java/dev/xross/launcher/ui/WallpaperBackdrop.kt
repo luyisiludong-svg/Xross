@@ -128,6 +128,19 @@ internal fun WallpaperBackdrop(
         }
     }
     val target = wallpaper.takeIf { shown }
+    // One picture replacing another (a rotating folder, § 5b, or a new pick): the old one stays
+    // underneath while the new one fades in over it, already decoded and blurred.
+    var outgoing by remember { mutableStateOf<Wallpaper?>(null) }
+    val cross = remember { androidx.compose.animation.core.Animatable(1f) }
+    val before = visible
+    if (target != null && before != null && before.key != target.key && outgoing == null) outgoing = before
+    LaunchedEffect(target?.key) {
+        if (outgoing != null && target != null) {
+            cross.snapTo(0f)
+            cross.animateTo(1f, tween(CROSSFADE_MS))
+        }
+        outgoing = null
+    }
     // Keep the last image while it fades out.
     target?.let { visible = it }
     val alpha by animateFloatAsState(
@@ -145,7 +158,12 @@ internal fun WallpaperBackdrop(
     if (alpha <= 0f) return
     val wFit = fitOf(w)
     FrostLayerEffect(FrostSlot.WALLPAPER, "wallpaper:${w.key}", w.image, viewport, coversScreen(w), BackdropScrim.WALLPAPER, wFit) { alpha }
-    Box(Modifier.fillMaxSize().graphicsLayer { this.alpha = alpha }) {
+    outgoing?.takeIf { it.key != w.key }?.let { old ->
+        Box(Modifier.fillMaxSize().graphicsLayer { this.alpha = alpha }) {
+            Image(old.image, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+        }
+    }
+    Box(Modifier.fillMaxSize().graphicsLayer { this.alpha = alpha * (if (outgoing != null) cross.value else 1f) }) {
         if (wFit == WallpaperFit.FILL) {
             Image(w.image, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
         } else {
@@ -163,6 +181,9 @@ internal fun WallpaperBackdrop(
         Box(Modifier.fillMaxSize().drawBehind { BackdropScrim.WALLPAPER.draw(this, size, 1f) })
     }
 }
+
+/** One picture into the next (a rotating folder, 0.2.2.0 § 5b). */
+private const val CROSSFADE_MS = 600
 
 /** Wallpaper fade-in, on a theme switch or Set as Xross wallpaper. */
 private const val WALLPAPER_FADE_MS = 500

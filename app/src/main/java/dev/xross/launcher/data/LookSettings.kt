@@ -20,6 +20,8 @@ fun UserLook.Companion.of(s: XrossSettings): UserLook = UserLook(
     adaptiveGamePalette = s.adaptiveGamePalette,
     circadianCurve = s.circadianCurve,
     batteryTint = s.batteryTint,
+    themeMusic = s.themeMusic,
+    wallpaperFolder = s.wallpaperFolder,
 )
 
 /** [s] with these picks written back (the rest of [s] as it is). */
@@ -32,6 +34,8 @@ fun UserLook.writeTo(s: XrossSettings): XrossSettings = s.copy(
     adaptiveGamePalette = adaptiveGamePalette,
     circadianCurve = circadianCurve,
     batteryTint = batteryTint,
+    themeMusic = themeMusic,
+    wallpaperFolder = wallpaperFolder,
 )
 
 /** The wave values of Settings ▸ Theme ▸ Wave settings in [s]. */

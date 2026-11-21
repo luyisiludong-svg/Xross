@@ -331,7 +331,7 @@ class PostProcessSettingsTest {
         assertEquals(fx, ids.filter { it.startsWith("disp:fx:") })
         // Background holds what is drawn behind the menu; Effects what is drawn over it.
         assertEquals(
-            listOf("disp:wave", "disp:wavesettings", "disp:wallpaper", "disp:fx:shader", "disp:fx:background_filter"),
+            listOf("disp:wave", "disp:wavesettings", "disp:wallpaper", "disp:music", "disp:fx:shader", "disp:fx:background_filter"),
             tree.list(MenuTree.DISPLAY_BACKGROUND).map { it.id },
         )
         assertEquals(
@@ -350,7 +350,7 @@ class PostProcessSettingsTest {
         assertEquals("Clears 1 effect, wallpaper", byId["disp:reset"]!!.subtitle)
         val wall = byId["disp:wallpaper"]!!
         assertEquals(NodeAction.Run(Command.ResetXrossWallpaper), wall.action)
-        assertEquals(listOf("Pick custom…", "Wallpaper fit", "Reset to theme (none)"), wall.menu.map { it.label })
+        assertEquals(listOf("Pick custom…", "Pick a folder…", "Change", "Wallpaper fit", "Reset to theme (none)"), wall.menu.map { it.label })
         val clean = MenuTree(MenuSnapshot(themes = setup)).themeRows().associateBy { it.id }
         assertEquals("Nothing overrides Sakura", clean["disp:reset"]!!.subtitle)
         assertEquals(NodeAction.Run(Command.PickXrossWallpaper), clean["disp:wallpaper"]!!.action)

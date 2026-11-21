@@ -39,6 +39,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -87,6 +88,16 @@ sealed interface UiEffect {
     data class PickMediaFile(val video: Boolean) : UiEffect
     /** Pick an image for the Xross wallpaper; answers [XmbViewModel.onWallpaperPicked]. */
     data object PickWallpaperImage : UiEffect
+    /** Xross wallpaper ▸ Pick a folder…; answers [XmbViewModel.onWallpaperFolderPicked]. */
+    data object PickWallpaperFolder : UiEffect
+    /** Theme music ▸ Pick a file…; answers [XmbViewModel.onThemeMusicFilePicked]. */
+    data object PickThemeMusicFile : UiEffect
+    /** Theme music ▸ Pick a folder…; answers [XmbViewModel.onThemeMusicFolderPicked]. */
+    data object PickThemeMusicFolder : UiEffect
+    /** Add system ▸ Pick another folder…; answers [XmbViewModel.onWizardFolderPicked]. */
+    data object PickWizardFolder : UiEffect
+    /** Add system ▸ Console logo; answers [XmbViewModel.onWizardLogoPicked]. */
+    data object PickWizardLogo : UiEffect
 
     /** Start a game; the activity hands the plan to [dev.xross.launcher.launch.GameLauncher.start]. */
     data class Launch(val plan: LaunchPlan.Ready) : UiEffect
@@ -139,6 +150,10 @@ data class XmbUiState(
     val details: GameDetailsState? = null,
     /** Options ▸ Metadata & Media while it is open. */
     val metadataEditor: MetadataEditorState? = null,
+    /** Settings ▸ Emulators ▸ Add emulator / Add system while one is open. */
+    val wizard: WizardView? = null,
+    /** Settings ▸ Metadata ▸ Fix media… while it is open (0.2.2.0 § 3). */
+    val browser: LibraryBrowserState? = null,
     /** Reading storage: a library scan or background fingerprinting is running. */
     val busy: Boolean = false,
     val showButtonHints: Boolean = true,
@@ -311,7 +326,7 @@ class XmbViewModel(
     )
 
     /** Options ▸ Metadata & Media: the editor and its media picker. */
-    private val metaEditor = MetadataEditorController(
+    private val metaEditor: MetadataEditorController = MetadataEditorController(
         scope = viewModelScope,
         db = container.database,
         media = container.mediaEditor,
@@ -326,14 +341,92 @@ class XmbViewModel(
             override fun refuse() = this@XmbViewModel.refuse()
             override fun emit(effect: UiEffect) = this@XmbViewModel.emit(effect)
             override fun run(command: Command) = this@XmbViewModel.run(command)
-            override fun siblings() = detailsSiblings()
-            override fun follow(gameId: Long) = followList(gameId)
+            override fun siblings() = if (browser.isOpen) browser.state.value?.ids.orEmpty() else detailsSiblings()
+            override fun follow(gameId: Long) = if (browser.isOpen) browser.follow(gameId) else followList(gameId)
             override fun reopenOptions(gameId: Long) {
+                // Opened from the library browser: Back returns there, on the same game.
+                if (browser.isOpen) return browser.follow(gameId)
                 (typing.state.value.search?.results ?: current().items)
                     .firstOrNull { (it.action as? NodeAction.LaunchGame)?.gameId == gameId }?.let(::openOptions)
             }
         },
     )
+
+    /** Settings ▸ Metadata ▸ Fix media… (0.2.2.0 § 3). */
+    private val browser: LibraryBrowserController = LibraryBrowserController(
+        scope = viewModelScope,
+        games = container.games.games,
+        metadata = container.database.metadata().observeAll(),
+        sounds = container.sounds,
+        host = object : LibraryBrowserController.Host {
+            override fun openEditor(gameId: Long) = metaEditor.open(gameId)
+        },
+    )
+
+    /** Settings ▸ Emulators ▸ Add emulator… / Add system… (0.2.2.0 § 1b). */
+    private val wizards = WizardController(
+        scope = viewModelScope,
+        settings = container.settings,
+        sounds = container.sounds,
+        env = WizardEnv(),
+        host = object : WizardController.Host {
+            override fun toast(message: String) = this@XmbViewModel.toast(message)
+            override fun fail(message: String) = this@XmbViewModel.fail(message)
+            override fun emit(effect: UiEffect) = this@XmbViewModel.emit(effect)
+            override fun rescan() = library.refreshFoldersAndRescan()
+        },
+    )
+
+    /** What the wizards read from the device. */
+    private inner class WizardEnv : WizardController.Env {
+        private val pm get() = context.packageManager
+
+        override fun apps(): List<AppChoice> {
+            val known = dev.xross.launcher.launch.EmulatorRegistry.builtIn.flatMapTo(HashSet()) { it.packages }
+            return EmulatorWizard.sortApps(
+                container.apps.apps.value.filter { it.packageName != context.packageName }
+                    .map { AppChoice(it.packageName, it.label, known = it.packageName in known) },
+            )
+        }
+
+        override fun activities(packageName: String): List<ActivityChoice> {
+            val launcher = pm.getLaunchIntentForPackage(packageName)?.component?.className
+            val viewers = runCatching {
+                val probe = Intent(Intent.ACTION_VIEW).setPackage(packageName)
+                    .setDataAndType(Uri.parse("content://${context.packageName}.files/rom"), "*/*")
+                pm.queryIntentActivities(probe, 0).filter { it.activityInfo.exported }.map { it.activityInfo.name }
+            }.getOrDefault(emptyList())
+            val names = (listOfNotNull(launcher) + viewers).distinct()
+            return names.map { ActivityChoice(it, launcher = it == launcher, acceptsView = it in viewers) }
+        }
+
+        override fun romRoots(): List<File> = library.state.value.folders.map { File(it.path) }
+        override fun survey(path: String, underRoot: Boolean) = dev.xross.launcher.storage.FolderSurvey.survey(File(path), underRoot)
+        override fun unclaimed() = dev.xross.launcher.storage.FolderSurvey.unclaimed(romRoots())
+        override fun treeToPath(uri: Uri): String? = container.volumes.treeUriToPath(uri)
+
+        override fun copyLogo(uri: Uri, systemId: String): String? {
+            val dir = File(container.environment.current.config, "logos").apply { mkdirs() }
+            val target = File(dir, "$systemId.png")
+            val bitmap = runCatching { context.contentResolver.openInputStream(uri)?.use { android.graphics.BitmapFactory.decodeStream(it) } }.getOrNull()
+                ?: return null
+            return runCatching {
+                target.outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+                target.absolutePath
+            }.getOrNull()
+        }
+
+        override suspend fun firstGame(platformId: String): dev.xross.launcher.data.GameEntity? = withContext(Dispatchers.IO) {
+            container.database.games().getAll().filter { it.platformId == platformId }.minByOrNull { it.title.lowercase() }
+        }
+
+        override fun planWith(game: dev.xross.launcher.data.GameEntity, entryId: String, entry: dev.xross.launcher.config.CustomEmulator): LaunchPlan {
+            val (def, problems) = dev.xross.launcher.launch.EmulatorRegistry.customDef(entryId, entry, builtInIds = emptySet())
+            return if (def == null) LaunchPlan.Failed(problems.firstOrNull() ?: "This recipe can't load") else container.launcher.planWith(game, def)
+        }
+
+        override fun installedEmulators(): Set<String> = env.value.installedEmulators
+    }
 
     /** Search and name entry, the two gamepad keyboards (Assessment §7.1). */
     private val typing = SearchController(
@@ -510,16 +603,27 @@ class XmbViewModel(
         val profile: ProfileState,
         val ra: RaState,
         val metadataEditor: MetadataEditorState?,
+        val wizard: OpenWizard?,
+        val browser: LibraryBrowserState?,
     )
 
     private val settled = combine(
         combine(
-            combine(transient, transitions.state, metaEditor.state, ::Triple), theme.layoutEditor, editors.state, typing.state, library.state,
-        ) { (tr, tn, me), le, ed, ty, lib -> Panels(tr, tn, le, ed, ty, lib, me) },
+            combine(transient, transitions.state, metaEditor.state, wizards.state, browser.state) { tr, tn, me, wz, br -> Quad(tr, tn, me, wz, br) },
+            theme.layoutEditor, editors.state, typing.state, library.state,
+        ) { q, le, ed, ty, lib -> Panels(q.transient, q.transitions, le, ed, ty, lib, q.metadataEditor, q.wizard, q.browser) },
         settingsStore.settings, media.overlay, container.profiles.state, ra.state,
     ) { p, st, ov, pr, r ->
-        Settled(p.transient, p.transitions, p.layoutEditor, p.editors, p.typing, p.library, st, ov, pr, r, p.metadataEditor)
+        Settled(p.transient, p.transitions, p.layoutEditor, p.editors, p.typing, p.library, st, ov, pr, r, p.metadataEditor, p.wizard, p.browser)
     }
+
+    private data class Quad(
+        val transient: Transient,
+        val transitions: TransitionState,
+        val metadataEditor: MetadataEditorState?,
+        val wizard: OpenWizard?,
+        val browser: LibraryBrowserState?,
+    )
 
     /** The panels' own flows, combined first so [settled] stays within five inputs. */
     private data class Panels(
@@ -530,6 +634,8 @@ class XmbViewModel(
         val typing: TypingState,
         val library: LibraryStatus,
         val metadataEditor: MetadataEditorState?,
+        val wizard: OpenWizard?,
+        val browser: LibraryBrowserState?,
     )
 
     /** The components' `glyphOverride` (2b.7b): which labels the hints draw. */
@@ -567,6 +673,8 @@ class XmbViewModel(
             info = tr.info,
             details = tr.details,
             metadataEditor = sd.metadataEditor,
+            wizard = sd.wizard?.view,
+            browser = sd.browser,
             busy = sd.library.scanning || sd.library.datWork || tr.themeWork || lv.fingerprints.current != null || lv.scrape.running,
             showButtonHints = settings.showButtonHints,
             profile = sd.profile,
@@ -679,6 +787,17 @@ class XmbViewModel(
             is XmbEvent.Typing -> typing.onEvent(event)
             is XmbEvent.Editor -> editors.onEvent(event)
             is XmbEvent.MetadataEditor -> metaEditor.onEvent(event)
+            is XmbEvent.Browser -> when (event) {
+                is XmbEvent.Browser.RowTap -> browser.onTapRow(event.index)
+                is XmbEvent.Browser.SystemTap -> browser.onTapSystem(event.index)
+                is XmbEvent.Browser.FilterTap -> browser.onTapFilter(event.index)
+                is XmbEvent.Browser.Scrolled -> browser.rememberScroll(event.firstVisible)
+                XmbEvent.Browser.Close -> browser.close()
+            }
+            is XmbEvent.Wizard -> when (event) {
+                is XmbEvent.Wizard.RowTap -> wizards.onTap(event.index)
+                XmbEvent.Wizard.Close -> wizards.close()
+            }
             is XmbEvent.Layout -> theme.onEvent(event)
             is XmbEvent.Ra -> ra.onEvent(event)
             is XmbEvent.Boot -> transitions.onEvent(event)
@@ -715,7 +834,9 @@ class XmbViewModel(
         if (theme.onLayoutAction(action)) return
         if (editors.onAvatarAction(action)) return
         if (ra.onScreenAction(action)) return
+        if (wizards.onAction(action)) return
         if (metaEditor.onAction(action)) return
+        if (browser.onAction(action)) return
         transient.value.info?.let { return infoAction(it, action) }
         transient.value.details?.let { return detailsAction(it, action) }
         // Before the media screens: the photo viewer's Options menu opens over it.
@@ -805,6 +926,57 @@ class XmbViewModel(
     // endregion
 
     // region Theme packs and Wave settings
+
+    /**
+     * Theme music ▸ Pick a file…: a file on shared storage is used where it is (Xross has All
+     * files access); one only reachable through its provider is copied to `Xross/media/bgm/`.
+     */
+    fun onThemeMusicFilePicked(uri: Uri?) {
+        if (uri == null) return
+        viewModelScope.launch {
+            val path = withContext(Dispatchers.IO) {
+                container.volumes.documentUriToPath(uri)?.takeIf { File(it).canRead() } ?: copyThemeMusic(uri)
+            } ?: return@launch fail("Couldn't read that file")
+            val choice = withContext(Dispatchers.IO) { dev.xross.launcher.data.ThemeMusic.resolve(path, settingsStore.current.themeMusicOrder) }
+            if ((choice as? dev.xross.launcher.data.ThemeMusic.Choice.Own)?.track == null) {
+                return@launch fail("That isn't an audio file Xross can play (up to ${dev.xross.launcher.theme.pack.BgmRef.MAX_BYTES shr 20} MB)")
+            }
+            settingsStore.update { it.copy(themeMusic = path) }
+            toast("Theme music: ${File(path).name}")
+        }
+    }
+
+    private fun copyThemeMusic(uri: Uri): String? = runCatching {
+        val name = (uri.lastPathSegment ?: "theme-music").substringAfterLast('/').substringAfterLast(':')
+            .takeIf { n -> dev.xross.launcher.data.ThemeMusic.isAudio(File(n)) } ?: "theme-music.ogg"
+        val dir = File(container.environment.current.media, "bgm").apply { mkdirs() }
+        val target = File(dir, name)
+        context.contentResolver.openInputStream(uri)?.use { input ->
+            target.outputStream().use { out ->
+                val copied = input.copyTo(out)
+                if (copied > dev.xross.launcher.theme.pack.BgmRef.MAX_BYTES) error("too large")
+            }
+        } ?: return null
+        target.absolutePath
+    }.getOrNull()
+
+    /** Theme music ▸ Pick a folder…: its audio files play as a list. */
+    fun onThemeMusicFolderPicked(uri: Uri?) {
+        if (uri == null) return
+        val path = container.volumes.treeUriToPath(uri) ?: return fail("Xross can't read that folder directly")
+        viewModelScope.launch {
+            val choice = withContext(Dispatchers.IO) { dev.xross.launcher.data.ThemeMusic.resolve(path, settingsStore.current.themeMusicOrder) }
+            val track = (choice as? dev.xross.launcher.data.ThemeMusic.Choice.Own)?.track ?: return@launch fail("No audio files Xross can play in ${File(path).name}")
+            settingsStore.update { it.copy(themeMusic = path) }
+            toast("Theme music: ${File(path).name}/ · ${track.files.size} tracks" + (choice.skipped.takeIf { it > 0 }?.let { " ($it skipped)" } ?: ""))
+        }
+    }
+
+    /** Add system ▸ Pick another folder…: see [WizardController.onFolderPicked]. */
+    fun onWizardFolderPicked(uri: Uri?) = wizards.onFolderPicked(uri)
+
+    /** Add system ▸ Console logo: see [WizardController.onLogoPicked]. */
+    fun onWizardLogoPicked(uri: Uri?) = wizards.onLogoPicked(uri)
 
     /** Metadata & Media ▸ a slot ▸ Use a file…: see [MetadataEditorController.onFilePicked]. */
     fun onMediaFilePicked(uri: Uri?) = metaEditor.onFilePicked(uri)
@@ -986,6 +1158,7 @@ class XmbViewModel(
             }
             is TextPrompt.AvatarBorderColor -> editors.onAvatarColorEntered(text)
             is TextPrompt.GameDescription -> metaEditor.onDescriptionEntered(prompt.gameId, text)
+            is TextPrompt.WizardText -> wizards.onText(prompt.field, text)
             is TextPrompt.MatchQuery -> {
                 if (value.isEmpty()) return
                 datWork {
@@ -1428,8 +1601,43 @@ class XmbViewModel(
 
     // endregion
 
-    /** The launcher is visible again (`onStart`): theme music may continue. */
-    fun onStarted() = audio.onStarted(true)
+    /** The launcher is visible again (`onStart`): theme music may continue, a rotating wallpaper may move on. */
+    fun onStarted() {
+        audio.onStarted(true)
+        rotator.onFront(android.os.SystemClock.elapsedRealtime())
+    }
+
+    /** Any key or touch (from the Activity): a wallpaper change that is due happens now (§ 5b). */
+    fun onUserInput() = rotator.onInput(android.os.SystemClock.elapsedRealtime())
+
+    /** Xross wallpaper ▸ Pick a folder… (0.2.2.0 § 5b). */
+    private val rotator = WallpaperRotator()
+
+    /** The rotating wallpaper's current picture, or null when no folder is set. */
+    val rotatingWallpaper: StateFlow<String?> get() = rotator.current
+
+    init {
+        viewModelScope.launch {
+            settingsStore.settings.map { it.wallpaperFolder to it.wallpaperInterval }.distinctUntilChanged().collectLatest { (folder, interval) ->
+                val pictures = withContext(Dispatchers.IO) { WallpaperRotator.list(folder) }
+                rotator.configure(pictures, RotationInterval.parse(interval), android.os.SystemClock.elapsedRealtime())
+            }
+        }
+    }
+
+    /** Xross wallpaper ▸ Pick a folder…: its pictures take turns. */
+    fun onWallpaperFolderPicked(uri: Uri?) {
+        if (uri == null) return
+        val path = container.volumes.treeUriToPath(uri) ?: return fail("Xross can't read that folder directly")
+        viewModelScope.launch {
+            val n = withContext(Dispatchers.IO) { WallpaperRotator.list(path).size }
+            if (n == 0) return@launch fail("No pictures (PNG, JPEG, WebP) in ${File(path).name}")
+            settingsStore.update {
+                it.copy(wallpaperFolder = path, wallpaperInterval = if (it.wallpaperInterval == RotationInterval.OFF.name) RotationInterval.MIN_15.name else it.wallpaperInterval)
+            }
+            toast("Wallpaper: ${File(path).name}/ · $n pictures, ${RotationInterval.parse(settingsStore.current.wallpaperInterval).label.lowercase()}")
+        }
+    }
 
     /** The launcher is no longer visible: back up the library shortly after, if it changed. */
     fun onStopped() {
@@ -1624,6 +1832,11 @@ class XmbViewModel(
             is Command.ShowAchievements -> ra.showAchievements(command.gameId)
             is Command.ShowDetails -> showDetails(command.gameId)
             is Command.OpenMetadataEditor -> metaEditor.open(command.gameId)
+            is Command.SetMissingArtFilter -> {
+                env.update { e -> e.copy(missingArtOnly = if (command.on) e.missingArtOnly + command.platformId else e.missingArtOnly - command.platformId) }
+                sounds.play(UiSound.OK)
+            }
+            is Command.OpenLibraryBrowser -> browser.open(command.platformId)
             is Command.EditTitle -> viewModelScope.launch {
                 val game = container.games.get(command.gameId) ?: return@launch
                 val current = container.database.metadata().get(game.id)?.titleOverride ?: game.title
@@ -1649,6 +1862,24 @@ class XmbViewModel(
                 if (container.scraper.isConfigured) rescrape(command.gameId)
             }
             is Command.CycleEmulator -> cycleEmulator(command.platformId)
+            is Command.SetEmulatorChoice -> settingsStore.update { it.copy(emulatorChoice = it.emulatorChoice + (command.platformId to command.key)) }
+            Command.OpenThemeMusicMenu -> current().focused?.let(::openOptions)
+            Command.PickWallpaperFolder -> emit(UiEffect.PickWallpaperFolder)
+            is Command.SetWallpaperInterval -> {
+                settingsStore.update { it.copy(wallpaperInterval = command.interval.name) }
+                toast(if (settingsStore.current.wallpaperFolder.isBlank()) "Pick a folder for the wallpaper to change" else "Wallpaper: ${command.interval.label.lowercase()}")
+            }
+            Command.PickThemeMusicFile -> emit(UiEffect.PickThemeMusicFile)
+            Command.PickThemeMusicFolder -> emit(UiEffect.PickThemeMusicFolder)
+            is Command.SetThemeMusic -> {
+                settingsStore.update { it.copy(themeMusic = command.value) }
+                toast(if (command.value.isBlank()) "Theme music from ${container.themes.active.value.info.name}" else "Theme music off")
+            }
+            is Command.SetThemeMusicOrder -> settingsStore.update { it.copy(themeMusicOrder = command.order) }
+            is Command.OpenEmulatorWizard -> wizards.openEmulator(command.forSystem)
+            is Command.EditCustomEmulator -> wizards.editEmulator(command.id)
+            is Command.OpenSystemWizard -> wizards.openSystem(command.folder)
+            is Command.EditCustomSystem -> wizards.editSystem(command.id)
             Command.ToggleWave -> settingsStore.update { it.copy(waveEnabled = !it.waveEnabled) }
             Command.OpenWaveSettings -> {
                 transient.update { it.copy(optionsMenu = null) }
@@ -1768,7 +1999,7 @@ class XmbViewModel(
     }
 
     private fun cycleEmulator(platformId: String) {
-        val platform = PlatformRegistry.byId(platformId) ?: return
+        val platform = PlatformRegistry.byId(platformId)?.takeIf { it.emulators.isNotEmpty() } ?: return
         val settings = settingsStore.current
         val current = GameLauncher.resolveOption(platform, settings.emulatorChoice[platformId], env.value.installedEmulators)
             ?: platform.emulators.firstOrNull { it.key == settings.emulatorChoice[platformId] }

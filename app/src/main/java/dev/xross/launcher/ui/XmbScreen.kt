@@ -338,7 +338,7 @@ fun XmbScreen(
         /** Height of the button-hint row, so the mini player can float just above it. */
         var hintsHeightPx by remember { mutableIntStateOf(0) }
         val menuShown = state.overlay == null && state.search == null && state.nameEntry == null && state.details == null &&
-            state.metadataEditor == null &&
+            state.metadataEditor == null && state.wizard == null && state.browser == null &&
             state.waveEditor == null && state.achievements == null && state.profileCard == null &&
             state.avatarEditor == null && state.raHub == null
         val menuAlpha by animateFloatAsState(if (menuShown) 1f else 0f, motion.tween(220), label = "menu")
@@ -348,7 +348,7 @@ fun XmbScreen(
         val components = LocalComponents.current
         // The mini player (card or ticker) hides while anything takes over the screen or the corner.
         val miniCovered = state.overlay != null || state.search != null || state.nameEntry != null ||
-            state.details != null || state.optionsMenu != null || state.info != null || state.metadataEditor != null ||
+            state.details != null || state.optionsMenu != null || state.info != null || state.metadataEditor != null || state.wizard != null || state.browser != null ||
             state.profileCard != null || state.remap != null || state.booting != null ||
             state.waveEditor != null || state.achievements != null ||
             state.avatarEditor != null || state.raHub != null || state.layoutEditor != null
@@ -548,6 +548,19 @@ fun XmbScreen(
             onDismiss = { onEvent(XmbEvent.Menu.CloseDetails) },
         )
 
+        LibraryBrowserScreen(
+            browser = state.browser,
+            m = m,
+            logoStyle = dev.xross.launcher.data.SystemLogoStyle.of(state.settings.systemLogoStyle),
+            confirmGlyph = if (state.confirm == ConfirmLayout.EAST) state.glyphs.east else state.glyphs.south,
+            backGlyph = if (state.confirm == ConfirmLayout.EAST) state.glyphs.south else state.glyphs.east,
+            onRowTap = { onEvent(XmbEvent.Browser.RowTap(it)) },
+            onSystemTap = { onEvent(XmbEvent.Browser.SystemTap(it)) },
+            onFilterTap = { onEvent(XmbEvent.Browser.FilterTap(it)) },
+            onScrolled = { onEvent(XmbEvent.Browser.Scrolled(it)) },
+            onDismiss = { onEvent(XmbEvent.Browser.Close) },
+        )
+
         MetadataEditorScreen(
             editor = state.metadataEditor,
             m = m,
@@ -560,6 +573,15 @@ fun XmbScreen(
             onPickerTap = { onEvent(XmbEvent.MetadataEditor.PickerTap(it)) },
             onClosePicker = { onEvent(XmbEvent.MetadataEditor.ClosePicker) },
             onDismiss = { onEvent(XmbEvent.MetadataEditor.Close) },
+        )
+
+        WizardScreen(
+            wizard = state.wizard,
+            m = m,
+            confirmGlyph = if (state.confirm == ConfirmLayout.EAST) state.glyphs.east else state.glyphs.south,
+            backGlyph = if (state.confirm == ConfirmLayout.EAST) state.glyphs.south else state.glyphs.east,
+            onRowTap = { onEvent(XmbEvent.Wizard.RowTap(it)) },
+            onDismiss = { onEvent(XmbEvent.Wizard.Close) },
         )
 
         InfoPanel(

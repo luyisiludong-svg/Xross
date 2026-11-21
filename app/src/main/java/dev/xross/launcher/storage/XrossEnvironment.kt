@@ -39,7 +39,9 @@ data class XrossLayout(val root: File, val portable: Boolean) {
     val settingsFile: File get() = File(config, "settings.json")
     val controllersFile: File get() = File(config, "controllers.json")
     val systemsFile: File get() = File(config, "systems.json")
-    val configFiles: List<File> get() = listOf(settingsFile, controllersFile, systemsFile)
+    /** Custom launch recipes (0.2.2.0 § 1). */
+    val emulatorsFile: File get() = File(config, "emulators.json")
+    val configFiles: List<File> get() = listOf(settingsFile, controllersFile, systemsFile, emulatorsFile)
 
     /** Backup snapshot of the library database. */
     val databaseBackup: File get() = File(data, "xross.db")
