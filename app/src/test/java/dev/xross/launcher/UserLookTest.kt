@@ -31,6 +31,7 @@ class UserLookTest {
         UserLook(batteryTint = true) to "1 color layer",
         UserLook(themeMusic = "none") to "theme music",
         UserLook(wallpaperFolder = "/storage/emulated/0/Pictures/Walls") to "wallpaper",
+        UserLook(wallpaperAlbum = "Walls") to "wallpaper",
     )
 
     @Test

@@ -131,16 +131,16 @@ data class SettingsFile(
         /** PACK, WHITE, COLOR, MONO, OUTLINED, DARK_COLOR, DARK_MONO or BLACK. */
         val systemLogoStyle: String = D.systemLogoStyle,
         /** Wallpaper rotation (0.2.2.0 § 5b): a folder of pictures and how often they change. */
-        val wallpaperRotation: WallpaperRotation = WallpaperRotation(D.wallpaperFolder, D.wallpaperInterval),
+        val wallpaperRotation: WallpaperRotation = WallpaperRotation(D.wallpaperFolder, D.wallpaperInterval, D.wallpaperAlbum),
         /** Theme music (0.2.2.0 § 5): an audio file, a folder, or `none`; empty = the theme pack's. */
         val bgm: String = D.themeMusic,
         /** SHUFFLE or IN_ORDER, for a folder of tracks. */
         val bgmOrder: String = D.themeMusicOrder,
     )
 
-    /** `interval`: OFF, MIN_1, MIN_5, MIN_15, MIN_60 or FRONT. */
+    /** `interval`: OFF, MIN_1, MIN_5, MIN_15, MIN_60 or FRONT. `album`: a Photo album's name; wins over `folder`. */
     @Serializable
-    data class WallpaperRotation(val folder: String = "", val interval: String = "OFF")
+    data class WallpaperRotation(val folder: String = "", val interval: String = "OFF", val album: String = "")
 
     /** `#RRGGBB` gradient for the CUSTOM wave tint. */
     @Serializable
@@ -388,7 +388,7 @@ object ConfigCodec {
             showFileFormat = s.showFileFormat,
             showSystemLogos = s.showSystemLogos,
             systemLogoStyle = s.systemLogoStyle,
-            wallpaperRotation = SettingsFile.WallpaperRotation(s.wallpaperFolder, s.wallpaperInterval),
+            wallpaperRotation = SettingsFile.WallpaperRotation(s.wallpaperFolder, s.wallpaperInterval, s.wallpaperAlbum),
             bgm = s.themeMusic,
             bgmOrder = s.themeMusicOrder,
         ),
@@ -465,6 +465,7 @@ object ConfigCodec {
         systemLogoStyle = dev.xross.launcher.data.SystemLogoStyle.of(f.display.systemLogoStyle).name,
         themeMusic = f.display.bgm.trim().take(MAX_WALLPAPER_CHARS),
         wallpaperFolder = f.display.wallpaperRotation.folder.trim().trimEnd('/').take(MAX_WALLPAPER_CHARS),
+        wallpaperAlbum = f.display.wallpaperRotation.album.trim().take(256),
         wallpaperInterval = f.display.wallpaperRotation.interval.trim().uppercase().let { i ->
             if (i in setOf("OFF", "MIN_1", "MIN_5", "MIN_15", "MIN_60", "FRONT")) i else "OFF"
         },

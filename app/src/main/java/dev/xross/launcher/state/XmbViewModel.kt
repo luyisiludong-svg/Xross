@@ -1618,8 +1618,16 @@ class XmbViewModel(
 
     init {
         viewModelScope.launch {
-            settingsStore.settings.map { it.wallpaperFolder to it.wallpaperInterval }.distinctUntilChanged().collectLatest { (folder, interval) ->
-                val pictures = withContext(Dispatchers.IO) { WallpaperRotator.list(folder) }
+            // A Photo album (its pictures by file name) wins over a folder.
+            combine(
+                settingsStore.settings.map { Triple(it.wallpaperFolder, it.wallpaperInterval, it.wallpaperAlbum) }.distinctUntilChanged(),
+                container.media.library.map { it.photos }.distinctUntilChanged(),
+            ) { setting, photos -> setting to photos }.collectLatest { (setting, photos) ->
+                val (folder, interval, album) = setting
+                val pictures = withContext(Dispatchers.IO) {
+                    if (album.isNotBlank()) WallpaperRotator.album(photos.filter { it.folder == album }.map { it.path })
+                    else WallpaperRotator.list(folder)
+                }
                 rotator.configure(pictures, RotationInterval.parse(interval), android.os.SystemClock.elapsedRealtime())
             }
         }
@@ -1633,7 +1641,7 @@ class XmbViewModel(
             val n = withContext(Dispatchers.IO) { WallpaperRotator.list(path).size }
             if (n == 0) return@launch fail("No pictures (PNG, JPEG, WebP) in ${File(path).name}")
             settingsStore.update {
-                it.copy(wallpaperFolder = path, wallpaperInterval = if (it.wallpaperInterval == RotationInterval.OFF.name) RotationInterval.MIN_15.name else it.wallpaperInterval)
+                it.copy(wallpaperFolder = path, wallpaperAlbum = "", wallpaperInterval = if (it.wallpaperInterval == RotationInterval.OFF.name) RotationInterval.MIN_15.name else it.wallpaperInterval)
             }
             toast("Wallpaper: ${File(path).name}/ · $n pictures, ${RotationInterval.parse(settingsStore.current.wallpaperInterval).label.lowercase()}")
         }
@@ -1865,15 +1873,33 @@ class XmbViewModel(
             is Command.SetEmulatorChoice -> settingsStore.update { it.copy(emulatorChoice = it.emulatorChoice + (command.platformId to command.key)) }
             Command.OpenThemeMusicMenu -> current().focused?.let(::openOptions)
             Command.PickWallpaperFolder -> emit(UiEffect.PickWallpaperFolder)
+            is Command.SetWallpaperAlbum -> {
+                val n = container.media.library.value.photos.count { it.folder == command.album && it.path.isNotEmpty() }
+                if (n == 0) return fail("${command.album} has no pictures Xross can read as files")
+                settingsStore.update {
+                    it.copy(
+                        wallpaperAlbum = command.album, wallpaperFolder = "",
+                        wallpaperInterval = if (it.wallpaperInterval == RotationInterval.OFF.name) RotationInterval.MIN_15.name else it.wallpaperInterval,
+                    )
+                }
+                toast("Wallpaper: ${command.album} · ${if (n == 1) "1 picture" else "$n pictures"}, ${RotationInterval.parse(settingsStore.current.wallpaperInterval).label.lowercase()}")
+            }
             is Command.SetWallpaperInterval -> {
                 settingsStore.update { it.copy(wallpaperInterval = command.interval.name) }
-                toast(if (settingsStore.current.wallpaperFolder.isBlank()) "Pick a folder for the wallpaper to change" else "Wallpaper: ${command.interval.label.lowercase()}")
+                toast(if (settingsStore.current.wallpaperFolder.isBlank() && settingsStore.current.wallpaperAlbum.isBlank()) "Pick a folder or an album for the wallpaper to change" else "Wallpaper: ${command.interval.label.lowercase()}")
             }
             Command.PickThemeMusicFile -> emit(UiEffect.PickThemeMusicFile)
             Command.PickThemeMusicFolder -> emit(UiEffect.PickThemeMusicFolder)
             is Command.SetThemeMusic -> {
                 settingsStore.update { it.copy(themeMusic = command.value) }
-                toast(if (command.value.isBlank()) "Theme music from ${container.themes.active.value.info.name}" else "Theme music off")
+                val playlist = dev.xross.launcher.data.ThemeMusic.playlistName(command.value)
+                toast(
+                    when {
+                        command.value.isBlank() -> "Theme music from ${container.themes.active.value.info.name}"
+                        playlist != null -> "Theme music: playlist $playlist"
+                        else -> "Theme music off"
+                    },
+                )
             }
             is Command.SetThemeMusicOrder -> settingsStore.update { it.copy(themeMusicOrder = command.order) }
             is Command.OpenEmulatorWizard -> wizards.openEmulator(command.forSystem)

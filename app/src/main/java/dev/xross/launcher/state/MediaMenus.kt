@@ -6,6 +6,7 @@ import dev.xross.launcher.media.MediaLibrary
 import dev.xross.launcher.media.NowPlaying
 import dev.xross.launcher.media.Photo
 import dev.xross.launcher.media.Playlist
+import dev.xross.launcher.data.ThemeMusic
 import dev.xross.launcher.media.Song
 import dev.xross.launcher.data.SongSort
 import dev.xross.launcher.data.WallpaperFit
@@ -33,6 +34,10 @@ class MediaMenus(
     private val albumSort: AlbumSort = AlbumSort.TITLE,
     /** For the photos' Options ▸ Wallpaper fit. */
     private val wallpaperFit: WallpaperFit = WallpaperFit.FILL,
+    /** The album used as a rotating Xross wallpaper (Settings ▸ Theme ▸ Xross wallpaper), or "". */
+    private val wallpaperAlbum: String = "",
+    /** Settings ▸ Theme ▸ Theme music (`playlist:<name>` for a playlist). */
+    private val themeMusic: String = "",
 ) {
 
     private val photosByFolder by lazy { media.photos.groupBy { it.folder } }
@@ -174,10 +179,23 @@ class MediaMenus(
         return buildList {
             add(folder(PHOTOS_ALL, "All photos", count(media.photos.size, "photo"), thumb(ThumbKind.PHOTO, media.photos.first().id, GlyphKey.PHOTO)))
             for ((name, photos) in photosByFolder.toSortedMap(String.CASE_INSENSITIVE_ORDER)) {
-                add(folder(PHOTO_FOLDER + name, name, count(photos.size, "photo"), thumb(ThumbKind.PHOTO, photos.first().id, GlyphKey.FOLDER)))
+                val inUse = name == wallpaperAlbum
+                add(
+                    folder(PHOTO_FOLDER + name, name, count(photos.size, "photo") + if (inUse) " · Xross wallpaper" else "", thumb(ThumbKind.PHOTO, photos.first().id, GlyphKey.FOLDER))
+                        .copy(menu = albumOptions(name, inUse)),
+                )
             }
         }
     }
+
+    /** Options on a Photo album: its pictures as the Xross wallpaper, taking turns (0.2.2.0). */
+    private fun albumOptions(name: String, inUse: Boolean): List<MenuOption> = listOf(
+        if (inUse) {
+            MenuOption("Stop using as Xross wallpaper", detail = "Back to the theme's", command = Command.ResetXrossWallpaper)
+        } else {
+            MenuOption("Use as Xross wallpaper", detail = "Its pictures take turns behind the menu", command = Command.SetWallpaperAlbum(name))
+        },
+    )
 
     fun videoRoot(): List<XmbNode> {
         if (media.videos.isEmpty()) return listOf(empty("video", "videos", "No videos found", "Videos in Movies, DCIM and other folders appear here"))
@@ -312,6 +330,13 @@ class MediaMenus(
                         if (songs.isNotEmpty()) {
                             add(MenuOption("Play", command = Command.PlayPlaylist(p.name, shuffle = false)))
                             add(MenuOption("Shuffle", command = Command.PlayPlaylist(p.name, shuffle = true)))
+                        }
+                        // 0.2.2.0: a playlist as the menu's background music.
+                        val isThemeMusic = ThemeMusic.playlistName(themeMusic)?.equals(p.name, ignoreCase = true) == true
+                        if (isThemeMusic) {
+                            add(MenuOption("Stop using as theme music", detail = "Back to the theme pack's", command = Command.SetThemeMusic("")))
+                        } else if (songs.isNotEmpty()) {
+                            add(MenuOption("Use as theme music", detail = "Plays behind the menu while nothing else does", command = Command.SetThemeMusic(ThemeMusic.playlist(p.name))))
                         }
                         // Favorites stays; emptying it is removing its songs.
                         if (!isFavorites) add(

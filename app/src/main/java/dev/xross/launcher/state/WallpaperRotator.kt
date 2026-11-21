@@ -79,6 +79,12 @@ class WallpaperRotator(private val exists: (String) -> Boolean = { File(it).isFi
     companion object {
         private val TYPES = setOf("png", "jpg", "jpeg", "webp")
 
+        /** A Photo album's pictures (file paths) that can be decoded as a wallpaper, by file name. */
+        fun album(paths: List<String>): List<String> = paths
+            .filter { it.isNotBlank() && File(it).extension.lowercase(Locale.ROOT) in TYPES }
+            .distinct()
+            .sortedWith(compareBy({ File(it).name.lowercase(Locale.ROOT) }, { it }))
+
         /** Blocking: the folder's pictures by file name. */
         fun list(folder: String): List<String> {
             if (folder.isBlank()) return emptyList()

@@ -261,8 +261,8 @@ from Settings ▸ Theme; editing the file by hand works too and is picked up on 
 | `themeVariant` | a variant id; empty = the pack's base look | Theme variant (§9) |
 | `surfaceStyle` | a built-in or pack surface id; empty = the pack's | Surface style (§4) |
 | `customWallpaper` | a `content://` URI or a file path; empty = the pack's wallpaper | Xross wallpaper (§8) |
-| `wallpaperRotation` | `{ "folder": path, "interval": OFF / MIN_1 / MIN_5 / MIN_15 / MIN_60 / FRONT }`; an empty folder turns it off; wins over `customWallpaper` | Xross wallpaper ▸ Pick a folder… (§8) |
-| `bgm` | an audio file's path, a folder's path, or `none`; empty = the pack's music | Theme music (§5) |
+| `wallpaperRotation` | `{ "folder": path, "album": a Photo album's name, "interval": OFF / MIN_1 / MIN_5 / MIN_15 / MIN_60 / FRONT }`; `album` wins over `folder`; both empty turns it off; wins over `customWallpaper` | Xross wallpaper ▸ Pick a folder… / An album, or Photo ▸ an album ▸ Options (§8) |
+| `bgm` | an audio file's path, a folder's path, `playlist:<name>` for a Music playlist, or `none`; empty = the pack's music | Theme music (§5), or Music ▸ Playlists ▸ Options |
 | `bgmOrder` | `SHUFFLE` or `IN_ORDER`, for a folder | Theme music ▸ Order (§5) |
 | `components` | `statusBarLeft`, `statusBarRight`, `batteryMode`, `clockFormat`, …; `null` = the pack's | Settings ▸ Theme ▸ Components (§15) |
 | `effects` | `shaderPreset`, `backgroundFilter`, `uiFilter`, `focusFrameStyle`, `foregroundParticles`, `iconMask`, `bootIntro`, `launchCurtain`; empty = the pack's | Effect rows (§11) |
@@ -298,7 +298,10 @@ file-name order) take turns, every 1, 5, 15 or 60 minutes or each time Xross com
 (**Change**), saved as `display.wallpaperRotation`. A change never wakes a resting screen: when it
 is due it waits for the next button press or touch, or for Xross coming back to the front. The
 next picture is decoded and blurred for the frosted surfaces before it crossfades in over
-600 ms; a deleted picture is skipped. Reset to theme defaults clears it.
+600 ms; a deleted picture is skipped. Reset to theme defaults clears it. A Photo album works the
+same way (**Xross wallpaper ▸ An album**, or **Photo ▸ an album ▸ Options ▸ Use as Xross
+wallpaper**): its pictures, from every folder of that name, by file name; it follows the album as
+photos are added or removed.
 
 ### Focus frames and app icons
 

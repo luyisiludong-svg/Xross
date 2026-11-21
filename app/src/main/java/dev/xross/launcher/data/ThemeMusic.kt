@@ -14,6 +14,11 @@ object ThemeMusic {
     const val OFF = "none"
     const val SHUFFLE = "SHUFFLE"
     const val IN_ORDER = "IN_ORDER"
+    /** `display.bgm` of a Music playlist: this prefix and its name. */
+    const val PLAYLIST = "playlist:"
+
+    fun playlist(name: String) = PLAYLIST + name
+    fun playlistName(choice: String): String? = choice.trim().takeIf { it.startsWith(PLAYLIST) }?.removePrefix(PLAYLIST)
 
     /** What plays instead of the pack's music. */
     sealed interface Choice {
@@ -29,10 +34,20 @@ object ThemeMusic {
 
     fun isAudio(file: File) = file.extension.lowercase(Locale.ROOT) in BgmRef.TYPES
 
-    fun resolve(choice: String, order: String): Choice {
+    /**
+     * [playlist] gives a Music playlist's file paths by name (null when there is none). A playlist
+     * plays its songs as a list in its own order (or shuffled); songs that are gone, too large or
+     * of a type ExoPlayer can't decode here are left out.
+     */
+    fun resolve(choice: String, order: String, playlist: (String) -> List<String>? = { null }): Choice {
         val c = choice.trim()
         if (c.isEmpty()) return Choice.Theme
         if (c.equals(OFF, ignoreCase = true)) return Choice.Off
+        playlistName(c)?.let { name ->
+            val all = playlist(name) ?: return Choice.Own(null)
+            val ok = all.map(::File).filter { it.isFile && isAudio(it) && it.length() in 1..BgmRef.MAX_BYTES }.distinctBy { it.path }.take(BgmRef.MAX_TRACKS)
+            return Choice.Own(BgmTrack.of(ok, shuffle = normalizeOrder(order) == SHUFFLE), skipped = all.size - ok.size)
+        }
         val f = File(c)
         if (f.isDirectory) {
             val all = f.listFiles().orEmpty().filter { it.isFile && isAudio(it) && !it.name.startsWith(".") }.sortedBy { it.name.lowercase(Locale.ROOT) }
@@ -44,11 +59,17 @@ object ThemeMusic {
     }
 
     /** "A folder · 12 tracks, shuffled", for the Settings row. */
-    fun describe(choice: String, order: String, packName: String, packHasMusic: Boolean): String {
+    fun describe(choice: String, order: String, packName: String, packHasMusic: Boolean, playlistSize: (String) -> Int? = { null }): String {
         val c = choice.trim()
+        val name = playlistName(c)
         return when {
             c.isEmpty() -> if (packHasMusic) "From $packName" else "$packName has none"
             c.equals(OFF, ignoreCase = true) -> "Off"
+            name != null -> when (val n = playlistSize(name)) {
+                null -> "Playlist $name (missing)"
+                else -> "Playlist $name · " + (if (n == 1) "1 song" else "$n songs") +
+                    if (n > 1) (if (normalizeOrder(order) == SHUFFLE) ", shuffled" else ", in order") else ""
+            }
             File(c).isDirectory -> {
                 val n = File(c).listFiles().orEmpty().count { it.isFile && isAudio(it) }.coerceAtMost(BgmRef.MAX_TRACKS)
                 "${File(c).name}/ · " + (if (n == 1) "1 track" else "$n tracks") +

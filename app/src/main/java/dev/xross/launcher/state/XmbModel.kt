@@ -169,6 +169,8 @@ sealed interface Command {
 
     /** Xross wallpaper ▸ Pick a folder… and its interval (0.2.2.0 § 5b). */
     data object PickWallpaperFolder : Command
+    /** Photo ▸ an album ▸ Options ▸ Use as Xross wallpaper: its pictures take turns. */
+    data class SetWallpaperAlbum(val album: String) : Command
     data class SetWallpaperInterval(val interval: RotationInterval) : Command
 
     /** Settings ▸ Theme ▸ Theme music (0.2.2.0 § 5). */

@@ -163,6 +163,8 @@ data class XrossSettings(
     val wallpaperFolder: String = "",
     /** [dev.xross.launcher.state.RotationInterval] name. */
     val wallpaperInterval: String = "OFF",
+    /** A Photo album (its name) whose pictures take turns instead; wins over [wallpaperFolder]. */
+    val wallpaperAlbum: String = "",
     /** A list of tracks (a folder): [ThemeMusic.SHUFFLE] or [ThemeMusic.IN_ORDER]. */
     val themeMusicOrder: String = ThemeMusic.SHUFFLE,
     /** Systems the user defined in systems.json (0.2.2.0 § 1), by id, in file order. */

@@ -31,6 +31,8 @@ data class UserLook(
     val themeMusic: String = "",
     /** Xross wallpaper ▸ Pick a folder… (0.2.2.0 § 5b); blank for none. */
     val wallpaperFolder: String = "",
+    /** A Photo album used the same way; blank for none. */
+    val wallpaperAlbum: String = "",
 ) {
     /** True when nothing is set: the pack as it is. */
     val isNone: Boolean get() = this == NONE
@@ -47,7 +49,7 @@ data class UserLook(
         if (surfaceStyle.isNotEmpty()) add("surface")
         val layers = listOf(adaptiveGamePalette, circadianCurve, batteryTint).count { it != null }
         if (layers > 0) add(countOf(layers, "color layer"))
-        if (customWallpaper.isNotBlank() || wallpaperFolder.isNotBlank()) add("wallpaper")
+        if (customWallpaper.isNotBlank() || wallpaperFolder.isNotBlank() || wallpaperAlbum.isNotBlank()) add("wallpaper")
         if (themeMusic.isNotBlank()) add("theme music")
     }
 

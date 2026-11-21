@@ -120,6 +120,7 @@ class ThemeRoundTripTest {
         // Not exported (the user's files stay on the device), but part of the user layer.
         themeMusic = "none",
         wallpaperFolder = "/storage/emulated/0/Pictures/Walls",
+        wallpaperAlbum = "Walls",
     )
 
     private fun photo(): File = File(tmp.root, "DCIM/photo.png").apply {

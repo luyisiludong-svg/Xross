@@ -346,6 +346,10 @@ logs each track change (`XrossBgm: next track n/m`). The list round trip is in
   `FRONT`, saved as `display.wallpaperRotation` `{folder, interval}`. Picking a folder sets 15
   minutes if the interval was Off. The crossfade is in `WallpaperBackdrop`; the frosted layer
   switches to the new picture as it starts fading in. Idle CPU not yet measured.
+- **Added after the plan:** a Photo album can be the rotating wallpaper (`wallpaperRotation.album`,
+  Photo ▸ album ▸ Options ▸ Use as Xross wallpaper), and a Music playlist can be the theme music
+  (`display.bgm` = `playlist:<name>`, Playlists ▸ Options ▸ Use as theme music). Both follow the
+  library and the playlist file as they change. `MediaAsBackgroundTest` (7).
 
 ---
 

@@ -286,9 +286,13 @@ class MainActivity : ComponentActivity() {
             // Settings ▸ Theme ▸ Theme music (0.2.2.0 § 5) wins over the pack's cascade.
             val musicChoice = state.settings.themeMusic
             val musicOrder = state.settings.themeMusicOrder
-            androidx.compose.runtime.LaunchedEffect(pack, look.bgm, musicChoice, musicOrder) {
+            // A playlist chosen as theme music follows edits to it.
+            val musicPlaylists by container.playlists.playlists.collectAsStateWithLifecycle()
+            val chosenPlaylist = dev.xross.launcher.data.ThemeMusic.playlistName(musicChoice)
+                ?.let { name -> musicPlaylists.firstOrNull { it.name.equals(name, ignoreCase = true) } }
+            androidx.compose.runtime.LaunchedEffect(pack, look.bgm, musicChoice, musicOrder, chosenPlaylist) {
                 val own = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                    dev.xross.launcher.data.ThemeMusic.resolve(musicChoice, musicOrder)
+                    dev.xross.launcher.data.ThemeMusic.resolve(musicChoice, musicOrder) { chosenPlaylist?.paths }
                 }
                 container.audio.onBgmTrack(
                     when (own) {

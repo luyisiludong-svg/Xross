@@ -22,6 +22,7 @@ fun UserLook.Companion.of(s: XrossSettings): UserLook = UserLook(
     batteryTint = s.batteryTint,
     themeMusic = s.themeMusic,
     wallpaperFolder = s.wallpaperFolder,
+    wallpaperAlbum = s.wallpaperAlbum,
 )
 
 /** [s] with these picks written back (the rest of [s] as it is). */
@@ -36,6 +37,7 @@ fun UserLook.writeTo(s: XrossSettings): XrossSettings = s.copy(
     batteryTint = batteryTint,
     themeMusic = themeMusic,
     wallpaperFolder = wallpaperFolder,
+    wallpaperAlbum = wallpaperAlbum,
 )
 
 /** The wave values of Settings ▸ Theme ▸ Wave settings in [s]. */

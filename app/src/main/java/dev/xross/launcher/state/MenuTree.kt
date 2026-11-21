@@ -200,7 +200,12 @@ class MenuTree(private val s: MenuSnapshot) {
     private val cache = HashMap<String, List<XmbNode>>()
 
     /** Photo/Music/Video lists and the collections behind the media viewers. */
-    val media by lazy { MediaMenus(s.media, s.storageGranted, s.playlists, s.settings.songSort, s.settings.albumSort, s.settings.wallpaperFit) }
+    val media by lazy {
+        MediaMenus(
+            s.media, s.storageGranted, s.playlists, s.settings.songSort, s.settings.albumSort, s.settings.wallpaperFit,
+            wallpaperAlbum = s.settings.wallpaperAlbum, themeMusic = s.settings.themeMusic,
+        )
+    }
 
     /** Music root with the live Now Playing row. Not cached. */
     fun musicRoot(now: NowPlaying): List<XmbNode> = media.musicRoot(now) + mediaAppsRow(AppHome.MUSIC)
@@ -1485,10 +1490,13 @@ class MenuTree(private val s: MenuSnapshot) {
      * custom one goes back to the theme's; otherwise it says where to set one.
      */
     private fun wallpaperRow(): XmbNode {
-        val rotating = s.settings.wallpaperFolder.isNotBlank()
+        val album = s.settings.wallpaperAlbum
+        val rotating = s.settings.wallpaperFolder.isNotBlank() || album.isNotBlank()
+        val albums = s.media.photos.groupBy { it.folder }.toSortedMap(String.CASE_INSENSITIVE_ORDER)
         val interval = RotationInterval.parse(s.settings.wallpaperInterval)
         val custom = s.settings.customWallpaper.isNotBlank() || rotating
         val summary = when {
+            album.isNotBlank() -> "Pictures from the $album album · ${interval.label.lowercase()} · Confirm to use the theme's"
             rotating -> "Pictures from ${java.io.File(s.settings.wallpaperFolder).name}/ · ${interval.label.lowercase()} · Confirm to use the theme's"
             custom -> "A picture you chose (${s.settings.wallpaperFit.label}) · Confirm to use the theme's"
             s.themes.packWallpaper -> "From ${s.themes.activeName} · Confirm to pick your own"
@@ -1502,10 +1510,21 @@ class MenuTree(private val s: MenuSnapshot) {
                 MenuOption("Pick custom…", detail = "Any picture, through the file picker", command = Command.PickXrossWallpaper),
                 MenuOption(
                     "Pick a folder…",
-                    detail = if (rotating) java.io.File(s.settings.wallpaperFolder).name + "/ · its pictures take turns" else "Its pictures take turns",
+                    detail = if (s.settings.wallpaperFolder.isNotBlank()) java.io.File(s.settings.wallpaperFolder).name + "/ · its pictures take turns" else "Its pictures take turns",
                     command = Command.PickWallpaperFolder,
-                    selected = rotating,
+                    selected = s.settings.wallpaperFolder.isNotBlank() && album.isBlank(),
                 ),
+            ) + (
+                if (albums.isEmpty()) emptyList() else listOf(
+                    MenuOption(
+                        "An album", detail = album.ifBlank { "A Photo album; its pictures take turns" },
+                        submenu = albums.map { (name, photos) ->
+                            MenuOption(name, detail = if (photos.size == 1) "1 photo" else "${photos.size} photos", command = Command.SetWallpaperAlbum(name), selected = name == album)
+                        },
+                        selected = album.isNotBlank(),
+                    ),
+                )
+            ) + listOf(
                 MenuOption(
                     "Change", detail = interval.label,
                     submenu = RotationInterval.entries.map { i ->
@@ -1526,11 +1545,29 @@ class MenuTree(private val s: MenuSnapshot) {
         val choice = s.settings.themeMusic
         val isFolder = choice.isNotBlank() && !choice.equals(dev.xross.launcher.data.ThemeMusic.OFF, ignoreCase = true) && java.io.File(choice).isDirectory
         val shuffle = s.settings.themeMusicOrder == dev.xross.launcher.data.ThemeMusic.SHUFFLE
-        val summary = dev.xross.launcher.data.ThemeMusic.describe(choice, s.settings.themeMusicOrder, s.themes.activeName, s.themes.packMusic)
+        val playlistName = dev.xross.launcher.data.ThemeMusic.playlistName(choice)
+        val summary = dev.xross.launcher.data.ThemeMusic.describe(choice, s.settings.themeMusicOrder, s.themes.activeName, s.themes.packMusic) { name ->
+            s.playlists.firstOrNull { it.name.equals(name, ignoreCase = true) }?.paths?.size
+        }
         val menu = buildList {
             add(MenuOption("Theme pack", detail = if (s.themes.packMusic) "From ${s.themes.activeName}" else "${s.themes.activeName} has none", command = Command.SetThemeMusic(""), selected = choice.isBlank()))
             add(MenuOption("Pick a file…", detail = "One track, looped", command = Command.PickThemeMusicFile))
             add(MenuOption("Pick a folder…", detail = "Up to 50 tracks, played as a list", command = Command.PickThemeMusicFolder, selected = isFolder))
+            if (s.playlists.isNotEmpty()) {
+                add(
+                    MenuOption(
+                        "A playlist", detail = playlistName ?: "Your Music playlists",
+                        submenu = s.playlists.map { p ->
+                            MenuOption(
+                                p.name, detail = if (p.paths.size == 1) "1 song" else "${p.paths.size} songs",
+                                command = Command.SetThemeMusic(dev.xross.launcher.data.ThemeMusic.playlist(p.name)),
+                                selected = p.name.equals(playlistName, ignoreCase = true),
+                            )
+                        },
+                        selected = playlistName != null,
+                    ),
+                )
+            }
             add(MenuOption("Off", command = Command.SetThemeMusic(dev.xross.launcher.data.ThemeMusic.OFF), selected = choice.equals(dev.xross.launcher.data.ThemeMusic.OFF, ignoreCase = true)))
             add(
                 MenuOption(

@@ -112,7 +112,7 @@ class PlaylistsTest {
         val inFav = some.list(MediaMenus.PLAYLIST + "favorites").single()
         assertEquals(listOf("Move up", "Move down", "Remove from playlist", "Add to playlist"), inFav.menu.map { it.label })
         val favRow = some.list(MediaMenus.PLAYLISTS)[1]
-        assertEquals(listOf("Play", "Shuffle"), favRow.menu.map { it.label })
+        assertEquals(listOf("Play", "Shuffle", "Use as theme music"), favRow.menu.map { it.label })
         // Albums add to Favorites through their playlist list.
         val album = some.list(MediaMenus.ALBUMS).first()
         assertEquals("favorites", album.menu[0].submenu[0].label)

@@ -34,6 +34,8 @@ data class Photo(
     val sizeBytes: Long,
     /** EXIF rotation in degrees; 90/270 swap the displayed width and height. */
     val orientation: Int = 0,
+    /** Absolute file path (an album used as a rotating wallpaper reads it); empty when unknown. */
+    val path: String = "",
 ) {
     val displayWidth: Int get() = if (orientation % 180 == 0) width else height
     val displayHeight: Int get() = if (orientation % 180 == 0) height else width
@@ -164,6 +166,7 @@ class MediaRepository(private val context: Context) {
         return Photo(
             id, uri, file.name, file.parentFile?.name ?: "Other", file.lastModified(),
             bounds.outWidth.coerceAtLeast(0), bounds.outHeight.coerceAtLeast(0), file.length(), orientation,
+            path = file.absolutePath,
         )
     }
 
@@ -302,6 +305,7 @@ class MediaRepository(private val context: Context) {
                             id, ContentUris.withAppendedId(IMAGES, id), c.getString(1).orEmpty(),
                             c.getString(2) ?: "Other", taken, c.getInt(5), c.getInt(6), c.getLong(7),
                             orientation = c.getInt(8),
+                            path = c.getString(9).orEmpty(),
                         ) to c.getString(9),
                     )
                 }

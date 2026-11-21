@@ -259,7 +259,8 @@ badges in `Xross/media/avatars/` and `Xross/media/ra/badges/`.
   [Theme 2.0 specification](THEME_SPECIFICATION.md#wallpaper)); it can also be set as the Android
   wallpaper. **Settings ▸ Theme ▸ Xross wallpaper ▸ Pick a folder…** lets a folder's pictures take
   turns (**Change**: every 1, 5, 15 or 60 minutes, or each time Xross comes to the front); a change
-  waits for your next button press, so a resting screen stays still.
+  waits for your next button press, so a resting screen stays still. **Photo ▸ an album ▸ Options ▸
+  Use as Xross wallpaper** (or Xross wallpaper ▸ **An album**) does the same with a Photo album.
 * **Music:** background music player with media-session controls. Select (or a held Guide button)
   opens the media controls. Music pauses for games and videos, and for a game's video snap once
   the snap's sound starts (it fades back in when the cursor moves on; a song you paused stays
@@ -267,7 +268,9 @@ badges in `Xross/media/avatars/` and `Xross/media/ra/badges/`.
   In Now Playing, ↓ stops the music and empties the queue.
 * **Theme music:** a theme pack can bring an ambient loop (`bgm.ogg`) or a list of tracks, or you
   choose in **Settings ▸ Theme ▸ Theme music**: the theme pack's, **Pick a file…** (one track,
-  looped), **Pick a folder…** (up to 50 tracks, crossfading, shuffled or in order) or **Off**.
+  looped), **Pick a folder…** (up to 50 tracks, crossfading, shuffled or in order), **A playlist**
+  (one of your Music playlists, in its order or shuffled; also **Music ▸ Playlists ▸ Options ▸ Use
+  as theme music**, and it follows edits to the playlist) or **Off**.
   After a game a list goes on with its next track. It plays only while nothing
   else does: it stops when you start a song (a paused song counts; stop it from Now Playing to
   hear the theme's music again), stays silent while another app plays media, pauses under a game's

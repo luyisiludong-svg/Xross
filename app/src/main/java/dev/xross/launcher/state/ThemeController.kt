@@ -212,12 +212,12 @@ class ThemeController(
                 it.copy(surfaceStyle = ids[(i + 1) % ids.size])
             }
             is Command.SetXrossWallpaper -> host.photoUri(command.photoId)?.let { uri ->
-                settings.update { it.copy(customWallpaper = uri.toString(), wallpaperFolder = "") }
+                settings.update { it.copy(customWallpaper = uri.toString(), wallpaperFolder = "", wallpaperAlbum = "") }
                 host.toast("Xross wallpaper set")
             }
             Command.ResetXrossWallpaper -> {
                 val old = settings.current.customWallpaper
-                settings.update { it.copy(customWallpaper = "", wallpaperFolder = "") }
+                settings.update { it.copy(customWallpaper = "", wallpaperFolder = "", wallpaperAlbum = "") }
                 releaseWallpaperGrant(old)
                 host.toast(if (themes.active.value.hasWallpaper) "Using the theme's wallpaper" else "Xross wallpaper removed")
             }
@@ -397,7 +397,7 @@ class ThemeController(
         val resolver = context.contentResolver
         val kept = runCatching { resolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }.isSuccess
         val old = settings.current.customWallpaper
-        settings.update { it.copy(customWallpaper = uri.toString(), wallpaperFolder = "") }
+        settings.update { it.copy(customWallpaper = uri.toString(), wallpaperFolder = "", wallpaperAlbum = "") }
         if (old != uri.toString()) releaseWallpaperGrant(old)
         host.toast(if (kept) "Xross wallpaper set" else "Xross wallpaper set (until Xross restarts: the picker gave no lasting access)")
     }

@@ -33,6 +33,10 @@
   without box art, a hero or a logo, and Metadata & Media pages through just those.
 - **Fix media…** goes through a whole system: a console strip, filters for what's missing, and a
   badge per art kind on every game; Confirm opens Metadata & Media, Back returns to the same game.
+- **Albums and playlists as backgrounds.** Photo ▸ an album ▸ Options ▸ Use as Xross wallpaper
+  lets the album's pictures take turns behind the menu, and Music ▸ Playlists ▸ a playlist ▸
+  Options ▸ Use as theme music plays it as the menu's music (also under Settings ▸ Theme ▸ Xross
+  wallpaper ▸ An album and Theme music ▸ A playlist).
 - **Wallpaper rotation.** Xross wallpaper ▸ Pick a folder… lets its pictures take turns, every few
   minutes or each time Xross comes to the front, crossfading; a change waits for your next input,
   so it never wakes a resting screen.
