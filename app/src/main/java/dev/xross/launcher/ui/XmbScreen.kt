@@ -208,6 +208,8 @@ fun XmbScreen(
     snap: SnapPlayer? = null,
     videoFile: suspend (String) -> java.io.File? = { null },
     loadBadge: suspend (String, Int) -> ImageBitmap? = { _, _ -> null },
+    /** A media picker thumbnail (Metadata & Media). */
+    loadOfferThumb: suspend (dev.xross.launcher.scrape.MediaOffer, Int) -> ImageBitmap? = { _, _ -> null },
     /** The wallpaper behind the menu (the user's Xross wallpaper or the pack's); null: none. */
     wallpaper: WallpaperSource? = null,
     /** The pack's wallpaper, shown when [wallpaper] (the user's) can't be read. */
@@ -336,6 +338,7 @@ fun XmbScreen(
         /** Height of the button-hint row, so the mini player can float just above it. */
         var hintsHeightPx by remember { mutableIntStateOf(0) }
         val menuShown = state.overlay == null && state.search == null && state.nameEntry == null && state.details == null &&
+            state.metadataEditor == null &&
             state.waveEditor == null && state.achievements == null && state.profileCard == null &&
             state.avatarEditor == null && state.raHub == null
         val menuAlpha by animateFloatAsState(if (menuShown) 1f else 0f, motion.tween(220), label = "menu")
@@ -345,7 +348,7 @@ fun XmbScreen(
         val components = LocalComponents.current
         // The mini player (card or ticker) hides while anything takes over the screen or the corner.
         val miniCovered = state.overlay != null || state.search != null || state.nameEntry != null ||
-            state.details != null || state.optionsMenu != null || state.info != null ||
+            state.details != null || state.optionsMenu != null || state.info != null || state.metadataEditor != null ||
             state.profileCard != null || state.remap != null || state.booting != null ||
             state.waveEditor != null || state.achievements != null ||
             state.avatarEditor != null || state.raHub != null || state.layoutEditor != null
@@ -543,6 +546,20 @@ fun XmbScreen(
             onPlay = { onEvent(XmbEvent.Menu.PlayDetails) },
             onAchievements = { onEvent(XmbEvent.Menu.DetailsAchievements) },
             onDismiss = { onEvent(XmbEvent.Menu.CloseDetails) },
+        )
+
+        MetadataEditorScreen(
+            editor = state.metadataEditor,
+            m = m,
+            pulse = { pulse },
+            confirmGlyph = if (state.confirm == ConfirmLayout.EAST) state.glyphs.east else state.glyphs.south,
+            backGlyph = if (state.confirm == ConfirmLayout.EAST) state.glyphs.south else state.glyphs.east,
+            loadArt = loadArt,
+            loadThumbnail = loadOfferThumb,
+            onRowTap = { onEvent(XmbEvent.MetadataEditor.RowTap(it)) },
+            onPickerTap = { onEvent(XmbEvent.MetadataEditor.PickerTap(it)) },
+            onClosePicker = { onEvent(XmbEvent.MetadataEditor.ClosePicker) },
+            onDismiss = { onEvent(XmbEvent.MetadataEditor.Close) },
         )
 
         InfoPanel(

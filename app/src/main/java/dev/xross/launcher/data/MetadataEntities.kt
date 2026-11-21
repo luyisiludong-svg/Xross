@@ -93,4 +93,20 @@ data class GameMetadataEntity(
     val scrapeStatus: String? = null,
     val scrapeDetail: String? = null,
     val scrapedAt: Long? = null,
-)
+    // Metadata & Media editor (v6)
+    /**
+     * Art kinds the user chose by hand ([dev.xross.launcher.model.ArtKind] names, comma-separated).
+     * Scraping never replaces a pinned kind.
+     */
+    val pinnedArt: String? = null,
+    /** The user's own description, shown instead of [synopsis]. */
+    val synopsisOverride: String? = null,
+    /**
+     * Which art kinds have a file ([dev.xross.launcher.model.ArtKind.bit] per kind), so lists can
+     * tell without touching storage. Null until the game's media folders were first checked.
+     */
+    val mediaStatus: Int? = null,
+) {
+    /** The description to show: the user's, else the scraped one. */
+    val shownSynopsis: String? get() = synopsisOverride ?: synopsis
+}

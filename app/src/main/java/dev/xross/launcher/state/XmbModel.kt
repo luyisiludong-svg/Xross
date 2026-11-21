@@ -264,6 +264,8 @@ sealed interface Command {
     data class ChooseMatch(val gameId: Long, val provider: ProviderId, val id: String) : Command
     data class Rescrape(val gameId: Long) : Command
     data class ResetMetadata(val gameId: Long) : Command
+    /** Options ▸ Metadata & Media: the full-screen editor on this game. */
+    data class OpenMetadataEditor(val gameId: Long) : Command
 }
 
 sealed interface NodeAction {

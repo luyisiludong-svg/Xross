@@ -24,6 +24,10 @@ Legend: ✅ done and verified · ◐ partial · ❌ not started · 🧊 iced · 
 | Phase 3 — release candidate | ◐ RetroAchievements linking, User Card, achievement lists and unlock toasts done and live; hot-swap and live resolution change done; dual screen, docking, Portal and FTPS not started | [Phase 2 evidence §3.12–§3.14](phase-2/STATUS.md#s3.12) |
 | Phase 4 — v1.0 | ◐ app triage and performance work started | [Performance](status/PERFORMANCE.md) |
 
+**Verification (2026-11-21, 0.2.2.0 § 2):** `./gradlew check assembleDebug assembleProfiling`
+passes; 1,061 unit tests (975 JVM/Robolectric in `:app`, 4 opt-in live tests skipped; 86 in
+`:theme:engine`), 0 failures. Device suites not rerun.
+
 **Verification (2026-11-16, Phase 3-prep step 7):** 980 unit tests pass (899 JVM/Robolectric in
 `:app`, 81 plain JUnit in `:theme:engine`); on the API 37 emulator smoke 12/12, library 41/41,
 media 56/56, input 11/11, integration 9/9 and theme 424/426
@@ -131,7 +135,8 @@ from §3.40; this dashboard only gets its summary row and index entry updated.
 | Throttled batch scraper | ✅ 📱 | Per-service pacing, back-off on 429, daily-quota stop, retry after a day on failure; only while Xross is in front; opt-in and Wi-Fi only by default |
 | Asset cache | ✅ 🧪 | `Xross/media/<kind>/<system>/<rom stem>.<ext>` since 2026-11-11 ([§3.10](phase-2/STATUS.md#s3.10)); atomic writes; files accepted only if their bytes are PNG, JPEG, WebP or MP4; art of removed games pruned. The earlier private UUID cache (verified on the Galaxy A55) is moved over once |
 | Game Details screen | ✅ 📱 | Background art (or the playing snap), box art, logo, release facts, rating, playtime, scrollable description |
-| Manual match and override tool | ✅ 📱 | Options ▸ Metadata: Edit title, Find match (results from every service), Scrape again, Use automatic match |
+| Manual match and override tool | ✅ 📱 | Options ▸ Metadata & Media: Edit title, Find match (results from every service), Scrape again, Reset metadata |
+| Metadata & Media editor | ✅ | 0.2.2.0 § 2: edit description, media picker over every offer, pins, `mediaStatus`; Room v6. Unit-tested (`MetadataEditorTest`, 18); not yet on the A55 |
 | Language priority list | ◐ | One region and one language setting |
 | RetroAchievements account and profile | ✅ 📱 | Settings ▸ Accounts link dialog, status bar avatar, User Card ([§3.12](phase-2/STATUS.md#s3.12)); since 2b.1 the avatar expands into a mini-HUD ([§3.15](phase-2b/2b.1/STATUS.md#s3.15)). Live on the emulator and the Galaxy A55 ([§3.14](phase-2/STATUS.md#s3.14)) |
 | RetroAchievements game achievements | ✅ 🧪 | Options ▸ Achievements and a Details summary: badge grid (locked greyed), titles, descriptions, points, hardcore/softcore and dates, completion bar. ROMs matched by RetroAchievements' hash per system, title only for disc systems or unfingerprinted ROMs. Live with a Web API key ([§3.14](phase-2/STATUS.md#s3.14)) |

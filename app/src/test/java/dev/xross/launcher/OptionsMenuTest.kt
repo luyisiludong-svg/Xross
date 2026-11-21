@@ -86,14 +86,16 @@ class OptionsMenuTest {
         val game = GameEntity(7, "/r/psx/a.chd", "psx", "Vagrant Story", "a.chd", 10, 0, playCount = 3, playTimeMs = 135 * 60_000L)
         val menu = gameMenu(game, installed = setOf("duckstation", "retroarch"))
         // Systems with RetroAchievements also get Achievements, right after Details.
-        assertEquals(listOf("Play", "Details", "Achievements", "Add to favorites", "Emulator", "Played", "Metadata", "Information"), menu.map { it.label })
+        assertEquals(listOf("Play", "Details", "Achievements", "Add to favorites", "Emulator", "Played", "Metadata & Media", "Information"), menu.map { it.label })
         assertEquals(Command.LaunchGame(7), menu[0].command)
         assertEquals(Command.ShowDetails(7), menu[1].command)
         assertEquals(Command.ShowAchievements(7), menu[2].command)
         assertEquals(Command.ToggleFavorite(7), menu[3].command)
         assertEquals("DuckStation", menu[4].detail)
         assertEquals("2 h 15 min · 3 times", menu[5].detail)
-        assertEquals(listOf(Command.EditTitle(7), Command.FindMatch(7), Command.Rescrape(7)), menu[6].submenu.map { it.command })
+        // One entry opens the Metadata & Media editor; its rows replace the old submenu.
+        assertEquals(Command.OpenMetadataEditor(7), menu[6].command)
+        assertTrue(menu[6].submenu.isEmpty())
         assertEquals(Command.ShowGameInfo(7), menu[7].command)
 
         val choices = menu[4].submenu
@@ -113,7 +115,7 @@ class OptionsMenuTest {
         assertEquals("Not installed", choices[1].detail) // DuckStation
         assertEquals("RetroArch · swanstation", choices[0].detail) // what the platform default resolves to
         // No sessions yet: no history row, but Information is always there.
-        assertEquals(listOf("Play", "Details", "Achievements", "Remove from favorites", "Emulator", "Metadata", "Information"), menu.map { it.label })
+        assertEquals(listOf("Play", "Details", "Achievements", "Remove from favorites", "Emulator", "Metadata & Media", "Information"), menu.map { it.label })
     }
 
     // endregion

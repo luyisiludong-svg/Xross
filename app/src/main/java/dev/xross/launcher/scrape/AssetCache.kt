@@ -105,6 +105,20 @@ class AssetCache(
     fun has(uuid: String, kind: ArtKind): Boolean = file(uuid, kind) != null
 
     /**
+     * Which kinds have a file for [uuid], as `game_metadata.mediaStatus` stores it ([ArtKind.bit]
+     * per kind). Touches storage (a few `stat` calls per kind), so lists read the stored value.
+     */
+    fun mediaStatus(uuid: String): Int = ArtKind.entries.fold(0) { mask, kind -> if (has(uuid, kind)) mask or kind.bit else mask }
+
+    /** Deletes [uuid]'s [kind], whatever its name variant or extension; false when there was none. */
+    suspend fun removeKind(uuid: String, kind: ArtKind): Boolean = withContext(Dispatchers.IO) {
+        if (!has(uuid, kind)) return@withContext false
+        slots[uuid]?.let { slot -> deleteVariants(kindDir(kind, slot), slot, kind, uuid) } ?: legacyFile(uuid, kind)?.delete()
+        _version.value++
+        true
+    }
+
+    /**
      * Stores media for [uuid]/[kind] by letting [write] fill a temp file, then renaming it into
      * place (replacing any earlier file of that kind, whatever its name variant or extension).
      */

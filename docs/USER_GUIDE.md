@@ -164,8 +164,20 @@ FAT32/exFAT cards. Art from earlier versions is moved here once, in the backgrou
 ### Per game: Details, matching and information
 
 * **Options ▸ Details** (or → on a game; L1/R1 or ←/→ there pages to the next and previous game).
-* **Options ▸ Metadata** to edit the title, find the right match by name, scrape again or go back
-  to the automatic match.
+* **Options ▸ Metadata & Media** for the game's title, description, match and art, on one screen:
+  * Edit title…, Edit description…, Find match…, Scrape again, and Reset metadata (which forgets
+    your title, description and match).
+  * One row per art slot (Box art, 3D box, Capsule, Hero background, Logo, Screenshot, and Video
+    snap when Settings ▸ Scrape videos is on), each with a preview and where it came from:
+    *Scraped*, *Chosen* (by you), *From your folder* (media copied in, ES-DE's for example),
+    *Removed* or *None*.
+  * Confirm on a slot opens the picker: everything ScreenScraper and SteamGridDB have for that
+    slot, then **Use a file…** (an image on the device; an MP4 for the video snap) and
+    **Remove**. Art you choose or remove is kept: Scrape again doesn't replace it until
+    **Reset media**. The services are asked only when you open a slot, so paging through games
+    uses no quota.
+  * L1 / R1 move to the previous or next game of the list and keep the cursor on the same row.
+    Back returns to the game's Options.
 * **Options ▸ Information** for the file, hashes, DAT match and playtime.
 
 Resting on a scraped game brings up its hero art and video snap behind the menu; timing and

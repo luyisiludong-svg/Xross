@@ -83,6 +83,8 @@ sealed interface UiEffect {
     data class PromptRetroAchievements(val user: String, val linked: Boolean) : UiEffect
     data object RequestStorageAccess : UiEffect
     data class SetWallpaper(val uri: Uri) : UiEffect
+    /** Pick an image (or, for the video slot, an MP4) for a game's media; answers [XmbViewModel.onMediaFilePicked]. */
+    data class PickMediaFile(val video: Boolean) : UiEffect
     /** Pick an image for the Xross wallpaper; answers [XmbViewModel.onWallpaperPicked]. */
     data object PickWallpaperImage : UiEffect
 
@@ -135,6 +137,8 @@ data class XmbUiState(
     val info: GameInfoState? = null,
     /** Game Details screen. */
     val details: GameDetailsState? = null,
+    /** Options ▸ Metadata & Media while it is open. */
+    val metadataEditor: MetadataEditorState? = null,
     /** Reading storage: a library scan or background fingerprinting is running. */
     val busy: Boolean = false,
     val showButtonHints: Boolean = true,
@@ -303,6 +307,31 @@ class XmbViewModel(
             override fun fail(message: String) = this@XmbViewModel.fail(message)
             override fun refuse() = this@XmbViewModel.refuse()
             override fun promptText(prompt: TextPrompt) = emit(UiEffect.PromptText(prompt))
+        },
+    )
+
+    /** Options ▸ Metadata & Media: the editor and its media picker. */
+    private val metaEditor = MetadataEditorController(
+        scope = viewModelScope,
+        db = container.database,
+        media = container.mediaEditor,
+        sounds = container.sounds,
+        artVersion = container.assets.version,
+        videos = { container.settings.current.scrapeVideos },
+        open = { uri -> context.contentResolver.openInputStream(uri) },
+        scratch = { File(context.cacheDir, "media-pick") },
+        host = object : MetadataEditorController.Host {
+            override fun toast(message: String) = this@XmbViewModel.toast(message)
+            override fun fail(message: String) = this@XmbViewModel.fail(message)
+            override fun refuse() = this@XmbViewModel.refuse()
+            override fun emit(effect: UiEffect) = this@XmbViewModel.emit(effect)
+            override fun run(command: Command) = this@XmbViewModel.run(command)
+            override fun siblings() = detailsSiblings()
+            override fun follow(gameId: Long) = followList(gameId)
+            override fun reopenOptions(gameId: Long) {
+                (typing.state.value.search?.results ?: current().items)
+                    .firstOrNull { (it.action as? NodeAction.LaunchGame)?.gameId == gameId }?.let(::openOptions)
+            }
         },
     )
 
@@ -480,15 +509,16 @@ class XmbViewModel(
         val overlay: MediaOverlay?,
         val profile: ProfileState,
         val ra: RaState,
+        val metadataEditor: MetadataEditorState?,
     )
 
     private val settled = combine(
         combine(
-            combine(transient, transitions.state, ::Pair), theme.layoutEditor, editors.state, typing.state, library.state,
-        ) { (tr, tn), le, ed, ty, lib -> Panels(tr, tn, le, ed, ty, lib) },
+            combine(transient, transitions.state, metaEditor.state, ::Triple), theme.layoutEditor, editors.state, typing.state, library.state,
+        ) { (tr, tn, me), le, ed, ty, lib -> Panels(tr, tn, le, ed, ty, lib, me) },
         settingsStore.settings, media.overlay, container.profiles.state, ra.state,
     ) { p, st, ov, pr, r ->
-        Settled(p.transient, p.transitions, p.layoutEditor, p.editors, p.typing, p.library, st, ov, pr, r)
+        Settled(p.transient, p.transitions, p.layoutEditor, p.editors, p.typing, p.library, st, ov, pr, r, p.metadataEditor)
     }
 
     /** The panels' own flows, combined first so [settled] stays within five inputs. */
@@ -499,6 +529,7 @@ class XmbViewModel(
         val editors: EditorsState,
         val typing: TypingState,
         val library: LibraryStatus,
+        val metadataEditor: MetadataEditorState?,
     )
 
     /** The components' `glyphOverride` (2b.7b): which labels the hints draw. */
@@ -535,6 +566,7 @@ class XmbViewModel(
             nameEntry = sd.typing.nameEntry,
             info = tr.info,
             details = tr.details,
+            metadataEditor = sd.metadataEditor,
             busy = sd.library.scanning || sd.library.datWork || tr.themeWork || lv.fingerprints.current != null || lv.scrape.running,
             showButtonHints = settings.showButtonHints,
             profile = sd.profile,
@@ -646,6 +678,7 @@ class XmbViewModel(
             is XmbEvent.Menu -> onMenuEvent(event)
             is XmbEvent.Typing -> typing.onEvent(event)
             is XmbEvent.Editor -> editors.onEvent(event)
+            is XmbEvent.MetadataEditor -> metaEditor.onEvent(event)
             is XmbEvent.Layout -> theme.onEvent(event)
             is XmbEvent.Ra -> ra.onEvent(event)
             is XmbEvent.Boot -> transitions.onEvent(event)
@@ -682,6 +715,7 @@ class XmbViewModel(
         if (theme.onLayoutAction(action)) return
         if (editors.onAvatarAction(action)) return
         if (ra.onScreenAction(action)) return
+        if (metaEditor.onAction(action)) return
         transient.value.info?.let { return infoAction(it, action) }
         transient.value.details?.let { return detailsAction(it, action) }
         // Before the media screens: the photo viewer's Options menu opens over it.
@@ -731,6 +765,7 @@ class XmbViewModel(
                 ra.dismissAll()
                 theme.dismissLayoutSettings()
                 editors.dismissAll()
+                metaEditor.close(sound = false)
                 transient.update { it.copy(optionsMenu = null, info = null, details = null) }
             }
             MediaOverlayController.NowPlayingToggle.CLOSED -> sounds.play(UiSound.BACK)
@@ -770,6 +805,12 @@ class XmbViewModel(
     // endregion
 
     // region Theme packs and Wave settings
+
+    /** Metadata & Media ▸ a slot ▸ Use a file…: see [MetadataEditorController.onFilePicked]. */
+    fun onMediaFilePicked(uri: Uri?) = metaEditor.onFilePicked(uri)
+
+    /** A media picker thumbnail as a local file (downloaded once per editor session). */
+    suspend fun mediaThumbnail(offer: dev.xross.launcher.scrape.MediaOffer): File? = metaEditor.thumbnail(offer)
 
     /** Settings ▸ Theme ▸ Xross wallpaper ▸ Pick a picture: see [ThemeController.onWallpaperPicked]. */
     fun onWallpaperPicked(uri: Uri?) = theme.onWallpaperPicked(uri)
@@ -944,6 +985,7 @@ class XmbViewModel(
                 toast(if (value.isEmpty()) "Automatic title restored" else "Title changed")
             }
             is TextPrompt.AvatarBorderColor -> editors.onAvatarColorEntered(text)
+            is TextPrompt.GameDescription -> metaEditor.onDescriptionEntered(prompt.gameId, text)
             is TextPrompt.MatchQuery -> {
                 if (value.isEmpty()) return
                 datWork {
@@ -1003,7 +1045,12 @@ class XmbViewModel(
     /** L1/R1 or Left/Right on Details: the previous or next game of the list, without leaving the screen. */
     private fun pageDetails(details: GameDetailsState, delta: Int) {
         val next = DetailsPager.neighbor(detailsSiblings(), details.gameId, delta) ?: return refuse()
-        // The list cursor follows, so Back lands on the game that was on screen.
+        followList(next)
+        showDetails(next, direction = delta)
+    }
+
+    /** The list cursor follows paging (Details, the metadata editor), so Back lands on the game that was on screen. */
+    private fun followList(next: Long) {
         val search = typing.state.value.search
         if (search != null) {
             val i = search.results.indexOfFirst { (it.action as? NodeAction.LaunchGame)?.gameId == next }
@@ -1016,7 +1063,6 @@ class XmbViewModel(
                 nav.value = nav.value.moveCursor(category.id, category.title, i - ui.focusedIndex, ui.items.size)
             }
         }
-        showDetails(next, direction = delta)
     }
 
     /** Touch: the achievements summary on Details. */
@@ -1571,11 +1617,13 @@ class XmbViewModel(
                 withContext(Dispatchers.IO) {
                     val db = container.database.metadata()
                     db.upsertAll(db.getAll().map { it.copy(scrapeStatus = null) })
+                    db.clearMediaStatus()
                 }
                 toast("Freed ${MenuTree.formatSize(freed)} · art downloads again on the next scrape")
             }
             is Command.ShowAchievements -> ra.showAchievements(command.gameId)
             is Command.ShowDetails -> showDetails(command.gameId)
+            is Command.OpenMetadataEditor -> metaEditor.open(command.gameId)
             is Command.EditTitle -> viewModelScope.launch {
                 val game = container.games.get(command.gameId) ?: return@launch
                 val current = container.database.metadata().get(game.id)?.titleOverride ?: game.title
@@ -1590,7 +1638,10 @@ class XmbViewModel(
             is Command.ResetMetadata -> viewModelScope.launch {
                 withContext(Dispatchers.IO) {
                     container.database.metadata().edit(command.gameId) {
-                        it.copy(locked = false, titleOverride = null, screenScraperId = null, steamGridDbId = null, scrapeStatus = null)
+                        it.copy(
+                            locked = false, titleOverride = null, synopsisOverride = null,
+                            screenScraperId = null, steamGridDbId = null, scrapeStatus = null,
+                        )
                     }
                 }
                 container.dats.matchAll()
@@ -1760,8 +1811,11 @@ class XmbViewModel(
         // Art is named after each game's ROM: keep the index current, then move the old private cache once.
         viewModelScope.launch {
             var migrated = false
+            var backfill: Job? = null
             container.games.games.collect { games ->
                 container.assets.setLibrary(games)
+                // Which art each game has (v6 `mediaStatus`): once after the upgrade, then for new games.
+                if (backfill?.isActive != true) backfill = viewModelScope.launch { runCatching { container.mediaEditor.backfillStatus() } }
                 if (!migrated && games.isNotEmpty()) {
                     migrated = true
                     viewModelScope.launch { runCatching { container.assets.migrateLegacy() } }

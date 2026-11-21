@@ -18,6 +18,9 @@ interface GameDao {
     @Query("SELECT * FROM games WHERE id = :id")
     suspend fun get(id: Long): GameEntity?
 
+    @Query("SELECT * FROM games WHERE id = :id")
+    fun observe(id: Long): Flow<GameEntity?>
+
     @Query("SELECT COUNT(*) FROM games")
     suspend fun count(): Int
 

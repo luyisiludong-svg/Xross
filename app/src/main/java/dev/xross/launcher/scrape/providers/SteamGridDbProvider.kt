@@ -4,6 +4,8 @@ import dev.xross.launcher.model.ArtKind
 import dev.xross.launcher.scrape.AssetCache
 import dev.xross.launcher.scrape.HttpClient
 import dev.xross.launcher.scrape.HttpResponse
+import dev.xross.launcher.scrape.MediaOffer
+import dev.xross.launcher.scrape.OfferResult
 import dev.xross.launcher.scrape.ProviderId
 import dev.xross.launcher.scrape.ProviderResult
 import dev.xross.launcher.scrape.RateLimiter
@@ -69,6 +71,33 @@ class SteamGridDbProvider(
         return hits.map { (id, name, year) -> SearchHit(ProviderId.STEAMGRIDDB, id, name, year) }
     }
 
+    /** The whole `/grids|heroes|logos/game/{id}` list (static images only), not just its first entry. */
+    override suspend fun mediaOffers(request: ScrapeRequest, kind: ArtKind): OfferResult {
+        val (endpoint, query) = when (kind) {
+            ArtKind.GRID -> "grids" to "dimensions=600x900&types=static"
+            ArtKind.HERO -> "heroes" to "types=static"
+            ArtKind.WHEEL -> "logos" to "types=static"
+            else -> return OfferResult.NONE
+        }
+        if (!isConfigured()) return OfferResult.Unavailable(OfferResult.NO_STEAMGRIDDB_KEY)
+        return try {
+            val gameId = request.steamGridDbId ?: run {
+                val hits = searchRaw(request.title) ?: return OfferResult.Unavailable("SteamGridDB rejected the API key")
+                bestHit(request.title, hits)?.first ?: return OfferResult.Unavailable(OfferResult.NO_MATCH)
+            }
+            val data = dataArray(get("/$endpoint/game/$gameId?$query")) ?: return OfferResult.NONE
+            OfferResult.Offers(parseOffers(data, kind))
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: RateLimited) {
+            OfferResult.Unavailable("SteamGridDB is rate limiting requests")
+        } catch (e: IOException) {
+            OfferResult.Unavailable("SteamGridDB unreachable (${e.javaClass.simpleName})")
+        } catch (_: JSONException) {
+            OfferResult.Unavailable("SteamGridDB sent an unreadable answer")
+        }
+    }
+
     private class RateLimited : IOException()
 
     /** (id, name, year) triples; null when the key was rejected. */
@@ -124,5 +153,26 @@ class SteamGridDbProvider(
         }
 
         internal fun normalize(s: String) = s.lowercase(Locale.ROOT).filter { it.isLetterOrDigit() }
+
+        /** Every image of a `data` array, in the API's order (best voted first). Labels read "Alternate · 600×900". */
+        internal fun parseOffers(data: JSONArray, kind: ArtKind): List<MediaOffer> =
+            (0 until data.length()).mapNotNull { i ->
+                val item = data.optJSONObject(i) ?: return@mapNotNull null
+                val url = item.optString("url").takeIf { it.startsWith("https://") } ?: return@mapNotNull null
+                val width = item.optInt("width", 0).takeIf { it > 0 }
+                val height = item.optInt("height", 0).takeIf { it > 0 }
+                val style = item.optString("style").replace('_', ' ').trim()
+                    .replaceFirstChar { it.titlecase(Locale.ROOT) }.ifEmpty { null }
+                MediaOffer(
+                    kind = kind,
+                    url = url,
+                    thumbnailUrl = item.optString("thumb").takeIf { it.startsWith("https://") },
+                    provider = ProviderId.STEAMGRIDDB,
+                    label = listOfNotNull(style, if (width != null && height != null) "$width×$height" else null)
+                        .joinToString(" · ").ifEmpty { "Image ${i + 1}" },
+                    width = width,
+                    height = height,
+                )
+            }
     }
 }

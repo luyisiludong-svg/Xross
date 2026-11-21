@@ -29,7 +29,7 @@ abstract class XrossDatabase : RoomDatabase() {
 
     companion object {
         const val NAME = "xross.db"
-        const val VERSION = 5
+        const val VERSION = 6
 
         /** v3: accumulated playtime per game. */
         val MIGRATION_2_3 = object : Migration(2, 3) {
@@ -98,8 +98,22 @@ abstract class XrossDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v6: the Metadata & Media editor. Three nullable columns on game_metadata: the art kinds
+         * the user pinned, their own description, and which kinds have a file. `mediaStatus`
+         * starts NULL ("not checked yet") and is filled by the first media check after the
+         * upgrade, which is the only code that can see the media folders.
+         */
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE game_metadata ADD COLUMN pinnedArt TEXT")
+                db.execSQL("ALTER TABLE game_metadata ADD COLUMN synopsisOverride TEXT")
+                db.execSQL("ALTER TABLE game_metadata ADD COLUMN mediaStatus INTEGER")
+            }
+        }
+
         /** Every hand-written migration, in order. No destructive fallback: an upgrade never drops data. */
-        val MIGRATIONS = arrayOf<Migration>(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+        val MIGRATIONS = arrayOf<Migration>(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
 
         /**
          * Opens the live database (app-private storage only; see [DatabaseBackupManager] for the

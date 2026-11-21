@@ -214,7 +214,8 @@ All 12 recipes are verified only against the test stand-ins, not real emulator i
 | Background scraping | ✅ 📱 | Off until turned on, Wi-Fi only by default, paced per service, stops while a game runs |
 | Art in `Xross/media/<kind>/<system>/<rom stem>.<ext>` | ✅ 📱 | ES-DE-style names (`covers`, `3dboxes`, `heroes`, `wheels`, `screenshots`, `capsules`, `snaps`), FAT-safe and de-duplicated per system; ES-DE media copied in is used as is and never pruned |
 | Game Details screen | ✅ 📱 | Options ▸ Details or → on a game: background art, box art, logo, release facts, rating, playtime, description, achievements summary. Paging between games added in 2b.1 (§2.9) |
-| Manual match and title override | ✅ 📱 | Options ▸ Metadata: Edit title, Find match, Scrape again, Use automatic match |
+| Manual match and title override | ✅ 📱 | Options ▸ Metadata & Media: Edit title, Find match, Scrape again, Reset metadata |
+| Metadata & Media editor (0.2.2.0 § 2) | ✅ | Edit description; choose each art slot from every ScreenScraper and SteamGridDB offer or a file; chosen art is pinned against rescrapes. Unit-tested; device check on the A55 to do |
 | Service credentials | ✅ | Stored apart from settings and excluded from backup; `.env` pre-fills them in debug builds only (see `.env.example`) |
 
 ### 2.9 Profile, RetroAchievements and Phase 2b.1

@@ -16,4 +16,24 @@ enum class ArtKind(val folder: String, val fileStem: String, val maxBytes: Long,
     GRID("capsules", "grid", 8L shl 20),
     /** Video snap. */
     VIDEO("snaps", "video", 40L shl 20, isVideo = true),
+    ;
+
+    /**
+     * This kind's bit in `game_metadata.mediaStatus`. It follows the declaration order, so new
+     * kinds are only ever added at the end.
+     */
+    val bit: Int get() = 1 shl ordinal
+
+    companion object {
+        /** The kinds whose bit is set in [mask]. */
+        fun inMask(mask: Int): Set<ArtKind> = entries.filterTo(LinkedHashSet()) { mask and it.bit != 0 }
+
+        /** `game_metadata.pinnedArt`: comma-separated names; unknown names are dropped. */
+        fun parsePins(raw: String?): Set<ArtKind> =
+            raw.orEmpty().split(',').mapNotNullTo(LinkedHashSet()) { name -> entries.firstOrNull { it.name == name.trim() } }
+
+        /** The stored form of [pins], in declaration order; null when there are none. */
+        fun formatPins(pins: Set<ArtKind>): String? =
+            entries.filter { it in pins }.joinToString(",") { it.name }.ifEmpty { null }
+    }
 }

@@ -55,6 +55,14 @@ sealed interface XmbEvent {
         data object CloseAvatar : Editor
     }
 
+    /** The Metadata & Media editor and its media picker; handled by [MetadataEditorController]. */
+    sealed interface MetadataEditor : XmbEvent {
+        data class RowTap(val index: Int) : MetadataEditor
+        data class PickerTap(val index: Int) : MetadataEditor
+        data object ClosePicker : MetadataEditor
+        data object Close : MetadataEditor
+    }
+
     /** The Layout panel; handled by [ThemeController]. */
     sealed interface Layout : XmbEvent {
         data class RowTap(val index: Int) : Layout

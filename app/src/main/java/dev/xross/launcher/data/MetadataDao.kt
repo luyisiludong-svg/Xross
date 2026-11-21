@@ -11,6 +11,17 @@ interface MetadataDao {
     @Query("SELECT * FROM game_metadata WHERE gameId = :gameId")
     suspend fun get(gameId: Long): GameMetadataEntity?
 
+    @Query("SELECT * FROM game_metadata WHERE gameId = :gameId")
+    fun observe(gameId: Long): Flow<GameMetadataEntity?>
+
+    /** Games whose media folders haven't been checked yet (see [GameMetadataEntity.mediaStatus]). */
+    @Query("SELECT g.* FROM games g LEFT JOIN game_metadata m ON m.gameId = g.id WHERE m.mediaStatus IS NULL")
+    suspend fun mediaStatusPending(): List<GameEntity>
+
+    /** Every media file is gone (Settings ▸ Clear artwork). Pins go with the files they named. */
+    @Query("UPDATE game_metadata SET mediaStatus = 0, pinnedArt = NULL")
+    suspend fun clearMediaStatus()
+
     @Query("SELECT * FROM game_metadata")
     fun observeAll(): Flow<List<GameMetadataEntity>>
 

@@ -13,9 +13,9 @@ Sizes: **XS** under an hour · **S** half a day · **M** one to two days · **L*
 | 3 | Console logos on system folders | S–M | ✅ `510c9bb`; Dan Patrick's logos bundled in eight styles, unit-tested and checked on the A55 |
 | 4a | ARMSX2 recipe (PS2) | S | ✅ `45d0ecc`, stub-verified only |
 | 4b | ARMSX3 recipe and a PS3 platform | M | ✅ `f8a4a19`, unit-tested and stub only |
-| 5 | Custom launch recipes and custom systems | M–L | Planned (candidate for 0.2.2.0) |
+| 5 | Custom launch recipes and custom systems | M–L | Moved to `PLAN_0.2.2.0.md` § 1 |
 | 6 | Sort Android apps into Video, Music and Photo | M | ✅ `2f8cd82`, unit-tested |
-| 7 | Choose a game's media from the scraper's offers | L | Planned (candidate for 0.2.2.0) |
+| 7 | Choose a game's media from the scraper's offers | L | Moved to `PLAN_0.2.2.0.md` § 2 (widened) |
 | 8 | New theme packs to show off the above | — | 🟡 Flat Shelf sample (outside this repo); designed packs still to do |
 | 9 | A `bios` folder in the Xross folder | XS | ✅ Done; Xross creates it and never reads it |
 

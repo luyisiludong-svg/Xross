@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased (0.2.2.0)
+
+- **Metadata & Media editor.** Options ▸ Metadata & Media now opens a full screen for the game
+  instead of a submenu. Edit the title or the description, find a match, scrape again or reset,
+  and see every art slot with a preview and where its art came from: Box art, 3D box, Capsule,
+  Hero background, Logo, Screenshot, and Video snap when Scrape videos is on. L1 / R1 move to the
+  previous or next game and keep your place, so you can fix the same slot down a whole list.
+- **Choose a game's art.** Confirm on a slot shows everything ScreenScraper and SteamGridDB have
+  for it (every region, every style), or use an image from the device, or remove it. Art you
+  choose or remove stays that way: Scrape again leaves it alone until Reset media. Offers are
+  only asked for when you open a slot, so browsing games costs no ScreenScraper quota. When there
+  is nothing to choose from, the picker says why (no SteamGridDB key, quota used up, no match).
+- **Your own description.** It shows on Details instead of the scraped one; an empty one brings
+  the scraped description back. Reset metadata clears it with your title and match.
+- The library database moves to version 6 (three new columns; nothing existing changes). The
+  first start after updating checks once which art each game has.
+
 ## 0.2.1.0-beta — 2026-11-19
 
 - **A `bios` folder in the Xross folder.** A single place to keep your own BIOS files next to

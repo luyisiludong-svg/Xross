@@ -62,6 +62,39 @@ data class ScrapeRequest(
 /** One downloadable media item a provider offered. */
 data class ScrapedMedia(val kind: ArtKind, val url: String, val ext: String?)
 
+/**
+ * One piece of media a provider has for a game, for the media picker. Unlike [ScrapedMedia]
+ * (the one item a scrape takes per kind) every offer is kept.
+ */
+data class MediaOffer(
+    val kind: ArtKind,
+    /** The full-size file; downloaded only when picked. */
+    val url: String,
+    /** A small preview, when the provider has one. */
+    val thumbnailUrl: String?,
+    val provider: ProviderId,
+    /** "3D box · EU", "Alternate · 600×900". */
+    val label: String,
+    val region: String? = null,
+    val width: Int? = null,
+    val height: Int? = null,
+)
+
+/** A provider's answer to [ScrapeProvider.mediaOffers]. */
+sealed interface OfferResult {
+    data class Offers(val offers: List<MediaOffer>) : OfferResult
+
+    /** Nothing to offer, and why, in words for the picker ("No SteamGridDB key…"). */
+    data class Unavailable(val reason: String) : OfferResult
+
+    companion object {
+        val NONE = Offers(emptyList())
+        const val NO_MATCH = "No match yet. Use Find match…"
+        const val SCREENSCRAPER_QUOTA = "ScreenScraper quota used up for today"
+        const val NO_STEAMGRIDDB_KEY = "No SteamGridDB key. Add one in Settings ▸ Metadata to get heroes, logos and capsules"
+    }
+}
+
 /** What one provider knows about a game. Null fields are unknown, not empty. */
 data class ScrapedGame(
     val provider: ProviderId,
@@ -111,4 +144,11 @@ interface ScrapeProvider {
 
     /** Name search for the manual match picker; empty when unsupported. */
     suspend fun search(query: String, platformId: String?): List<SearchHit> = emptyList()
+
+    /**
+     * Everything the provider has for [kind], for the media picker. Costs quota, so it is called
+     * only when a picker opens. A provider without that kind answers [OfferResult.NONE] without
+     * touching the network.
+     */
+    suspend fun mediaOffers(request: ScrapeRequest, kind: ArtKind): OfferResult = OfferResult.NONE
 }

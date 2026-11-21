@@ -65,7 +65,7 @@ data class GameDetailsState(
                 title = game.title,
                 platform = platform?.name,
                 // Descriptions scraped before entity decoding still hold "&quot;" and friends.
-                synopsis = meta?.synopsis?.trim()?.ifEmpty { null }?.let(HtmlText::decode),
+                synopsis = meta?.shownSynopsis?.trim()?.ifEmpty { null }?.let(HtmlText::decode),
                 facts = facts,
                 rating = meta?.rating,
                 playtime = when {
@@ -112,6 +112,8 @@ sealed interface TextPrompt {
     val initial: String
     val secret: Boolean get() = false
     val hint: String? get() = null
+    /** Several lines of text (a description), not one. */
+    val multiline: Boolean get() = false
 
     data class ScreenScraperUser(override val initial: String) : TextPrompt {
         override val title = "ScreenScraper user name"
@@ -134,6 +136,12 @@ sealed interface TextPrompt {
     data class GameTitle(val gameId: Long, override val initial: String) : TextPrompt {
         override val title = "Title"
         override val hint = "Empty restores the automatic title"
+    }
+
+    data class GameDescription(val gameId: Long, override val initial: String) : TextPrompt {
+        override val title = "Description"
+        override val hint = "Empty restores the scraped description"
+        override val multiline = true
     }
 
     /** Custom ring color for the avatar (Settings ▸ Theme ▸ Profile customization). */

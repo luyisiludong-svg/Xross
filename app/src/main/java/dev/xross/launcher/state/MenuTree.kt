@@ -448,30 +448,8 @@ class MenuTree(private val s: MenuSnapshot) {
             val launches = if (game.playCount == 1) "1 time" else "${game.playCount} times"
             add(MenuOption("Played", detail = "$played · $launches"))
         }
-        add(MenuOption("Metadata", detail = metadataDetail(game), submenu = metadataMenu(game)))
+        add(MenuOption("Metadata & Media", detail = MetadataEditor.matchStatus(s.metadata[game.id]), command = Command.OpenMetadataEditor(game.id)))
         add(MenuOption("Information", detail = "File, size, fingerprints and playtime", command = Command.ShowGameInfo(game.id)))
-    }
-
-    private fun metadataDetail(game: GameEntity): String {
-        val meta = s.metadata[game.id]
-        return when {
-            meta?.locked == true -> "Set manually"
-            meta?.matchKind != null && meta.scrapeStatus == "OK" -> "Verified · scraped"
-            meta?.matchKind != null -> "Verified by DAT"
-            meta?.scrapeStatus == "OK" -> "Scraped"
-            meta?.scrapeStatus == "NOT_FOUND" -> "Not found online"
-            else -> "Not scraped yet"
-        }
-    }
-
-    private fun metadataMenu(game: GameEntity): List<MenuOption> = buildList {
-        val meta = s.metadata[game.id]
-        add(MenuOption("Edit title…", detail = meta?.titleOverride ?: "Use your own name for this game", command = Command.EditTitle(game.id)))
-        add(MenuOption("Find match…", detail = "Search by name when the automatic match is wrong", command = Command.FindMatch(game.id)))
-        add(MenuOption("Scrape again", detail = "Refresh text and art for this game", command = Command.Rescrape(game.id)))
-        if (meta?.locked == true || meta?.titleOverride != null) {
-            add(MenuOption("Use automatic match", detail = "Forget the manual title and match", command = Command.ResetMetadata(game.id)))
-        }
     }
 
     /**

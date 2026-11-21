@@ -33,6 +33,13 @@ class ArtLoader(private val cache: AssetCache, maxBytes: Int = defaultBudget()) 
 
     fun file(uuid: String, kind: ArtKind): File? = cache.file(uuid, kind)
 
+    /** Any image file (a media picker thumbnail), decoded to about [maxPx] and kept like art. */
+    suspend fun loadFile(file: File, maxPx: Int): ImageBitmap? {
+        val key = "file:${file.path}/$maxPx/${file.lastModified()}"
+        memory.get(key)?.let { return it }
+        return withContext(Dispatchers.IO) { decode(file, maxPx) }?.also { memory.put(key, it) }
+    }
+
     /**
      * Drops decoded art. Called when Xross's UI is hidden (a game or another app is in front) or
      * the system is short of memory; rows decode again from disk when they next appear.

@@ -150,6 +150,11 @@ class MainActivity : ComponentActivity() {
         viewModel.onWallpaperPicked(it)
     }
 
+    /** Metadata & Media ▸ a slot ▸ Use a file…: an image, or an MP4 for the video slot. */
+    private val pickMediaFile = registerForActivityResult(ActivityResultContracts.OpenDocument()) {
+        viewModel.onMediaFilePicked(it)
+    }
+
     private val pickBaseRomsFolder = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) {
         viewModel.onBaseRomsFolderPicked(it)
     }
@@ -367,6 +372,7 @@ class MainActivity : ComponentActivity() {
                         }
                     },
                     loadBadge = { name, px -> badgeImages.load(name, px) },
+                    loadOfferThumb = { offer, px -> viewModel.mediaThumbnail(offer)?.let { container.art.loadFile(it, px) } },
                     wallpaper = androidx.compose.runtime.remember(state.settings.customWallpaper, pack, look) {
                         WallpaperSource.resolve(state.settings.customWallpaper, pack, look)
                     },
@@ -471,6 +477,9 @@ class MainActivity : ComponentActivity() {
             is UiEffect.CreateThemeArchive -> runCatching { createThemeArchive.launch(effect.fileName) }
                 .onFailure { viewModel.onThemeArchiveCreated(null) }
             UiEffect.PickBaseRomsFolder -> runCatching { pickBaseRomsFolder.launch(null) }
+            is UiEffect.PickMediaFile -> runCatching {
+                pickMediaFile.launch(if (effect.video) arrayOf("video/mp4") else arrayOf("image/png", "image/jpeg", "image/webp"))
+            }
             UiEffect.PickWallpaperImage -> runCatching { pickWallpaperImage.launch(arrayOf("image/png", "image/jpeg", "image/webp")) }
             is UiEffect.PickMediaFolder -> {
                 pendingMediaFolder = effect.kind
@@ -506,12 +515,22 @@ class MainActivity : ComponentActivity() {
      */
     private fun promptText(prompt: TextPrompt) {
         val input = android.widget.EditText(this).apply {
-            setSingleLine()
+            if (prompt.multiline) {
+                isSingleLine = false
+                minLines = 4
+                maxLines = 10
+                gravity = android.view.Gravity.TOP or android.view.Gravity.START
+            } else {
+                setSingleLine()
+            }
             setText(prompt.initial)
             setSelection(text.length)
             hint = prompt.hint
             inputType = if (prompt.secret) {
                 android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+            } else if (prompt.multiline) {
+                android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE or
+                    android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
             } else {
                 android.text.InputType.TYPE_CLASS_TEXT
             }

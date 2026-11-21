@@ -5,6 +5,8 @@ import dev.xross.launcher.model.ArtKind
 import dev.xross.launcher.scrape.AssetCache
 import dev.xross.launcher.scrape.HttpClient
 import dev.xross.launcher.scrape.HttpResponse
+import dev.xross.launcher.scrape.MediaOffer
+import dev.xross.launcher.scrape.OfferResult
 import dev.xross.launcher.scrape.ProviderId
 import dev.xross.launcher.scrape.ProviderResult
 import dev.xross.launcher.scrape.RateLimiter
@@ -106,19 +108,59 @@ class ScreenScraperProvider(
 
     override fun isConfigured(): Boolean = credentials().hasDeveloper
 
-    override suspend fun lookup(request: ScrapeRequest): ProviderResult {
+    override suspend fun lookup(request: ScrapeRequest): ProviderResult = when (val fetched = fetch(request)) {
+        is Fetched.Game -> ProviderResult.Found(parseGame(fetched.jeu, request.prefs.region, request.prefs.language, request.prefs.videos))
+        is Fetched.Problem -> fetched.result
+    }
+
+    /** The game's `jeu` object, or why there is none. */
+    private sealed interface Fetched {
+        class Game(val jeu: JSONObject) : Fetched
+        class Problem(val result: ProviderResult) : Fetched
+    }
+
+    /** Offers of the games whose pickers were opened last, so a second slot of a game costs no request. */
+    private val offerCache = object : LinkedHashMap<String, List<MediaOffer>>(8, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, List<MediaOffer>>) = size > OFFER_CACHE_GAMES
+    }
+
+    /**
+     * Every image and video `jeuInfos` lists for the game: one request per game, whichever slots
+     * are opened afterwards.
+     */
+    override suspend fun mediaOffers(request: ScrapeRequest, kind: ArtKind): OfferResult {
+        if (OFFER_TYPES.none { it.kind == kind }) return OfferResult.NONE
+        val key = request.uuid + "/" + (request.screenScraperId ?: "")
+        val all = synchronized(offerCache) { offerCache[key] } ?: when (val fetched = fetch(request)) {
+            is Fetched.Game -> {
+                val regions = (listOf(request.prefs.region) + REGION_FALLBACK).distinct()
+                parseOffers(fetched.jeu.opt("medias"), regions).also { synchronized(offerCache) { offerCache[key] = it } }
+            }
+            is Fetched.Problem -> return OfferResult.Unavailable(
+                when (val r = fetched.result) {
+                    is ProviderResult.QuotaExceeded -> OfferResult.SCREENSCRAPER_QUOTA
+                    is ProviderResult.Unavailable -> r.reason
+                    is ProviderResult.Failed -> r.reason
+                    else -> OfferResult.NO_MATCH
+                },
+            )
+        }
+        return OfferResult.Offers(all.filter { it.kind == kind })
+    }
+
+    private suspend fun fetch(request: ScrapeRequest): Fetched {
         val creds = credentials()
-        if (!creds.hasDeveloper) return ProviderResult.Unavailable("This build has no ScreenScraper developer credentials")
-        if (_quota.value?.isSpent == true) return ProviderResult.QuotaExceeded("ScreenScraper's daily quota is used up")
+        if (!creds.hasDeveloper) return Fetched.Problem(ProviderResult.Unavailable("This build has no ScreenScraper developer credentials"))
+        if (_quota.value?.isSpent == true) return Fetched.Problem(ProviderResult.QuotaExceeded("ScreenScraper's daily quota is used up"))
 
         val gameId = request.screenScraperId ?: if (request.hasHash) {
             null
         } else {
             // No hash (file too large to fingerprint): only a confident name match may be used.
             when (val found = searchForGameId(creds, request)) {
-                is ProviderResult -> return found
+                is ProviderResult -> return Fetched.Problem(found)
                 is String -> found
-                else -> return ProviderResult.NotFound
+                else -> return Fetched.Problem(ProviderResult.NotFound)
             }
         }
         val params = LinkedHashMap<String, String>()
@@ -139,17 +181,17 @@ class ScreenScraperProvider(
         } catch (e: CancellationException) {
             throw e
         } catch (e: IOException) {
-            return ProviderResult.Failed("ScreenScraper unreachable (${e.javaClass.simpleName})")
+            return Fetched.Problem(ProviderResult.Failed("ScreenScraper unreachable (${e.javaClass.simpleName})"))
         }
-        statusResult(response)?.let { return it }
+        statusResult(response)?.let { return Fetched.Problem(it) }
         return try {
             val root = JSONObject(response.text())
             val jeu = root.optJSONObject("response")?.optJSONObject("jeu") ?: root.optJSONObject("jeu")
-                ?: return ProviderResult.NotFound
-            if (jeu.optString("notgame") == "true") return ProviderResult.NotFound
-            ProviderResult.Found(parseGame(jeu, request.prefs.region, request.prefs.language, request.prefs.videos))
+                ?: return Fetched.Problem(ProviderResult.NotFound)
+            if (jeu.optString("notgame") == "true") return Fetched.Problem(ProviderResult.NotFound)
+            Fetched.Game(jeu)
         } catch (_: JSONException) {
-            ProviderResult.Failed("ScreenScraper sent an unreadable answer")
+            Fetched.Problem(ProviderResult.Failed("ScreenScraper sent an unreadable answer"))
         }
     }
 
@@ -345,8 +387,71 @@ class ScreenScraperProvider(
             "video" to ArtKind.VIDEO,
         )
 
+        private data class Item(val type: String, val region: String?, val url: String, val format: String?)
+
+        /** A media type the picker offers: its art kind and what to call it. Best first within a kind. */
+        private class OfferType(val type: String, val kind: ArtKind, val label: String)
+
+        private val OFFER_TYPES = listOf(
+            OfferType("box-3D", ArtKind.BOX_3D, "3D box"),
+            OfferType("box-2D", ArtKind.BOX_2D, "Box"),
+            OfferType("mixrbv2", ArtKind.BOX_2D, "Mix"),
+            OfferType("wheel-hd", ArtKind.WHEEL, "Logo HD"),
+            OfferType("wheel", ArtKind.WHEEL, "Logo"),
+            OfferType("wheel-carbon", ArtKind.WHEEL, "Logo, carbon"),
+            OfferType("wheel-steel", ArtKind.WHEEL, "Logo, steel"),
+            OfferType("ss", ArtKind.SCREENSHOT, "Screenshot"),
+            OfferType("sstitle", ArtKind.SCREENSHOT, "Title screen"),
+            OfferType("fanart", ArtKind.HERO, "Fan art"),
+            OfferType("video-normalized", ArtKind.VIDEO, "Video, normalized"),
+            OfferType("video", ArtKind.VIDEO, "Video"),
+        )
+
+        private const val OFFER_CACHE_GAMES = 8
+
+        /** Longest side of a picker thumbnail; the media server scales to it. */
+        private const val THUMB_PX = 320
+
+        /**
+         * Every listed medium of a type the picker knows, none dropped: best type first, then the
+         * user's region order. Labels read "3D box · EU". Images get a scaled-down thumbnail URL
+         * (the media endpoint's `maxwidth` / `maxheight`); videos have none.
+         */
+        internal fun parseOffers(raw: Any?, regions: List<String>): List<MediaOffer> {
+            val items = collectItems(raw)
+            return OFFER_TYPES.flatMap { offer ->
+                items.filter { it.type == offer.type }
+                    .sortedBy { regions.indexOf(it.region).let { r -> if (r < 0) regions.size else r } }
+                    .map { item ->
+                        MediaOffer(
+                            kind = offer.kind,
+                            url = item.url,
+                            thumbnailUrl = if (offer.kind.isVideo) null else "${item.url}&maxwidth=$THUMB_PX&maxheight=$THUMB_PX",
+                            provider = ProviderId.SCREENSCRAPER,
+                            label = listOfNotNull(offer.label, item.region?.uppercase(java.util.Locale.ROOT)).joinToString(" · "),
+                            region = item.region,
+                        )
+                    }
+            }.distinctBy { it.url }
+        }
+
         internal fun parseMedia(raw: Any?, regions: List<String>, videos: Boolean): List<ScrapedMedia> {
-            data class Item(val type: String, val region: String?, val url: String, val format: String?)
+            val items = collectItems(raw)
+            return MEDIA_TYPES.map { it.second }.distinct().mapNotNull { kind ->
+                if (kind.isVideo && !videos) return@mapNotNull null
+                val types = MEDIA_TYPES.filter { it.second == kind }.map { it.first }
+                items.filter { it.type in types }
+                    .sortedWith(
+                        compareBy<Item> { types.indexOf(it.type) }
+                            .thenBy { regions.indexOf(it.region).let { r -> if (r < 0) regions.size else r } },
+                    )
+                    .firstOrNull()
+                    ?.let { ScrapedMedia(kind, it.url, AssetCache.extensionFor(it.url, null, it.format)) }
+            }
+        }
+
+        /** The `medias` value as a flat list, from either layout the API uses. */
+        private fun collectItems(raw: Any?): List<Item> {
             val items = ArrayList<Item>()
             when (raw) {
                 is JSONArray -> for (i in 0 until raw.length()) {
@@ -369,17 +474,7 @@ class ScreenScraperProvider(
                     items += Item(type, region, url, null)
                 }
             }
-            return MEDIA_TYPES.map { it.second }.distinct().mapNotNull { kind ->
-                if (kind.isVideo && !videos) return@mapNotNull null
-                val types = MEDIA_TYPES.filter { it.second == kind }.map { it.first }
-                items.filter { it.type in types }
-                    .sortedWith(
-                        compareBy<Item> { types.indexOf(it.type) }
-                            .thenBy { regions.indexOf(it.region).let { r -> if (r < 0) regions.size else r } },
-                    )
-                    .firstOrNull()
-                    ?.let { ScrapedMedia(kind, it.url, AssetCache.extensionFor(it.url, null, it.format)) }
-            }
+            return items
         }
 
         private fun flattenKeyed(obj: JSONObject, out: (String, String) -> Unit) {

@@ -6,6 +6,7 @@ import dev.xross.launcher.data.GameEntity
 import dev.xross.launcher.data.GameHashEntity
 import dev.xross.launcher.data.GameMetadataEntity
 import dev.xross.launcher.data.XrossDatabase
+import dev.xross.launcher.model.ArtKind
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -49,15 +50,15 @@ data class ScrapeProgress(
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class ScrapeOrchestrator(
-    private val db: XrossDatabase,
-    private val cache: AssetCache,
-    private val http: HttpClient,
+    internal val db: XrossDatabase,
+    internal val cache: AssetCache,
+    internal val http: HttpClient,
     /** In query order: identification first, art last. */
-    private val providers: List<ScrapeProvider>,
+    internal val providers: List<ScrapeProvider>,
     private val prefs: () -> ScrapePrefs,
     /** False on a metered network when the user asked for Wi-Fi only. */
     private val networkAllowed: () -> Boolean = { true },
-    private val clock: () -> Long = System::currentTimeMillis,
+    internal val clock: () -> Long = System::currentTimeMillis,
 ) {
     private val lane = Dispatchers.IO.limitedParallelism(1)
     private val games = db.games()
@@ -88,6 +89,18 @@ class ScrapeOrchestrator(
     suspend fun scrapeOne(gameId: Long): ScrapeStatus? = withContext(lane) {
         val game = games.get(gameId) ?: return@withContext null
         scrapeGame(game, exhausted = HashSet(), replaceArt = true).also { games.applyTitles() }
+    }
+
+    /**
+     * Runs [block] while no game is being scraped, so a hand-picked image can't be overwritten by
+     * a download that started before it (see [GameMediaEditor]).
+     */
+    internal suspend fun <T> withGameLock(block: suspend () -> T): T = gameLock.withLock { block() }
+
+    /** What the services are asked about [game], as a scrape would ask it. */
+    internal suspend fun requestFor(game: GameEntity): ScrapeRequest {
+        val hash = hashes.get(game.id)?.takeIf { it.fileSize == game.sizeBytes && it.fileModified == game.lastModified }
+        return buildRequest(game, hash, metadata.get(game.id))
     }
 
     /** Name search across services, for the manual match picker. */
@@ -201,8 +214,9 @@ class ScrapeOrchestrator(
                 else -> return@withLock null
             }
             cache.register(game)
-            val artProblems = downloadArt(game.uuid, found, replaceArt)
-            metadata.edit(game.id) { merge(it, found, status, (problems + artProblems).firstOrNull(), clock()) }
+            val artProblems = downloadArt(game.uuid, found, replaceArt, ArtKind.parsePins(meta?.pinnedArt))
+            val media = cache.mediaStatus(game.uuid)
+            metadata.edit(game.id) { merge(it, found, status, (problems + artProblems).firstOrNull(), clock()).copy(mediaStatus = media) }
             if (BuildConfig.PERF_LOG) Log.i("XrossScrape", "${game.id}: $status (${found.joinToString { it.provider.label }})")
             status
         }
@@ -236,11 +250,15 @@ class ScrapeOrchestrator(
         )
     }
 
-    /** First offered URL per art kind, ScreenScraper before SteamGridDB; returns problems. */
-    private suspend fun downloadArt(uuid: String, found: List<ScrapedGame>, replace: Boolean): List<String> {
+    /**
+     * First offered URL per art kind, ScreenScraper before SteamGridDB; returns problems. Kinds in
+     * [pinned] (chosen by hand in the Metadata & Media editor) are left alone even on a replace.
+     */
+    private suspend fun downloadArt(uuid: String, found: List<ScrapedGame>, replace: Boolean, pinned: Set<ArtKind>): List<String> {
         val problems = ArrayList<String>()
         val offers = found.flatMap { it.media }.groupBy { it.kind }
         for ((kind, candidates) in offers) {
+            if (kind in pinned) continue
             if (!replace && cache.has(uuid, kind)) continue
             for (media in candidates) {
                 val tmp = cache.tempFile()

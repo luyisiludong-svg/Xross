@@ -202,6 +202,11 @@ class AppContainer(context: Context) {
             networkAllowed = { !settings.current.scrapeWifiOnly || Network.isUnmetered(appContext) },
         )
     }
+    /** Choosing a game's media by hand (Metadata & Media editor); picker thumbnails live in the app cache. */
+    val mediaEditor: dev.xross.launcher.scrape.GameMediaEditor by lazy {
+        dev.xross.launcher.scrape.GameMediaEditor(scraper) { java.io.File(appContext.cacheDir, "media-picker") }
+    }
+
     /** The linked RetroAchievements account (status bar avatar, User Card, Settings ▸ Accounts). */
     val profiles: ProfileRepository by lazy {
         ProfileRepository(
