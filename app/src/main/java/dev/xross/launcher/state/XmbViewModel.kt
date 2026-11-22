@@ -1960,6 +1960,15 @@ class XmbViewModel(
             Command.ToggleVideoLoop -> settingsStore.update { it.copy(videoLoop = !it.videoLoop) }
             Command.ToggleAllGamesFolder -> settingsStore.update { it.copy(allGamesFolder = !it.allGamesFolder) }
             Command.ToggleFileFormat -> settingsStore.update { it.copy(showFileFormat = !it.showFileFormat) }
+            Command.CycleStandbyMotion -> settingsStore.update { it.copy(standbyMotion = it.standbyMotion.next()) }
+            is Command.SetStandbyMotion -> settingsStore.update { it.copy(standbyMotion = command.mode) }
+            Command.ToggleFullFrameRate -> settingsStore.update { it.copy(fullFrameRate = !it.fullFrameRate) }
+            Command.CycleSlowShaders -> setSlowShaders(settingsStore.current.slowShaders.next())
+            is Command.SetSlowShaders -> setSlowShaders(command.mode)
+            Command.RetrySlowShaders -> {
+                container.shaderHealth.retrySlow()
+                toast("Background shaders will be measured again")
+            }
             Command.CycleSystemLogos -> settingsStore.update {
                 val styles = dev.xross.launcher.data.SystemLogoStyle.entries
                 when {
@@ -2045,6 +2054,17 @@ class XmbViewModel(
     private fun fail(message: String) {
         sounds.play(UiSound.ERROR)
         toast(message)
+    }
+
+    /**
+     * A new Slow shaders rule also measures every shader again, so one retired under Switch to the
+     * wave comes back under Keep and warn, and one kept is judged anew under Switch to the wave.
+     */
+    private fun setSlowShaders(mode: dev.xross.launcher.data.SlowShaders) {
+        if (mode == settingsStore.current.slowShaders) return
+        container.shaderHealth.retireSlow = mode == dev.xross.launcher.data.SlowShaders.RETIRE
+        settingsStore.update { it.copy(slowShaders = mode) }
+        container.shaderHealth.retrySlow()
     }
 
     private fun toast(message: String) {

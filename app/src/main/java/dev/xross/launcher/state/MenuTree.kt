@@ -8,6 +8,8 @@ import dev.xross.launcher.data.MusicUnderSnaps
 import dev.xross.launcher.audio.VolumeChannel
 import dev.xross.launcher.data.AppEntry
 import dev.xross.launcher.data.GameEntity
+import dev.xross.launcher.data.SlowShaders
+import dev.xross.launcher.data.StandbyMotion
 import dev.xross.launcher.data.SystemLogoStyle
 import dev.xross.launcher.data.XrossSettings
 import dev.xross.launcher.input.ConfirmLayout
@@ -245,6 +247,7 @@ class MenuTree(private val s: MenuSnapshot) {
         key == SOUND -> soundSettings()
         key == MEDIA_SETTINGS -> mediaSettings()
         key == SYSTEM -> systemSettings()
+        key == PERFORMANCE -> performanceSettings()
         key == ACCOUNTS -> accountSettings()
         key == APPS_SETTINGS -> appSettings()
         key == HIDDEN_APPS -> hiddenAppRows()
@@ -1744,7 +1747,66 @@ class MenuTree(private val s: MenuSnapshot) {
                 ),
             )
         }
+        add(folder(PERFORMANCE, "Performance", GlyphKey.SYSTEM, performanceSummary()))
         add(setting("sys:android", "Android settings", null, GlyphKey.SETTINGS, Command.OpenAndroidSettings))
+    }
+
+    /** "Rests after 3 s · ~60 fps · slow shaders switch to the wave". */
+    private fun performanceSummary(): String {
+        val st = s.settings
+        return listOf(
+            when (st.standbyMotion) {
+                StandbyMotion.AFTER_3S -> "Rests after 3 s"
+                StandbyMotion.AFTER_30S -> "Rests after 30 s"
+                StandbyMotion.NEVER -> "Never rests"
+            },
+            if (st.fullFrameRate) "full frame rate" else "~60 fps",
+            if (st.slowShaders == SlowShaders.RETIRE) "slow shaders switch to the wave" else "slow shaders kept",
+        ).joinToString(" · ")
+    }
+
+    /**
+     * Settings ▸ System ▸ Performance: when the screen rests, the background's frame rate, and the
+     * frame-budget watchdog. Device settings: never part of a theme or its export.
+     */
+    private fun performanceSettings(): List<XmbNode> {
+        val st = s.settings
+        return listOf(
+            XmbNode(
+                id = "perf:standby",
+                title = "Standby motion",
+                subtitle = "${st.standbyMotion.label} · ${st.standbyMotion.detail}. At rest the background slows to ~20 fps and the focus glow holds still",
+                icon = NodeIcon.Glyph(GlyphKey.DISPLAY),
+                action = NodeAction.Run(Command.CycleStandbyMotion),
+                menu = StandbyMotion.entries.map { m ->
+                    MenuOption(m.label, detail = m.detail, command = Command.SetStandbyMotion(m), selected = m == st.standbyMotion)
+                },
+            ),
+            setting(
+                "perf:fps", "Background frame rate",
+                if (st.fullFrameRate) {
+                    "The screen's full refresh rate · smoother on 90 Hz+ screens, uses more battery"
+                } else {
+                    "About 60 fps · 90 Hz+ screens draw the background every other refresh"
+                },
+                GlyphKey.DISPLAY, Command.ToggleFullFrameRate,
+            ),
+            XmbNode(
+                id = "perf:slow",
+                title = "Slow shaders",
+                subtitle = "${st.slowShaders.label} · ${st.slowShaders.detail}",
+                icon = NodeIcon.Glyph(GlyphKey.DISPLAY),
+                action = NodeAction.Run(Command.CycleSlowShaders),
+                menu = SlowShaders.entries.map { m ->
+                    MenuOption(m.label, detail = m.detail, command = Command.SetSlowShaders(m), selected = m == st.slowShaders)
+                },
+            ),
+            setting(
+                "perf:retry", "Try retired shaders again",
+                "Measures every background shader again, without restarting Xross",
+                GlyphKey.REFRESH, Command.RetrySlowShaders,
+            ),
+        )
     }
 
     private fun backupSummary(p: PortableSetup): String = when {
@@ -1914,6 +1976,7 @@ class MenuTree(private val s: MenuSnapshot) {
         const val MEDIA_APPS_PREFIX = "media:apps:"
         private val DISC_EXTENSIONS = setOf("iso", "cue", "chd", "cso", "rvz", "gcz", "wbfs", "cdi", "gdi", "pbp", "m3u")
         const val SYSTEM = "settings:system"
+        const val PERFORMANCE = "settings:system:performance"
         const val ACCOUNTS = "settings:accounts"
 
         /** "Off — hardware only" for 0 (the driver's own centre zone is all that applies), "35%" otherwise. */

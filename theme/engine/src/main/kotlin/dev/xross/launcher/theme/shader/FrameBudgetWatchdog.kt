@@ -42,6 +42,13 @@ class FrameBudgetWatchdog(
 
     val sampleCount: Int get() = count
 
+    /**
+     * The trip was the [HOPELESS_SAMPLES] one: every sample over [HOPELESS_FACTOR]× the budget. Such
+     * a program is retired even when the user keeps slow shaders (Settings ▸ System ▸ Performance).
+     */
+    var hopeless: Boolean = false
+        private set
+
     /** One draw that took [durationNs] of GPU time, measured at [nowNs] (any monotonic clock). */
     fun record(durationNs: Long, nowNs: Long): Verdict {
         if (verdict != Verdict.MEASURING) return verdict
@@ -56,6 +63,7 @@ class FrameBudgetWatchdog(
             val fastest = percentile(samples, count, 0)
             if (fastest > HOPELESS_FACTOR * budgetNs) {
                 p90Ns = percentile(samples, count, 90)
+                hopeless = true
                 verdict = Verdict.TRIPPED
                 return verdict
             }

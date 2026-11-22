@@ -106,6 +106,7 @@ fun AdaptiveWave(
         shaders = shaders,
         health = health,
         audio = audio,
+        fullFrameRate = settings.fullFrameRate,
     )
 
     // Halos stay white unless a color layer is at work, so the plain themes look as before.

@@ -51,7 +51,20 @@ data class SettingsFile(
     val video: MediaFolders = MediaFolders(),
     val music: MediaFolders = MediaFolders(),
     val profile: Profile = Profile(),
+    val performance: Performance = Performance(),
 ) {
+    /**
+     * Settings ▸ System ▸ Performance. `standbyMotion`: AFTER_3S, AFTER_30S or NEVER.
+     * `fullFrameRate`: the background at the screen's full refresh rate instead of ~60 fps.
+     * `slowShaders`: RETIRE or WARN.
+     */
+    @Serializable
+    data class Performance(
+        val standbyMotion: String = D.standbyMotion.name,
+        val fullFrameRate: Boolean = D.fullFrameRate,
+        val slowShaders: String = D.slowShaders.name,
+    )
+
     /** The profile avatar: ring color (`#RRGGBB`), ring width 1–6 dp, glow on/off, speed 0.5–2.0, intensity 0.1–1.0. */
     @Serializable
     data class Profile(val avatarStyle: AvatarStyleConfig = D.avatarStyle)
@@ -417,6 +430,7 @@ object ConfigCodec {
         video = SettingsFile.MediaFolders(s.videoFolders),
         music = SettingsFile.MediaFolders(s.musicFolders),
         profile = SettingsFile.Profile(s.avatarStyle),
+        performance = SettingsFile.Performance(s.standbyMotion.name, s.fullFrameRate, s.slowShaders.name),
     )
 
     /** Applies settings.json onto [base], keeping [base]'s mappings and systems. Out-of-range numbers are clamped. */
@@ -507,6 +521,9 @@ object ConfigCodec {
         videoFolders = cleanFolders(f.video.customFolders),
         musicFolders = cleanFolders(f.music.customFolders),
         avatarStyle = AvatarStyleLimits.clamp(f.profile.avatarStyle),
+        standbyMotion = dev.xross.launcher.data.StandbyMotion.parse(f.performance.standbyMotion),
+        fullFrameRate = f.performance.fullFrameRate,
+        slowShaders = dev.xross.launcher.data.SlowShaders.parse(f.performance.slowShaders),
     )
 
     private fun cleanFolders(paths: List<String>) = paths.map { it.trim().trimEnd('/') }.filter { it.isNotEmpty() }.distinct()

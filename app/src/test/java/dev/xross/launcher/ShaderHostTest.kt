@@ -308,6 +308,7 @@ class ShaderHostTest {
         assertEquals(Verdict.MEASURING, dog.feed(FrameBudgetWatchdog.SKIP_FIRST + 2) { 344 * ms })
         assertEquals(Verdict.TRIPPED, dog.record(344 * ms, 4 * budget60))
         assertEquals(344 * ms, dog.p90Ns)
+        assertTrue(dog.hopeless)
     }
 
     @Test fun verySlowShaderTripsOnTheEarlyMedian() {
@@ -315,6 +316,8 @@ class ShaderHostTest {
         // 40 ms is under 4× the budget, so it waits for the median check at 6 samples.
         assertEquals(Verdict.MEASURING, dog.feed(FrameBudgetWatchdog.SKIP_FIRST + FrameBudgetWatchdog.EARLY_SAMPLES - 1) { 40 * ms })
         assertEquals(Verdict.TRIPPED, dog.record(40 * ms, 10 * budget60))
+        // Not hopeless: Slow shaders ▸ Keep and warn leaves it on screen.
+        assertFalse(dog.hopeless)
     }
 
     @Test fun oneFastFrameAmongSlowOnesWaitsForTheMedian() {

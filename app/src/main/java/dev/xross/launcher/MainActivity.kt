@@ -102,10 +102,13 @@ class MainActivity : ComponentActivity() {
 
     private lateinit var gamepad: GamepadHandler
 
-    /** No input for a few seconds: the wave drops to a standby rate and the glows hold still. */
+    /**
+     * No input for a few seconds: the wave drops to a standby rate and the glows hold still. The
+     * timeout follows Settings ▸ System ▸ Performance ▸ Standby motion (see [setContent]).
+     */
     private val inactivity = InactivityTracker(now = android.os.SystemClock::uptimeMillis)
 
-    /** No input for 10 s: the foreground particles (2b.4e) settle and stop. */
+    /** No input for 10 s (or the standby timeout, when longer): the foreground particles (2b.4e) settle and stop. */
     private val particleInactivity = InactivityTracker(
         timeoutMs = ParticleRest.IDLE_AFTER_MS,
         now = android.os.SystemClock::uptimeMillis,
@@ -317,6 +320,13 @@ class MainActivity : ComponentActivity() {
             var bootCovers by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
             // Resting: no input for a few seconds and nothing playing. Music and video snaps keep
             // the screen awake (the mini player and the snap are live content).
+            val standby = state.settings.standbyMotion
+            androidx.compose.runtime.LaunchedEffect(standby) {
+                inactivity.setTimeout(standby.timeoutMs)
+                particleInactivity.setTimeout(standby.particleTimeoutMs)
+            }
+            val retireSlow = state.settings.slowShaders == dev.xross.launcher.data.SlowShaders.RETIRE
+            androidx.compose.runtime.LaunchedEffect(retireSlow) { container.shaderHealth.retireSlow = retireSlow }
             val noInput by inactivity.idle.collectAsStateWithLifecycle()
             val music by container.music.state.collectAsStateWithLifecycle()
             val snapPlaying by container.snaps.player.collectAsStateWithLifecycle()

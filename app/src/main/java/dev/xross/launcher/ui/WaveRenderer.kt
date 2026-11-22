@@ -101,7 +101,10 @@ data class WaveIntro(val startedAtNanos: Long, val durationMs: Long, val endedAt
  *    first error line is logged and [ShaderHealth] posts the toast.
  *  - Frame-budget watchdog: a non-WAVE program's GPU time is measured for its first ~2 s on
  *    screen (`GL_EXT_disjoint_timer_query`, else a `glFinish` sample every third frame); a p90
- *    over 60% of the active frame budget retires it for the session ([FrameBudgetWatchdog]).
+ *    over 60% of the active frame budget retires it for the session ([FrameBudgetWatchdog]). With
+ *    Settings ▸ System ▸ Performance ▸ Slow shaders on Keep and warn ([ShaderHealth.retireSlow]
+ *    false) only a hopeless one is retired; the rest stay on screen with a notice. Try retired
+ *    shaders again ([ShaderHealth.retrySlow]) forgets every verdict, so each is measured anew.
  *  - Crash-loop guard: a pack's own program is armed in the [ShaderCanary] while it compiles and
  *    until it has drawn [ShaderCanary.PROVEN_FRAMES] frames in a row.
  *
@@ -141,7 +144,11 @@ class WaveRenderer(
 ) : GLSurfaceView.Renderer {
     private val framePeriodNs = (1e9 / refreshRateHz.coerceIn(30f, 240f)).roundToLong()
 
-    /** The watchdog's budget: one frame at the in-use rate (16.7 ms at 60 Hz, and at 120 Hz paced to 60). */
+    /**
+     * The watchdog's budget: one frame at the default in-use rate (16.7 ms at 60 Hz, and at 120 Hz
+     * paced to 60). The full-frame-rate setting doesn't shrink it: a shader that keeps 60 fps is
+     * worth keeping, and at full rate it just drops to that.
+     */
     private val activeBudgetNs = framePeriodNs * activeStride(refreshRateHz)
 
     /** Vsyncs per frame, set by [WaveBackground]'s pacer. */
@@ -208,6 +215,8 @@ class WaveRenderer(
     private val verdicts = HashMap<String, FrameBudgetWatchdog.Verdict>()
     private val slowReasons = HashMap<String, String>()
     private val proven = HashSet<String>()
+    /** [ShaderHealth.retryGeneration] last acted on. */
+    private var retrySeen = health?.retryGeneration ?: 0
     private var canaryKey: String? = null
     private var canaryFrames = 0
 
@@ -348,6 +357,7 @@ class WaveRenderer(
         }
 
         val program = try {
+            retryIfAsked()
             if (library !== synced) sync()
             poll()
             select(p.shader)
@@ -561,6 +571,14 @@ class WaveRenderer(
             }
             FrameBudgetWatchdog.Verdict.TRIPPED -> {
                 val why = dog.describe()
+                if (!dog.hopeless && health?.retireSlow == false) {
+                    // Keep and warn: measured once, left on screen.
+                    verdicts[program.spec.key] = FrameBudgetWatchdog.Verdict.PASSED
+                    program.watchdog = null
+                    health.notice(program.spec.key, "Shader ${program.spec.label} is slow here ($why) · kept on")
+                    Log.w(TAG, "watchdog kept slow ${program.spec.key}: $why (${method()}, ${dog.sampleCount} samples)")
+                    return
+                }
                 verdicts[program.spec.key] = FrameBudgetWatchdog.Verdict.TRIPPED
                 slowReasons[program.spec.key] = why
                 program.watchdog = null
@@ -571,6 +589,30 @@ class WaveRenderer(
     }
 
     private fun method() = if (timer?.supported == true) "timer query" else "glFinish"
+
+    /**
+     * Try retired shaders again: forget every verdict, and drop the programs the watchdog retired so
+     * [sync] compiles them anew. Each is measured again on its next ~2 s on screen.
+     */
+    private fun retryIfAsked() {
+        val h = health ?: return
+        val generation = h.retryGeneration
+        if (generation == retrySeen) return
+        retrySeen = generation
+        val retired = programs.values.filter { it.state == ProgramState.FAILED && it.cause == ShaderStatus.Cause.TOO_SLOW }
+        for (program in retired) {
+            programs.remove(program.spec.key)
+            program.release()
+        }
+        val keys = verdicts.keys.toList()
+        verdicts.clear()
+        slowReasons.clear()
+        for (program in programs.values) program.watchdog = null
+        h.forget(keys)
+        lastReport = null
+        synced = null
+        Log.i(TAG, "watchdog verdicts cleared: ${keys.size}, ${retired.size} retired program(s) to compile again")
+    }
 
     /**
      * One frame of [program] on screen. A program that reads `uField` first draws its field pass at

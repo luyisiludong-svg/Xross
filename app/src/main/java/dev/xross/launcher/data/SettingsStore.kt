@@ -191,6 +191,12 @@ data class XrossSettings(
     val musicFolders: List<String> = emptyList(),
     /** Ring and glow of the profile avatar (Settings ▸ Theme ▸ Profile customization). */
     val avatarStyle: AvatarStyleConfig = AvatarStyleConfig(),
+    /** Settings ▸ System ▸ Performance: how soon the screen rests. */
+    val standbyMotion: StandbyMotion = StandbyMotion.AFTER_3S,
+    /** The background at the screen's full refresh rate (true), or paced to about 60 fps on 90 Hz+ screens. */
+    val fullFrameRate: Boolean = false,
+    /** What the frame-budget watchdog does with a slow background shader. */
+    val slowShaders: SlowShaders = SlowShaders.RETIRE,
 )
 
 /**

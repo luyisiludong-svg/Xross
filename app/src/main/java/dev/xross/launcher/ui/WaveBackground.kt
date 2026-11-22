@@ -53,6 +53,8 @@ fun WaveBackground(
     health: ShaderHealth? = null,
     /** Music levels for `uAudioBass` / `uAudioBeat` (2b.4b); null binds 0. */
     audio: AudioLevels? = null,
+    /** In use, draw at the screen's full refresh rate instead of pacing 90 Hz+ screens to ~60 fps. */
+    fullFrameRate: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -127,7 +129,11 @@ fun WaveBackground(
     }
     // Covered: stop drawing frames (the GL thread sleeps) but keep the surface. Otherwise run at
     // full rate when that is already at or under the ceiling, else paced to every n-th vsync.
-    val stride = if (idle) WaveRenderer.idleStride(refreshHz) else WaveRenderer.activeStride(refreshHz)
+    val stride = when {
+        idle -> WaveRenderer.idleStride(refreshHz)
+        fullFrameRate -> 1
+        else -> WaveRenderer.activeStride(refreshHz)
+    }
     LaunchedEffect(view, paused, stride, resumed, frozen) {
         renderer.stride = stride
         val loop = waveLoop(paused = paused, resumed = resumed, stride = stride, frozen = frozen)

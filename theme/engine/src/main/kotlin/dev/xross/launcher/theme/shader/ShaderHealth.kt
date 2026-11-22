@@ -24,6 +24,29 @@ class ShaderHealth(val canary: ShaderCanary) {
 
     private val announced = HashSet<String>()
 
+    /**
+     * Settings ▸ System ▸ Performance ▸ Slow shaders: a program the frame-budget watchdog trips is
+     * retired (true) or kept with a notice (false). A hopeless one is retired either way. Read on
+     * the GL thread when a verdict is reached.
+     */
+    @Volatile var retireSlow: Boolean = true
+
+    /** Bumped by [retrySlow]; the renderer compares it each frame. */
+    @Volatile var retryGeneration: Int = 0
+        private set
+
+    /** Settings ▸ System ▸ Performance ▸ Try retired shaders again: forget the watchdog's verdicts. */
+    @Synchronized
+    fun retrySlow() {
+        retryGeneration++
+    }
+
+    /** The renderer forgot these programs' verdicts: a new failure of one is announced again. */
+    @Synchronized
+    fun forget(keys: Collection<String>) {
+        announced.removeAll(keys.toSet())
+    }
+
     /** Keys a crash left armed at the last exit; they're blocked now. */
     val recovered: List<String> = canary.recover()
 

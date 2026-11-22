@@ -92,7 +92,7 @@ class ConfigCodecTest {
     @Test fun settingsFileIsGroupedLikeTheSettingsMenu() {
         val root = Json.parseToJsonElement(ConfigCodec.encodeSettings(everything)).jsonObject
         assertEquals(
-            setOf("version", "library", "controls", "display", "sound", "media", "metadata", "apps", "photo", "video", "music", "profile"),
+            setOf("version", "library", "controls", "display", "sound", "media", "metadata", "apps", "photo", "video", "music", "profile", "performance"),
             root.keys,
         )
         val apps = root.getValue("apps").jsonObject
