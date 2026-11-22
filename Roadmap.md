@@ -155,7 +155,7 @@ All 12 recipes are verified only against the test stand-ins, not real emulator i
 | Background music pauses for games and videos | ✅ | Resumes when Xross is back in front |
 | Video player | ✅ | Seek, previous/next, loop, auto-hiding controls |
 | Clear empty state without storage access | ✅ 🧪 | Photo, Music and Video say "Storage access needed"; pressing the row opens the grant screen |
-| Custom Photo and Video folders | ✅ 📱 | Settings ▸ Media ▸ Photo folders / Video folders. Empty = all of MediaStore; otherwise MediaStore filtered by path plus a direct walk for files it skips (`.nomedia` and hidden folders, unindexed drives), with thumbnails made by Xross. Reloads on resume and when a drive comes or goes |
+| Custom Photo, Video and Music folders | ✅ 📱 | Settings ▸ Media ▸ Photo folders / Video folders / Music folders. Empty = all of MediaStore; otherwise MediaStore filtered by path plus a direct walk for files it skips (`.nomedia` and hidden folders, unindexed drives), with thumbnails made by Xross. Reloads on resume and when a drive comes or goes |
 | Floating mini player | ✅ 📱 | A rounded card in the lower-right corner, just above the button hints: 40 dp album art, scrolling title, artist, play/pause glyph. Stays across every category and steps aside for full-screen media, panels and dialogs. Tap opens Now Playing; long press plays or pauses |
 | Mini player hides after 30 s paused | ✅ 📱 | Fades out after 30 s paused; comes straight back when playback resumes or the track changes |
 

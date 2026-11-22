@@ -250,6 +250,7 @@ class MenuTree(private val s: MenuSnapshot) {
         key == HIDDEN_APPS -> hiddenAppRows()
         key == PHOTO_FOLDERS -> mediaFolderRows(MediaFolderKind.PHOTO)
         key == VIDEO_FOLDERS -> mediaFolderRows(MediaFolderKind.VIDEO)
+        key == MUSIC_FOLDERS -> mediaFolderRows(MediaFolderKind.MUSIC)
         else -> emptyList()
     }
 
@@ -1772,16 +1773,19 @@ class MenuTree(private val s: MenuSnapshot) {
         setting("med:loop", "Loop videos", onOff(s.settings.videoLoop), GlyphKey.VIDEO, Command.ToggleVideoLoop),
         folder(PHOTO_FOLDERS, "Photo folders", GlyphKey.PHOTO, mediaFoldersSummary(s.settings.photoFolders, "photos")),
         folder(VIDEO_FOLDERS, "Video folders", GlyphKey.VIDEO, mediaFoldersSummary(s.settings.videoFolders, "videos")),
+        folder(MUSIC_FOLDERS, "Music folders", GlyphKey.MUSIC, mediaFoldersSummary(s.settings.musicFolders, "music")),
     )
 
     private fun mediaFoldersSummary(folders: List<String>, noun: String) =
         if (folders.isEmpty()) "All $noun on this device" else "Only " + countOf(folders.size, "folder")
 
-    /** Settings ▸ Media ▸ Photo / Video folders. */
+    /** Settings ▸ Media ▸ Photo / Video / Music folders. */
     private fun mediaFolderRows(kind: MediaFolderKind): List<XmbNode> = buildList {
-        val folders = if (kind == MediaFolderKind.PHOTO) s.settings.photoFolders else s.settings.videoFolders
-        val glyph = if (kind == MediaFolderKind.PHOTO) GlyphKey.PHOTO else GlyphKey.VIDEO
-        val noun = if (kind == MediaFolderKind.PHOTO) "photos" else "videos"
+        val (folders, glyph, noun) = when (kind) {
+            MediaFolderKind.PHOTO -> Triple(s.settings.photoFolders, GlyphKey.PHOTO, "photos")
+            MediaFolderKind.VIDEO -> Triple(s.settings.videoFolders, GlyphKey.VIDEO, "videos")
+            MediaFolderKind.MUSIC -> Triple(s.settings.musicFolders, GlyphKey.MUSIC, "music")
+        }
         add(
             setting(
                 "medfolders:${kind.name}:add", "Add folder…",
@@ -1903,6 +1907,7 @@ class MenuTree(private val s: MenuSnapshot) {
         const val HIDDEN_APPS = "settings:apps:hidden"
         const val PHOTO_FOLDERS = "settings:media:photo-folders"
         const val VIDEO_FOLDERS = "settings:media:video-folders"
+        const val MUSIC_FOLDERS = "settings:media:music-folders"
         const val APP_FOLDER_PREFIX = "apps:folder:"
 
         /** The Apps folder of Video, Music or Photo: `media:apps:video`. */

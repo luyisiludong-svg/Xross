@@ -345,4 +345,4 @@ object Categories {
 }
 
 /** Which media tab a custom folder list belongs to. */
-enum class MediaFolderKind(val label: String) { PHOTO("Photo"), VIDEO("Video") }
+enum class MediaFolderKind(val label: String) { PHOTO("Photo"), VIDEO("Video"), MUSIC("Music") }

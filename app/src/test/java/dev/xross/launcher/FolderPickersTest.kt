@@ -127,6 +127,12 @@ class FolderPickersTest {
         folders.onCommand(Command.ClearMediaFolders(MediaFolderKind.PHOTO))
         assertEquals(emptyList<String>(), settings.current.photoFolders)
         assertEquals(0, host.rescans)
+
+        folders.onMediaFolderPicked(MediaFolderKind.MUSIC, Uri.parse("content://tree/photos"))
+        assertEquals(listOf("/storage/1234-ABCD/Pictures"), settings.current.musicFolders)
+        assertEquals("Music now includes /storage/1234-ABCD/Pictures", host.toasts.last())
+        folders.onCommand(Command.ClearMediaFolders(MediaFolderKind.MUSIC))
+        assertEquals(emptyList<String>(), settings.current.musicFolders)
     }
 
     @Test fun pickerCommandsAskTheActivityAndOthersAreNotTaken() = runTest {

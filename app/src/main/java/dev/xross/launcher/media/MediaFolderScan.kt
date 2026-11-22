@@ -4,13 +4,14 @@ import java.io.File
 import java.util.Locale
 
 /**
- * Helpers for custom Photo and Video folders: which paths belong to them, the MediaStore filter,
+ * Helpers for custom Photo, Video and Music folders: which paths belong to them, the MediaStore filter,
  * and a direct walk that also finds what MediaStore skips (folders with `.nomedia`, hidden
  * folders, drives it doesn't index).
  */
 object MediaFolderScan {
     val PHOTO_EXTENSIONS = setOf("jpg", "jpeg", "png", "webp", "gif", "bmp", "heic", "heif")
     val VIDEO_EXTENSIONS = setOf("mp4", "m4v", "mkv", "webm", "3gp", "mov", "avi", "ts")
+    val MUSIC_EXTENSIONS = setOf("mp3", "flac", "m4a", "aac", "ogg", "oga", "opus", "wav", "wma", "alac", "aif", "aiff", "mka")
 
     const val MAX_DEPTH = 8
     const val MAX_FILES = 20_000

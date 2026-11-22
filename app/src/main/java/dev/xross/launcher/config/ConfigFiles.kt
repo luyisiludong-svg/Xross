@@ -49,6 +49,7 @@ data class SettingsFile(
     val apps: Apps = Apps(),
     val photo: MediaFolders = MediaFolders(),
     val video: MediaFolders = MediaFolders(),
+    val music: MediaFolders = MediaFolders(),
     val profile: Profile = Profile(),
 ) {
     /** The profile avatar: ring color (`#RRGGBB`), ring width 1–6 dp, glow on/off, speed 0.5–2.0, intensity 0.1–1.0. */
@@ -197,7 +198,7 @@ data class SettingsFile(
         val homes: Map<String, String> = emptyMap(),
     )
 
-    /** Empty [customFolders]: every photo or video MediaStore knows. Otherwise only these folders. */
+    /** Empty [customFolders]: every photo, video or song MediaStore knows. Otherwise only these folders. */
     @Serializable
     data class MediaFolders(val customFolders: List<String> = emptyList())
 
@@ -414,6 +415,7 @@ object ConfigCodec {
         ),
         photo = SettingsFile.MediaFolders(s.photoFolders),
         video = SettingsFile.MediaFolders(s.videoFolders),
+        music = SettingsFile.MediaFolders(s.musicFolders),
         profile = SettingsFile.Profile(s.avatarStyle),
     )
 
@@ -503,6 +505,7 @@ object ConfigCodec {
         }.toMap(),
         photoFolders = cleanFolders(f.photo.customFolders),
         videoFolders = cleanFolders(f.video.customFolders),
+        musicFolders = cleanFolders(f.music.customFolders),
         avatarStyle = AvatarStyleLimits.clamp(f.profile.avatarStyle),
     )
 

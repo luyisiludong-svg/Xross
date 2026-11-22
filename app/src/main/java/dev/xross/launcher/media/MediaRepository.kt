@@ -80,15 +80,19 @@ data class MediaLibrary(
 
 enum class ThumbKind { PHOTO, VIDEO, ALBUM_ART }
 
-/** Custom folders for Photo and Video; an empty list means everything MediaStore knows. */
-data class MediaFolders(val photo: List<String> = emptyList(), val video: List<String> = emptyList())
+/** Custom folders for Photo, Video and Music; an empty list means everything MediaStore knows. */
+data class MediaFolders(
+    val photo: List<String> = emptyList(),
+    val video: List<String> = emptyList(),
+    val music: List<String> = emptyList(),
+)
 
 /**
  * Photos, music and videos from MediaStore (which already parses ID3/Vorbis tags and EXIF).
  * Reloads automatically when MediaStore reports changes, debounced so a bulk copy triggers one
  * reload.
  *
- * With custom [MediaFolders], Photo and Video show only those folders: MediaStore is filtered by
+ * With custom [MediaFolders], Photo, Video and Music show only those folders: MediaStore is filtered by
  * path, and a direct walk adds files it doesn't index (`.nomedia` and hidden folders, some USB
  * drives). Walked files get negative ids, a `content://` URI from Xross's FileProvider (so the
  * viewer, the player and "Set as wallpaper" work as for any photo), and thumbnails made here.
@@ -121,7 +125,7 @@ class MediaRepository(private val context: Context) {
         _library.value = MediaLibrary(
             photos = runCatching { photosIn(f.photo) }.getOrDefault(emptyList()),
             videos = runCatching { videosIn(f.video) }.getOrDefault(emptyList()),
-            songs = runCatching { querySongs() }.getOrDefault(emptyList()),
+            songs = runCatching { songsIn(f.music) }.getOrDefault(emptyList()),
         )
     }
 
@@ -143,6 +147,16 @@ class MediaRepository(private val context: Context) {
             .filter { it.absolutePath !in known }
             .mapNotNull(::videoFromFile)
         return (indexed.map { it.first } + extra).sortedByDescending { it.modifiedAt }
+    }
+
+    private fun songsIn(custom: List<String>): List<Song> {
+        if (custom.isEmpty()) return querySongs(null)
+        val indexed = querySongs(custom)
+        val known = indexed.mapTo(HashSet()) { it.path }
+        val extra = MediaFolderScan.walk(custom, MediaFolderScan.MUSIC_EXTENSIONS)
+            .filter { it.absolutePath !in known }
+            .mapNotNull(::songFromFile)
+        return indexed + extra
     }
 
     private fun shareUri(file: java.io.File): Uri? = runCatching {
@@ -190,6 +204,52 @@ class MediaRepository(private val context: Context) {
         val id = MediaFolderScan.syntheticId(file.absolutePath)
         walked[id] = file
         return Video(id, uri, file.name, file.parentFile?.name ?: "Other", duration, width, height, file.length(), file.lastModified())
+    }
+
+    /** A song MediaStore doesn't know, with its tags read here; one album per folder and album tag. */
+    private fun songFromFile(file: java.io.File): Song? {
+        val uri = shareUri(file) ?: return null
+        var title: String? = null
+        var artist: String? = null
+        var album: String? = null
+        var track = 0
+        var duration = 0L
+        var mime: String? = null
+        runCatching {
+            android.media.MediaMetadataRetriever().run {
+                try {
+                    setDataSource(file.path)
+                    title = extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_TITLE)
+                    artist = extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_ARTIST)
+                        ?: extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_ALBUMARTIST)
+                    album = extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_ALBUM)
+                    // "3/12" or "3"
+                    track = extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_CD_TRACK_NUMBER)
+                        ?.substringBefore('/')?.trim()?.toIntOrNull() ?: 0
+                    duration = extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+                    mime = extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_MIMETYPE)
+                } finally {
+                    release()
+                }
+            }
+        }
+        val folder = file.parentFile?.absolutePath.orEmpty()
+        val albumName = album.cleanTag() ?: UNKNOWN_ALBUM
+        val id = MediaFolderScan.syntheticId(file.absolutePath)
+        walked[id] = file
+        return Song(
+            id, uri,
+            title = title?.takeIf { it.isNotBlank() } ?: file.nameWithoutExtension,
+            artist = artist.cleanTag() ?: UNKNOWN_ARTIST,
+            album = albumName,
+            albumId = MediaFolderScan.syntheticId(folder + "\u0000" + albumName),
+            track = track,
+            durationMs = duration,
+            folder = folder,
+            format = formatOf(mime).ifEmpty { file.extension.uppercase() },
+            path = file.absolutePath,
+            addedAt = file.lastModified(),
+        )
     }
 
     /** Starts watching MediaStore; call once with a long-lived scope. */
@@ -278,7 +338,20 @@ class MediaRepository(private val context: Context) {
                 }
             }
         }
-        ThumbKind.ALBUM_ART -> null
+        ThumbKind.ALBUM_ART -> android.media.MediaMetadataRetriever().run {
+            try {
+                setDataSource(file.path)
+                embeddedPicture?.let { bytes ->
+                    val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                    android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+                    var sample = 1
+                    while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= sizePx) sample *= 2
+                    android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, android.graphics.BitmapFactory.Options().apply { inSampleSize = sample })
+                }
+            } finally {
+                release()
+            }
+        }
     }
 
     // region Queries
@@ -339,7 +412,8 @@ class MediaRepository(private val context: Context) {
         }.orEmpty()
     }
 
-    private fun querySongs(): List<Song> {
+    /** Songs; [inFolders] null = all. */
+    private fun querySongs(inFolders: List<String>?): List<Song> {
         val cols = arrayOf(
             MediaStore.Audio.Media._ID, MediaStore.Audio.Media.TITLE, MediaStore.Audio.Media.ARTIST,
             MediaStore.Audio.Media.ALBUM, MediaStore.Audio.Media.ALBUM_ID, MediaStore.Audio.Media.TRACK,
@@ -348,8 +422,11 @@ class MediaRepository(private val context: Context) {
             MediaStore.Audio.Media.DATE_ADDED,
         )
         // Music only: skip ringtones, notification sounds and voice notes.
-        val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0"
-        return resolver.query(AUDIO, cols, selection, null, null)?.use { c ->
+        @Suppress("DEPRECATION")
+        val inside = inFolders?.let { " AND " + MediaFolderScan.selection(MediaStore.Audio.Media.DATA, it) }.orEmpty()
+        val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0$inside"
+        val args = inFolders?.let { MediaFolderScan.selectionArgs(it) }
+        return resolver.query(AUDIO, cols, selection, args, null)?.use { c ->
             buildList {
                 while (c.moveToNext()) {
                     val id = c.getLong(0)

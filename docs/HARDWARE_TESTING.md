@@ -316,6 +316,8 @@ point is real radios, real volume keys and 120 Hz.
 - [ ] Photo, Music and Video show your device's pictures, songs (with album art) and videos
 - [ ] Settings ▸ Media ▸ Photo folders ▸ Add folder…: Photo then shows only that folder,
       including pictures in a folder with a `.nomedia` file; "Show all photos again" undoes it
+- [ ] Settings ▸ Media ▸ Music folders ▸ Add folder…: Music then shows only songs in that
+      folder (tags and album art read even under `.nomedia`); "Show all music again" undoes it
 - [ ] Photo viewer: L1/R1 zoom, D-pad pans without showing black edges, Start runs a
       slideshow, Options offers Set as Xross wallpaper (the photo shows behind the menu, and
       frosted cards over it show it blurred) and Set as Android wallpaper (the system screen);

@@ -183,6 +183,7 @@ class LibraryOrganizationTest {
         val media = tree.list(MenuTree.MEDIA_SETTINGS).associateBy { it.title }
         assertEquals("Only 1 folder", media.getValue("Photo folders").subtitle)
         assertEquals("All videos on this device", media.getValue("Video folders").subtitle)
+        assertEquals("All music on this device", media.getValue("Music folders").subtitle)
 
         val photoRows = tree.list(MenuTree.PHOTO_FOLDERS)
         assertEquals(listOf("Add folder…", "Show all photos again", "/storage/emulated/0/Pictures/Shots"), photoRows.map { it.title })
@@ -192,6 +193,9 @@ class LibraryOrganizationTest {
             photoRows.last().menu.single().command,
         )
         assertEquals(listOf("Add folder…", "All videos"), tree.list(MenuTree.VIDEO_FOLDERS).map { it.title })
+        val musicRows = tree.list(MenuTree.MUSIC_FOLDERS)
+        assertEquals(listOf("Add folder…", "All music"), musicRows.map { it.title })
+        assertEquals(NodeAction.Run(Command.AddMediaFolder(MediaFolderKind.MUSIC)), musicRows[0].action)
     }
 
     // endregion

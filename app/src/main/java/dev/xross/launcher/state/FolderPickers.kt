@@ -19,7 +19,7 @@ import java.io.File
 /**
  * The folders the library and the media categories read, split out of [XmbViewModel]
  * (Architecture Assessment §7.1, step 6): ROM folders and auto-detect, the base ROMs folder and
- * its system folders, the DAT folder, and the Photo and Video folders. It answers the folder
+ * its system folders, the DAT folder, and the Photo, Video and Music folders. It answers the folder
  * pickers, runs the Settings ▸ Library and Settings ▸ Media folder commands, and keeps the media
  * library on the folder lists in the settings.
  *
@@ -169,13 +169,14 @@ class FolderPickers(
             when (kind) {
                 MediaFolderKind.PHOTO -> it.copy(photoFolders = transform(it.photoFolders))
                 MediaFolderKind.VIDEO -> it.copy(videoFolders = transform(it.videoFolders))
+                MediaFolderKind.MUSIC -> it.copy(musicFolders = transform(it.musicFolders))
             }
         }
     }
 
     /** Applies the folder lists to the media library and reloads it when they changed. */
     private fun syncMediaFolders(s: XrossSettings) {
-        if (media.setFolders(MediaFolders(s.photoFolders, s.videoFolders))) {
+        if (media.setFolders(MediaFolders(s.photoFolders, s.videoFolders, s.musicFolders))) {
             scope.launch { media.refresh() }
         }
     }

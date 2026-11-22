@@ -73,6 +73,7 @@ class ConfigCodecTest {
         baseRomsFolder = "/storage/1A2B-3C4D/ROMs",
         photoFolders = listOf("/storage/emulated/0/Pictures/Shots"),
         videoFolders = listOf("/storage/1A2B-3C4D/Movies", "/storage/emulated/0/Xross/media/snaps"),
+        musicFolders = listOf("/storage/1A2B-3C4D/Music/FLAC"),
     )
 
     private fun roundTrip(s: XrossSettings): XrossSettings {
@@ -91,7 +92,7 @@ class ConfigCodecTest {
     @Test fun settingsFileIsGroupedLikeTheSettingsMenu() {
         val root = Json.parseToJsonElement(ConfigCodec.encodeSettings(everything)).jsonObject
         assertEquals(
-            setOf("version", "library", "controls", "display", "sound", "media", "metadata", "apps", "photo", "video", "profile"),
+            setOf("version", "library", "controls", "display", "sound", "media", "metadata", "apps", "photo", "video", "music", "profile"),
             root.keys,
         )
         val apps = root.getValue("apps").jsonObject
