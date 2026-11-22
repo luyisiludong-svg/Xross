@@ -262,6 +262,36 @@ class ShaderHostTest {
         for (name in listOf("uResolution", "uColorTop", "uColorBottom", "uAccent", "uTime")) assertTrue(name, wave.contains(name))
     }
 
+    /**
+     * A feedback shader that adds a blur of last frame (`col += halo * …`) keeps `keep + glow` of it
+     * each frame. A fixed glow made Gargantua wash out at 120 fps (0.86 + 0.24 > 1); the glow now
+     * holds the per-second gain at its 60 fps value. Modelled here with each file's constants.
+     */
+    @Test fun feedbackBloomStaysStableAtEveryFrameRate() {
+        fun constant(src: String, name: String) =
+            Regex("""const float $name = ([0-9.]+);""").find(src)?.groupValues?.get(1)?.toDouble()
+        val sources = listOf(File(shaderDir, "black_hole.frag"), File("src/main/assets/themes/blackhole/black_hole.frag"))
+        for (file in sources) {
+            val src = file.readText()
+            assertTrue("$file scales its bloom by uFrameDt", src.contains("* glow;") && !src.contains("* GLOW;"))
+            val glow60 = constant(src, "GLOW")!!
+            val trail = constant(src, "TRAIL")
+            val persist = constant(src, "PERSIST")
+            fun keep(dt: Double) = if (trail != null) Math.pow(trail, dt * 30) else Math.pow(2.0, -dt / persist!!)
+            val perFrame60 = keep(1.0 / 60) + glow60
+            assertTrue("$file is stable at 60 fps", perFrame60 < 1)
+            for (fps in listOf(20.0, 60.0, 72.0, 90.0, 120.0, 144.0)) {
+                val dt = 1 / fps
+                val glow = maxOf(Math.pow(perFrame60, dt * 60) - keep(dt), 0.0)
+                val gain = keep(dt) + glow
+                assertTrue("$file at $fps fps keeps $gain a frame", gain < 1)
+                // The same decay per second at every rate.
+                assertEquals("$file at $fps fps", Math.pow(perFrame60, 60.0), Math.pow(gain, fps), 1e-9)
+            }
+            assertEquals(glow60, Math.pow(perFrame60, 1.0) - keep(1.0 / 60), 1e-12)
+        }
+    }
+
     // endregion
 
     // region Watchdog

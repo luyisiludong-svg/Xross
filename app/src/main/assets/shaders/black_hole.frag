@@ -424,11 +424,16 @@ void main() {
     if (uFresh < 0.5) {
         vec2 st = frag / uResolution;
         vec3 prev = texture(uPrev, st).rgb;
-        col = max(col, prev * exp2(-uFrameDt / PERSIST) - 1.5 / 255.0);   // RGBA8: never stuck at 1/255
+        float keep = exp2(-uFrameDt / PERSIST);
+        col = max(col, prev * keep - 1.5 / 255.0);   // RGBA8: never stuck at 1/255
         vec2 o = cell * 1.6 / uResolution;
         vec3 halo = 0.25 * (texture(uPrev, st + o).rgb + texture(uPrev, st - o).rgb
                           + texture(uPrev, st + vec2(o.x, -o.y)).rgb + texture(uPrev, st + vec2(-o.x, o.y)).rgb);
-        col += max(halo - 0.025, 0.0) * GLOW;
+        // Each frame keeps `keep + glow` of the last one. Hold that per second at its 60 fps value
+        // (GLOW exactly, at 60 fps): a fixed GLOW at 120 fps keeps over 100% a frame, so the
+        // bloom grows until the screen washes out.
+        float glow = max(pow(exp2(-1.0 / (60.0 * PERSIST)) + GLOW, uFrameDt * 60.0) - keep, 0.0);
+        col += max(halo - 0.025, 0.0) * glow;
     }
     // Soft shoulder: highlights roll off instead of clipping, so the hot side stays gold with its
     // letters readable rather than a white blob. Below 0.65 nothing changes.
