@@ -77,8 +77,12 @@ variants, category and system patches, and rules.
 ```glsl
 uniform sampler2D uImage0, uImage1, uImage2, uImage3; // effects.shaderImages, in order (texture units 2–5)
 uniform vec4 uImageSize0, uImageSize1, uImageSize2, uImageSize3; // w, h, 1/w, 1/h; 0 for a missing slot
-uniform vec2 uFocus;  // 0..1: the crosshair's x (the screen signal CrosshairX), y = the focused row's height; eased
+uniform vec2 uFocus;  // 0..1: the focused item's centre on screen (the screen signal Focus); eased
 ```
+
+`uFocus` comes from `ScreenSignal.Focus`, which `PLAN_MENU_STYLES.md` slice 1 adds in place of
+`CrosshairX`. Every menu style reports it, so a shader's parallax follows the focus in any of
+them. That slice lands before or with this section.
 
 The driver gives an unused sampler no location, so programs that don't read the images pay
 nothing. That's the same reasoning `uPrev` already uses.
