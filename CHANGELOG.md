@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- **Images for theme shaders.** A pack's own background shader can sample up to four of its
+  images (`effects.shaderImages`: PNG, JPEG or WebP, with `wrap`, `filter` and `mipmap`) as
+  `uImage0`–`uImage3`, and gets the focused item's position as `uFocus`. Paintings can now ripple,
+  drift in haze and shift in depth. Images are capped at 2048 px and 8 MP per shader; replacing one
+  reloads like an edit to the shader. See the shader guide §8 and the tutorial's painted scene.
+- The desktop shader preview binds a pack's shader images and moves `uFocus` with the mouse.
+
 ## 0.2.2.0-beta — 2026-11-21
 
 - **Metadata & Media editor.** Options ▸ Metadata & Media now opens a full screen for the game

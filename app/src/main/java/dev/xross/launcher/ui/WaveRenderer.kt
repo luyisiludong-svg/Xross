@@ -17,6 +17,7 @@ import dev.xross.launcher.theme.shader.ProgramState
 import dev.xross.launcher.theme.shader.ShaderCanary
 import dev.xross.launcher.theme.shader.ShaderFallback
 import dev.xross.launcher.theme.shader.ShaderHealth
+import dev.xross.launcher.theme.shader.ShaderImage
 import dev.xross.launcher.theme.shader.ShaderLibrary
 import dev.xross.launcher.theme.shader.ShaderPreset
 import dev.xross.launcher.theme.shader.ShaderSpec
@@ -58,6 +59,12 @@ data class WaveParams(
     val filter: BackgroundFilter = BackgroundFilter.NONE,
     /** The cold-start shader intro (2b.5d) while it plays: `uTransition` follows its ramp instead of category switches. */
     val intro: WaveIntro? = null,
+    /**
+     * `uFocus`: the focused item's centre over the screen, 0..1 with y down as laid out
+     * ([ScreenSignal.Focus]); the renderer flips it to GL's y up and eases it.
+     */
+    val focusX: Float = 0.5f,
+    val focusY: Float = 0.5f,
 ) {
     // Converted once per parameter change, not per frame, so the GL loop allocates nothing.
     internal val topRgb = palette.top.rgb()
@@ -142,6 +149,8 @@ class WaveRenderer(
     private val health: ShaderHealth? = null,
     /** The music player's levels; null binds 0 (previews, tests). */
     private val audio: AudioLevels? = null,
+    /** Decodes pack shaders' `effects.shaderImages` off the GL thread; null leaves those programs waiting (previews, tests). */
+    private val imageDecoder: ShaderImageDecoder? = null,
 ) : GLSurfaceView.Renderer {
     private val framePeriodNs = (1e9 / refreshRateHz.coerceIn(30f, 240f)).roundToLong()
 
@@ -172,6 +181,18 @@ class WaveRenderer(
     @Volatile var library: ShaderLibrary = ShaderLibrary.DEFAULT
 
     private val canary: ShaderCanary? get() = health?.canary
+
+    /**
+     * Called (on the decoder's thread) when a program's images are decoded, so a still (E-Ink)
+     * screen draws the frame that uploads them; a running loop picks them up anyway.
+     */
+    @Volatile var onImagesDecoded: (() -> Unit)? = null
+
+    /** Decoded images waiting for the GL thread, with the program they were decoded for. */
+    private val decoded = java.util.concurrent.ConcurrentLinkedQueue<Pair<GlProgram, DecodedImages>>()
+
+    /** `uFocus` on screen, eased toward params' (GL y up). */
+    private val shownFocus = floatArrayOf(0.5f, 0.5f)
 
     /** This frame's `uAudioBass`, `uAudioBeat`. */
     private val audioLevels = FloatArray(2)
@@ -211,6 +232,8 @@ class WaveRenderer(
     /** `uFrameDt`: this frame's step, so feedback fades per second, not per frame. */
     private var frameDt = 1f / 60f
     private var loggedFilter: BackgroundFilter? = null
+    /** Longest side a shader image is uploaded at: [dev.xross.launcher.theme.shader.ShaderImage.MAX_SIDE], within `GL_MAX_TEXTURE_SIZE`. */
+    private var maxImageSide = ShaderImage.MAX_SIDE
 
     // Survive a context loss: a verdict is about the program's text on this GPU, not its handle.
     private val verdicts = HashMap<String, FrameBudgetWatchdog.Verdict>()
@@ -257,6 +280,10 @@ class WaveRenderer(
         feedback.forget()
         feedbackKey = null
         field.forget()
+        decoded.clear() // decoded for programs of the dead context; theirs are requested again
+        val maxTex = IntArray(1)
+        GLES30.glGetIntegerv(GLES30.GL_MAX_TEXTURE_SIZE, maxTex, 0)
+        maxImageSide = if (maxTex[0] > 0) minOf(ShaderImage.MAX_SIDE, maxTex[0]) else ShaderImage.MAX_SIDE
         val extensions = GLES30.glGetString(GLES30.GL_EXTENSIONS).orEmpty()
         parallel = "GL_KHR_parallel_shader_compile" in extensions
         timer = GpuTimer(extensions)
@@ -308,6 +335,8 @@ class WaveRenderer(
         easeColor(shownBottom, p.bottomRgb, k)
         easeColor(shownWave, p.waveRgb, k)
         easeColor(shownGlow, p.glowRgb, k)
+        val kf = if (still || lastFrameNs == 0L) 1f else focusStep(dt)
+        easeFocus(shownFocus, p.focusX.coerceIn(0f, 1f), 1f - p.focusY.coerceIn(0f, 1f), kf)
         colorsShown = true
         if (lastFrameNs != 0L && !still) {
             stats?.record(now - lastFrameNs, stride)
@@ -361,6 +390,7 @@ class WaveRenderer(
             retryIfAsked()
             if (library !== synced) sync()
             poll()
+            uploadDecoded()
             select(p.shader)
         } catch (e: RuntimeException) {
             Log.e(TAG, "shader host", e)
@@ -447,6 +477,7 @@ class WaveRenderer(
                 if (spec.untrusted) canary?.arm(spec.key) // a driver that crashes compiling it
                 program.begin(vertex, pre, body)
                 if (blocking || !parallel || program.state != ProgramState.PENDING) settle(program)
+                if (program.state != ProgramState.FAILED) requestImages(program)
             }
         }
     }
@@ -464,6 +495,38 @@ class WaveRenderer(
         }
     }
 
+    /**
+     * Live backgrounds § 1: decodes [program]'s images on the decoder's thread while it compiles.
+     * Until they are uploaded ([uploadDecoded]) it counts as PENDING ([GlProgram.drawState]).
+     */
+    private fun requestImages(program: GlProgram) {
+        val images = program.spec.images
+        if (images.isEmpty()) return
+        val decoder = imageDecoder ?: return
+        decoder.decode(images, maxImageSide) { result ->
+            decoded.add(program to result)
+            onImagesDecoded?.invoke()
+        }
+    }
+
+    /** Uploads what the decoder finished, for programs that are still this context's. */
+    private fun uploadDecoded() {
+        while (true) {
+            val (program, result) = decoded.poll() ?: return
+            if (programs[program.spec.key] !== program || program.handle == 0 || program.state == ProgramState.FAILED) continue
+            val textures = ImageTextures()
+            val ok = textures.upload(result.slots)
+            program.textures = textures
+            val problems = result.problems + if (ok) emptyList() else listOf("the GPU refused an image")
+            if (problems.isNotEmpty()) {
+                Log.w(TAG, "${program.spec.label} images: ${problems.joinToString("; ")}")
+                health?.notice("images:${program.spec.key}", "Shader ${program.spec.label}: ${problems.joinToString("; ")}")
+            } else if (BuildConfig.PERF_LOG) {
+                Log.i(TAG, "images uploaded ${program.spec.key}: ${result.slots.joinToString { it?.let { d -> "${d.width}x${d.height}" } ?: "-" }}")
+            }
+        }
+    }
+
     /** Settles programs the driver finished linking in the background. */
     private fun poll() {
         if (!parallel) return
@@ -477,7 +540,7 @@ class WaveRenderer(
         // A key not prepared yet (params can name the new pack's program a frame before its
         // library arrives) is reported as compiling; the program on screen stays meanwhile.
         val wanted = programs[desired]
-        val status = ShaderFallback.status(wanted?.spec ?: library.spec(desired), desired, wanted?.state, wanted?.error.orEmpty(), wanted?.cause)
+        val status = ShaderFallback.status(wanted?.spec ?: library.spec(desired), desired, wanted?.drawState, wanted?.error.orEmpty(), wanted?.cause)
         if (status != lastReport) {
             lastReport = status
             health?.report(status)
@@ -490,8 +553,8 @@ class WaveRenderer(
                 Log.i(TAG, "status $kind ${status.key}")
             }
         }
-        val key = ShaderFallback.choose(desired, active?.spec?.key) { programs[it]?.state }
-        val next = programs[key]?.takeIf { it.state == ProgramState.READY }
+        val key = ShaderFallback.choose(desired, active?.spec?.key) { programs[it]?.drawState }
+        val next = programs[key]?.takeIf { it.drawState == ProgramState.READY }
         if (next !== active) switchTo(next)
         return next
     }
@@ -680,6 +743,14 @@ class WaveRenderer(
         GLES30.glUniform1f(program.uTransition, if (still) 0f else transition)
         GLES30.glUniform1f(program.uTravel, travel.toFloat())
         GLES30.glUniform1f(program.uPxPerDp, pxPerDp)
+        GLES30.glUniform2f(program.uFocus, shownFocus[0], shownFocus[1])
+        program.textures?.let { t ->
+            t.bind()
+            for (i in 0 until ShaderImage.MAX) {
+                GLES30.glUniform1i(program.uImage[i], ShaderImage.FIRST_UNIT + i)
+                GLES30.glUniform4f(program.uImageSize[i], t.sizes[i * 4], t.sizes[i * 4 + 1], t.sizes[i * 4 + 2], t.sizes[i * 4 + 3])
+            }
+        }
         // WAVE's own.
         GLES30.glUniform1f(program.uBright, 0.8f + 0.2f * daylight)
         GLES30.glUniform1i(program.uLines, p.lineCount.coerceIn(0, MAX_LINES))
@@ -814,6 +885,21 @@ class WaveRenderer(
                 val d = target[i] - shown[i]
                 shown[i] = if (abs(d) < 1f / 512f) target[i] else shown[i] + d * k
             }
+        }
+
+        /** Time constant of `uFocus`'s ease: a parallax that follows the focus without snapping. */
+        const val FOCUS_EASE_S = 0.12f
+
+        /** Fraction of the way to the target focus after [dtSeconds]. */
+        fun focusStep(dtSeconds: Float): Float =
+            if (dtSeconds <= 0f) 0f else (1f - kotlin.math.exp(-dtSeconds / FOCUS_EASE_S)).coerceIn(0f, 1f)
+
+        /** Moves [shown] [k] of the way to ([x], [y]), snapping the last hair. */
+        fun easeFocus(shown: FloatArray, x: Float, y: Float, k: Float) {
+            val dx = x - shown[0]
+            val dy = y - shown[1]
+            shown[0] = if (abs(dx) < 1e-4f) x else shown[0] + dx * k
+            shown[1] = if (abs(dy) < 1e-4f) y else shown[1] + dy * k
         }
 
         /** Render-target scale: keep the long side near 1280 px. */

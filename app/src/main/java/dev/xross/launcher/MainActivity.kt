@@ -315,6 +315,8 @@ class MainActivity : ComponentActivity() {
                 surfaces.active = resolved.surface
             }
             var backdropCovers by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+            // The focused item's centre as laid out (ScreenSignal.Focus), for shaders' uFocus.
+            var focus by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(ScreenSignal.Focus(0.5f, 0.5f)) }
             // Cold-start intro (2b.5d): the black, the boot video or the shader ramp, then the menu.
             val bootReveal = rememberBootReveal(state.coldBoot, state.bootPending, state.boot)
             var bootCovers by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
@@ -380,6 +382,8 @@ class MainActivity : ComponentActivity() {
                     intro = state.boot?.takeIf { it.plan.mode == BootMode.SHADER }?.let {
                         WaveIntro(it.startedAtNanos, BootSequence.SHADER_MS, it.endedAtNanos)
                     },
+                    focusX = focus.x,
+                    focusY = focus.y,
                 )
                 // Focus frame and app-icon look (2b.4d): the look's, colored by the active palette.
                 val cosmetics = look.cosmetics
@@ -415,7 +419,10 @@ class MainActivity : ComponentActivity() {
                         when (signal) {
                             is ScreenSignal.BackdropCover -> backdropCovers = signal.covers
                             is ScreenSignal.UiFilterError -> container.shaderHealth.notice(signal.key, signal.text)
-                            is ScreenSignal.CrosshairX -> container.sounds.setCrosshair(signal.x)
+                            is ScreenSignal.Focus -> {
+                                container.sounds.setCrosshair(signal.x)
+                                focus = signal
+                            }
                         }
                     },
                     snap = container.snaps,

@@ -93,7 +93,9 @@ data class MenuAnchors(
 )
 ```
 
-- `ScreenSignal.CrosshairX` becomes `ScreenSignal.Focus(x, y)`, both 0..1, eased. `MainActivity`
+- `ScreenSignal.CrosshairX` becomes `ScreenSignal.Focus(x, y)`, both 0..1, eased. *Done with
+  Live backgrounds § 1 (2026-11-25): the XMB sends its crosshair, and the renderer does the
+  easing; `MenuAnchors` should send the focused item's centre through the same signal.* `MainActivity`
   passes `x` to `sounds.setCrosshair` as today. It also becomes the source of Live backgrounds
   § 1's `uFocus`, so a pack shader's parallax follows the focus in either style.
 - `LayoutSettingsPanel` hides the XMB-only rows when the active style is not `XMB`, and gains a

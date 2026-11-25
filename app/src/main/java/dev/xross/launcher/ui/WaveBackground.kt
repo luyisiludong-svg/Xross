@@ -69,7 +69,15 @@ fun WaveBackground(
     val refreshHz = remember {
         (context.getSystemService(Context.WINDOW_SERVICE) as android.view.WindowManager).defaultDisplay.refreshRate
     }
-    val renderer = remember { WaveRenderer(refreshRateHz = refreshHz, assets = context.assets, health = health, audio = audio) }
+    val renderer = remember {
+        WaveRenderer(
+            refreshRateHz = refreshHz,
+            assets = context.assets,
+            health = health,
+            audio = audio,
+            imageDecoder = ShaderImageLoader(context.assets),
+        )
+    }
     // The library before the params that may name one of its programs.
     renderer.library = shaders
     renderer.params = params
@@ -96,6 +104,8 @@ fun WaveBackground(
                 }
             }
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            // A still screen draws one frame per change: the one that uploads a shader's images too.
+            renderer.onImagesDecoded = { if (renderer.frozen) requestRender() }
         }
     }
     val pacer = remember { VsyncPacer(view, refreshHz) }

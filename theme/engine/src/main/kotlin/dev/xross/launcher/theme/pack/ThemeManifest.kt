@@ -233,6 +233,11 @@ data class ThemeManifest(
         /** CUSTOM's fragment shader, from the pack root (default `shader.frag`); alone it implies CUSTOM. */
         val shaderPath: String? = null,
         /**
+         * Up to four images CUSTOM's shader samples as `uImage0..3` (Live backgrounds § 1): pack
+         * paths, or `{ "path", "wrap", "filter", "mipmap" }` objects ([dev.xross.launcher.theme.shader.ShaderImage]).
+         */
+        val shaderImages: kotlinx.serialization.json.JsonElement? = null,
+        /**
          * Static wallpaper behind the menu ([WallpaperRef], 2b.4c): a PNG, JPEG or WebP from the
          * pack root, or `none`. Unset: the pack's `wallpaper.png` if it has one.
          */
@@ -282,7 +287,7 @@ data class ThemeManifest(
              */
             val KEYS: Set<String> = setOf(
                 "surfaceStyle", "adaptiveGamePalette",
-                "shaderPreset", "shader", "shaderPath",
+                "shaderPreset", "shader", "shaderPath", "shaderImages",
                 "wallpaperPath", "wallpaper",
                 "focusFrameStyle", "focusFrame", "iconMask", "iconFilter",
                 "foregroundParticles", "particles",

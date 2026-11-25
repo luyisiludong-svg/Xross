@@ -59,6 +59,9 @@ fun AdaptiveWave(
     filter: BackgroundFilter = BackgroundFilter.NONE,
     /** The cold-start shader intro while it plays (2b.5d). */
     intro: WaveIntro? = null,
+    /** The focused item's centre, 0..1 with y down ([ScreenSignal.Focus]), for `uFocus`. */
+    focusX: Float = 0.5f,
+    focusY: Float = 0.5f,
 ) {
     val artColors by art.collectAsStateWithLifecycle()
     val level by battery.collectAsStateWithLifecycle()
@@ -82,7 +85,7 @@ fun AdaptiveWave(
     }
     val s = settings
     val batteryLevel = level?.percent?.let { it.coerceIn(0, 100) / 100f } ?: 1f
-    val params = remember(palette, s.waveSpeed, s.waveLineCount, s.waveTurbulence, s.waveThickness, pulse, shader, category, batteryLevel, filter, intro) {
+    val params = remember(palette, s.waveSpeed, s.waveLineCount, s.waveTurbulence, s.waveThickness, pulse, shader, category, batteryLevel, filter, intro, focusX, focusY) {
         WaveParams(
             speed = s.waveSpeed,
             palette = palette,
@@ -95,6 +98,8 @@ fun AdaptiveWave(
             battery = batteryLevel,
             filter = filter,
             intro = intro,
+            focusX = focusX,
+            focusY = focusY,
         )
     }
     WaveBackground(

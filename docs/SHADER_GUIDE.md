@@ -20,6 +20,7 @@ settings, §8 `shaderPreset` / `shaderPath` and the rest of the `effects` keys),
 5. [The frame budget](#5-the-frame-budget)
 6. [Testing a shader](#6-testing-a-shader)
 7. [`BLACK_HOLE`, a worked example](#7-black_hole-a-worked-example)
+8. [Images and the focus](#8-images-and-the-focus)
 
 ## 1. How the background is drawn
 
@@ -67,6 +68,8 @@ writes `fragColor`. Compile errors are reported with line numbers of your file, 
 | `uTransition` | `float` | 1 right after a category switch, easing to 0 in about a second; the cold-start `SHADER` intro ramps it 0 → 1 |
 | `uPrev`, `uFrameDt`, `uFresh` | | feedback, [§3](#3-feedback-last-frames-picture) |
 | `uField`, `uPass` | | the field pass, [§4](#4-the-field-pass-work-per-block-of-pixels) |
+| `uFocus` | `vec2` | the focused item's centre, 0…1 in `gl_FragCoord.xy / uResolution` space (y up), eased; [§8](#8-images-and-the-focus) |
+| `uImage0`…`uImage3`, `uImageSize0`…`uImageSize3` | | the pack's images, `effects.shaderImages`; [§8](#8-images-and-the-focus) |
 
 Conventions the built-ins follow:
 
@@ -174,8 +177,9 @@ Reference costs on the Galaxy A55, profiling build, watchdog p90 (§3.39):
 * **Pick it:** Settings ▸ Theme ▸ Background shader, or `display.effects.shaderPreset` in
   `Xross/config/settings.json` (picked up on the next start).
 * **Look on the desktop:** [`tools/shader-preview/`](../tools/shader-preview/index.html) runs a
-  shader in the browser the way `WaveRenderer` does (prelude, field pass, feedback, the uniforms;
-  a time slider, a category-switch button, bass, portrait). Serve a folder above both this repo and
+  shader in the browser the way `WaveRenderer` does (prelude, field pass, feedback, the uniforms,
+  `effects.shaderImages`; a time slider, a category-switch button, bass, portrait, and `uFocus`
+  following the mouse). Serve a folder above both this repo and
   the pack, e.g. `python3 -m http.server` in the parent folder, and open
   `tools/shader-preview/?frag=<path to the .frag>&theme=<path to theme.json>`. Paths are relative
   to the page. `renderAt(seconds)` in the console draws one moment and returns a PNG blob. It shows
@@ -194,7 +198,8 @@ Reference costs on the Galaxy A55, profiling build, watchdog p90 (§3.39):
   never Confirm. Run at least three rounds; single runs vary.
 * **Unit tests:** `ShaderHostTest` checks that every preset ships a source and that the prelude
   declares the public uniforms; `FeedbackTest` covers the feedback and field-pass rules and which
-  shaders use them.
+  shaders use them; `ShaderImagesTest` covers `effects.shaderImages`, the program key, the
+  upload sizes and budget, and `uFocus`.
 
 ## 7. `BLACK_HOLE`, a worked example
 
@@ -306,3 +311,81 @@ All in [`black_hole.frag`](../app/src/main/assets/shaders/black_hole.frag).
 
 Re-check the A55 timing ([§6](#6-testing-a-shader)) after raising rays, steps, `ROWS` or the bloom
 taps; on 2026-11-16 the shader used 6.1–6.3 ms of the 10 ms budget.
+
+## 8. Images and the focus
+
+A CUSTOM shader can sample up to four images from its pack, so a painting, a photo or a hand-made
+texture can be brought to life by math (ripples, haze, depth parallax) instead of being either a
+still wallpaper or pure math. List them next to the shader, in any layer that can set one (base,
+variants, category and system overrides, rules):
+
+```json
+"effects": {
+  "shaderPath": "scene.frag",
+  "shaderImages": [
+    "art/painting.webp",
+    { "path": "art/depth.png", "wrap": "CLAMP", "filter": "LINEAR", "mipmap": false },
+    { "path": "art/noise.png", "wrap": "REPEAT" }
+  ]
+}
+```
+
+* **Slots:** the first is `uImage0` (texture unit 2), the next `uImage1`, up to `uImage3`. An entry
+  that can't be used is reported and leaves its slot empty, so the ones after it keep their
+  numbers. More than four are reported and ignored.
+* **Settings:** a plain string means `CLAMP`, `LINEAR`, no mipmaps. `wrap` is `CLAMP`, `REPEAT` or
+  `MIRROR`; `filter` is `LINEAR` or `NEAREST` (pixel art); `mipmap: true` for an image drawn much
+  smaller than its size. All of them work at any size on ES 3.0.
+* **Files:** PNG, JPEG or WebP inside the pack (no `..`), at most 24 MB each. Images are only read
+  with a CUSTOM shader; with a preset they are a problem in Settings ▸ Theme ▸ Theme pack.
+* **Orientation:** upright when sampled at `gl_FragCoord.xy / uResolution`, the same space as
+  `uPrev`. Fitting the image to the screen is the shader's job; `scene.frag` in the example below
+  has a `cover()` that keeps the aspect.
+* **Alpha is straight, not premultiplied.** What a pack stores in alpha (a mask, a water marker,
+  packed depth) comes through exactly. Multiply by alpha yourself where you blend.
+* **Size:** each image's long side is capped at 2048 px (less if the GPU's `GL_MAX_TEXTURE_SIZE`
+  is smaller), keeping its aspect. One program's images share a budget of 8 megapixels (32 MB as
+  RGBA8, about 43 MB with mipmaps): two full 2048² images use all of it. Slots that don't fit are
+  left empty with a toast, in order, and a smaller one after them may still fit.
+* **`uImageSizeN`** is `(w, h, 1/w, 1/h)` in texels as uploaded, and all zeros for an empty slot. An
+  empty slot samples black, so `if (uImageSize1.x > 0.0)` tells whether an optional image is there.
+* **Cost:** a program that doesn't read the images pays nothing (an unused sampler has no
+  location). Reading them costs a texture fetch each; the watchdog times it like any other work.
+
+### Loading
+
+The images are found when the pack loads, then decoded off the GL thread
+([`ShaderImageLoader`](../app/src/main/java/dev/xross/launcher/ui/ShaderImageLoader.kt)) while the
+program compiles, and uploaded on the GL thread
+([`ImageTextures`](../app/src/main/java/dev/xross/launcher/ui/GlShaders.kt)). Until they are
+uploaded the program counts as compiling, so the background on screen stays and nothing flashes
+black. The decoded pixels aren't kept: after a lost GL context they are decoded again.
+
+A program's key folds in each image's settings, size and modification time, so replacing an image
+in a folder pack (a hot reload) is a new program, and a shader blocked after a crash is tried
+again once one of its images changes.
+
+### `uFocus`
+
+`uFocus` is the centre of the focused item on screen, in the same 0…1 space as
+`gl_FragCoord.xy / uResolution` (y up), eased over about 0.1 s so it never snaps. Use it to make
+near layers lean away from where the user is looking:
+
+```glsl
+float d = texture(uImage1, uv).r;            // depth: 0 far .. 1 near
+vec2 p = uv - (uFocus - 0.5) * 0.03 * d;     // near things move most
+vec3 col = texture(uImage0, p).rgb;
+```
+
+In the XMB the focused item always sits at the crosshair, so `uFocus` changes when the layout does
+(another pack, rotation), not on every press. Menu styles that move the focus around the screen
+(`docs/design/PLAN_MENU_STYLES.md`) report it the same way.
+
+### Example
+
+[`tools/shader-preview/examples/painted/`](../tools/shader-preview/examples/painted/) is a small
+pack: a generated dusk valley (`painting.png`, whose alpha marks the lake), a depth map
+(`depth.png`) and `scene.frag`, which shifts the layers by depth toward `uFocus`, ripples the
+water with the bass and `uTransition`, and drifts a haze tinted by `uGlow`. Open it in the preview
+with `?frag=examples/painted/scene.frag&theme=examples/painted/theme.json`: the preview binds the
+`theme.json`'s `shaderImages` (or `&images=a.png,b.png`), and `uFocus` follows the mouse.

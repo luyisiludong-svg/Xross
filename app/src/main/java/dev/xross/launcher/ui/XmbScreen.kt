@@ -255,7 +255,9 @@ fun XmbScreen(
             XmbMetrics(constraints.maxWidth.toFloat(), constraints.maxHeight.toFloat(), layout)
         }
         val signal by rememberUpdatedState(onSignal)
-        LaunchedEffect(m.anchorX, m.width) { if (m.width > 0f) signal(ScreenSignal.CrosshairX(m.anchorX / m.width)) }
+        LaunchedEffect(m.anchorX, m.focusedY, m.width, m.height) {
+            if (m.width > 0f && m.height > 0f) signal(ScreenSignal.Focus(m.anchorX / m.width, m.focusedY / m.height))
+        }
         val density = LocalDensity.current
         fun Float.sp(): TextUnit = with(density) { this@sp.toSp() }
         fun Float.dp(): Dp = with(density) { this@dp.toDp() }

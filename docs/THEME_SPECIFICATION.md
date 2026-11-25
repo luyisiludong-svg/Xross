@@ -61,7 +61,8 @@ Xross/themes/<theme_id>/
 ├── sounds/         cursor.wav, category_switch.wav, confirm.wav, drill_in.wav, drill_out.wav,
 │                   back.wav, option.wav, ok.wav, system_ng.wav, trophy.wav, 01. opening.wav,
 │                   gameboot.wav
-├── shader.frag     optional: a CUSTOM background shader (or effects.shaderPath)
+├── shader.frag     optional: a CUSTOM background shader (or effects.shaderPath), and up to
+│                   four PNG / JPEG / WebP images it samples (effects.shaderImages)
 ├── postprocess.agsl optional: a CUSTOM UI filter, Android 13+ (or effects.uiFilterPath)
 ├── wallpaper.png   optional: drawn behind the menu (or .jpg / .webp, or effects.wallpaperPath)
 ├── bgm.ogg         optional: ambient music loop, at most 20 MB (or bgm.mp3, or audio.bgmFile)
@@ -303,6 +304,26 @@ same way (**Xross wallpaper ▸ An album**, or **Photo ▸ an album ▸ Options 
 wallpaper**): its pictures, from every folder of that name, by file name; it follows the album as
 photos are added or removed.
 
+### Shader images
+
+A pack's own shader (`CUSTOM`) can sample up to four images from the pack, listed in
+`effects.shaderImages` next to `shaderPath`, in any layer that can set a shader:
+
+```json
+"effects": {
+  "shaderPath": "scene.frag",
+  "shaderImages": ["art/painting.webp", { "path": "art/depth.png", "wrap": "CLAMP" }]
+}
+```
+
+They are bound as `uImage0` … `uImage3` in order, upright and with straight alpha, each capped at
+2048 px on its long side, 8 megapixels per shader in all. `uFocus` gives the shader the focused
+item's position for parallax. A path that leaves the pack or isn't PNG, JPEG or WebP, a bad `wrap`
+or `filter`, images with a preset shader, and an image that's missing or over the budget are
+listed with the pack's problems; the shader still draws, with that slot empty. Replacing an image
+is picked up by hot reload like an edit to the shader. The details, and a worked example, are in
+[Shader guide §8](SHADER_GUIDE.md#8-images-and-the-focus).
+
 ### Focus frames and app icons
 
 `effects.focusFrameStyle` (alias `focusFrame`) frames the focused item:
@@ -416,6 +437,7 @@ instead of being ignored silently, so a typo shows up.
 | `adaptiveGamePalette` | `true` / `false` | 2b.3 |
 | `shaderPreset` (`shader`) | `WAVE`, `ASCII_MATRIX`, `BOKEH`, `STARFIELD`, `CRT`, `BLACK_HOLE`, `MECHA`, `CUSTOM` | 2b.4a (`BLACK_HOLE` 2026-11-16, `MECHA` 2026-11-17) |
 | `shaderPath` | a `.frag` in the pack (implies `CUSTOM`) | 2b.4a |
+| `shaderImages` | up to four images in the pack for a `CUSTOM` shader (`uImage0..3`): paths, or `{ "path", "wrap": CLAMP / REPEAT / MIRROR, "filter": LINEAR / NEAREST, "mipmap" }` ([Shader guide §8](SHADER_GUIDE.md#8-images-and-the-focus)) | Live backgrounds § 1 |
 | `wallpaperPath` (`wallpaper`) | a PNG, JPEG or WebP in the pack, or `none` | 2b.4c |
 | `focusFrameStyle` (`focusFrame`) | `BREATHING_HALO`, `STATIC_NEON`, `HARD_SHADOW`, `GOLD_BEZEL` | 2b.4d |
 | `iconMask` | `NONE`, `SQUIRCLE`, `CIRCLE`, `Y2K_CHROME_FRAME` | 2b.4d |

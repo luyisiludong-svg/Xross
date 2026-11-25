@@ -25,6 +25,8 @@
     pipeline (ceil(res / 4) RGBA8 texture), and one reading uPrev gets RGBA8 feedback. Serve from a
     folder above both this repo and the pack, e.g. `python3 -m http.server` in the projects folder,
     then open tools/shader-preview/?frag=<path to .frag relative to this page>.
+    Images (uImage0..3): the theme.json's effects.shaderImages, resolved next to it, or
+    ?images=a.png,b.png relative to this page. uFocus follows the mouse over the canvas.
     Timings here say nothing about a phone: measure on the A55 (docs/SHADER_GUIDE.md §6).
   -->
   <canvas id="c"></canvas>
@@ -32,6 +34,7 @@
     <label>frag <input id="frag" type="text"></label>
     <button id="load">Load</button>
     <label>theme.json <input id="theme" type="text" style="width:22em"></label>
+    <label>images <input id="images" type="text" style="width:22em" placeholder="a.png,b.png"></label>
   </div>
   <div class="bar">
     <button id="play">Pause</button>
@@ -56,6 +59,7 @@ const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
 $('frag').value = params.get('frag') || '';
 $('theme').value = params.get('theme') || '';
+$('images').value = params.get('images') || '';
 if (params.get('t')) $('t').value = params.get('t');
 
 const canvas = $('c');
@@ -114,12 +118,49 @@ let W = 1280, H = 576, fresh = true;
 let palette = { top: [0.10, 0.10, 0.14, 1], bottom: [0.02, 0.02, 0.03, 1], accent: [0.6, 0.8, 1, 1], glow: [1, 0.6, 0.2, 1] };
 let time = Number($('t').value), playing = !params.has('t'), last = performance.now(), lastDraw = 0;
 let transition = 0, beat = 0;
+// uImage0..3 as WaveRenderer binds them: upright at gl_FragCoord / uResolution, straight alpha.
+let images = [], imageList = [];
+let focus = [0.5, 0.5], focusTarget = [0.5, 0.5];
+canvas.addEventListener('mousemove', (e) => {
+  const r = canvas.getBoundingClientRect();
+  focusTarget = [(e.clientX - r.left) / r.width, 1 - (e.clientY - r.top) / r.height];
+});
+
+async function loadImages() {
+  for (const img of images) if (img) gl.deleteTexture(img.tex);
+  images = [];
+  const list = imageList.slice(0, 4);
+  for (const item of list) {
+    const spec = typeof item === 'string' ? { path: item } : item;
+    try {
+      const blob = await (await fetch(spec.path)).blob();
+      const bmp = await createImageBitmap(blob, { imageOrientation: 'flipY', premultiplyAlpha: 'none', colorSpaceConversion: 'none' });
+      const tex = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, bmp);
+      const wrap = { REPEAT: gl.REPEAT, MIRROR: gl.MIRRORED_REPEAT }[(spec.wrap || '').toUpperCase()] || gl.CLAMP_TO_EDGE;
+      const nearest = (spec.filter || '').toUpperCase() === 'NEAREST';
+      const mag = nearest ? gl.NEAREST : gl.LINEAR;
+      if (spec.mipmap) gl.generateMipmap(gl.TEXTURE_2D);
+      const min = spec.mipmap ? (nearest ? gl.NEAREST_MIPMAP_NEAREST : gl.LINEAR_MIPMAP_LINEAR) : mag;
+      for (const [k, v] of [[gl.TEXTURE_MIN_FILTER, min], [gl.TEXTURE_MAG_FILTER, mag], [gl.TEXTURE_WRAP_S, wrap], [gl.TEXTURE_WRAP_T, wrap]])
+        gl.texParameteri(gl.TEXTURE_2D, k, v);
+      images.push({ tex, w: bmp.width, h: bmp.height });
+    } catch (e) {
+      images.push(null);
+      $('log').textContent += `image ${spec.path}: ${e.message}\n`;
+    }
+  }
+}
 
 async function loadTheme() {
   const path = $('theme').value.trim();
   if (!path) return;
   try {
     const th = await (await fetch(path)).json();
+    const base = path.slice(0, path.lastIndexOf('/') + 1);
+    const listed = (th.effects && th.effects.shaderImages) || [];
+    if (!$('images').value.trim()) imageList = [].concat(listed).map(i => typeof i === 'string' ? base + i : { ...i, path: base + i.path });
     const pal = th.palette || {};
     const canvasC = hexColor(pal.canvas, null);
     if (canvasC) { palette.top = canvasC; palette.bottom = canvasC.map((v, i) => i < 3 ? v * 0.35 : 1); }
@@ -137,7 +178,9 @@ async function load() {
       fetch(path).then(r => { if (!r.ok) throw new Error(path + ': ' + r.status); return r.text(); }),
       fetch('../../app/src/main/assets/shaders/prelude.glsl').then(r => r.text()),
     ]);
+    imageList = $('images').value.split(',').map(s => s.trim()).filter(Boolean);
     await loadTheme();
+    await loadImages();
     const own = /^\s*#version/.test(user);
     // The prelude ends without a newline-terminated line count we can trust; count it.
     const preludeLines = own ? 0 : prelude.split('\n').length - (prelude.endsWith('\n') ? 1 : 0);
@@ -146,12 +189,14 @@ async function load() {
     blit = blit || link(BLIT, 0);
     loc = {};
     for (const n of ['uTime', 'uResolution', 'uColorTop', 'uColorBottom', 'uAccent', 'uGlow', 'uBatteryLevel',
-                     'uAudioBass', 'uAudioBeat', 'uTransition', 'uPrev', 'uFrameDt', 'uFresh', 'uField', 'uPass'])
+                     'uAudioBass', 'uAudioBeat', 'uTransition', 'uPrev', 'uFrameDt', 'uFresh', 'uField', 'uPass', 'uFocus',
+                     'uImage0', 'uImage1', 'uImage2', 'uImage3', 'uImageSize0', 'uImageSize1', 'uImageSize2', 'uImageSize3'])
       loc[n] = gl.getUniformLocation(prog, n);
     usesField = loc.uField !== null;
     usesPrev = loc.uPrev !== null;
     resize();
-    $('stat').textContent = `${path} — ${usesField ? 'field pass' : 'one pass'}${usesPrev ? ' + feedback' : ''}`;
+    const imgs = images.length ? ` + ${images.length} image(s)` : '';
+    $('stat').textContent = `${path} — ${usesField ? 'field pass' : 'one pass'}${usesPrev ? ' + feedback' : ''}${imgs}`;
   } catch (e) {
     prog = null;
     $('log').textContent = e.message;
@@ -181,6 +226,15 @@ function setUniforms(dt) {
   gl.uniform1f(loc.uTransition, transition);
   gl.uniform1f(loc.uFrameDt, Math.min(dt, 0.1));
   gl.uniform1f(loc.uFresh, fresh ? 1 : 0);
+  gl.uniform2f(loc.uFocus, focus[0], focus[1]);
+  for (let i = 0; i < 4; i++) {
+    const img = images[i];
+    gl.activeTexture(gl.TEXTURE2 + i);
+    gl.bindTexture(gl.TEXTURE_2D, img ? img.tex : null);
+    gl.uniform1i(loc['uImage' + i], 2 + i);
+    gl.uniform4f(loc['uImageSize' + i], img ? img.w : 0, img ? img.h : 0, img ? 1 / img.w : 0, img ? 1 / img.h : 0);
+  }
+  gl.activeTexture(gl.TEXTURE0);
 }
 
 function frame(now) {
@@ -193,6 +247,8 @@ function frame(now) {
   if (dt > 0.5) fresh = true;
   transition = Math.max(0, transition - dt);   // ~1 s ease, as on the device
   beat = Math.max(0, beat - dt);
+  const k = 1 - Math.exp(-dt / 0.12);           // uFocus eases as on the device
+  focus = focus.map((v, i) => v + (focusTarget[i] - v) * k);
   $('tv').textContent = time.toFixed(2) + ' s';
   draw(dt);
 }

@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 2,
+  "name": "Painted Valley",
+  "author": "Xross examples",
+  "palette": { "canvas": "#1A1230", "accent": "#FFC896", "accentSecondary": "#C47062" },
+  "effects": {
+    "shaderPath": "scene.frag",
+    "shaderImages": [
+      "painting.png",
+      { "path": "depth.png", "wrap": "CLAMP", "filter": "LINEAR" }
+    ]
+  }
+}

@@ -6,6 +6,7 @@ import dev.xross.launcher.theme.ThemePalette
 import dev.xross.launcher.theme.WaveColors
 import dev.xross.launcher.theme.WaveTint
 import dev.xross.launcher.theme.XrossTheme
+import dev.xross.launcher.theme.shader.ShaderImage
 import dev.xross.launcher.theme.shader.ShaderPreset
 import dev.xross.launcher.theme.shader.ShaderRef
 import kotlinx.serialization.json.JsonArray
@@ -219,7 +220,10 @@ object LookExporter {
         val all = LinkedHashSet<String>()
         val wallpapers = LinkedHashSet<String>()
         fun effects(e: ThemeManifest.Effects?, base: Boolean) {
-            ShaderRef.of("x", e?.shaderPreset, e?.shaderPath, ignored)?.takeIf { it.preset == ShaderPreset.CUSTOM }?.let { all += it.path }
+            ShaderRef.of("x", e?.shaderPreset, e?.shaderPath, ignored, e?.shaderImages)?.takeIf { it.preset == ShaderPreset.CUSTOM }?.let { ref ->
+                all += ref.path
+                ref.images.forEach { img -> img?.let { all += it.path } }
+            }
             UiFilterRef.of("x", e?.uiFilter, e?.uiFilterPath, ignored)?.takeIf { it.filter == UiFilter.CUSTOM }?.let { all += it.path }
             val w = WallpaperRef.of("x", e?.wallpaperPath, ignored)
             (if (w == null && base) d.wallpaper else w?.path)?.let { all += it; wallpapers += it }
@@ -266,7 +270,7 @@ object LookExporter {
     private val EFFECT_UNITS: Map<String, Set<String>> = mapOf(
         "surfaceStyle" to setOf("surfaceStyle"),
         "adaptiveGamePalette" to setOf("adaptiveGamePalette"),
-        "shaderPreset" to setOf("shaderPreset", "shader", "shaderPath"),
+        "shaderPreset" to setOf("shaderPreset", "shader", "shaderPath", "shaderImages"),
         "wallpaperPath" to setOf("wallpaperPath", "wallpaper"),
         "focusFrameStyle" to setOf("focusFrameStyle", "focusFrame"),
         "iconMask" to setOf("iconMask"),
@@ -306,8 +310,29 @@ object LookExporter {
         p.textSecondary?.let { put("textSecondary", str(it)) }
     }
 
-    private fun shaderJson(s: ShaderRef): Map<String, JsonElement> =
-        if (s.preset == ShaderPreset.CUSTOM) mapOf("shaderPreset" to str(s.preset.name), "shaderPath" to str(s.path)) else mapOf("shaderPreset" to str(s.preset.name))
+    private fun shaderJson(s: ShaderRef): Map<String, JsonElement> = when {
+        s.preset != ShaderPreset.CUSTOM -> mapOf("shaderPreset" to str(s.preset.name))
+        s.images.isEmpty() -> mapOf("shaderPreset" to str(s.preset.name), "shaderPath" to str(s.path))
+        else -> mapOf("shaderPreset" to str(s.preset.name), "shaderPath" to str(s.path), "shaderImages" to shaderImagesJson(s.images))
+    }
+
+    /** `effects.shaderImages` back as JSON: a plain path where the settings are the defaults. An unusable slot stays an empty path's place. */
+    private fun shaderImagesJson(images: List<ShaderImage?>): JsonArray = JsonArray(
+        images.map { img ->
+            when {
+                img == null -> str("")
+                img == ShaderImage(img.path) -> str(img.path)
+                else -> JsonObject(
+                    linkedMapOf(
+                        "path" to str(img.path),
+                        "wrap" to str(img.wrap.name),
+                        "filter" to str(img.filter.name),
+                        "mipmap" to JsonPrimitive(img.mipmap),
+                    ),
+                )
+            }
+        },
+    )
 
     private fun uiFilterJson(f: UiFilterRef): Map<String, JsonElement> =
         if (f.filter == UiFilter.CUSTOM) mapOf("uiFilter" to str(f.filter.name), "uiFilterPath" to str(f.path)) else mapOf("uiFilter" to str(f.filter.name))

@@ -3,6 +3,8 @@ package dev.xross.launcher.theme.pack
 import androidx.compose.runtime.Immutable
 import dev.xross.launcher.model.GlyphKey
 import dev.xross.launcher.theme.ThemePalette
+import dev.xross.launcher.theme.shader.ShaderImage
+import dev.xross.launcher.theme.shader.ShaderImageSource
 import dev.xross.launcher.theme.shader.ShaderLibrary
 import dev.xross.launcher.theme.shader.ShaderPreset
 import dev.xross.launcher.theme.shader.ShaderRef
@@ -112,6 +114,8 @@ data class LoadedTheme(
     val shader: ShaderRef = ShaderRef.WAVE,
     /** Text of each CUSTOM shader file the pack names, by its pack-relative path (unreadable ones absent). */
     val customShaders: Map<String, String> = emptyMap(),
+    /** Each image a CUSTOM shader samples (`effects.shaderImages`), by its pack-relative path (missing ones absent). */
+    val shaderImages: Map<String, ShaderImageSource> = emptyMap(),
     /** The pack's own wallpaper (2b.4c): `effects.wallpaperPath`, else its `wallpaper.png`, else none. */
     val wallpaper: WallpaperRef = WallpaperRef.NONE,
     /** Each wallpaper file the pack names, by its pack-relative path (missing ones absent). */
@@ -172,7 +176,7 @@ data class LoadedTheme(
         }
 
     /** [shadersUsed] as programs, compiled ahead of time when this pack becomes active. */
-    val shaderLibrary: ShaderLibrary by lazy { ShaderLibrary.of(shadersUsed, customShaders) }
+    val shaderLibrary: ShaderLibrary by lazy { ShaderLibrary.of(shadersUsed, customShaders, shaderImages) }
 
     /**
      * [shaderLibrary] plus [extra] (the user's Settings ▸ Theme ▸ Background shader, 2b.4f), so
@@ -180,7 +184,7 @@ data class LoadedTheme(
      */
     fun shaderLibrary(extra: ShaderPreset?): ShaderLibrary =
         if (extra == null || extra == ShaderPreset.CUSTOM || shadersUsed.any { it.preset == extra }) shaderLibrary
-        else ShaderLibrary.of(shadersUsed + ShaderRef(extra), customShaders)
+        else ShaderLibrary.of(shadersUsed + ShaderRef(extra), customShaders, shaderImages)
 
     /** True when the base, a variant, an override or a rule can show a wallpaper. */
     val hasWallpaper: Boolean get() = wallpapers.isNotEmpty()
@@ -279,6 +283,7 @@ sealed interface PackLoad {
  *   sounds/      cursor.wav, confirm.wav, back.wav, option.wav, ok.wav, system_ng.wav,
  *                trophy.wav, 01. opening.wav, gameboot.wav
  *   shader.frag  GLSL ES 3.0 fragment shader for "effects": { "shaderPreset": "CUSTOM" } (or effects.shaderPath)
+ *                plus up to four PNG / JPEG / WebP images it samples (effects.shaderImages)
  *   wallpaper.png  static wallpaper behind the menu (or .jpg / .webp, or effects.wallpaperPath)
  *   bgm.ogg      ambient music loop (or bgm.mp3, or audio.bgmFile), at most 20 MB
  *   boot.mp4     cold-start video (or audio.bootVideo), at most 30 MB, cut at 15 s
@@ -489,15 +494,21 @@ class ThemePackLoader(
             resolveRules(m.rules, surfaces.keys, base?.layout ?: ThemeLayout.DEFAULT, problems),
         )
 
-        val shader = ShaderRef.of("theme", m.effects?.shaderPreset, m.effects?.shaderPath, problems) ?: base?.shader ?: ShaderRef.WAVE
+        val shader = ShaderRef.of("theme", m.effects?.shaderPreset, m.effects?.shaderPath, problems, m.effects?.shaderImages)
+            ?: base?.shader ?: ShaderRef.WAVE
         val variants = resolveVariants(m.variants, palette != null, surfaces.keys, problems)
         val categoryPatches = resolveCategoryPatches(m.categoryOverrides, surfaces.keys, problems)
         val systemPatches = resolveSystemPatches(systems, surfaces.keys, problems)
-        val customPaths = (listOf(shader) + variants.mapNotNull { it.shader } + (categoryPatches.values + systemPatches.values).mapNotNull { it.shader } +
+        val customRefs = (listOf(shader) + variants.mapNotNull { it.shader } + (categoryPatches.values + systemPatches.values).mapNotNull { it.shader } +
             rules.mapNotNull { it.patch?.shader })
-            .filter { it.preset == ShaderPreset.CUSTOM }.map { it.path }.distinct()
+            .filter { it.preset == ShaderPreset.CUSTOM }
         val customShaders = LinkedHashMap<String, String>()
-        for (path in customPaths) shaderText(pack, path, problems, files)?.let { customShaders[path] = it }
+        for (path in customRefs.map { it.path }.distinct()) shaderText(pack, path, problems, files)?.let { customShaders[path] = it }
+        // Live backgrounds § 1: the images those shaders sample, found (not decoded) here.
+        val shaderImages = LinkedHashMap<String, ShaderImageSource>()
+        for (path in customRefs.flatMap { r -> r.images.mapNotNull { it?.path } }.distinct()) {
+            shaderImageSource(pack, path, problems, files)?.let { shaderImages[path] = it }
+        }
 
         val wallpaper = WallpaperRef.of("theme", m.effects?.wallpaperPath, problems)
             ?: folder?.let(WallpaperRef::defaultIn)?.let(::WallpaperRef)
@@ -551,6 +562,7 @@ class ThemePackLoader(
             flags = ColorFlags.of(m.palette, m.effects),
             shader = shader,
             customShaders = customShaders,
+            shaderImages = shaderImages,
             wallpaper = wallpaper,
             wallpapers = wallpapers,
             bgm = bgm,
@@ -631,6 +643,42 @@ class ThemePackLoader(
         files += path
         return text
     }
+
+    /**
+     * Where an image a CUSTOM shader samples is (Live backgrounds § 1): a folder pack's file or a
+     * bundled pack's asset. Only found and size-checked here; the renderer decodes it on IO when the
+     * program is prepared, so a pack load never holds the pixels.
+     */
+    private fun shaderImageSource(pack: ThemePackInfo, path: String, problems: MutableList<String>, files: MutableSet<String>): ShaderImageSource? =
+        when (val s = pack.source) {
+            is PackSource.Builtin -> {
+                val asset = "${s.dir}/$path"
+                if (!assetExists(asset)) {
+                    problems += "Shader image $path not found in the pack"
+                    null
+                } else {
+                    files += path
+                    ShaderImageSource(asset = asset)
+                }
+            }
+            is PackSource.Folder -> {
+                val file = inside(s.dir, path)?.takeIf { it.isFile }
+                when {
+                    file == null -> {
+                        problems += "Shader image $path not found in the pack"
+                        null
+                    }
+                    file.length() > ShaderImage.MAX_BYTES -> {
+                        problems += "Shader image $path is larger than ${ShaderImage.MAX_BYTES / (1024 * 1024)} MB"
+                        null
+                    }
+                    else -> {
+                        relativePath(s.dir, file)?.let(files::add)
+                        ShaderImageSource(file = file, bytes = file.length(), modified = file.lastModified())
+                    }
+                }
+            }
+        }
 
     /** A bare file name is looked up in `sounds/`; a path ("audio/tick.wav") from the pack root. */
     private fun soundFile(pack: ThemePackInfo, name: String): SoundSource? {

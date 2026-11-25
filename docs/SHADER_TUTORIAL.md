@@ -19,6 +19,7 @@ field passes in detail, the frame budget, the `BLACK_HOLE` worked example) is th
 8. [Rules of thumb](#8-rules-of-thumb)
 9. [UI filters (AGSL)](#9-ui-filters-agsl)
 10. [Where to go next](#10-where-to-go-next)
+11. [A painted scene](#11-a-painted-scene)
 
 ## 1. Two kinds of shader
 
@@ -71,6 +72,8 @@ Declared by the prelude:
 | `uBatteryLevel` | 0 empty … 1 full (1 where unknown) | a low-battery mood |
 | `uPrev`, `uFrameDt`, `uFresh` | feedback: last frame, seconds since it, 1 when there is none | trails, afterglow |
 | `uField`, `uPass` | the quarter-size field pass | expensive work shared by blocks of pixels |
+| `uFocus` | the focused item's centre, 0 … 1, y up, eased | parallax toward what the user looks at |
+| `uImage0` … `uImage3`, `uImageSize0` … `uImageSize3` | the pack's `effects.shaderImages` and their sizes | painted scenes, masks, depth maps, noise textures |
 
 The renderer looks up its uniforms by name on every program, so a pack's shader may also declare
 these, which the prelude leaves out:
@@ -81,8 +84,8 @@ these, which the prelude leaves out:
 | `uniform float uTravel;` | distance gained on category switches, integrated so it never jumps | `starfield.frag` |
 | `uBright`, `uLines` (`int`), `uTurb`, `uThick` | daylight brightness and the Settings ▸ Theme ▸ Wave settings sliders | `wave.frag` |
 
-Feedback and the field pass are opt-in by use: a shader that never reads `uPrev` or `uField` gets no
-extra buffers and no extra pass.
+Feedback, the field pass and images are opt-in by use: a shader that never reads `uPrev`, `uField`
+or `uImage0` gets no extra buffers, no extra pass and no textures.
 
 ## 4. The starter shader
 
@@ -188,3 +191,41 @@ Every pass is a full-screen offscreen render, so on a slow GPU prefer `effects.b
 * §8 of the [theme specification](THEME_SPECIFICATION.md): `shaderPreset`, `shaderPath`,
   `backgroundFilter`, `uiFilter` and `bootIntro`, and how context rules can change the shader per
   category or system.
+
+## 11. A painted scene
+
+Images (`effects.shaderImages`) let a shader start from art instead of from nothing. The worked
+example is [`tools/shader-preview/examples/painted/`](../tools/shader-preview/examples/painted/):
+
+```json
+"effects": {
+  "shaderPath": "scene.frag",
+  "shaderImages": ["painting.png", { "path": "depth.png", "wrap": "CLAMP", "filter": "LINEAR" }]
+}
+```
+
+1. **Paint, then mark.** `painting.png` is the picture. Its alpha is not transparency: it is 1
+   everywhere except the lake, where it is 0.5. Xross keeps alpha straight, so a shader can use it
+   as a mask. `depth.png` is a greyscale depth map, black far away and white near. Paint it by
+   hand, or make it from the layers you painted.
+2. **Fit it.** Images are bound upright in `gl_FragCoord.xy / uResolution` space but keep their own
+   aspect. `cover()` in `scene.frag` maps screen uv to image uv like a wallpaper's `COVER`, then
+   shrinks it a few percent so the parallax never shows an edge.
+3. **Parallax.** Read the depth, then offset the lookup by `(uFocus - 0.5) * strength * depth`:
+   near things lean away from the focus, the far sky stays put. A slow sine sway keeps it alive
+   while the focus rests.
+4. **Water.** Where the mask says water, nudge the lookup by two scrolling noises, stretched along
+   x, and let `uAudioBass` and `uTransition` raise the swell.
+5. **Air.** A low haze tinted with `uGlow`, stronger with distance (`1 - depth`), ties the
+   painting to the theme's colours.
+6. **Then the usual finish:** dim it for the menu, a vignette, a dither.
+
+Try it in the preview:
+`?frag=examples/painted/scene.frag&theme=examples/painted/theme.json`. The preview binds the
+images from the `theme.json` and moves `uFocus` with the mouse. The rules for images (slots,
+`wrap` / `filter` / `mipmap`, the 2048 px cap and the 8 MP budget) are in
+[guide §8](SHADER_GUIDE.md#8-images-and-the-focus).
+
+Keep an eye on cost: every `texture()` is a fetch, and a dependent read (the depth decides where
+the painting is read) is slower than a plain one. Measure on the phone as in §5.
+

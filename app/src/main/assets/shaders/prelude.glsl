@@ -14,6 +14,12 @@ uniform float uBatteryLevel; // 0.0 empty .. 1.0 full (1.0 where unknown)
 uniform float uAudioBass;    // 0.0 .. 1.0 bass energy of Xross's music, as heard (0.0 with none or paused)
 uniform float uAudioBeat;    // 1.0 for ~100 ms from a beat, else 0.0
 uniform float uTransition;   // 1.0 right after a category switch, easing back to 0.0 in ~1 s
+uniform vec2 uFocus;         // the focused item's centre, 0..1 in the space of gl_FragCoord.xy / uResolution (y up); eased
+// Images (optional): effects.shaderImages, in order, on texture units 2-5. Upright when sampled
+// at gl_FragCoord.xy / uResolution; RGBA8 with straight (not premultiplied) alpha, so masks and
+// data packed in alpha survive. A missing or dropped slot samples black and its size is 0.
+uniform sampler2D uImage0, uImage1, uImage2, uImage3;
+uniform vec4 uImageSize0, uImageSize1, uImageSize2, uImageSize3; // w, h, 1/w, 1/h in texels; 0 for a missing slot
 // Feedback (optional): a shader that reads uPrev gets last frame's picture (RGBA8, the render
 // size, linear filtering, clamped). Fade it per second with uFrameDt, and ignore it where
 // uFresh is 1.0 (first frame, after a pause or resize, and in still/E-Ink mode).

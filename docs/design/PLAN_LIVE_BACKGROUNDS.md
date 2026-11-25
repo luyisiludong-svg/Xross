@@ -5,10 +5,11 @@ backgrounds: shader image inputs, video backgrounds, and layered scenes. Written
 at `1b5261f` (2026-11-22).
 
 Sizes: **XS** under an hour · **S** half a day · **M** one to two days · **L** three days or more.
+Status: ✅ done · ◐ code done, device check open · ⬜ not started.
 
 | # | Feature | Size | Status |
 | --- | --- | --- | --- |
-| 1 | Image inputs for pack shaders (`uImage0..3`, `uFocus`) | M | ⬜ |
+| 1 | Image inputs for pack shaders (`uImage0..3`, `uFocus`) | M | ◐ on `feat/live-backgrounds-image-inputs`; A55 timing open |
 | 2 | Video backgrounds (`effects.videoPath`, `uVideo`, VIDEO preset) | L | ⬜ |
 | 3 | Layered scenes (`scene.json`: images, sprites, video, effect shaders, GPU particles) | L × 5–6 | ⬜ |
 
@@ -48,6 +49,32 @@ retried. From § 1 on, a CUSTOM key is
 
 ## 1. Image inputs for pack shaders (M)
 
+> **Progress (2026-11-25, `feat/live-backgrounds-image-inputs`).** Code, unit tests and docs are
+> done; the A55 timing is not (no device was attached).
+>
+> - **Format and loading** as specified below. `ShaderImage` / `ShaderImageSource` / `BoundImage` /
+>   `ShaderImagePlan` in `Shaders.kt`; `ShaderRef.images`, `ShaderSpec.images`, and
+>   `ShaderLibrary.customKey` (a shader without images keeps its old key). `LoadedTheme.shaderImages`
+>   finds the files (folder and bundled packs) without decoding them. `LookExporter` carries them.
+> - **GL:** `ShaderImageLoader` (decoder thread: bounds, plan, `ImageDecoder` unpremultiplied,
+>   rows flipped so images are upright at `gl_FragCoord.xy / uResolution`), `ImageTextures` in
+>   `GlShaders.kt`, `GlProgram.drawState` (PENDING until uploaded). On a still screen the frame
+>   that uploads is requested by `WaveRenderer.onImagesDecoded`.
+> - **`uFocus`:** `ScreenSignal.CrosshairX` became `ScreenSignal.Focus(x, y)` here, the signal half
+>   of `PLAN_MENU_STYLES.md` slice 1 (`MenuAnchors` and `layout.menuStyle` are still to come). In
+>   the XMB it is the crosshair, so it only moves with the layout. It is eased in the renderer
+>   (`WaveRenderer.easeFocus`, 0.12 s) and carried in `WaveParams.focusX/Y`.
+> - **A deviation:** a slot whose entry is unusable stays empty instead of shifting the later
+>   images down, so `uImageN` always means the N-th entry the pack wrote.
+> - **Tests:** `ShaderImagesTest` (12): decoding, problems, the cascade, keys, the 2048 cap and 8 MP
+>   budget, focus easing, the prelude. The full `:app:testDebugUnitTest` and `:theme:engine:test`
+>   pass, and `validateShaders` is clean.
+> - **Sample:** `tools/shader-preview/examples/painted/` (generated art, depth map, `scene.frag`),
+>   checked in the preview, which now binds `shaderImages` and moves `uFocus` with the mouse. A
+>   pack in `xross_themePacks` is still to make.
+> - **Open:** the A55 run with a profiling build (the sample's watchdog p90 into
+>   `docs/status/PERFORMANCE.md`), and a look at the upload hitch for two 2048² images with mipmaps.
+
 **Goal.** A pack's shader can sample up to four images from the pack, and knows where the menu's
 focus is. This is the smallest change that ends the split between "static image" and "pure math".
 
@@ -81,7 +108,7 @@ uniform vec2 uFocus;  // 0..1: the focused item's centre on screen (the screen s
 ```
 
 `uFocus` comes from `ScreenSignal.Focus`, which `PLAN_MENU_STYLES.md` slice 1 adds in place of
-`CrosshairX`. Every menu style reports it, so a shader's parallax follows the focus in any of
+`CrosshairX` (the signal itself landed with this section). Every menu style reports it, so a shader's parallax follows the focus in any of
 them. That slice lands before or with this section.
 
 The driver gives an unused sampler no location, so programs that don't read the images pay
