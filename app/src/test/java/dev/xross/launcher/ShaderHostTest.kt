@@ -479,6 +479,64 @@ class ShaderHostTest {
         assertTrue(later.isBlocked("custom:shader.frag:abc"))
     }
 
+    @Test fun aForceStopOrUpdateSparesAnArmedShaderOnce() {
+        ShaderCanary { cache }.arm("custom:a:1") // force-stopped mid-proof
+        val next = ShaderCanary { cache }
+        var askedAbout = 0L
+        assertEquals(emptyList<String>(), next.recover { askedAbout = it; false })
+        assertTrue(askedAbout > 0) // the marker's time, so an older exit record isn't used
+        assertFalse(next.isBlocked("custom:a:1"))
+        // Dies armed again before it proved itself: blocked, whatever Android says.
+        next.arm("custom:a:1")
+        val third = ShaderCanary { cache }
+        assertEquals(listOf("custom:a:1"), third.recover { false })
+        assertTrue(third.isBlocked("custom:a:1"))
+    }
+
+    @Test fun aProvenShaderIsSparedAgainLater() {
+        ShaderCanary { cache }.arm("custom:a:1")
+        val next = ShaderCanary { cache }
+        next.recover { false }
+        next.arm("custom:a:1")
+        next.disarm("custom:a:1")
+        next.proven("custom:a:1")
+        next.arm("custom:a:1") // a later force-stop
+        assertEquals(emptyList<String>(), ShaderCanary { cache }.recover { false })
+    }
+
+    @Test fun anUnknownExitStillBlocks() {
+        ShaderCanary { cache }.arm("custom:a:1")
+        assertEquals(listOf("custom:a:1"), ShaderCanary { cache }.recover { null })
+        ShaderCanary { cache }.arm("custom:b:1")
+        assertEquals(listOf("custom:b:1"), ShaderCanary { cache }.recover { error("no exit info") })
+    }
+
+    @Test fun retryingRetiredShadersLiftsCrashBlocks() {
+        ShaderCanary { cache }.arm("custom:x:1")
+        val health = ShaderHealth(ShaderCanary { cache }) { true }
+        assertTrue(health.canary.isBlocked("custom:x:1"))
+        val generation = health.retryGeneration
+        health.retryRetired()
+        assertEquals(generation + 1, health.retryGeneration)
+        assertFalse(health.canary.isBlocked("custom:x:1"))
+        assertFalse(File(cache, ShaderCanary.BLOCKED).exists())
+        assertTrue(ShaderCanary { cache }.blockedKeys().isEmpty())
+        // Its next failure is announced again.
+        val fail = ShaderStatus.Failed("custom:x:1", "x", "blocked after a crash", ShaderStatus.Cause.CRASHED)
+        health.report(fail)
+        assertEquals(fail, health.status.value)
+    }
+
+    @Test fun onlyHarmlessExitReasonsSpareAShader() {
+        assertFalse(ProcessExits.crashed(android.app.ApplicationExitInfo.REASON_USER_REQUESTED))
+        assertFalse(ProcessExits.crashed(16)) // package updated
+        assertFalse(ProcessExits.crashed(android.app.ApplicationExitInfo.REASON_LOW_MEMORY))
+        assertTrue(ProcessExits.crashed(android.app.ApplicationExitInfo.REASON_CRASH_NATIVE))
+        assertTrue(ProcessExits.crashed(android.app.ApplicationExitInfo.REASON_SIGNALED))
+        assertTrue(ProcessExits.crashed(android.app.ApplicationExitInfo.REASON_UNKNOWN))
+        assertTrue(ProcessExits.crashed(android.app.ApplicationExitInfo.REASON_ANR))
+    }
+
     @Test fun cleanExitLeavesNothingBlocked() {
         val canary = ShaderCanary { cache }
         canary.arm("custom:a")

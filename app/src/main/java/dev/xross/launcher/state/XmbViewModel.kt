@@ -1966,8 +1966,8 @@ class XmbViewModel(
             Command.CycleSlowShaders -> setSlowShaders(settingsStore.current.slowShaders.next())
             is Command.SetSlowShaders -> setSlowShaders(command.mode)
             Command.RetrySlowShaders -> {
-                container.shaderHealth.retrySlow()
-                toast("Background shaders will be measured again")
+                container.shaderHealth.retryRetired()
+                toast("Background shaders will be tried again")
             }
             Command.CycleSystemLogos -> settingsStore.update {
                 val styles = dev.xross.launcher.data.SystemLogoStyle.entries

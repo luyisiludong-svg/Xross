@@ -104,7 +104,8 @@ data class WaveIntro(val startedAtNanos: Long, val durationMs: Long, val endedAt
  *    over 60% of the active frame budget retires it for the session ([FrameBudgetWatchdog]). With
  *    Settings ▸ System ▸ Performance ▸ Slow shaders on Keep and warn ([ShaderHealth.retireSlow]
  *    false) only a hopeless one is retired; the rest stay on screen with a notice. Try retired
- *    shaders again ([ShaderHealth.retrySlow]) forgets every verdict, so each is measured anew.
+ *    shaders again ([ShaderHealth.retryRetired]) forgets every verdict, so each is measured anew,
+ *    and lifts the crash guard's blocks.
  *  - Crash-loop guard: a pack's own program is armed in the [ShaderCanary] while it compiles and
  *    until it has drawn [ShaderCanary.PROVEN_FRAMES] frames in a row.
  *
@@ -557,6 +558,7 @@ class WaveRenderer(
             } else if (canaryFrames >= ShaderCanary.PROVEN_FRAMES) {
                 quiesce()
                 proven += spec.key
+                canary?.proven(spec.key)
             }
         }
     }
@@ -599,7 +601,11 @@ class WaveRenderer(
         val generation = h.retryGeneration
         if (generation == retrySeen) return
         retrySeen = generation
-        val retired = programs.values.filter { it.state == ProgramState.FAILED && it.cause == ShaderStatus.Cause.TOO_SLOW }
+        // Too slow, or blocked by a crash guard that has since been cleared.
+        val retired = programs.values.filter {
+            it.state == ProgramState.FAILED &&
+                (it.cause == ShaderStatus.Cause.TOO_SLOW || it.cause == ShaderStatus.Cause.CRASHED && canary?.isBlocked(it.spec.key) != true)
+        }
         for (program in retired) {
             programs.remove(program.spec.key)
             program.release()

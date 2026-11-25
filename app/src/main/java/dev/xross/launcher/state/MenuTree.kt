@@ -1803,7 +1803,7 @@ class MenuTree(private val s: MenuSnapshot) {
             ),
             setting(
                 "perf:retry", "Try retired shaders again",
-                "Measures every background shader again, without restarting Xross",
+                "Tries shaders switched off as too slow or after a crash again, without restarting Xross",
                 GlyphKey.REFRESH, Command.RetrySlowShaders,
             ),
         )

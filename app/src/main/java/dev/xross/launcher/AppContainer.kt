@@ -73,6 +73,7 @@ class AppContainer(context: Context) {
     val shaderHealth: ShaderHealth by lazy {
         ShaderHealth(
             ShaderCanary { java.io.File(environment.current.root, CACHE_DIR) },
+            lastExitWasCrash = { markedAt -> ProcessExits.wasCrash(appContext, since = markedAt) },
         )
     }
     val themes: ThemeRuntime by lazy { ThemeRuntime(themePacks) }

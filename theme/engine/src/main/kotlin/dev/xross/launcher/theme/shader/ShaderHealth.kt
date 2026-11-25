@@ -12,9 +12,13 @@ import kotlinx.coroutines.flow.receiveAsFlow
  * shows as toasts (a compile error, a shader too slow for this GPU, one that crashed Xross last
  * time). Each program's failure is announced once per process, not on every category switch.
  *
- * Construct it once per process, before any renderer runs: it runs [ShaderCanary.recover].
+ * Construct it once per process, before any renderer runs: it runs [ShaderCanary.recover], with
+ * [lastExitWasCrash] saying how the last process ended (null: Android can't tell).
  */
-class ShaderHealth(val canary: ShaderCanary) {
+class ShaderHealth(
+    val canary: ShaderCanary,
+    lastExitWasCrash: (markedAtMs: Long) -> Boolean? = { null },
+) {
     private val _status = MutableStateFlow<ShaderStatus>(ShaderStatus.Ready(ShaderLibrary.WAVE_KEY, ShaderPreset.WAVE.label))
     val status: StateFlow<ShaderStatus> = _status.asStateFlow()
 
@@ -35,9 +39,19 @@ class ShaderHealth(val canary: ShaderCanary) {
     @Volatile var retryGeneration: Int = 0
         private set
 
-    /** Settings ▸ System ▸ Performance ▸ Try retired shaders again: forget the watchdog's verdicts. */
+    /** Forget the watchdog's verdicts (a new Slow shaders rule). */
     @Synchronized
     fun retrySlow() {
+        retryGeneration++
+    }
+
+    /**
+     * Settings ▸ System ▸ Performance ▸ Try retired shaders again: forget the watchdog's verdicts
+     * and the crash guard's blocks. A shader that really crashes Xross is blocked again next start.
+     */
+    @Synchronized
+    fun retryRetired() {
+        forget(canary.unblockAll())
         retryGeneration++
     }
 
@@ -48,7 +62,7 @@ class ShaderHealth(val canary: ShaderCanary) {
     }
 
     /** Keys a crash left armed at the last exit; they're blocked now. */
-    val recovered: List<String> = canary.recover()
+    val recovered: List<String> = canary.recover(lastExitWasCrash)
 
     init {
         if (recovered.isNotEmpty()) {
