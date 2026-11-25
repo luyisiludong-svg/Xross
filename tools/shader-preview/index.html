@@ -27,6 +27,9 @@
     then open tools/shader-preview/?frag=<path to .frag relative to this page>.
     Images (uImage0..3): the theme.json's effects.shaderImages, resolved next to it, or
     ?images=a.png,b.png relative to this page. uFocus follows the mouse over the canvas.
+    Video (uVideo, uVideoSize, uVideoRect): the theme.json's effects.videoPath and videoFit, or
+    ?video=loop.mp4&fit=FIT. A muted loop, uploaded each frame upright like on the device; open
+    ?frag=../../app/src/main/assets/shaders/video.frag to see the VIDEO preset.
     Timings here say nothing about a phone: measure on the A55 (docs/SHADER_GUIDE.md §6).
   -->
   <canvas id="c"></canvas>
@@ -35,6 +38,8 @@
     <button id="load">Load</button>
     <label>theme.json <input id="theme" type="text" style="width:22em"></label>
     <label>images <input id="images" type="text" style="width:22em" placeholder="a.png,b.png"></label>
+    <label>video <input id="video" type="text" style="width:16em" placeholder="loop.mp4"></label>
+    <label>fit <select id="fit"><option>FILL</option><option>FIT</option><option>STRETCH</option><option>CENTER</option></select></label>
   </div>
   <div class="bar">
     <button id="play">Pause</button>
@@ -60,6 +65,8 @@ const params = new URLSearchParams(location.search);
 $('frag').value = params.get('frag') || '';
 $('theme').value = params.get('theme') || '';
 $('images').value = params.get('images') || '';
+$('video').value = params.get('video') || '';
+if (params.get('fit')) $('fit').value = params.get('fit').toUpperCase().replace('COVER', 'FILL');
 if (params.get('t')) $('t').value = params.get('t');
 
 const canvas = $('c');
@@ -121,6 +128,25 @@ let transition = 0, beat = 0;
 // uImage0..3 as WaveRenderer binds them: upright at gl_FragCoord / uResolution, straight alpha.
 let images = [], imageList = [];
 let focus = [0.5, 0.5], focusTarget = [0.5, 0.5];
+// uVideo as WaveRenderer binds it (texture unit 6): the current frame, upright, at most 1280 on its long side.
+const videoEl = document.createElement('video');
+videoEl.muted = true; videoEl.loop = true; videoEl.playsInline = true; videoEl.crossOrigin = 'anonymous';
+let videoTex = null, videoReady = false;
+videoEl.addEventListener('playing', () => { videoReady = true; });
+function loadVideo(path) {
+  videoReady = false;
+  if (!path) { videoEl.removeAttribute('src'); videoEl.load(); return; }
+  videoEl.src = path;
+  videoEl.play().catch(e => { $('log').textContent += `video ${path}: ${e.message}\n`; });
+}
+// VideoFit.place: (left, bottom, width, height) of a vw x vh frame in a W x H target.
+function placeVideo(fit, vw, vh) {
+  if (!vw || !vh || fit === 'STRETCH') return [0, 0, W, H];
+  const cover = Math.max(W / vw, H / vh), contain = Math.min(W / vw, H / vh);
+  const k = fit === 'FIT' ? contain : fit === 'CENTER' ? Math.min(1, contain) : cover;
+  const w = vw * k, h = vh * k;
+  return [(W - w) / 2, (H - h) / 2, w, h];
+}
 canvas.addEventListener('mousemove', (e) => {
   const r = canvas.getBoundingClientRect();
   focusTarget = [(e.clientX - r.left) / r.width, 1 - (e.clientY - r.top) / r.height];
@@ -161,6 +187,10 @@ async function loadTheme() {
     const base = path.slice(0, path.lastIndexOf('/') + 1);
     const listed = (th.effects && th.effects.shaderImages) || [];
     if (!$('images').value.trim()) imageList = [].concat(listed).map(i => typeof i === 'string' ? base + i : { ...i, path: base + i.path });
+    const fx = th.effects || {};
+    const vp = fx.videoPath || fx.video;
+    if (vp && !/^(none|off)$/i.test(vp) && !$('video').value.trim()) $('video').value = base + vp;
+    if (fx.videoFit && !params.get('fit')) $('fit').value = String(fx.videoFit).toUpperCase().replace('COVER', 'FILL');
     const pal = th.palette || {};
     const canvasC = hexColor(pal.canvas, null);
     if (canvasC) { palette.top = canvasC; palette.bottom = canvasC.map((v, i) => i < 3 ? v * 0.35 : 1); }
@@ -181,6 +211,7 @@ async function load() {
     imageList = $('images').value.split(',').map(s => s.trim()).filter(Boolean);
     await loadTheme();
     await loadImages();
+    loadVideo($('video').value.trim());
     const own = /^\s*#version/.test(user);
     // The prelude ends without a newline-terminated line count we can trust; count it.
     const preludeLines = own ? 0 : prelude.split('\n').length - (prelude.endsWith('\n') ? 1 : 0);
@@ -190,13 +221,15 @@ async function load() {
     loc = {};
     for (const n of ['uTime', 'uResolution', 'uColorTop', 'uColorBottom', 'uAccent', 'uGlow', 'uBatteryLevel',
                      'uAudioBass', 'uAudioBeat', 'uTransition', 'uPrev', 'uFrameDt', 'uFresh', 'uField', 'uPass', 'uFocus',
-                     'uImage0', 'uImage1', 'uImage2', 'uImage3', 'uImageSize0', 'uImageSize1', 'uImageSize2', 'uImageSize3'])
+                     'uImage0', 'uImage1', 'uImage2', 'uImage3', 'uImageSize0', 'uImageSize1', 'uImageSize2', 'uImageSize3',
+                     'uVideo', 'uVideoSize', 'uVideoRect'])
       loc[n] = gl.getUniformLocation(prog, n);
     usesField = loc.uField !== null;
     usesPrev = loc.uPrev !== null;
     resize();
     const imgs = images.length ? ` + ${images.length} image(s)` : '';
-    $('stat').textContent = `${path} — ${usesField ? 'field pass' : 'one pass'}${usesPrev ? ' + feedback' : ''}${imgs}`;
+    const vid = $('video').value.trim() ? ' + video' : '';
+    $('stat').textContent = `${path} — ${usesField ? 'field pass' : 'one pass'}${usesPrev ? ' + feedback' : ''}${imgs}${vid}`;
   } catch (e) {
     prog = null;
     $('log').textContent = e.message;
@@ -234,6 +267,31 @@ function setUniforms(dt) {
     gl.uniform1i(loc['uImage' + i], 2 + i);
     gl.uniform4f(loc['uImageSize' + i], img ? img.w : 0, img ? img.h : 0, img ? 1 / img.w : 0, img ? 1 / img.h : 0);
   }
+  // The video: this frame's picture, flipped so it is upright at gl_FragCoord / uResolution.
+  let vw = 0, vh = 0;
+  if (videoReady && videoEl.videoWidth) {
+    vw = videoEl.videoWidth; vh = videoEl.videoHeight;
+    if (!videoTex) {
+      videoTex = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, videoTex);
+      for (const [k, v] of [[gl.TEXTURE_MIN_FILTER, gl.LINEAR], [gl.TEXTURE_MAG_FILTER, gl.LINEAR],
+                            [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]])
+        gl.texParameteri(gl.TEXTURE_2D, k, v);
+    }
+    gl.activeTexture(gl.TEXTURE6);
+    gl.bindTexture(gl.TEXTURE_2D, videoTex);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, videoEl);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+  }
+  gl.activeTexture(gl.TEXTURE6);
+  gl.bindTexture(gl.TEXTURE_2D, vw ? videoTex : null);
+  gl.uniform1i(loc.uVideo, 6);
+  // The device copies at most 1280 on the long side; the size reported is the copy's.
+  const kv = vw ? Math.min(1, 1280 / Math.max(vw, vh)) : 0;
+  const cw = Math.round(vw * kv), ch = Math.round(vh * kv);
+  gl.uniform4f(loc.uVideoSize, cw, ch, cw ? 1 / cw : 0, ch ? 1 / ch : 0);
+  gl.uniform4fv(loc.uVideoRect, placeVideo($('fit').value, vw, vh));
   gl.activeTexture(gl.TEXTURE0);
 }
 

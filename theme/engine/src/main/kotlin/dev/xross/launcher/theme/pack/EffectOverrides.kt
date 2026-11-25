@@ -19,7 +19,7 @@ import kotlinx.serialization.Serializable
 @Immutable
 @Serializable
 data class EffectOverrides(
-    /** [ShaderPreset] other than CUSTOM (a pack's own code stays the pack's). */
+    /** [ShaderPreset] other than CUSTOM (a pack's own code stays the pack's) and VIDEO (it needs the pack's video). */
     val shaderPreset: String = "",
     val backgroundFilter: String = "",
     /** [UiFilter] other than CUSTOM. */
@@ -32,7 +32,7 @@ data class EffectOverrides(
     /** [LaunchCurtain] (2b.5d): the curtain before a game starts. */
     val launchCurtain: String = "",
 ) {
-    val shader: ShaderPreset? get() = ShaderPreset.byName(shaderPreset)?.takeIf { it != ShaderPreset.CUSTOM }
+    val shader: ShaderPreset? get() = ShaderPreset.byName(shaderPreset)?.takeIf { it != ShaderPreset.CUSTOM && it != ShaderPreset.VIDEO }
 
     /** The overrides as a cascade patch: set values replace the look's. */
     val cosmetics: Cosmetics

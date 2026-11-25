@@ -23,6 +23,7 @@ import dev.xross.launcher.theme.rememberMinuteOfDay
 import kotlinx.coroutines.flow.StateFlow
 import dev.xross.launcher.media.energy.AudioLevels
 import dev.xross.launcher.theme.pack.BackgroundFilter
+import dev.xross.launcher.theme.pack.VideoSource
 import dev.xross.launcher.theme.shader.ShaderHealth
 import dev.xross.launcher.theme.shader.ShaderLibrary
 
@@ -62,6 +63,13 @@ fun AdaptiveWave(
     /** The focused item's centre, 0..1 with y down ([ScreenSignal.Focus]), for `uFocus`. */
     focusX: Float = 0.5f,
     focusY: Float = 0.5f,
+    /** The look's background video (Live backgrounds § 2); null for none. */
+    video: VideoSource? = null,
+    /** A video snap or the boot video plays: the background video holds its frame. */
+    otherVideo: Boolean = false,
+    /** The background video holds its frame: resting on Standby motion's particle timeout. */
+    videoResting: Boolean? = null,
+    onVideoFailed: (VideoSource, String) -> Unit = { _, _ -> },
 ) {
     val artColors by art.collectAsStateWithLifecycle()
     val level by battery.collectAsStateWithLifecycle()
@@ -85,7 +93,7 @@ fun AdaptiveWave(
     }
     val s = settings
     val batteryLevel = level?.percent?.let { it.coerceIn(0, 100) / 100f } ?: 1f
-    val params = remember(palette, s.waveSpeed, s.waveLineCount, s.waveTurbulence, s.waveThickness, pulse, shader, category, batteryLevel, filter, intro, focusX, focusY) {
+    val params = remember(palette, s.waveSpeed, s.waveLineCount, s.waveTurbulence, s.waveThickness, pulse, shader, category, batteryLevel, filter, intro, focusX, focusY, video?.fit) {
         WaveParams(
             speed = s.waveSpeed,
             palette = palette,
@@ -100,6 +108,7 @@ fun AdaptiveWave(
             intro = intro,
             focusX = focusX,
             focusY = focusY,
+            videoFit = video?.fit,
         )
     }
     WaveBackground(
@@ -112,6 +121,10 @@ fun AdaptiveWave(
         health = health,
         audio = audio,
         fullFrameRate = settings.fullFrameRate,
+        video = video,
+        otherVideo = otherVideo,
+        videoResting = videoResting,
+        onVideoFailed = onVideoFailed,
     )
 
     // Halos stay white unless a color layer is at work, so the plain themes look as before.

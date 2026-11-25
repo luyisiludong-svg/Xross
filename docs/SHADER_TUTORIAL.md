@@ -20,6 +20,7 @@ field passes in detail, the frame budget, the `BLACK_HOLE` worked example) is th
 9. [UI filters (AGSL)](#9-ui-filters-agsl)
 10. [Where to go next](#10-where-to-go-next)
 11. [A painted scene](#11-a-painted-scene)
+12. [Glass over a video](#12-glass-over-a-video)
 
 ## 1. Two kinds of shader
 
@@ -229,3 +230,26 @@ images from the `theme.json` and moves `uFocus` with the mouse. The rules for im
 Keep an eye on cost: every `texture()` is a fetch, and a dependent read (the depth decides where
 the painting is read) is slower than a plain one. Measure on the phone as in §5.
 
+## 12. Glass over a video
+
+A pack can ship a looping video (`effects.videoPath`). Left at the wave, the look shows it as it
+is, through the built-in `VIDEO` preset; with a shader of your own you get the frame as `uVideo`
+and can treat it like any image. The worked example is
+[`tools/shader-preview/examples/video/`](../tools/shader-preview/examples/video/):
+
+```json
+"effects": { "videoPath": "loop.mp4", "videoFit": "FILL", "shaderPath": "glass.frag" }
+```
+
+1. **Place it.** `uVideoRect` is where `videoFit` put the frame, in render pixels, so
+   `(gl_FragCoord.xy - uVideoRect.xy) / uVideoRect.zw` is 0…1 across it. Use that instead of your
+   own cover maths and the pack's `videoFit` keeps working.
+2. **Wait for a picture.** Until the first frame, `uVideoSize.x` is 0: draw the theme gradient.
+3. **Then bend it:** a small offset from two crossed sines is rippled glass; scale it with
+   `uAudioBass`, and add `(uFocus - 0.5) * 0.02` for a little parallax.
+4. **Finish** with a vignette, as for a painting.
+
+Try it in the preview: `?frag=examples/video/glass.frag&theme=examples/video/theme.json`. Keep
+loops short and modest (720p, 10–20 s): an `.xtheme` is 50 MB at most. The rules are in
+[guide §9](SHADER_GUIDE.md#9-video) and the
+[theme specification](THEME_SPECIFICATION.md#background-video).

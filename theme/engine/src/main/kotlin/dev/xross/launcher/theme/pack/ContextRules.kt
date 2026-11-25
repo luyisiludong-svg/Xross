@@ -49,7 +49,7 @@ data class RuleApplication(
     /** Palette roles, and the `circadianCurve` / `batteryTint` switches. */
     val palette: ThemeManifest.Palette? = null,
     /**
-     * `surfaceStyle`, `adaptiveGamePalette`, `shaderPreset`, `shaderPath`, `shaderImages`, `wallpaperPath`,
+     * `surfaceStyle`, `adaptiveGamePalette`, `shaderPreset`, `shaderPath`, `shaderImages`, `wallpaperPath`, `videoPath`, `videoFit`,
      * `focusFrameStyle`, `iconMask`, `iconFilter` and `foregroundParticles`.
      */
     val effects: ThemeManifest.Effects? = null,

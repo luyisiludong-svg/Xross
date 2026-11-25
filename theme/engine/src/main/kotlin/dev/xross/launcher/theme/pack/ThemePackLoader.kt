@@ -120,6 +120,10 @@ data class LoadedTheme(
     val wallpaper: WallpaperRef = WallpaperRef.NONE,
     /** Each wallpaper file the pack names, by its pack-relative path (missing ones absent). */
     val wallpapers: Map<String, File> = emptyMap(),
+    /** The pack's own background video (Live backgrounds § 2): `effects.videoPath` / `videoFit`, else none. */
+    val video: VideoRef = VideoRef.NONE,
+    /** Each video file the pack names, by its pack-relative path (missing and oversized ones absent). */
+    val videos: Map<String, File> = emptyMap(),
     /** The pack's own music loop (2b.5c): `audio.bgmFile`, else its `bgm.ogg` / `bgm.mp3`, else none. */
     val bgm: BgmRef = BgmRef.NONE,
     /** Each loop file the pack names, by its pack-relative path (missing and oversized ones absent). */
@@ -173,6 +177,8 @@ data class LoadedTheme(
             variants.forEach { v -> v.shader?.let(::add) }
             (categoryPatches.values + systemPatches.values).forEach { p -> p.shader?.let(::add) }
             rules.forEach { r -> r.patch?.shader?.let(::add) }
+            // A look with a video and the wave draws it through VIDEO (withVideoShader).
+            if (videos.isNotEmpty()) add(ShaderRef(ShaderPreset.VIDEO))
         }
 
     /** [shadersUsed] as programs, compiled ahead of time when this pack becomes active. */
@@ -191,6 +197,12 @@ data class LoadedTheme(
 
     /** The file of [ref] (the look's wallpaper); null for none or a file that wasn't found. */
     fun wallpaperFile(ref: WallpaperRef): File? = ref.path?.let(wallpapers::get)
+
+    /** True when the base, a variant, an override or a rule can show a background video. */
+    val hasVideo: Boolean get() = videos.isNotEmpty()
+
+    /** The video [ref] names (the look's), with its fit; null for none or a file that wasn't found. */
+    fun videoSource(ref: VideoRef): VideoSource? = ref.path?.let(videos::get)?.let { VideoSource(it, ref.shownFit) }
 
     /** True when the base, a variant, an override or a rule can play theme music (2b.5c). */
     val hasBgm: Boolean get() = bgmFiles.isNotEmpty()
@@ -237,7 +249,7 @@ data class LoadedTheme(
         // Category-wide tile shapes and focused-system layout patches depend on those two as well.
         val layoutContext = if (layoutHeld.isEmpty()) "" else "${category.orEmpty()}/${system.orEmpty()}"
         return looks.getOrPut(LookKey(v?.id.orEmpty(), cat, sys, held.map { it.index }, layoutHeld, layoutContext)) {
-            cascade(roles, surfaceId, wave, v, categoryPatches[cat], systemPatches[sys], held, flags, shader, wallpaper, cosmetics, gains, soundLinks, bgm)
+            cascade(roles, surfaceId, wave, v, categoryPatches[cat], systemPatches[sys], held, flags, shader, wallpaper, cosmetics, gains, soundLinks, bgm, video)
                 .copy(layout = if (layoutHeld.isEmpty()) null else applyRuleLayout(layout, rules, ctx))
         }
     }
@@ -285,6 +297,7 @@ sealed interface PackLoad {
  *   shader.frag  GLSL ES 3.0 fragment shader for "effects": { "shaderPreset": "CUSTOM" } (or effects.shaderPath)
  *                plus up to four PNG / JPEG / WebP images it samples (effects.shaderImages)
  *   wallpaper.png  static wallpaper behind the menu (or .jpg / .webp, or effects.wallpaperPath)
+ *   *.mp4 / *.webm looping, muted background video named by effects.videoPath (at most 30 MB)
  *   bgm.ogg      ambient music loop (or bgm.mp3, or audio.bgmFile), at most 20 MB
  *   boot.mp4     cold-start video (or audio.bootVideo), at most 30 MB, cut at 15 s
  * ```
@@ -516,6 +529,12 @@ class ThemePackLoader(
         val wallpaperRefs = listOf(wallpaper) + variants.mapNotNull { it.wallpaper } +
             (categoryPatches.values + systemPatches.values).mapNotNull { it.wallpaper } + rules.mapNotNull { it.patch?.wallpaper }
         val wallpapers = wallpaperFiles(folder, wallpaperRefs, problems).also { it.values.forEach(::keep) }
+        // Live backgrounds § 2: a fit alone at the base is the fit later layers' videos inherit.
+        val video = VideoRef.of("theme", m.effects?.videoPath, m.effects?.videoFit, problems)?.let { VideoRef.NONE.over(it) }
+            ?: VideoRef.NONE
+        val videoRefs = listOf(video) + variants.mapNotNull { it.video } +
+            (categoryPatches.values + systemPatches.values).mapNotNull { it.video } + rules.mapNotNull { it.patch?.video }
+        val videos = videoFiles(folder, videoRefs, problems).also { it.values.forEach(::keep) }
         val bgm = BgmRef.of("theme", m.audio?.bgmFile, problems)
             ?: BgmRef.ofList("theme", m.audio?.bgmFiles, m.audio?.bgmOrder, problems)
             ?: folder?.let(BgmRef::defaultIn)?.let { BgmRef(it) }
@@ -565,6 +584,8 @@ class ThemePackLoader(
             shaderImages = shaderImages,
             wallpaper = wallpaper,
             wallpapers = wallpapers,
+            video = video,
+            videos = videos,
             bgm = bgm,
             bgmFiles = bgmFiles,
             bootVideo = bootVideo,

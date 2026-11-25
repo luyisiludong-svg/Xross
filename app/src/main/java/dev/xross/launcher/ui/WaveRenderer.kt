@@ -11,6 +11,7 @@ import dev.xross.launcher.media.energy.AudioLevels
 import dev.xross.launcher.theme.ThemePalette
 import dev.xross.launcher.theme.XrossTheme
 import dev.xross.launcher.theme.pack.BackgroundFilter
+import dev.xross.launcher.theme.pack.VideoFit
 import dev.xross.launcher.theme.rgb
 import dev.xross.launcher.theme.shader.FrameBudgetWatchdog
 import dev.xross.launcher.theme.shader.ProgramState
@@ -65,6 +66,11 @@ data class WaveParams(
      */
     val focusX: Float = 0.5f,
     val focusY: Float = 0.5f,
+    /**
+     * The look's background video's placement (Live backgrounds § 2); null: no video, so the
+     * renderer holds no [android.graphics.SurfaceTexture]. The frames come from [WaveRenderer.onVideoSurface]'s player.
+     */
+    val videoFit: VideoFit? = null,
 ) {
     // Converted once per parameter change, not per frame, so the GL loop allocates nothing.
     internal val topRgb = palette.top.rgb()
@@ -188,6 +194,31 @@ class WaveRenderer(
      */
     @Volatile var onImagesDecoded: (() -> Unit)? = null
 
+    /**
+     * Live backgrounds § 2: the GL thread made (a [android.view.Surface]) or dropped (null) the
+     * surface the background video's player renders into. Called on the GL thread.
+     */
+    @Volatile var onVideoSurface: ((android.view.Surface?) -> Unit)? = null
+
+    /** A decoded video frame is waiting (main thread): a still screen draws the frame that copies it. */
+    @Volatile var onVideoFrame: (() -> Unit)? = null
+
+    /** The video's display size as the player reports it ([videoSize]); 0 while unknown. */
+    @Volatile private var videoDims = 0L
+
+    /**
+     * The view is going away (main thread, after [GLSurfaceView.onPause] parked the GL thread):
+     * the video's [android.graphics.SurfaceTexture] is released without GL calls.
+     */
+    fun abandonVideo() {
+        video.abandon()
+    }
+
+    /** Sets the video's display size (main thread, from the player). */
+    fun videoSize(width: Int, height: Int) {
+        videoDims = (width.toLong() shl 32) or (height.toLong() and 0xFFFFFFFFL)
+    }
+
     /** Decoded images waiting for the GL thread, with the program they were decoded for. */
     private val decoded = java.util.concurrent.ConcurrentLinkedQueue<Pair<GlProgram, DecodedImages>>()
 
@@ -222,6 +253,10 @@ class WaveRenderer(
     private var finishSample = 0
     private var lastReport: ShaderStatus? = null
     private val filterPass = ScreenFilterPass()
+    /** The background video's surface and its copy (Live backgrounds § 2). */
+    private val video = VideoTexture { onVideoFrame?.invoke() }
+    /** The driver refused the video's textures in this context: don't retry every frame. */
+    private var videoRefused = false
     /** Last frame's picture for a program that reads `uPrev`; see [render]. */
     private val feedback = FeedbackTargets()
     /** The low-resolution first pass of a program that reads `uField`; see [render]. */
@@ -281,6 +316,12 @@ class WaveRenderer(
         feedbackKey = null
         field.forget()
         decoded.clear() // decoded for programs of the dead context; theirs are requested again
+        // The video's SurfaceTexture belonged to the old context: a new one, a new surface for the player.
+        if (video.created) {
+            video.forget()
+            onVideoSurface?.invoke(null)
+        }
+        videoRefused = false
         val maxTex = IntArray(1)
         GLES30.glGetIntegerv(GLES30.GL_MAX_TEXTURE_SIZE, maxTex, 0)
         maxImageSide = if (maxTex[0] > 0) minOf(ShaderImage.MAX_SIDE, maxTex[0]) else ShaderImage.MAX_SIDE
@@ -391,6 +432,7 @@ class WaveRenderer(
             if (library !== synced) sync()
             poll()
             uploadDecoded()
+            syncVideo(p)
             select(p.shader)
         } catch (e: RuntimeException) {
             Log.e(TAG, "shader host", e)
@@ -526,6 +568,33 @@ class WaveRenderer(
             }
         }
     }
+
+    /**
+     * Live backgrounds § 2: makes the video's surface when the look has a video (and drops it when
+     * it hasn't), then copies a waiting frame into `uVideo`. One small pass per decoded frame.
+     */
+    private fun syncVideo(p: WaveParams) {
+        val wanted = p.videoFit != null
+        if (wanted && !video.created && !videoRefused) {
+            if (video.create()) {
+                onVideoSurface?.invoke(video.surface)
+            } else {
+                videoRefused = true
+                health?.notice("video:gl", "Background video: this GPU refused the video texture · showing the theme colors")
+            }
+        } else if (!wanted && video.created) {
+            video.release()
+            onVideoSurface?.invoke(null)
+        }
+        if (!video.created) return
+        val dims = videoDims
+        if (video.update((dims ushr 32).toInt(), dims.toInt(), width, height) && BuildConfig.PERF_LOG && !loggedVideoFrame) {
+            loggedVideoFrame = true
+            Log.i(TAG, "video frame copied at %.0fx%.0f".format(video.size[0], video.size[1]))
+        }
+    }
+
+    private var loggedVideoFrame = false
 
     /** Settles programs the driver finished linking in the background. */
     private fun poll() {
@@ -750,6 +819,19 @@ class WaveRenderer(
                 GLES30.glUniform1i(program.uImage[i], ShaderImage.FIRST_UNIT + i)
                 GLES30.glUniform4f(program.uImageSize[i], t.sizes[i * 4], t.sizes[i * 4 + 1], t.sizes[i * 4 + 2], t.sizes[i * 4 + 3])
             }
+        }
+        if (program.usesVideo) {
+            video.bind()
+            GLES30.glUniform1i(program.uVideo, VideoTexture.UNIT)
+            val s = video.size
+            GLES30.glUniform4f(program.uVideoSize, s[0], s[1], s[2], s[3])
+            // The placement follows the video's own aspect (its display size), else the copy's.
+            val dims = videoDims
+            val vw = (dims ushr 32).toInt().takeIf { it > 0 } ?: s[0].toInt()
+            val vh = dims.toInt().takeIf { it > 0 } ?: s[1].toInt()
+            video.place(p.videoFit ?: VideoFit.FILL, width, height, vw, vh)
+            val r = video.rect
+            GLES30.glUniform4f(program.uVideoRect, r[0], r[1], r[2], r[3])
         }
         // WAVE's own.
         GLES30.glUniform1f(program.uBright, 0.8f + 0.2f * daylight)

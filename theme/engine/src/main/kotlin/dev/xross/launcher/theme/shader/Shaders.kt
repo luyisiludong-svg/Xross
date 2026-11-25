@@ -28,6 +28,11 @@ enum class ShaderPreset(val file: String?, val label: String) {
     BLACK_HOLE("black_hole.frag", "Black hole"),
     /** A battle-worn mecha kneeling over its sword, drawn in ASCII; the core ignites after launch. */
     MECHA("mecha.frag", "Mecha"),
+    /**
+     * The look's background video (`effects.videoPath`, Live backgrounds § 2) placed by
+     * `effects.videoFit`, over the theme gradient. What a look with a video and the wave shows.
+     */
+    VIDEO("video.frag", "Video"),
     CUSTOM(null, "Custom shader"),
     ;
 

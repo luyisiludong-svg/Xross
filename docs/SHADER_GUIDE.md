@@ -21,6 +21,7 @@ settings, §8 `shaderPreset` / `shaderPath` and the rest of the `effects` keys),
 6. [Testing a shader](#6-testing-a-shader)
 7. [`BLACK_HOLE`, a worked example](#7-black_hole-a-worked-example)
 8. [Images and the focus](#8-images-and-the-focus)
+9. [Video](#9-video)
 
 ## 1. How the background is drawn
 
@@ -70,6 +71,7 @@ writes `fragColor`. Compile errors are reported with line numbers of your file, 
 | `uField`, `uPass` | | the field pass, [§4](#4-the-field-pass-work-per-block-of-pixels) |
 | `uFocus` | `vec2` | the focused item's centre, 0…1 in `gl_FragCoord.xy / uResolution` space (y up), eased; [§8](#8-images-and-the-focus) |
 | `uImage0`…`uImage3`, `uImageSize0`…`uImageSize3` | | the pack's images, `effects.shaderImages`; [§8](#8-images-and-the-focus) |
+| `uVideo`, `uVideoSize`, `uVideoRect` | | the look's background video, `effects.videoPath`; [§9](#9-video) |
 
 Conventions the built-ins follow:
 
@@ -178,7 +180,7 @@ Reference costs on the Galaxy A55, profiling build, watchdog p90 (§3.39):
   `Xross/config/settings.json` (picked up on the next start).
 * **Look on the desktop:** [`tools/shader-preview/`](../tools/shader-preview/index.html) runs a
   shader in the browser the way `WaveRenderer` does (prelude, field pass, feedback, the uniforms,
-  `effects.shaderImages`; a time slider, a category-switch button, bass, portrait, and `uFocus`
+  `effects.shaderImages`, `effects.videoPath`; a time slider, a category-switch button, bass, portrait, and `uFocus`
   following the mouse). Serve a folder above both this repo and
   the pack, e.g. `python3 -m http.server` in the parent folder, and open
   `tools/shader-preview/?frag=<path to the .frag>&theme=<path to theme.json>`. Paths are relative
@@ -199,7 +201,9 @@ Reference costs on the Galaxy A55, profiling build, watchdog p90 (§3.39):
 * **Unit tests:** `ShaderHostTest` checks that every preset ships a source and that the prelude
   declares the public uniforms; `FeedbackTest` covers the feedback and field-pass rules and which
   shaders use them; `ShaderImagesTest` covers `effects.shaderImages`, the program key, the
-  upload sizes and budget, and `uFocus`.
+  upload sizes and budget, and `uFocus`; `BackgroundVideoTest` covers `effects.videoPath` and
+  `videoFit`, the VIDEO preset's place in the cascade, the placements, the copy size and when the
+  player plays, holds or lets go.
 
 ## 7. `BLACK_HOLE`, a worked example
 
@@ -389,3 +393,46 @@ pack: a generated dusk valley (`painting.png`, whose alpha marks the lake), a de
 water with the bass and `uTransition`, and drifts a haze tinted by `uGlow`. Open it in the preview
 with `?frag=examples/painted/scene.frag&theme=examples/painted/theme.json`: the preview binds the
 `theme.json`'s `shaderImages` (or `&images=a.png,b.png`), and `uFocus` follows the mouse.
+
+## 9. Video
+
+A look can have a looping, muted background video (`effects.videoPath`, with `effects.videoFit`;
+see the [theme specification](THEME_SPECIFICATION.md#background-video)). With the look's shader
+left at the wave, the built-in `VIDEO` preset draws it. A pack's own shader reads it instead:
+
+```glsl
+uniform sampler2D uVideo;    // the current frame (texture unit 6), already RGB, alpha 1
+uniform vec4 uVideoSize;     // w, h, 1/w, 1/h of the frame in texels; 0 with no video
+uniform vec4 uVideoRect;     // where effects.videoFit places it: left, bottom, width, height in render pixels
+```
+
+* **A plain texture.** The decoder's frames arrive in an external (OES) texture; each new one is
+  copied into a regular RGBA8 texture, at most 1280 px on its long side, and that copy is
+  `uVideo`. Filtering and `texelFetch` work as on any `sampler2D`, and the prelude needs no
+  extension. The copy costs one small pass per decoded frame (about 30 a second), not per frame
+  drawn.
+* **Upright,** like the images: sample at `gl_FragCoord.xy / uResolution` for a stretched frame, or
+  through `uVideoRect` for the pack's fit:
+
+  ```glsl
+  vec2 t = (gl_FragCoord.xy - uVideoRect.xy) / uVideoRect.zw; // 0..1 across the placed frame
+  vec3 col = texture(uVideo, clamp(t, 0.0, 1.0)).rgb;
+  ```
+
+  `uVideoRect` is in full-size render pixels; in the field pass (`uPass` = 0) scale it by
+  `FieldPolicy`'s 1/4.
+* **Before the first frame,** and with no video, `uVideo` samples black and `uVideoSize` is 0, so
+  `if (uVideoSize.x > 0.0)` tells whether there is a picture yet. When the player pauses (covered,
+  resting, a snap plays) or lets go (a game is in front), the last frame stays.
+* **Cost.** Decoding happens in the hardware decoder whatever the frame rate, so the video pauses
+  when the screen rests. The shader is measured by the watchdog as any other; a 720p H.264 loop is
+  the safe choice on a mid-range phone.
+
+### Example
+
+[`tools/shader-preview/examples/video/`](../tools/shader-preview/examples/video/) is a small pack:
+a generated 6 s gradient loop (`loop.mp4`, 640×360, 37 KB) and `glass.frag`, which shows it
+through rippled glass that follows the bass, shifted a little toward `uFocus`, with a vignette. Its
+`plain` variant shows the same video through `VIDEO`. In the preview:
+`?frag=examples/video/glass.frag&theme=examples/video/theme.json`, or
+`?frag=../../app/src/main/assets/shaders/video.frag&video=<a .mp4>&fit=FIT` for the preset alone.

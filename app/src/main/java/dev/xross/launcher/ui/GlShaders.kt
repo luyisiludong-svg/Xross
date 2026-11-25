@@ -61,6 +61,12 @@ internal class GlProgram(val spec: ShaderSpec) {
     val uImage = IntArray(ShaderImage.MAX) { -1 }
     val uImageSize = IntArray(ShaderImage.MAX) { -1 }
 
+    /** The background video (Live backgrounds § 2): the copied frame, its size, where `videoFit` places it. */
+    var uVideo = -1; var uVideoSize = -1; var uVideoRect = -1
+
+    /** Reads any of the video uniforms, so the frame is bound for it. */
+    val usesVideo: Boolean get() = uVideo >= 0 || uVideoSize >= 0 || uVideoRect >= 0
+
     /** Its `effects.shaderImages` on the GPU, once uploaded; null for a program without images. */
     var textures: ImageTextures? = null
 
@@ -143,6 +149,7 @@ internal class GlProgram(val spec: ShaderSpec) {
         uPrev = loc("uPrev"); uFrameDt = loc("uFrameDt"); uFresh = loc("uFresh")
         uField = loc("uField"); uPass = loc("uPass")
         uFocus = loc("uFocus")
+        uVideo = loc("uVideo"); uVideoSize = loc("uVideoSize"); uVideoRect = loc("uVideoRect")
         for (i in 0 until ShaderImage.MAX) {
             uImage[i] = loc("uImage$i")
             uImageSize[i] = loc("uImageSize$i")

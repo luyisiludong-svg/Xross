@@ -20,6 +20,12 @@ uniform vec2 uFocus;         // the focused item's centre, 0..1 in the space of 
 // data packed in alpha survive. A missing or dropped slot samples black and its size is 0.
 uniform sampler2D uImage0, uImage1, uImage2, uImage3;
 uniform vec4 uImageSize0, uImageSize1, uImageSize2, uImageSize3; // w, h, 1/w, 1/h in texels; 0 for a missing slot
+// Video (optional): effects.videoPath, the current frame on texture unit 6, already RGB (alpha 1),
+// upright at the same coordinates as the images, at most 1280 on its long side. Before the first
+// frame, and with no video, it samples black and uVideoSize is 0.
+uniform sampler2D uVideo;
+uniform vec4 uVideoSize;     // w, h, 1/w, 1/h of the frame in texels; 0 with no video
+uniform vec4 uVideoRect;     // where effects.videoFit places it: left, bottom, width, height in render pixels
 // Feedback (optional): a shader that reads uPrev gets last frame's picture (RGBA8, the render
 // size, linear filtering, clamped). Fade it per second with uFrameDt, and ignore it where
 // uFresh is 1.0 (first frame, after a pause or resize, and in still/E-Ink mode).

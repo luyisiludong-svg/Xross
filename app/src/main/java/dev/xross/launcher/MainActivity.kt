@@ -58,6 +58,8 @@ import dev.xross.launcher.state.BootSequence
 import dev.xross.launcher.state.MediaFolderKind
 import dev.xross.launcher.state.TextPrompt
 import dev.xross.launcher.theme.WallpaperSource
+import dev.xross.launcher.theme.shader.ShaderLibrary
+import dev.xross.launcher.theme.shader.ShaderPreset
 import dev.xross.launcher.theme.WaveTint
 import dev.xross.launcher.ui.AdaptiveWave
 import dev.xross.launcher.ui.BootOverlay
@@ -272,6 +274,14 @@ class MainActivity : ComponentActivity() {
             val profile = resolved.profile
             // The pack's programs plus the user's background shader, all compiled ahead of time.
             val shaderLibrary = androidx.compose.runtime.remember(pack, userEffects.shader) { pack.shaderLibrary(userEffects.shader) }
+            // Live backgrounds § 2: the look's background video, shown by VIDEO or read by a CUSTOM
+            // shader. One the decoder failed on is left out (its key: a replaced file is tried again);
+            // the look's wallpaper shows instead, else the wave.
+            var failedVideo by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
+            val lookVideo = androidx.compose.runtime.remember(pack, look.video) { pack.videoSource(look.video) }
+            val readsVideo = look.shader.preset == ShaderPreset.VIDEO || look.shader.preset == ShaderPreset.CUSTOM
+            val shownVideo = lookVideo?.takeIf { readsVideo && it.key != failedVideo }
+            val shaderKey = if (look.shader.preset == ShaderPreset.VIDEO && shownVideo == null) ShaderLibrary.WAVE_KEY else shaderLibrary.keyOf(look.shader)
             if (BuildConfig.PERF_LOG) {
                 androidx.compose.runtime.LaunchedEffect(look.shader, look.cosmetics) {
                     val c = look.cosmetics
@@ -374,7 +384,7 @@ class MainActivity : ComponentActivity() {
                     paused = (backdropCovers && state.waveEditor == null) || bootCovers,
                     idle = uiIdle,
                     shaders = shaderLibrary,
-                    shader = shaderLibrary.keyOf(look.shader),
+                    shader = shaderKey,
                     category = categoryId,
                     health = container.shaderHealth,
                     audio = container.music.energy,
@@ -384,6 +394,14 @@ class MainActivity : ComponentActivity() {
                     },
                     focusX = focus.x,
                     focusY = focus.y,
+                    video = shownVideo,
+                    otherVideo = snapPlaying != null,
+                    videoResting = particlesIdle,
+                    onVideoFailed = { v, why ->
+                        failedVideo = v.key
+                        val instead = if (WallpaperSource.packWallpaper(pack, look) != null) "the wallpaper" else "the wave"
+                        container.shaderHealth.notice("video:${v.key}", "Background video ${v.file.name}: $why · showing $instead")
+                    },
                 )
                 // Focus frame and app-icon look (2b.4d): the look's, colored by the active palette.
                 val cosmetics = look.cosmetics
@@ -433,11 +451,14 @@ class MainActivity : ComponentActivity() {
                     },
                     loadBadge = { name, px -> badgeImages.load(name, px) },
                     loadOfferThumb = { offer, px -> viewModel.mediaThumbnail(offer)?.let { container.art.loadFile(it, px) } },
-                    wallpaper = androidx.compose.runtime.remember(rotating, state.settings.customWallpaper, pack, look) {
-                        WallpaperSource.resolve(rotating ?: state.settings.customWallpaper, pack, look)
+                    // While the look's video shows, it is the pack's art: the pack's wallpaper isn't drawn
+                    // over it. A wallpaper the user chose still wins (opaque, covering, video held).
+                    wallpaper = androidx.compose.runtime.remember(rotating, state.settings.customWallpaper, pack, look, shownVideo) {
+                        val custom = rotating ?: state.settings.customWallpaper
+                        if (shownVideo != null) WallpaperSource.resolve(custom, null, null) else WallpaperSource.resolve(custom, pack, look)
                     },
-                    packWallpaper = androidx.compose.runtime.remember(pack, look) {
-                        WallpaperSource.packWallpaper(pack, look)
+                    packWallpaper = androidx.compose.runtime.remember(pack, look, shownVideo) {
+                        WallpaperSource.packWallpaper(pack, look).takeIf { shownVideo == null }
                     },
                     loadWallpaper = { source, px -> container.wallpapers.load(source, px) },
                     wallpaperFit = state.settings.wallpaperFit,

@@ -23,7 +23,10 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlin.math.roundToInt
+import dev.xross.launcher.media.BackgroundVideo
+import dev.xross.launcher.media.BackgroundVideoPolicy
 import dev.xross.launcher.media.energy.AudioLevels
+import dev.xross.launcher.theme.pack.VideoSource
 import dev.xross.launcher.theme.shader.ShaderHealth
 import dev.xross.launcher.theme.shader.ShaderLibrary
 import dev.xross.launcher.theme.topColor
@@ -40,6 +43,11 @@ import dev.xross.launcher.theme.bottomColor
  * [shaders] is every program the active pack can show; a new library is compiled ahead of time on
  * the GL thread ([WaveRenderer.prepare]) while the current program keeps drawing. [params]'
  * `shader` picks the one shown.
+ *
+ * [video] (Live backgrounds § 2) is the look's background video: a [BackgroundVideo] player
+ * decodes it into a surface the renderer made, and programs read it as `uVideo`. It follows
+ * [BackgroundVideoPolicy]: released while the activity is stopped (a game is in front), held on
+ * its last frame while covered, resting, still or while [otherVideo] plays, else playing.
  */
 @Composable
 fun WaveBackground(
@@ -55,6 +63,18 @@ fun WaveBackground(
     audio: AudioLevels? = null,
     /** In use, draw at the screen's full refresh rate instead of pacing 90 Hz+ screens to ~60 fps. */
     fullFrameRate: Boolean = false,
+    /** The look's background video (Live backgrounds § 2); null for none. */
+    video: VideoSource? = null,
+    /** A video snap or the boot video is playing: the background video holds its frame meanwhile. */
+    otherVideo: Boolean = false,
+    /**
+     * The background video rests (holds its frame): Standby motion's timeout, but never sooner than
+     * the particles' 10 s ([dev.xross.launcher.data.StandbyMotion.particleTimeoutMs]), so a loop
+     * doesn't freeze 3 s after each press. Null follows [idle].
+     */
+    videoResting: Boolean? = null,
+    /** The player can't play [video] (why): the caller falls back to the wallpaper, else the wave. */
+    onVideoFailed: (VideoSource, String) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -69,6 +89,7 @@ fun WaveBackground(
     val refreshHz = remember {
         (context.getSystemService(Context.WINDOW_SERVICE) as android.view.WindowManager).defaultDisplay.refreshRate
     }
+    val onVideoFailedState = remember { mutableStateOf(onVideoFailed) }
     val renderer = remember {
         WaveRenderer(
             refreshRateHz = refreshHz,
@@ -78,6 +99,15 @@ fun WaveBackground(
             imageDecoder = ShaderImageLoader(context.assets),
         )
     }
+    val bgVideo = remember {
+        BackgroundVideo(
+            context,
+            onFailed = { v, why -> onVideoFailedState.value(v, why) },
+            onNotice = { v, text -> health?.notice("video:${v.key}", "Background video ${v.file.name}: $text") },
+            onSize = renderer::videoSize,
+        )
+    }
+    onVideoFailedState.value = onVideoFailed
     // The library before the params that may name one of its programs.
     renderer.library = shaders
     renderer.params = params
@@ -106,10 +136,15 @@ fun WaveBackground(
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
             // A still screen draws one frame per change: the one that uploads a shader's images too.
             renderer.onImagesDecoded = { if (renderer.frozen) requestRender() }
+            // The background video's surface comes from the GL thread; the player lives on the main one.
+            val main = android.os.Handler(android.os.Looper.getMainLooper())
+            renderer.onVideoSurface = { surface -> main.post { bgVideo.setSurface(surface) } }
+            renderer.onVideoFrame = { if (renderer.frozen) requestRender() }
         }
     }
     val pacer = remember { VsyncPacer(view, refreshHz) }
     var resumed by remember { mutableStateOf(lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) }
+    var started by remember { mutableStateOf(lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) }
     DisposableEffect(lifecycle, view) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
@@ -122,6 +157,9 @@ fun WaveBackground(
                     view.onPause()
                     renderer.quiesce() // the GL thread is parked: nothing of a pack shader is in flight
                 }
+                // A game or app in front: the background video lets go of its decoder (§ 2).
+                Lifecycle.Event.ON_START -> started = true
+                Lifecycle.Event.ON_STOP -> started = false
                 else -> Unit
             }
         }
@@ -131,7 +169,25 @@ fun WaveBackground(
             pacer.stop()
             view.onPause()
             renderer.quiesce()
+            bgVideo.release()
+            bgVideo.setSurface(null)
+            renderer.abandonVideo()
         }
+    }
+    // Live backgrounds § 2: the background video's player follows the policy.
+    val videoAction = BackgroundVideoPolicy.action(
+        hasVideo = video != null,
+        started = started,
+        still = frozen,
+        // Paused (not resumed) stops the GL loop too: nothing would show the frames.
+        covered = paused || !resumed,
+        standby = videoResting ?: idle,
+        otherVideo = otherVideo,
+    )
+    LaunchedEffect(bgVideo, video, videoAction) {
+        bgVideo.apply(video, videoAction)
+        if (dev.xross.launcher.BuildConfig.PERF_LOG) android.util.Log.i("XrossVideo", "policy ${videoAction.name.lowercase()} video=${video?.file?.name} " +
+            "started=$started resumed=$resumed still=$frozen covered=$paused resting=${videoResting ?: idle} other=$otherVideo")
     }
     // Ahead-of-time compile of the pack's programs (2b.4a), on the GL thread between frames.
     LaunchedEffect(view, shaders) {

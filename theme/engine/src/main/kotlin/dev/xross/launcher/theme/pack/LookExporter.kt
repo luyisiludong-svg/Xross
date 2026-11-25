@@ -227,6 +227,7 @@ object LookExporter {
             UiFilterRef.of("x", e?.uiFilter, e?.uiFilterPath, ignored)?.takeIf { it.filter == UiFilter.CUSTOM }?.let { all += it.path }
             val w = WallpaperRef.of("x", e?.wallpaperPath, ignored)
             (if (w == null && base) d.wallpaper else w?.path)?.let { all += it; wallpapers += it }
+            VideoRef.of("x", e?.videoPath, null, ignored)?.path?.let { all += it }
         }
         fun audio(a: ThemeManifest.Audio?, base: Boolean) {
             val b = BgmRef.of("x", a?.bgmFile, ignored)
@@ -272,6 +273,7 @@ object LookExporter {
         "adaptiveGamePalette" to setOf("adaptiveGamePalette"),
         "shaderPreset" to setOf("shaderPreset", "shader", "shaderPath", "shaderImages"),
         "wallpaperPath" to setOf("wallpaperPath", "wallpaper"),
+        "videoPath" to setOf("videoPath", "video", "videoFit"),
         "focusFrameStyle" to setOf("focusFrameStyle", "focusFrame"),
         "iconMask" to setOf("iconMask"),
         "iconFilter" to setOf("iconFilter"),
@@ -430,6 +432,13 @@ object LookExporter {
             v.surfaceId?.let { setEffect("surfaceStyle", mapOf("surfaceStyle" to str(it))) }
             v.shader?.let { setEffect("shaderPreset", shaderJson(it)) }
             v.wallpaper?.let { setEffect("wallpaperPath", mapOf("wallpaperPath" to str(it.path ?: "none"))) }
+            v.video?.let { video ->
+                // A fit-only layer keeps the base's video: write its fit next to whatever the base names.
+                val base = block("effects")
+                val path = if (video.isFitOnly) (base["videoPath"] ?: base["video"]) else str(video.path ?: "none")
+                val fit = video.fit?.let { str(it.name) } ?: if (video.isFitOnly) null else base["videoFit"]
+                setEffect("videoPath", listOfNotNull(path?.let { "videoPath" to it }, fit?.let { "videoFit" to it }).toMap())
+            }
             v.cosmetics?.let { c ->
                 c.focusFrame?.let { setEffect("focusFrameStyle", mapOf("focusFrameStyle" to str(it.name))) }
                 c.iconMask?.let { setEffect("iconMask", mapOf("iconMask" to str(it.name))) }

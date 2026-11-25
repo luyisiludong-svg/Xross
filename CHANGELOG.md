@@ -8,6 +8,15 @@
   drift in haze and shift in depth. Images are capped at 2048 px and 8 MP per shader; replacing one
   reloads like an edit to the shader. See the shader guide §8 and the tutorial's painted scene.
 - The desktop shader preview binds a pack's shader images and moves `uFocus` with the mouse.
+- **Video backgrounds.** A theme can bring a looping, muted video (`effects.videoPath`: MP4 with
+  H.264 or HEVC, or WebM with VP9) placed by `effects.videoFit` (`FILL`, `FIT`, `STRETCH`,
+  `CENTER`). Left at the wave it plays as is, through the new `VIDEO` background; a theme's own
+  shader reads it as `uVideo` and can bend it (glass, haze, parallax), and the background filter
+  still applies. It holds its frame while art covers it, while a snap or the boot video plays and
+  when the screen rests (never sooner than 10 s after a button); a game in front frees its decoder,
+  and it picks up where it left off on return. Still mode shows a poster. A video the device can't
+  play shows the theme's wallpaper, else the wave. See the theme specification and shader guide §9.
+- The shader preview plays a theme's video (`?video=`, `&fit=`) and has a video example.
 
 ## 0.2.2.0-beta — 2026-11-21
 

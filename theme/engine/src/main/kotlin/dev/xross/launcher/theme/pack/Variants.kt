@@ -19,6 +19,8 @@ data class ResolvedVariant(
     val shader: ShaderRef? = null,
     /** `effects.wallpaperPath`, checked ([WallpaperRef.NONE] turns the pack's off). */
     val wallpaper: WallpaperRef? = null,
+    /** `effects.videoPath` / `effects.videoFit`, checked (Live backgrounds § 2; [VideoRef.NONE] turns the pack's off). */
+    val video: VideoRef? = null,
     /** `effects.focusFrameStyle`, `iconMask`, `iconFilter` (2b.4d) and `foregroundParticles` (2b.4e), checked. */
     val cosmetics: Cosmetics? = null,
     /** `audio.soundGains` (2b.5a), checked. */
@@ -46,6 +48,8 @@ data class ThemePatch(
     val gains: Map<SoundRole, Float>? = null,
     /** The music loop while this patch holds (`audio.bgmFile`, 2b.5c; [BgmRef.NONE]: none). */
     val bgm: BgmRef? = null,
+    /** The background video while this patch holds (Live backgrounds § 2; [VideoRef.NONE]: none). */
+    val video: VideoRef? = null,
 )
 
 /**
@@ -75,6 +79,8 @@ data class ThemeLook(
     val gains: Map<SoundRole, Float> = emptyMap(),
     /** The pack's music loop here (2b.5c), resolved through [LoadedTheme.bgmTrack]. */
     val bgm: BgmRef = BgmRef.NONE,
+    /** The pack's background video here (Live backgrounds § 2), resolved through [LoadedTheme.videoSource]. */
+    val video: VideoRef = VideoRef.NONE,
 )
 
 /**
@@ -103,6 +109,7 @@ fun cascade(
     gains: Map<SoundRole, Float> = emptyMap(),
     gainLinks: Map<SoundRole, SoundRole> = emptyMap(),
     bgm: BgmRef = BgmRef.NONE,
+    video: VideoRef = VideoRef.NONE,
 ): ThemeLook {
     var palette = roles
     var surface = surfaceId
@@ -111,6 +118,7 @@ fun cascade(
     var backdrop = wallpaper
     var look = cosmetics
     var music = bgm
+    var movie = video
     variant?.let { v ->
         v.palette?.let { palette = palette?.over(it) ?: it }
         v.surfaceId?.let { surface = it }
@@ -119,6 +127,7 @@ fun cascade(
         v.wallpaper?.let { backdrop = it }
         look = look.over(v.cosmetics)
         v.bgm?.let { music = it }
+        movie = movie.over(v.video)
     }
     for (patch in listOfNotNull(category, system) + rules.mapNotNull { it.patch }) {
         patch.palette?.let { p -> palette = palette?.over(p) }
@@ -128,6 +137,7 @@ fun cascade(
         patch.wallpaper?.let { backdrop = it }
         look = look.over(patch.cosmetics)
         patch.bgm?.let { music = it }
+        movie = movie.over(patch.video)
     }
     val gainPatches = listOfNotNull(variant?.gains, category?.gains, system?.gains) + rules.mapNotNull { it.patch?.gains }
     return ThemeLook(
@@ -136,8 +146,21 @@ fun cascade(
         cosmetics = look, focusGold = palette?.focusGold?.let(ThemeManifest::parseColor),
         gains = cascadeGains(gains, gainLinks, gainPatches),
         bgm = music,
-    )
+        video = movie,
+    ).let(::withVideoShader)
 }
+
+/**
+ * Live backgrounds § 2: a look with a video and the wave shows the video (the VIDEO preset), so a
+ * pack needs no shader key for it. Any other shader keeps its place: a CUSTOM one reads `uVideo`,
+ * a preset ignores the video.
+ */
+internal fun withVideoShader(look: ThemeLook): ThemeLook =
+    if (look.video.path != null && look.shader.preset == dev.xross.launcher.theme.shader.ShaderPreset.WAVE) {
+        look.copy(shader = ShaderRef(dev.xross.launcher.theme.shader.ShaderPreset.VIDEO))
+    } else {
+        look
+    }
 
 /** Variant ids: what `settings.json` stores. */
 private val VARIANT_ID = Regex("[A-Za-z0-9_.-]{1,48}")
@@ -178,6 +201,7 @@ internal fun resolveVariants(
             cosmetics = Cosmetics.of("variants.$id", v.effects, problems),
             gains = resolveGainPatch("variants.$id", v.audio, problems),
             bgm = BgmRef.of("variants.$id", v.audio?.bgmFile, problems),
+            video = VideoRef.of("variants.$id", v.effects?.videoPath, v.effects?.videoFit, problems),
             components = ComponentsPatch.of("variants.$id", v.components, problems),
         )
     }
@@ -252,10 +276,11 @@ internal fun patchOf(where: String, o: ThemeOverride, surfaceIds: Set<String>, p
     val cosmetics = Cosmetics.of(where, o.effects, problems)
     val gains = resolveGainPatch(where, o.audio, problems)
     val bgm = BgmRef.of(where, o.audio?.bgmFile, problems)
-    return if (palette == null && surface == null && flags == null && shader == null && wallpaper == null && cosmetics == null && gains == null && bgm == null) {
+    val video = VideoRef.of(where, o.effects?.videoPath, o.effects?.videoFit, problems)
+    return if (palette == null && surface == null && flags == null && shader == null && wallpaper == null && cosmetics == null && gains == null && bgm == null && video == null) {
         null
     } else {
-        ThemePatch(palette, surface, flags, shader, wallpaper, cosmetics, gains, bgm)
+        ThemePatch(palette, surface, flags, shader, wallpaper, cosmetics, gains, bgm, video)
     }
 }
 

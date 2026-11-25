@@ -10,7 +10,7 @@ Status: ✅ done · ◐ code done, device check open · ⬜ not started.
 | # | Feature | Size | Status |
 | --- | --- | --- | --- |
 | 1 | Image inputs for pack shaders (`uImage0..3`, `uFocus`) | M | ◐ on `feat/live-backgrounds-image-inputs`; A55 timing open |
-| 2 | Video backgrounds (`effects.videoPath`, `uVideo`, VIDEO preset) | L | ⬜ |
+| 2 | Video backgrounds (`effects.videoPath`, `uVideo`, VIDEO preset) | L | ◐ on `feat/live-backgrounds-image-inputs`; emulator checked, A55 runs open; stretch not started |
 | 3 | Layered scenes (`scene.json`: images, sprites, video, effect shaders, GPU particles) | L × 5–6 | ⬜ |
 
 **Order:** 1, then 2, then 3. Section 2 reuses § 1's texture units and upload path, and § 3 is
@@ -144,6 +144,64 @@ straight alpha, the budget), and a "painted scene" chapter in `SHADER_TUTORIAL.m
 pack goes in `xross_themePacks`.
 
 ## 2. Video backgrounds (L)
+
+> **Progress (2026-11-26, `feat/live-backgrounds-image-inputs`, on top of § 1).** Code, unit
+> tests, docs and an emulator run are done. The A55 runs and the stretch are not.
+>
+> - **Format and cascade.** `VideoRef` / `VideoFit` / `VideoSource` in
+>   `theme/engine/.../pack/VideoBackground.kt`. They follow the wallpaper's cascade through
+>   `ResolvedVariant`, `ThemePatch`, `ThemeLook.video` and `cascade()`. `LoadedTheme.videos` /
+>   `videoSource()` handle folder packs only, at most 30 MB. `LookExporter` carries the files and
+>   flattens `videoPath` / `videoFit`.
+> - **VIDEO preset.** `withVideoShader` turns a look's WAVE into VIDEO when the look has a video.
+>   CUSTOM and the other presets keep their place. `shadersUsed` compiles VIDEO ahead of time when
+>   the pack has a video file. `EffectOverrides` doesn't let the user pick VIDEO.
+> - **GL.** `VideoTexture` in `ui/GlVideo.kt` (OES texture, `SurfaceTexture`, an ESSL 1.0
+>   `samplerExternalOES` copy into RGBA8 capped at 1280). `WaveRenderer.syncVideo` creates it and
+>   drops it again with `WaveParams.videoFit`. After a context loss it is made again and the player
+>   gets the new surface. `video.frag` and the prelude's `uVideo`, `uVideoSize`, `uVideoRect` use
+>   unit 6.
+> - **Player.** `media/BackgroundVideo.kt` has `BackgroundVideoPolicy` (pure: RELEASE / HOLD /
+>   PLAY, and the probe verdicts) and `BackgroundVideo` (ExoPlayer, `REPEAT_MODE_ONE`, audio track
+>   disabled, volume 0, the position kept across a release, a `MediaExtractor` +
+>   `MediaCodecList` probe off the main thread). `WaveBackground` runs it from the lifecycle: it is
+>   released on ON_STOP. `MainActivity` hides the pack's wallpaper while a video shows. After a
+>   failure it falls back to that wallpaper, else WAVE, keyed by the file, so a replaced file is
+>   tried again.
+> - **Deviations:**
+>   - `videoFit` uses its own engine enum, `VideoFit` (FILL / FIT / STRETCH / CENTER, with
+>     `COVER` read as FILL), because `WallpaperFit` lives in `:app`.
+>   - A layer that sets only `videoFit` keeps the video and changes its fit.
+>   - The prelude also gets `uVideoRect` (the `videoFit` placement), so a CUSTOM shader can
+>     honour the pack's fit.
+>   - **Standby** uses the particles' rest, not the 3 s screen rest: Standby motion's timeout,
+>     but at least 10 s. With the 3 s default, a loop froze 3 s after every press on the emulator.
+>     `Never` keeps it playing.
+>   - The video also holds while the activity is paused (not resumed), since the GL loop is
+>     stopped then too.
+>   - "Media playback open" needs no rule of its own: full-screen photos and video already remove
+>     the GL surface, which releases the player.
+> - **Tests:** `BackgroundVideoTest` (15): decoding, fit-only layers, the cascade (VIDEO under the
+>   wave, presets and CUSTOM kept, `none`, category overrides), missing files, the source key, the
+>   exporter, placements, the copy size, the policy, the probe, and the prelude. The full
+>   `:app:testDebugUnitTest` and `:theme:engine:test` pass, and `validateShaders` is clean (10
+>   built-ins).
+> - **Emulator** (API 37, `-gpu host`, debug build, the sample pack):
+>   - VIDEO and `glass.frag` link, and frames are copied at 640×360.
+>   - The watchdog passes `glass.frag` (p90 5.5–7.7 ms, glFinish; emulator timings mean little).
+>   - The policy goes play → hold after 10 s without input → play on a key.
+>   - Settings in front: hold on pause, release on stop, play from the saved position on return.
+>   - That emulator image kept raising system ANR dialogs after a cold boot, so the snap handoff
+>     (it has no games) and the loop seam weren't checked.
+> - **Sample:** `tools/shader-preview/examples/video/` (a generated 6 s loop, 37 KB, `glass.frag`,
+>   and a `plain` variant on VIDEO). The preview plays `videoPath` / `?video=` with `videoFit` /
+>   `&fit=`.
+> - **Open:**
+>   - The A55 with a profiling build: jank while navigating, idle CPU, and battery over 30 min
+>     against the WAVE baseline, into `docs/status/PERFORMANCE.md`.
+>   - The snap handoff and the loop seam on a device with games.
+>   - HEVC and VP9 files on the A55.
+>   - The § 2 stretch (videos from the user's folders).
 
 **Goal.** A looping, muted video as the background. It can be drawn as is, or read by a pack's
 shader as `uVideo` and still pass through the background filter.

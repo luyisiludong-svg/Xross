@@ -243,6 +243,14 @@ data class ThemeManifest(
          */
         @kotlinx.serialization.json.JsonNames("wallpaper") val wallpaperPath: String? = null,
         /**
+         * A looping, muted background video ([VideoRef], Live backgrounds § 2): an MP4 (H.264 or
+         * HEVC) or WebM (VP9) from the pack, or `none`. Drawn by the VIDEO preset when the look's
+         * shader is the wave; a CUSTOM shader reads it as `uVideo`.
+         */
+        @kotlinx.serialization.json.JsonNames("video") val videoPath: String? = null,
+        /** How [videoPath] is placed ([VideoFit]): `FILL` (default, alias `COVER`), `FIT`, `STRETCH`, `CENTER`. */
+        val videoFit: String? = null,
+        /**
          * The focused item's frame ([FocusFrameStyle], 2b.4d): `BREATHING_HALO` (default),
          * `STATIC_NEON`, `HARD_SHADOW` or `GOLD_BEZEL`.
          */
@@ -288,7 +296,7 @@ data class ThemeManifest(
             val KEYS: Set<String> = setOf(
                 "surfaceStyle", "adaptiveGamePalette",
                 "shaderPreset", "shader", "shaderPath", "shaderImages",
-                "wallpaperPath", "wallpaper",
+                "wallpaperPath", "wallpaper", "videoPath", "video", "videoFit",
                 "focusFrameStyle", "focusFrame", "iconMask", "iconFilter",
                 "foregroundParticles", "particles",
                 "backgroundFilter", "uiFilter", "postProcess", "uiFilterPath", "postProcessPath",

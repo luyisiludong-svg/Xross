@@ -65,6 +65,7 @@ Xross/themes/<theme_id>/
 │                   four PNG / JPEG / WebP images it samples (effects.shaderImages)
 ├── postprocess.agsl optional: a CUSTOM UI filter, Android 13+ (or effects.uiFilterPath)
 ├── wallpaper.png   optional: drawn behind the menu (or .jpg / .webp, or effects.wallpaperPath)
+├── *.mp4 / *.webm  optional: a looping background video named by effects.videoPath, at most 30 MB
 ├── bgm.ogg         optional: ambient music loop, at most 20 MB (or bgm.mp3, or audio.bgmFile)
 └── boot.mp4        optional: cold-start video, at most 30 MB, cut at 15 s (or audio.bootVideo)
 ```
@@ -324,6 +325,39 @@ listed with the pack's problems; the shader still draws, with that slot empty. R
 is picked up by hot reload like an edit to the shader. The details, and a worked example, are in
 [Shader guide §8](SHADER_GUIDE.md#8-images-and-the-focus).
 
+### Background video
+
+`effects.videoPath` (alias `video`) names a looping, muted video in the pack: an MP4 (H.264 or
+HEVC) or a WebM (VP9), at most 30 MB. `effects.videoFit` places it: `FILL` (the default; `COVER`
+is accepted too), `FIT`, `STRETCH` or `CENTER`. `"none"` turns a video off.
+
+```json
+"effects": { "videoPath": "loops/rain.mp4", "videoFit": "FILL" }
+```
+
+* **Which shader shows it.** With the look's shader left at the wave, the built-in `VIDEO` preset
+  draws the video (the pack needs no shader key). A `CUSTOM` shader reads it as `uVideo` instead,
+  next to its images; the other presets ignore it. The background filter is drawn over it as over
+  any shader. `VIDEO` isn't offered in Settings ▸ Theme ▸ Background shader: it needs the pack's
+  video.
+* **Cascade.** Variants, overrides and rules may set it like the wallpaper. A layer that sets only
+  `videoFit` keeps the video and changes its placement.
+* **It is the pack's art.** While the video shows, the pack's own wallpaper isn't drawn over it. A
+  wallpaper you chose (Set as Xross wallpaper, a folder or an album) still wins: it covers the
+  screen, and the video holds its frame behind it.
+* **When it plays.** It pauses on its last frame while something opaque covers the background,
+  while a video snap or the boot video plays, and when the screen rests: Settings ▸ System ▸
+  Performance ▸ Standby motion, but never sooner than 10 s after the last button (with `Never`
+  it keeps playing). Still (E-Ink) mode shows its first frame and never plays. When a game or app
+  comes to the front, the player lets go of its decoder; back in Xross the loop resumes where it
+  was.
+* **Problems.** A path that leaves the pack or isn't MP4 / WebM, a missing or oversized file, a
+  bad `videoFit`, and a video in the built-in pack are listed with the pack's problems. A file the
+  device can't decode shows a notice and the look's wallpaper, else the wave; one larger than
+  1920 px on its long side plays, with a notice.
+* **Size.** An `.xtheme` is capped at 50 MB, so keep loops short: 720p, 10–20 s, about 2–4 Mbit/s.
+  Shaders sample it at most 1280 px on its long side.
+
 ### Focus frames and app icons
 
 `effects.focusFrameStyle` (alias `focusFrame`) frames the focused item:
@@ -435,10 +469,12 @@ instead of being ignored silently, so a typo shows up.
 | --- | --- | --- |
 | `surfaceStyle` | a preset or a surface the pack defines | 2b.2 |
 | `adaptiveGamePalette` | `true` / `false` | 2b.3 |
-| `shaderPreset` (`shader`) | `WAVE`, `ASCII_MATRIX`, `BOKEH`, `STARFIELD`, `CRT`, `BLACK_HOLE`, `MECHA`, `CUSTOM` | 2b.4a (`BLACK_HOLE` 2026-11-16, `MECHA` 2026-11-17) |
+| `shaderPreset` (`shader`) | `WAVE`, `ASCII_MATRIX`, `BOKEH`, `STARFIELD`, `CRT`, `BLACK_HOLE`, `MECHA`, `VIDEO`, `CUSTOM` | 2b.4a (`BLACK_HOLE` 2026-11-16, `MECHA` 2026-11-17, `VIDEO` Live backgrounds § 2) |
 | `shaderPath` | a `.frag` in the pack (implies `CUSTOM`) | 2b.4a |
 | `shaderImages` | up to four images in the pack for a `CUSTOM` shader (`uImage0..3`): paths, or `{ "path", "wrap": CLAMP / REPEAT / MIRROR, "filter": LINEAR / NEAREST, "mipmap" }` ([Shader guide §8](SHADER_GUIDE.md#8-images-and-the-focus)) | Live backgrounds § 1 |
 | `wallpaperPath` (`wallpaper`) | a PNG, JPEG or WebP in the pack, or `none` | 2b.4c |
+| `videoPath` (`video`) | an MP4 or WebM in the pack, or `none` ([Background video](#background-video)) | Live backgrounds § 2 |
+| `videoFit` | `FILL` (`COVER`), `FIT`, `STRETCH`, `CENTER` | Live backgrounds § 2 |
 | `focusFrameStyle` (`focusFrame`) | `BREATHING_HALO`, `STATIC_NEON`, `HARD_SHADOW`, `GOLD_BEZEL` | 2b.4d |
 | `iconMask` | `NONE`, `SQUIRCLE`, `CIRCLE`, `Y2K_CHROME_FRAME` | 2b.4d |
 | `iconFilter` | `NONE`, `DUOTONE`, `MONOCHROME` | 2b.4d |
@@ -466,7 +502,7 @@ folder alias such as `dc`) while one of that system's games is focused, after th
 a quarter second.
 
 Each may set `palette` roles, `effects.surfaceStyle`, `effects.shaderPreset`,
-`effects.wallpaperPath`, `effects.focusFrameStyle`, `iconMask`, `iconFilter`,
+`effects.wallpaperPath`, `effects.videoPath`, `effects.videoFit`, `effects.focusFrameStyle`, `iconMask`, `iconFilter`,
 `foregroundParticles`, `backgroundFilter`, `uiFilter`, `bootIntro`, `launchCurtain` and `cardAspectRatio` (a system's aspect
 shapes that system's game tiles), `audio.soundGains` and `audio.bgmFile` (§5).
 
