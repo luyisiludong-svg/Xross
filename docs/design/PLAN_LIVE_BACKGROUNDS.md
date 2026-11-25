@@ -11,7 +11,7 @@ Status: ✅ done · ◐ code done, device check open · ⬜ not started.
 | --- | --- | --- | --- |
 | 1 | Image inputs for pack shaders (`uImage0..3`, `uFocus`) | M | ◐ on `feat/live-backgrounds-image-inputs`; A55 timing open |
 | 2 | Video backgrounds (`effects.videoPath`, `uVideo`, VIDEO preset) | L | ◐ on `feat/live-backgrounds-image-inputs`; emulator checked, A55 runs open; stretch not started |
-| 3 | Layered scenes (`scene.json`: images, sprites, video, effect shaders, GPU particles) | L × 5–6 | ⬜ |
+| 3 | Layered scenes (`scene.json`: images, sprites, video, effect shaders, GPU particles) | L × 5–6 | ◐ 3a on `feat/live-backgrounds-image-inputs` (model, loader, key, poster); 3b–3f not started |
 
 **Order:** 1, then 2, then 3. Section 2 reuses § 1's texture units and upload path, and § 3 is
 built from § 1 and § 2 layers. Each section ships on its own: § 1 alone already enables painted
@@ -263,6 +263,57 @@ baseline.
 
 ## 3. Layered scenes (L × 5–6, about 3–4 weeks)
 
+> **Progress (2026-11-26, `feat/live-backgrounds-image-inputs`, on top of § 2).** Slice 3a is
+> done: code, unit tests and docs. 3b–3f are not started. No device was attached, so the A55 runs
+> still open in § 1 and § 2 are still open.
+>
+> - **Model.** `theme/engine/.../shader/Scene.kt`: `Scene`, the `SceneLayer` types (`Image`,
+>   `Video`, `Sprite`, `Shader`, `Particles`), `LayerLook` (the shared fields), `LayerMotion`
+>   (`scroll`, `Sway`, `Pulse`, and a `Drive` each for `audio`, `transition` and `daylight`),
+>   `SceneBudget` and `SceneSource`. Layer `fit` reuses § 2's `VideoFit`.
+> - **Format and cascade.** `effects.scenePath` (alias `scene`) is a new preset, `SCENE`, read by
+>   `ShaderRef.of`. A scene therefore cascades through the shader field with no new cascade code,
+>   and is one `ShaderLibrary` entry. `"shaderPreset": "SCENE"` alone reads `scene.json`. A
+>   `scenePath` next to `shaderPreset` / `shaderPath` / `shaderImages` wins, and the others are
+>   problems. `EffectOverrides` doesn't let the user pick SCENE.
+> - **Loader.** `LoadedTheme.scenes`: each scene is parsed, then its files are found the way § 1
+>   and § 2 find theirs. Images (poster, layers, masks, shader layers' images) are found as shader
+>   images, in both pack kinds. Videos are found as background videos, folder packs only. Shader
+>   layers are read as shader text. Problems are per layer: `scene.json: layers[3].frames: …`.
+> - **Key.** `scene:<path>:<digest(scene.json + each file's path and size/mtime, or a shader
+>   layer's text digest)>`. An unreadable scene is `scene:<path>:missing` and fails as MISSING, so
+>   the wave shows.
+> - **Poster.** Until 3b, the SCENE preset is the built-in `scene_poster.frag`. It draws
+>   `SceneSource.posterImage` (`poster`, else the first image layer) as § 1's `uImage0`, covering
+>   the screen, over the theme gradient. All of § 1's upload, PENDING and context-loss handling
+>   applies. `MainActivity` doesn't draw the pack's wallpaper while a scene shows (as for § 2's
+>   video); a user wallpaper still wins.
+> - **Exporter.** A scene and every file it names travel together. A flattened variant writes
+>   `shaderPreset: SCENE` + `scenePath`, and a look that drops the scene drops its files.
+> - **Deviations:**
+>   - **Overdraw cap 8, not 6 screens.** The plan's own example measures 6.02 (three full images,
+>     a full video, a shader layer ×2), so 6 would drop its top layer. The A55 timings in 3f
+>     settle the final number.
+>   - The overdraw estimate and the count limits (16 / 2 / 4 / 2,000) landed here, not in 3f:
+>     they are loader problems. 3f keeps the poster fallback on a slow verdict and the canary.
+>   - Particle `color` uses `#aarrggbb`, as everywhere in a theme, so the example's fading end
+>     colour is now `#00ff8024`.
+>   - Paths in `scene.json` are pack-relative, like every other path in `theme.json`. They are
+>     not relative to the scene's folder.
+>   - Units: `rect` and `anchor` are screen fractions from the top-left, y down. `velocity`,
+>     `size` and `offset` are pixels at 1280 on the long side. `scroll` is texels of the layer's
+>     own image per second.
+>   - `untrusted` stays CUSTOM-only for now: only the built-in poster program runs. A scene with
+>     shader layers becomes canary-guarded as one unit in 3c.
+> - **Tests:** `SceneTest` (12): the plan's example, per-layer problems and defaults, unusable
+>   files, the poster choice, the budget (screens, videos, shaders, layers, particles), the
+>   `scenePath` rules, the loader and cascade, a missing scene, key changes for each kind of file,
+>   the exporter, and the effect keys. The full `:app:testDebugUnitTest` and `:theme:engine:test`
+>   pass, and `validateShaders` is clean (11 built-ins).
+> - **Not checked:** the poster on a device or emulator (no device was attached). There is also
+>   no sample scene pack or shader-preview support yet; both belong to 3f.
+> - **Next:** 3b, the quad program with image and sprite layers and the resolution switch.
+
 **Goal.** A stack of layers as in Wallpaper Engine's scene type. Each layer can move, react to
 focus, audio and time, and carry its own effect. Sections 1 and 2 are the building blocks.
 
@@ -281,7 +332,7 @@ today.
     { "type": "sprite", "path": "neon.png",  "frames": [4, 2], "fps": 8, "rect": [0.62, 0.40, 0.12, 0.10] },
     { "type": "shader", "path": "rain_glass.frag", "images": ["drops.png"] },
     { "type": "particles", "path": "ember.png", "rate": 30, "life": [3, 6], "velocity": [[-5, 5], [-40, -20]],
-      "size": [4, 10], "color": ["#ffb354", "#ff802400"], "parallax": 0.7 },
+      "size": [4, 10], "color": ["#ffb354", "#00ff8024"], "parallax": 0.7 },
     { "type": "image",  "path": "rain_fg.png", "parallax": 1.0, "scroll": [0, 300], "wrap": "REPEAT", "blend": "ADD" }
   ]
 }
@@ -316,7 +367,7 @@ the same way.
 
 **Budget.**
 - The loader estimates overdraw: the screen fractions covered by all layers, with shader layers
-  counted ×2. Above 6 screens, or with more than 16 layers, 2 video layers, 4 shader layers or
+  counted ×2. Above 8 screens (6 in the first draft; see the progress note), or with more than 16 layers, 2 video layers, 4 shader layers or
   2,000 particles, it reports a problem and drops the topmost layers that don't fit.
 - The watchdog measures the whole scene as one program. A slow or crashing scene is retired to
   its `poster` (else its first image layer, drawn alone), not to the wave. That's a better
@@ -339,7 +390,7 @@ the scene, the same way it wins over a pack's shader today: opaque, covering, wa
 
 | Slice | Scope | Size |
 | --- | --- | --- |
-| 3a | `scene.json` model, loader, problems, key, poster; unit tests | M |
+| 3a ✅ | `scene.json` model, loader, problems, key, poster; unit tests | M |
 | 3b | Quad program; image and sprite layers; fit, anchor, blend, opacity; motions; resolution switch | L |
 | 3c | Video layer (§ 2's copy pass); shader layers with `uBelow` and ping-pong targets | M |
 | 3d | GPU particles; turns off Compose particles under a scene | M–L |

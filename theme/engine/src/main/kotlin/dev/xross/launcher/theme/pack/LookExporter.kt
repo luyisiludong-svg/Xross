@@ -6,6 +6,7 @@ import dev.xross.launcher.theme.ThemePalette
 import dev.xross.launcher.theme.WaveColors
 import dev.xross.launcher.theme.WaveTint
 import dev.xross.launcher.theme.XrossTheme
+import dev.xross.launcher.theme.shader.SceneSource
 import dev.xross.launcher.theme.shader.ShaderImage
 import dev.xross.launcher.theme.shader.ShaderPreset
 import dev.xross.launcher.theme.shader.ShaderRef
@@ -201,9 +202,9 @@ object LookExporter {
             wallpaper = pack.wallpaper.path.takeIf { sourceBaseWallpaper },
             bgm = pack.bgm.path.takeIf { sourceBaseBgm },
         )
-        val before = refs(pack.info.manifest, defaults)
+        val before = refs(pack.info.manifest, defaults, pack.scenes)
         val out = ThemeManifest.JSON.decodeFromJsonElement(ThemeManifest.serializer(), body)
-        val after = refs(out, defaults).let { r -> if (ignoreWallpapers) r - r.wallpapers else r }
+        val after = refs(out, defaults, pack.scenes).let { r -> if (ignoreWallpapers) r - r.wallpapers else r }
         val dropped = (before.all - after.all).mapTo(HashSet()) { it.lowercase(Locale.ROOT) }
         return pack.files.filter { it.lowercase(Locale.ROOT) !in dropped }
     }
@@ -214,15 +215,22 @@ object LookExporter {
         operator fun minus(other: Set<String>) = Refs(all - other, wallpapers - other)
     }
 
-    /** Every patchable file [m] names in its base, variants, overrides and rules (pack-relative). */
-    private fun refs(m: ThemeManifest, d: Defaults): Refs {
+    /** Every patchable file [m] names in its base, variants, overrides and rules (pack-relative); a scene's files come from [scenes]. */
+    private fun refs(m: ThemeManifest, d: Defaults, scenes: Map<String, SceneSource>): Refs {
         val ignored = ArrayList<String>()
         val all = LinkedHashSet<String>()
         val wallpapers = LinkedHashSet<String>()
         fun effects(e: ThemeManifest.Effects?, base: Boolean) {
-            ShaderRef.of("x", e?.shaderPreset, e?.shaderPath, ignored, e?.shaderImages)?.takeIf { it.preset == ShaderPreset.CUSTOM }?.let { ref ->
-                all += ref.path
-                ref.images.forEach { img -> img?.let { all += it.path } }
+            ShaderRef.of("x", e?.shaderPreset, e?.shaderPath, ignored, e?.shaderImages, e?.scenePath)?.let { ref ->
+                when (ref.preset) {
+                    ShaderPreset.CUSTOM -> {
+                        all += ref.path
+                        ref.images.forEach { img -> img?.let { all += it.path } }
+                    }
+                    // The scene and every file it names travel together (Live backgrounds § 3).
+                    ShaderPreset.SCENE -> all += scenes[ref.path]?.files ?: listOf(ref.path)
+                    else -> Unit
+                }
             }
             UiFilterRef.of("x", e?.uiFilter, e?.uiFilterPath, ignored)?.takeIf { it.filter == UiFilter.CUSTOM }?.let { all += it.path }
             val w = WallpaperRef.of("x", e?.wallpaperPath, ignored)
@@ -271,7 +279,7 @@ object LookExporter {
     private val EFFECT_UNITS: Map<String, Set<String>> = mapOf(
         "surfaceStyle" to setOf("surfaceStyle"),
         "adaptiveGamePalette" to setOf("adaptiveGamePalette"),
-        "shaderPreset" to setOf("shaderPreset", "shader", "shaderPath", "shaderImages"),
+        "shaderPreset" to setOf("shaderPreset", "shader", "shaderPath", "shaderImages", "scenePath", "scene"),
         "wallpaperPath" to setOf("wallpaperPath", "wallpaper"),
         "videoPath" to setOf("videoPath", "video", "videoFit"),
         "focusFrameStyle" to setOf("focusFrameStyle", "focusFrame"),
@@ -313,6 +321,7 @@ object LookExporter {
     }
 
     private fun shaderJson(s: ShaderRef): Map<String, JsonElement> = when {
+        s.preset == ShaderPreset.SCENE -> mapOf("shaderPreset" to str(s.preset.name), "scenePath" to str(s.path))
         s.preset != ShaderPreset.CUSTOM -> mapOf("shaderPreset" to str(s.preset.name))
         s.images.isEmpty() -> mapOf("shaderPreset" to str(s.preset.name), "shaderPath" to str(s.path))
         else -> mapOf("shaderPreset" to str(s.preset.name), "shaderPath" to str(s.path), "shaderImages" to shaderImagesJson(s.images))

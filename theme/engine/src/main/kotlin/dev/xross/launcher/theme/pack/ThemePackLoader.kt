@@ -8,6 +8,8 @@ import dev.xross.launcher.theme.shader.ShaderImageSource
 import dev.xross.launcher.theme.shader.ShaderLibrary
 import dev.xross.launcher.theme.shader.ShaderPreset
 import dev.xross.launcher.theme.shader.ShaderRef
+import dev.xross.launcher.theme.shader.Scene
+import dev.xross.launcher.theme.shader.SceneSource
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -116,6 +118,8 @@ data class LoadedTheme(
     val customShaders: Map<String, String> = emptyMap(),
     /** Each image a CUSTOM shader samples (`effects.shaderImages`), by its pack-relative path (missing ones absent). */
     val shaderImages: Map<String, ShaderImageSource> = emptyMap(),
+    /** Each layered scene the pack names (`effects.scenePath`, Live backgrounds § 3), by its pack-relative path (unusable ones absent). */
+    val scenes: Map<String, SceneSource> = emptyMap(),
     /** The pack's own wallpaper (2b.4c): `effects.wallpaperPath`, else its `wallpaper.png`, else none. */
     val wallpaper: WallpaperRef = WallpaperRef.NONE,
     /** Each wallpaper file the pack names, by its pack-relative path (missing ones absent). */
@@ -146,8 +150,9 @@ data class LoadedTheme(
      * Every file of this pack the load read and uses (2b.8-prep), as pack-relative paths with `/`
      * ("icons/games.svg", "sounds/cursor.wav", "wallpaper.png"), resolved against [info]'s
      * [PackSource]: the APK asset folder for the built-in pack, the pack folder otherwise. Fonts,
-     * icons, logos, sounds, CUSTOM shaders, CUSTOM UI filters, wallpapers, music loops and the boot
-     * video, in any variant, override or rule. Not the JSON files ([sourceJson] holds them), not
+     * icons, logos, sounds, CUSTOM shaders and their images, CUSTOM UI filters, wallpapers, background
+     * videos, scenes (their `scene.json` and every file they name), music loops and the boot video, in
+     * any variant, override or rule. Not the manifest's JSON files ([sourceJson] holds them), not
      * what the Default pack lends a folder pack, and not a file that was missing or unusable.
      */
     val files: Set<String> = emptySet(),
@@ -182,7 +187,7 @@ data class LoadedTheme(
         }
 
     /** [shadersUsed] as programs, compiled ahead of time when this pack becomes active. */
-    val shaderLibrary: ShaderLibrary by lazy { ShaderLibrary.of(shadersUsed, customShaders, shaderImages) }
+    val shaderLibrary: ShaderLibrary by lazy { ShaderLibrary.of(shadersUsed, customShaders, shaderImages, scenes) }
 
     /**
      * [shaderLibrary] plus [extra] (the user's Settings ▸ Theme ▸ Background shader, 2b.4f), so
@@ -190,7 +195,7 @@ data class LoadedTheme(
      */
     fun shaderLibrary(extra: ShaderPreset?): ShaderLibrary =
         if (extra == null || extra == ShaderPreset.CUSTOM || shadersUsed.any { it.preset == extra }) shaderLibrary
-        else ShaderLibrary.of(shadersUsed + ShaderRef(extra), customShaders, shaderImages)
+        else ShaderLibrary.of(shadersUsed + ShaderRef(extra), customShaders, shaderImages, scenes)
 
     /** True when the base, a variant, an override or a rule can show a wallpaper. */
     val hasWallpaper: Boolean get() = wallpapers.isNotEmpty()
@@ -507,20 +512,25 @@ class ThemePackLoader(
             resolveRules(m.rules, surfaces.keys, base?.layout ?: ThemeLayout.DEFAULT, problems),
         )
 
-        val shader = ShaderRef.of("theme", m.effects?.shaderPreset, m.effects?.shaderPath, problems, m.effects?.shaderImages)
+        val shader = ShaderRef.of("theme", m.effects?.shaderPreset, m.effects?.shaderPath, problems, m.effects?.shaderImages, m.effects?.scenePath)
             ?: base?.shader ?: ShaderRef.WAVE
         val variants = resolveVariants(m.variants, palette != null, surfaces.keys, problems)
         val categoryPatches = resolveCategoryPatches(m.categoryOverrides, surfaces.keys, problems)
         val systemPatches = resolveSystemPatches(systems, surfaces.keys, problems)
-        val customRefs = (listOf(shader) + variants.mapNotNull { it.shader } + (categoryPatches.values + systemPatches.values).mapNotNull { it.shader } +
-            rules.mapNotNull { it.patch?.shader })
-            .filter { it.preset == ShaderPreset.CUSTOM }
+        val shaderRefs = listOf(shader) + variants.mapNotNull { it.shader } + (categoryPatches.values + systemPatches.values).mapNotNull { it.shader } +
+            rules.mapNotNull { it.patch?.shader }
+        val customRefs = shaderRefs.filter { it.preset == ShaderPreset.CUSTOM }
         val customShaders = LinkedHashMap<String, String>()
         for (path in customRefs.map { it.path }.distinct()) shaderText(pack, path, problems, files)?.let { customShaders[path] = it }
         // Live backgrounds § 1: the images those shaders sample, found (not decoded) here.
         val shaderImages = LinkedHashMap<String, ShaderImageSource>()
         for (path in customRefs.flatMap { r -> r.images.mapNotNull { it?.path } }.distinct()) {
             shaderImageSource(pack, path, problems, files)?.let { shaderImages[path] = it }
+        }
+        // Live backgrounds § 3: each scene, parsed, with its files found (not decoded) here.
+        val scenes = LinkedHashMap<String, SceneSource>()
+        for (path in shaderRefs.filter { it.preset == ShaderPreset.SCENE }.map { it.path }.distinct()) {
+            scene(pack, folder, path, problems, files)?.let { scenes[path] = it }
         }
 
         val wallpaper = WallpaperRef.of("theme", m.effects?.wallpaperPath, problems)
@@ -582,6 +592,7 @@ class ThemePackLoader(
             shader = shader,
             customShaders = customShaders,
             shaderImages = shaderImages,
+            scenes = scenes,
             wallpaper = wallpaper,
             wallpapers = wallpapers,
             video = video,
@@ -700,6 +711,25 @@ class ThemePackLoader(
                 }
             }
         }
+
+    /**
+     * The scene at [path] (Live backgrounds § 3): its text read and parsed, and every file it
+     * names found the way the other background files are: images as shader images (both pack
+     * kinds), videos as background videos (folder packs only), shader layers as shader text.
+     * Null when the file can't be read or keeps no usable layer; missing layer files are
+     * reported and kept as missing (the layer draws nothing).
+     */
+    private fun scene(pack: ThemePackInfo, folder: File?, path: String, problems: MutableList<String>, files: MutableSet<String>): SceneSource? {
+        val text = packText(pack, "Scene", path, problems, files) ?: return null
+        val scene = Scene.parse(path, text, problems) ?: return null
+        val images = LinkedHashMap<String, ShaderImageSource>()
+        for (p in scene.imagePaths) shaderImageSource(pack, p, problems, files)?.let { images[p] = it }
+        val videos = videoFiles(folder, scene.videoPaths.map { VideoRef(it) }, problems)
+        for (file in videos.values) relativePath(folder ?: continue, file)?.let(files::add)
+        val shaders = LinkedHashMap<String, String>()
+        for (p in scene.shaderPaths) shaderText(pack, p, problems, files)?.let { shaders[p] = it }
+        return SceneSource(path, text, scene, images, videos, shaders)
+    }
 
     /** A bare file name is looked up in `sounds/`; a path ("audio/tick.wav") from the pack root. */
     private fun soundFile(pack: ThemePackInfo, name: String): SoundSource? {

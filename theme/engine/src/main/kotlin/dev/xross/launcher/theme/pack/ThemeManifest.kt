@@ -238,6 +238,12 @@ data class ThemeManifest(
          */
         val shaderImages: kotlinx.serialization.json.JsonElement? = null,
         /**
+         * A layered scene (Live backgrounds § 3): a `.json` file in the pack describing a stack of
+         * image, video, sprite, shader and particle layers ([dev.xross.launcher.theme.shader.Scene]).
+         * It replaces the shader keys of the same layer and cascades like them.
+         */
+        @kotlinx.serialization.json.JsonNames("scene") val scenePath: String? = null,
+        /**
          * Static wallpaper behind the menu ([WallpaperRef], 2b.4c): a PNG, JPEG or WebP from the
          * pack root, or `none`. Unset: the pack's `wallpaper.png` if it has one.
          */
@@ -295,7 +301,7 @@ data class ThemeManifest(
              */
             val KEYS: Set<String> = setOf(
                 "surfaceStyle", "adaptiveGamePalette",
-                "shaderPreset", "shader", "shaderPath", "shaderImages",
+                "shaderPreset", "shader", "shaderPath", "shaderImages", "scenePath", "scene",
                 "wallpaperPath", "wallpaper", "videoPath", "video", "videoFit",
                 "focusFrameStyle", "focusFrame", "iconMask", "iconFilter",
                 "foregroundParticles", "particles",

@@ -17,6 +17,13 @@
   and it picks up where it left off on return. Still mode shows a poster. A video the device can't
   play shows the theme's wallpaper, else the wave. See the theme specification and shader guide §9.
 - The shader preview plays a theme's video (`?video=`, `&fit=`) and has a video example.
+- **Layered scenes, first part.** A theme can describe its background as a stack of layers in a
+  `scene.json` (`effects.scenePath`): images, videos, sprite sheets, shader layers and particles,
+  each with opacity, blend, placement, parallax, a mask and motion. Xross reads and checks the
+  whole format now, lists any problem per layer, keeps a scene within its budget, and shows the
+  scene's poster (or its first image) as the background; the layers are drawn in a later update.
+  Editing the scene or any of its files reloads it, and exports carry them. See the theme
+  specification's Layered scenes.
 
 ## 0.2.2.0-beta — 2026-11-21
 

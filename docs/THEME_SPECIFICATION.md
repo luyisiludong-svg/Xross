@@ -66,6 +66,8 @@ Xross/themes/<theme_id>/
 ├── postprocess.agsl optional: a CUSTOM UI filter, Android 13+ (or effects.uiFilterPath)
 ├── wallpaper.png   optional: drawn behind the menu (or .jpg / .webp, or effects.wallpaperPath)
 ├── *.mp4 / *.webm  optional: a looping background video named by effects.videoPath, at most 30 MB
+├── scene.json      optional: a layered scene (effects.scenePath), and the images, videos and
+│                   shaders its layers name
 ├── bgm.ogg         optional: ambient music loop, at most 20 MB (or bgm.mp3, or audio.bgmFile)
 └── boot.mp4        optional: cold-start video, at most 30 MB, cut at 15 s (or audio.bootVideo)
 ```
@@ -358,6 +360,76 @@ is accepted too), `FIT`, `STRETCH` or `CENTER`. `"none"` turns a video off.
 * **Size.** An `.xtheme` is capped at 50 MB, so keep loops short: 720p, 10–20 s, about 2–4 Mbit/s.
   Shaders sample it at most 1280 px on its long side.
 
+### Layered scenes
+
+*In progress (Live backgrounds § 3).* The format below is read and checked today, and the scene
+shows as its **poster**; the layers themselves are drawn from a later update on. A pack written
+against this section keeps working as the renderer lands.
+
+`effects.scenePath` (alias `scene`) names a `.json` file in the pack that describes a stack of
+layers, drawn bottom to top. `"shaderPreset": "SCENE"` alone reads `scene.json`. A scene is one
+background program: it cascades like a shader (variants, overrides and rules may each pick another
+scene, or a shader instead), and it replaces the other shader keys of the same layer
+(`shaderPreset`, `shaderPath` and `shaderImages` next to a `scenePath` are listed as problems).
+
+```json
+{
+  "resolution": "sharp",
+  "poster": "poster.webp",
+  "layers": [
+    { "type": "image",  "path": "sky.webp", "fit": "COVER", "parallax": 0.1, "scroll": [4, 0], "wrap": "REPEAT" },
+    { "type": "video",  "path": "clouds.mp4", "blend": "SCREEN", "opacity": 0.6 },
+    { "type": "image",  "path": "city.png", "anchor": "BOTTOM", "parallax": 0.4, "audio": { "scale": 0.02 } },
+    { "type": "sprite", "path": "neon.png", "frames": [4, 2], "fps": 8, "rect": [0.62, 0.40, 0.12, 0.10] },
+    { "type": "shader", "path": "rain_glass.frag", "images": ["drops.png"] },
+    { "type": "particles", "path": "ember.png", "rate": 30, "life": [3, 6], "velocity": [[-5, 5], [-40, -20]],
+      "size": [4, 10], "color": ["#ffb354", "#00ff8024"], "parallax": 0.7 },
+    { "type": "image",  "path": "rain_fg.png", "parallax": 1.0, "scroll": [0, 300], "wrap": "REPEAT", "blend": "ADD" }
+  ]
+}
+```
+
+Every path is relative to the pack root, like the rest of `theme.json`.
+
+* **`resolution`:** `soft` (the default, 1280 px on the long side) or `sharp` (1920 px).
+* **`poster`:** an image that stands in for the scene while it loads, in Still mode and if the
+  scene is retired as too slow. Without one, the first `image` layer is the poster.
+* **Layer types:**
+
+  | `type` | Its own keys |
+  | --- | --- |
+  | `image` | `path` (PNG, JPEG or WebP), `wrap` (`CLAMP`, `REPEAT`, `MIRROR`) |
+  | `video` | `path` (MP4 or WebM, folder packs only, at most 30 MB), looped and muted |
+  | `sprite` | `path`, `frames` `[columns, rows]` (1–64 each), `fps` (default 8), `count` (default every cell) |
+  | `shader` | `path` (a `.frag`), `images` (up to four, as `effects.shaderImages`); it reads the layers below it |
+  | `particles` | `path` (optional; a soft dot without one), `rate` per second (required), `life` `[min, max]` s, `velocity` `[[xMin, xMax], [yMin, yMax]]` px/s, `size` `[min, max]` px, `color` `[start, end]` |
+
+* **Keys every layer has:** `opacity` (0–1), `blend` (`NORMAL`, `ADD`, `SCREEN`, `MULTIPLY`),
+  `rect` `[x, y, width, height]` (fractions of the screen from its top-left corner) or `fit`
+  (`COVER` / `FILL`, `FIT`, `STRETCH`, `CENTER`) with `anchor` (`CENTER`, `TOP`, `BOTTOM`, `LEFT`,
+  `RIGHT`, `TOP_LEFT`, `TOP_RIGHT`, `BOTTOM_LEFT`, `BOTTOM_RIGHT`), `parallax` (0 stays still, 1
+  moves the most with the focus), `mask` (an image whose alpha masks the layer).
+* **Motion:** `scroll` `[x, y]` in texels per second; `sway` (an angle in degrees, or
+  `{ "angle", "offset": [x, y], "period" }`); `pulse` (a scale amount, or
+  `{ "scale", "opacity", "period" }`). `audio`, `transition` and `daylight` each take
+  `{ "scale", "opacity", "offset", "angle" }`: what that input adds at its full strength (the
+  music's bass, a category switch, noon).
+* **Units:** pixels (`velocity`, `size`, `offset`) are at 1280 px on the screen's long side, y
+  down. Colours are `#rrggbb`, or `#aarrggbb` with alpha, as everywhere in a theme.
+* **Budget:** at most 16 layers, 2 video layers, 4 shader layers, 2,000 particles (`rate` × the
+  longest `life`) and 8 screens of pixels per frame (each layer counts the part of the screen it
+  covers, a shader layer twice). Layers are taken bottom to top while they fit; one that doesn't
+  is left out with a problem, and a cheaper one above it may still fit.
+* **Problems** are listed per layer, with the layer's place in the file:
+  `scene.json: layers[3].frames: give [columns, rows], …`. An unknown key or a bad value falls back
+  to its default; an unknown `type` or a bad or missing `path` leaves the layer out. A missing file
+  is listed and its layer draws nothing. A file that isn't valid JSON, or keeps no usable layer,
+  is no scene: the look shows the wave.
+* **It is the pack's art.** While a scene shows, the pack's own wallpaper isn't drawn over it. A
+  wallpaper you chose still wins, as over any shader.
+* **Hot reload.** Editing `scene.json` or any file it names reloads the scene.
+* A scene can't be picked in Settings ▸ Theme ▸ Background shader: it needs the pack's files.
+
 ### Focus frames and app icons
 
 `effects.focusFrameStyle` (alias `focusFrame`) frames the focused item:
@@ -469,9 +541,10 @@ instead of being ignored silently, so a typo shows up.
 | --- | --- | --- |
 | `surfaceStyle` | a preset or a surface the pack defines | 2b.2 |
 | `adaptiveGamePalette` | `true` / `false` | 2b.3 |
-| `shaderPreset` (`shader`) | `WAVE`, `ASCII_MATRIX`, `BOKEH`, `STARFIELD`, `CRT`, `BLACK_HOLE`, `MECHA`, `VIDEO`, `CUSTOM` | 2b.4a (`BLACK_HOLE` 2026-11-16, `MECHA` 2026-11-17, `VIDEO` Live backgrounds § 2) |
+| `shaderPreset` (`shader`) | `WAVE`, `ASCII_MATRIX`, `BOKEH`, `STARFIELD`, `CRT`, `BLACK_HOLE`, `MECHA`, `VIDEO`, `SCENE`, `CUSTOM` | 2b.4a (`BLACK_HOLE` 2026-11-16, `MECHA` 2026-11-17, `VIDEO` Live backgrounds § 2, `SCENE` § 3) |
 | `shaderPath` | a `.frag` in the pack (implies `CUSTOM`) | 2b.4a |
 | `shaderImages` | up to four images in the pack for a `CUSTOM` shader (`uImage0..3`): paths, or `{ "path", "wrap": CLAMP / REPEAT / MIRROR, "filter": LINEAR / NEAREST, "mipmap" }` ([Shader guide §8](SHADER_GUIDE.md#8-images-and-the-focus)) | Live backgrounds § 1 |
+| `scenePath` (`scene`) | a `.json` scene in the pack (implies `SCENE`; [Layered scenes](#layered-scenes)) | Live backgrounds § 3 |
 | `wallpaperPath` (`wallpaper`) | a PNG, JPEG or WebP in the pack, or `none` | 2b.4c |
 | `videoPath` (`video`) | an MP4 or WebM in the pack, or `none` ([Background video](#background-video)) | Live backgrounds § 2 |
 | `videoFit` | `FILL` (`COVER`), `FIT`, `STRETCH`, `CENTER` | Live backgrounds § 2 |
@@ -501,8 +574,8 @@ applies while that category is open; `"systemOverrides": { "dreamcast": {…} }`
 folder alias such as `dc`) while one of that system's games is focused, after the cursor rests for
 a quarter second.
 
-Each may set `palette` roles, `effects.surfaceStyle`, `effects.shaderPreset`,
-`effects.wallpaperPath`, `effects.videoPath`, `effects.videoFit`, `effects.focusFrameStyle`, `iconMask`, `iconFilter`,
+Each may set `palette` roles, `effects.surfaceStyle`, `effects.shaderPreset` (with `shaderPath`,
+`shaderImages` or `scenePath`), `effects.wallpaperPath`, `effects.videoPath`, `effects.videoFit`, `effects.focusFrameStyle`, `iconMask`, `iconFilter`,
 `foregroundParticles`, `backgroundFilter`, `uiFilter`, `bootIntro`, `launchCurtain` and `cardAspectRatio` (a system's aspect
 shapes that system's game tiles), `audio.soundGains` and `audio.bgmFile` (§5).
 

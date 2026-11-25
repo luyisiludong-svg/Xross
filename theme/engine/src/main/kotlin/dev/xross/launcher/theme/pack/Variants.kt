@@ -15,7 +15,7 @@ data class ResolvedVariant(
     val palette: ThemeManifest.Palette? = null,
     val surfaceId: String? = null,
     val flags: ColorFlags? = null,
-    /** `effects.shaderPreset` / `effects.shaderPath` / `effects.shaderImages`, checked. */
+    /** `effects.shaderPreset` / `effects.shaderPath` / `effects.shaderImages` / `effects.scenePath`, checked. */
     val shader: ShaderRef? = null,
     /** `effects.wallpaperPath`, checked ([WallpaperRef.NONE] turns the pack's off). */
     val wallpaper: WallpaperRef? = null,
@@ -196,7 +196,7 @@ internal fun resolveVariants(
             palette = palette,
             surfaceId = surfaceOf("variants.$id", v.effects, surfaceIds, problems),
             flags = ColorFlags.of(v.palette, v.effects).takeUnless { it.empty },
-            shader = ShaderRef.of("variants.$id", v.effects?.shaderPreset, v.effects?.shaderPath, problems, v.effects?.shaderImages),
+            shader = ShaderRef.of("variants.$id", v.effects?.shaderPreset, v.effects?.shaderPath, problems, v.effects?.shaderImages, v.effects?.scenePath),
             wallpaper = WallpaperRef.of("variants.$id", v.effects?.wallpaperPath, problems),
             cosmetics = Cosmetics.of("variants.$id", v.effects, problems),
             gains = resolveGainPatch("variants.$id", v.audio, problems),
@@ -271,7 +271,7 @@ internal fun patchOf(where: String, o: ThemeOverride, surfaceIds: Set<String>, p
     val palette = o.palette?.valid("$where.palette", problems)?.takeIf { it.hasColors }
     val surface = surfaceOf(where, o.effects, surfaceIds, problems)
     val flags = ColorFlags.of(o.palette, o.effects).takeUnless { it.empty }
-    val shader = ShaderRef.of(where, o.effects?.shaderPreset, o.effects?.shaderPath, problems, o.effects?.shaderImages)
+    val shader = ShaderRef.of(where, o.effects?.shaderPreset, o.effects?.shaderPath, problems, o.effects?.shaderImages, o.effects?.scenePath)
     val wallpaper = WallpaperRef.of(where, o.effects?.wallpaperPath, problems)
     val cosmetics = Cosmetics.of(where, o.effects, problems)
     val gains = resolveGainPatch(where, o.audio, problems)

@@ -33,6 +33,13 @@ enum class ShaderPreset(val file: String?, val label: String) {
      * `effects.videoFit`, over the theme gradient. What a look with a video and the wave shows.
      */
     VIDEO("video.frag", "Video"),
+    /**
+     * A layered scene (`effects.scenePath`, Live backgrounds § 3): the [Scene] a `scene.json`
+     * describes, one program as far as the library, the fallback and the watchdog go. Until the
+     * scene renderer lands (slice 3b), [file] draws the scene's poster ([SceneSource.posterImage],
+     * bound as `uImage0`) over the theme gradient.
+     */
+    SCENE("scene_poster.frag", "Scene"),
     CUSTOM(null, "Custom shader"),
     ;
 
@@ -90,8 +97,12 @@ data class ShaderImage(
          * image, so the ones after it still land in the `uImageN` the shader expects.
          */
         fun listOf(where: String, element: JsonElement?, problems: MutableList<String>): List<ShaderImage?> {
+            return listAt("$where.effects.shaderImages", element, problems)
+        }
+
+        /** [listOf] reported under [at] as written (a scene's shader layer: `scene.json: layers[4].images`). */
+        fun listAt(at: String, element: JsonElement?, problems: MutableList<String>): List<ShaderImage?> {
             if (element == null || element is JsonNull) return emptyList()
-            val at = "$where.effects.shaderImages"
             val items = when (element) {
                 is JsonArray -> element.toList()
                 is JsonPrimitive, is JsonObject -> kotlin.collections.listOf(element)
@@ -210,10 +221,11 @@ data class ShaderRef(
         val FILE_TYPES = setOf("frag", "glsl", "fs")
 
         /**
-         * `effects.shaderPreset` / `effects.shaderPath` / `effects.shaderImages` of one theme
-         * layer, or null when it sets neither shader key (or names an unknown preset, reported in
-         * [problems] under [where]). A path alone means CUSTOM; CUSTOM alone reads `shader.frag`.
-         * Images are only read with CUSTOM.
+         * `effects.shaderPreset` / `effects.shaderPath` / `effects.shaderImages` /
+         * `effects.scenePath` of one theme layer, or null when it sets no shader key (or names an
+         * unknown preset, reported in [problems] under [where]). A path alone means CUSTOM; CUSTOM
+         * alone reads `shader.frag`. Images are only read with CUSTOM. A `scenePath` (or `SCENE`
+         * alone, reading `scene.json`) is a [ShaderPreset.SCENE] and replaces the other keys.
          */
         fun of(
             where: String,
@@ -221,10 +233,25 @@ data class ShaderRef(
             shaderPath: String?,
             problems: MutableList<String>,
             images: JsonElement? = null,
+            scenePath: String? = null,
         ): ShaderRef? {
             val name = shader?.trim().orEmpty()
             val path = shaderPath?.trim()?.replace('\\', '/').orEmpty()
             val hasImages = images != null && images !is JsonNull
+            val scene = scenePath?.trim()?.replace('\\', '/')?.trimStart('/').orEmpty()
+            if (scene.isNotEmpty() || ShaderPreset.byName(name) == ShaderPreset.SCENE) {
+                if (name.isNotEmpty() && ShaderPreset.byName(name) != ShaderPreset.SCENE) {
+                    problems += "$where.effects.scenePath replaces effects.shaderPreset ($name): a layer shows one or the other"
+                }
+                if (path.isNotEmpty()) problems += "$where.effects.shaderPath isn't read with a scene; give the scene a shader layer"
+                if (hasImages) problems += "$where.effects.shaderImages isn't read with a scene; give its shader layer \"images\""
+                val file = scene.ifEmpty { Scene.DEFAULT_FILE }
+                if (!SceneSource.validPath(file)) {
+                    problems += "$where.effects.scenePath: use a .json scene file inside the pack (not $file)"
+                    return null
+                }
+                return ShaderRef(ShaderPreset.SCENE, file)
+            }
             if (name.isEmpty() && path.isEmpty()) {
                 if (hasImages) problems += "$where.effects.shaderImages is only read together with a CUSTOM shader (shaderPreset or shaderPath)"
                 return null
@@ -262,13 +289,18 @@ data class ShaderSpec(
     val label: String,
     /** CUSTOM: the file's text, null when it can't be read. Built-ins: null (read from assets). */
     val source: String? = null,
-    /** CUSTOM: `uImage0..3` by slot (null: the slot is empty); built-ins have none. */
+    /** CUSTOM: `uImage0..3` by slot (null: the slot is empty); SCENE: its poster; built-ins have none. */
     val images: List<BoundImage?> = emptyList(),
+    /** SCENE: the scene as loaded; null when its file couldn't be read or parsed. */
+    val scene: SceneSource? = null,
 ) {
     /** The images as the pack asked for them, to match a [ShaderRef] against. */
     val requested: List<ShaderImage?> get() = images.map { it?.image }
 
-    /** A pack's own code: canary-guarded before it is compiled and drawn. */
+    /**
+     * A pack's own code: canary-guarded before it is compiled and drawn. A SCENE isn't, yet: until
+     * its shader layers are drawn (slice 3c) only the built-in poster program runs.
+     */
     val untrusted: Boolean get() = preset == ShaderPreset.CUSTOM
 }
 
@@ -283,7 +315,11 @@ data class ShaderLibrary(val specs: List<ShaderSpec>) {
      */
     fun keyOf(ref: ShaderRef): String =
         specs.firstOrNull {
-            it.preset == ref.preset && (ref.preset != ShaderPreset.CUSTOM || it.label == ref.path && it.requested == ref.images)
+            it.preset == ref.preset && when (ref.preset) {
+                ShaderPreset.CUSTOM -> it.label == ref.path && it.requested == ref.images
+                ShaderPreset.SCENE -> it.label == ref.path
+                else -> true
+            }
         }?.key ?: WAVE_KEY
 
     val keys: Set<String> get() = specs.mapTo(LinkedHashSet()) { it.key }
@@ -295,12 +331,14 @@ data class ShaderLibrary(val specs: List<ShaderSpec>) {
 
         /**
          * [refs] as specs; CUSTOM text comes from [customSources] (pack-relative path → text), its
-         * images from [imageSources] (pack-relative path → where the loader found it).
+         * images from [imageSources] (pack-relative path → where the loader found it), and a
+         * SCENE from [scenes] (its `scene.json` path → the scene as loaded).
          */
         fun of(
             refs: Collection<ShaderRef>,
             customSources: Map<String, String>,
             imageSources: Map<String, ShaderImageSource> = emptyMap(),
+            scenes: Map<String, SceneSource> = emptyMap(),
         ): ShaderLibrary {
             val out = LinkedHashMap<String, ShaderSpec>()
             out[WAVE_KEY] = WAVE_SPEC
@@ -310,6 +348,16 @@ data class ShaderLibrary(val specs: List<ShaderSpec>) {
                         val text = customSources[ref.path]
                         val images = ref.images.map { img -> img?.let { BoundImage(it, imageSources[it.path]) } }
                         ShaderSpec(customKey(ref.path, text, images), ShaderPreset.CUSTOM, ref.path, text, images)
+                    }
+                    ShaderPreset.SCENE -> {
+                        val scene = scenes[ref.path]
+                        ShaderSpec(
+                            key = scene?.key ?: "scene:${ref.path}:missing",
+                            preset = ShaderPreset.SCENE,
+                            label = ref.path,
+                            images = listOfNotNull(scene?.posterImage),
+                            scene = scene,
+                        )
                     }
                     else -> ShaderSpec(ref.preset.name, ref.preset, ref.preset.label)
                 }

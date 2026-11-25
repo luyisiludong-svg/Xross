@@ -510,10 +510,16 @@ class WaveRenderer(
             program.fail(ShaderStatus.Cause.TOO_SLOW, slowReasons[spec.key].orEmpty())
             return
         }
-        val body = if (spec.untrusted) spec.source else body(spec.preset)
+        // A scene whose file couldn't be read or parsed has nothing to draw (Live backgrounds § 3).
+        val unreadable = spec.preset == ShaderPreset.SCENE && spec.scene == null
+        val body = when {
+            spec.untrusted -> spec.source
+            unreadable -> null
+            else -> body(spec.preset)
+        }
         val pre = prelude ?: asset(PRELUDE_FILE)?.also { prelude = it }
         when {
-            body == null -> program.fail(ShaderStatus.Cause.MISSING, if (spec.untrusted) "can't read ${spec.label}" else "missing from the app")
+            body == null -> program.fail(ShaderStatus.Cause.MISSING, if (spec.untrusted || unreadable) "can't read ${spec.label}" else "missing from the app")
             pre == null -> program.fail(ShaderStatus.Cause.MISSING, "the shader prelude is missing from the app")
             else -> {
                 if (spec.untrusted) canary?.arm(spec.key) // a driver that crashes compiling it
