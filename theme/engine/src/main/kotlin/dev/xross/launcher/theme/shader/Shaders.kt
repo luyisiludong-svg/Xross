@@ -298,10 +298,10 @@ data class ShaderSpec(
     val requested: List<ShaderImage?> get() = images.map { it?.image }
 
     /**
-     * A pack's own code: canary-guarded before it is compiled and drawn. A SCENE isn't, yet: until
-     * its shader layers are drawn (slice 3c) only the built-in poster program runs.
+     * A pack's own code: canary-guarded before it is compiled and drawn. A SCENE is when it has
+     * shader layers (Live backgrounds § 3c): they compile and draw with it, guarded as one unit.
      */
-    val untrusted: Boolean get() = preset == ShaderPreset.CUSTOM
+    val untrusted: Boolean get() = preset == ShaderPreset.CUSTOM || preset == ShaderPreset.SCENE && scene?.scene?.hasShaderLayers == true
 }
 
 /** Every program a pack can show, compiled ahead of time when it loads; WAVE always first. */

@@ -64,6 +64,9 @@ internal class GlProgram(val spec: ShaderSpec) {
     /** The background video (Live backgrounds § 2): the copied frame, its size, where `videoFit` places it. */
     var uVideo = -1; var uVideoSize = -1; var uVideoRect = -1
 
+    /** A scene shader layer's input: the layers below it (Live backgrounds § 3c, unit [GlScene.BELOW_UNIT]). */
+    var uBelow = -1
+
     /** Reads any of the video uniforms, so the frame is bound for it. */
     val usesVideo: Boolean get() = uVideo >= 0 || uVideoSize >= 0 || uVideoRect >= 0
 
@@ -79,8 +82,8 @@ internal class GlProgram(val spec: ShaderSpec) {
     /** A layered scene's textures and draw; null until it is set up. */
     var scene: GlScene? = null
 
-    /** Waiting for its images to be decoded and uploaded ([ImageTextures], or a layered scene's [GlScene]). */
-    val awaitingImages: Boolean get() = if (layered) scene?.uploaded != true else spec.images.isNotEmpty() && textures == null
+    /** Waiting for its images to be decoded and uploaded ([ImageTextures], or a layered scene's [GlScene], shader layers' too). */
+    val awaitingImages: Boolean get() = if (layered) scene?.ready != true else spec.images.isNotEmpty() && textures == null
 
     /**
      * The state [ShaderFallback] sees: a linked program is still PENDING until its images are on
@@ -159,6 +162,7 @@ internal class GlProgram(val spec: ShaderSpec) {
         uField = loc("uField"); uPass = loc("uPass")
         uFocus = loc("uFocus")
         uVideo = loc("uVideo"); uVideoSize = loc("uVideoSize"); uVideoRect = loc("uVideoRect")
+        uBelow = loc("uBelow")
         for (i in 0 until ShaderImage.MAX) {
             uImage[i] = loc("uImage$i")
             uImageSize[i] = loc("uImageSize$i")

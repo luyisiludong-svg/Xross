@@ -58,6 +58,8 @@ import dev.xross.launcher.state.BootSequence
 import dev.xross.launcher.state.MediaFolderKind
 import dev.xross.launcher.state.TextPrompt
 import dev.xross.launcher.theme.WallpaperSource
+import dev.xross.launcher.theme.pack.VideoFit
+import dev.xross.launcher.theme.pack.VideoSource
 import dev.xross.launcher.theme.shader.ShaderLibrary
 import dev.xross.launcher.theme.shader.ShaderPreset
 import dev.xross.launcher.theme.WaveTint
@@ -278,8 +280,18 @@ class MainActivity : ComponentActivity() {
             // shader. One the decoder failed on is left out (its key: a replaced file is tried again);
             // the look's wallpaper shows instead, else the wave.
             var failedVideo by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
-            val lookVideo = androidx.compose.runtime.remember(pack, look.video) { pack.videoSource(look.video) }
-            val readsVideo = look.shader.preset == ShaderPreset.VIDEO || look.shader.preset == ShaderPreset.CUSTOM
+            // § 3c: a scene's video layers show its one video file through the same player.
+            val isScene = look.shader.preset == ShaderPreset.SCENE
+            val lookVideo = androidx.compose.runtime.remember(pack, look.video, look.shader, shaderLibrary) {
+                if (isScene) {
+                    shaderLibrary.spec(shaderLibrary.keyOf(look.shader))?.scene?.let { src ->
+                        src.scene.video?.let(src.videos::get)?.let { VideoSource(it, VideoFit.FILL) }
+                    }
+                } else {
+                    pack.videoSource(look.video)
+                }
+            }
+            val readsVideo = look.shader.preset == ShaderPreset.VIDEO || look.shader.preset == ShaderPreset.CUSTOM || isScene
             val shownVideo = lookVideo?.takeIf { readsVideo && it.key != failedVideo }
             val shaderKey = if (look.shader.preset == ShaderPreset.VIDEO && shownVideo == null) ShaderLibrary.WAVE_KEY else shaderLibrary.keyOf(look.shader)
             // Live backgrounds § 3: a scene is the pack's art, like its video (its poster for now).
@@ -401,7 +413,11 @@ class MainActivity : ComponentActivity() {
                     videoResting = particlesIdle,
                     onVideoFailed = { v, why ->
                         failedVideo = v.key
-                        val instead = if (WallpaperSource.packWallpaper(pack, look) != null) "the wallpaper" else "the wave"
+                        val instead = when {
+                            isScene -> "the scene without it"
+                            WallpaperSource.packWallpaper(pack, look) != null -> "the wallpaper"
+                            else -> "the wave"
+                        }
                         container.shaderHealth.notice("video:${v.key}", "Background video ${v.file.name}: $why · showing $instead")
                     },
                 )

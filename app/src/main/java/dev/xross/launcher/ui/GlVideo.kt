@@ -63,6 +63,9 @@ internal class VideoTexture(
     /** A frame has been copied: [size] and the texture hold it. */
     val hasFrame: Boolean get() = tex[0] != 0 && size[0] > 0f
 
+    /** The copied frame's texture (no mipmaps, clamped), for a scene's video layers; 0 before the first frame. */
+    val texture: Int get() = if (hasFrame) tex[0] else 0
+
     override fun onFrameAvailable(st: SurfaceTexture) {
         pending.set(true)
         onFrame()
@@ -264,7 +267,7 @@ internal class VideoTexture(
     }
 
     companion object {
-        /** Texture unit of `uVideo` (0 `uPrev`, 1 `uField`, 2–5 `uImage0..3`). */
+        /** Texture unit of `uVideo` (0 `uPrev`, 1 `uField`, 2–5 `uImage0..3`, 7 a scene layer's `uBelow`). */
         const val UNIT = 6
 
         private const val TAG = "XrossVideo"

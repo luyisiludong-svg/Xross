@@ -362,9 +362,9 @@ is accepted too), `FIT`, `STRETCH` or `CENTER`. `"none"` turns a video off.
 
 ### Layered scenes
 
-*In progress (Live backgrounds § 3).* The whole format below is read and checked. **Image and
-sprite layers are drawn**, with their placement, blend, opacity, mask, parallax and motion, and
-`resolution` applies. Video, shader and particle layers are skipped until a later update. A scene
+*In progress (Live backgrounds § 3).* The whole format below is read and checked. **Image,
+sprite, video and shader layers are drawn**, with their placement, blend, opacity, mask, parallax
+and motion, and `resolution` applies. Particle layers are skipped until a later update. A scene
 with none of the drawn kinds shows its **poster**. A pack written against this section keeps
 working as the rest lands.
 
@@ -401,9 +401,9 @@ Every path is relative to the pack root, like the rest of `theme.json`.
   | `type` | Its own keys |
   | --- | --- |
   | `image` | `path` (PNG, JPEG or WebP), `wrap` (`CLAMP`, `REPEAT`, `MIRROR`) |
-  | `video` | `path` (MP4 or WebM, folder packs only, at most 30 MB), looped and muted |
+  | `video` | `path` (MP4 or WebM, folder packs only, at most 30 MB), looped and muted; one file per scene, which several layers may show |
   | `sprite` | `path`, `frames` `[columns, rows]` (1–64 each), `fps` (default 8), `count` (default every cell) |
-  | `shader` | `path` (a `.frag`), `images` (up to four, as `effects.shaderImages`); it reads the layers below it |
+  | `shader` | `path` (a `.frag`), `images` (up to four, as `effects.shaderImages`); it reads the layers below it as `uBelow` |
   | `particles` | `path` (optional; a soft dot without one), `rate` per second (required), `life` `[min, max]` s, `velocity` `[[xMin, xMax], [yMin, yMax]]` px/s, `size` `[min, max]` px, `color` `[start, end]` |
 
 * **Keys every layer has:** `opacity` (0–1), `blend` (`NORMAL`, `ADD`, `SCREEN`, `MULTIPLY`),
@@ -428,9 +428,22 @@ Every path is relative to the pack root, like the rest of `theme.json`.
   layer's centre. A `mask` is stretched over the layer's box and doesn't scroll. Sprite sheets
   are clamped at their edges. Images are blended with premultiplied alpha, so soft edges don't
   fringe.
+* **Video layers** show the scene's video file like an image layer, posed and blended the same
+  way, at most 1280 px on its long side. It plays under the same rules as `effects.videoPath`
+  (held while resting, covered or in Still mode, released while a game runs). Until its first
+  frame, or if this device can't decode it, the layer draws nothing (with a notice) and the rest
+  of the scene shows.
+* **Shader layers** are full-screen shaders with the whole prelude (see the shader guide), plus
+  `uBelow`: the layers below, already composited, at `gl_FragCoord.xy / uResolution`. What the
+  shader writes replaces them inside the layer's `rect` (else the whole screen), mixed in at its
+  `opacity`. `blend`, `fit`, `anchor`, `parallax`, `mask` and the motions don't apply to a shader
+  layer and are listed as problems. `uPrev` and `uField` aren't available in a layer (`uFresh` is
+  1). A shader layer that doesn't compile is left out with a notice; the rest of the scene draws.
+  A scene with shader layers is pack code: it is crash-guarded as one unit, like a pack's shader.
 * **Budget for images:** a scene's drawn images share 16 megapixels, each at most 2048 px on its
-  long side. Images past that are left out (top layers first) with a notice.
-* **Budget:** at most 16 layers, 2 video layers, 4 shader layers, 2,000 particles (`rate` × the
+  long side. Images past that are left out (top layers first) with a notice. Shader layers'
+  `images` share another 8 megapixels, as one shader's `shaderImages` do.
+* **Budget:** at most 16 layers, 1 video file (any number of layers may show it), 4 shader layers, 2,000 particles (`rate` × the
   longest `life`) and 8 screens of pixels per frame (each layer counts the part of the screen it
   covers, a shader layer twice). Layers are taken bottom to top while they fit; one that doesn't
   is left out with a problem, and a cheaper one above it may still fit.

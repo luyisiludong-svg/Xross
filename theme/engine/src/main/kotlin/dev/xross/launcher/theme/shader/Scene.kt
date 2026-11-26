@@ -28,8 +28,9 @@ import kotlin.math.ceil
  * (`rect`, `anchor`); speeds and sizes are in render pixels at 1280 on the long side, y down
  * (`velocity`, `size`); `scroll` is in texels of the layer's own image per second.
  *
- * Image and sprite layers are drawn (slice 3b, posed by [ScenePoser]); video, shader and particle
- * layers are skipped until 3c / 3d. A scene with no drawn layer shows its [Scene.poster].
+ * Image, sprite and video layers are drawn as posed quads (slices 3b and 3c, [ScenePoser]); shader
+ * layers are full-screen § 1 programs over the layers below them (`uBelow`, 3c). Particle layers
+ * are skipped until 3d. A scene with no drawn layer shows its [Scene.poster].
  */
 
 /** `scene.resolution`: how sharp the surface is while the scene shows. */
@@ -220,6 +221,9 @@ data class Scene(
 
     val videoPaths: List<String> get() = layers.mapNotNull { (it as? SceneLayer.Video)?.path }.distinct()
 
+    /** The video file its video layers show (one per scene: [SceneBudget.MAX_VIDEOS]); null for none. */
+    val video: String? get() = videoPaths.firstOrNull()
+
     val shaderPaths: List<String> get() = layers.mapNotNull { (it as? SceneLayer.Shader)?.path }.distinct()
 
     /** Pack code runs in it: the scene is canary-guarded as one unit. */
@@ -292,6 +296,12 @@ data class Scene(
                 }
             }
             for (key in obj.keys - own - COMMON_KEYS - "type") p += "$key isn't a property of a $type layer"
+            // A shader layer draws its own pixels over its rect (else the screen): it isn't posed or blended.
+            if (type == "shader") {
+                for (key in obj.keys.filter { it in COMMON_KEYS && it !in SHADER_LOOK_KEYS }) {
+                    p += "$key is ignored on a shader layer (it draws over its rect, else the whole screen, at its opacity)"
+                }
+            }
             val look = look(p, obj)
             return when (type) {
                 "image" -> p.image("path", obj["path"])?.let { SceneLayer.Image(it, p.enumOf<ImageWrap>("wrap", obj["wrap"]) ?: ImageWrap.CLAMP, look) }
@@ -422,6 +432,8 @@ data class Scene(
         private const val TRANSPARENT_WHITE = 0x00FFFFFF
 
         private val SCENE_KEYS = setOf("resolution", "poster", "layers")
+        /** What a shader layer's look uses; the rest of [COMMON_KEYS] is reported as ignored. */
+        private val SHADER_LOOK_KEYS = setOf("opacity", "rect")
         private val COMMON_KEYS = setOf(
             "opacity", "blend", "rect", "fit", "anchor", "parallax", "mask",
             "scroll", "sway", "pulse", "audio", "transition", "daylight",
@@ -440,13 +452,17 @@ data class Scene(
 
 /**
  * What a scene may cost (pure, so it is unit tested): at most [MAX_LAYERS] layers,
- * [MAX_VIDEOS] video layers, [MAX_SHADERS] shader layers, [Scene.MAX_PARTICLES] particles and
+ * [MAX_VIDEOS] video file (any number of video layers may show it), [MAX_SHADERS] shader layers, [Scene.MAX_PARTICLES] particles and
  * [MAX_OVERDRAW] screens of pixels. Layers are taken bottom to top while they fit; one that
  * doesn't is dropped (and a cheaper one above it may still fit).
  */
 object SceneBudget {
     const val MAX_LAYERS = 16
-    const val MAX_VIDEOS = 2
+    /**
+     * Video files per scene. One: § 2's rule of one hardware decoder in use at a time (the plan's
+     * draft had 2 layers). Several layers may show the same file, each with its own blend and pose.
+     */
+    const val MAX_VIDEOS = 1
     const val MAX_SHADERS = 4
     /** Screens of pixels per frame (the plan's 6 left its own sample scene, at 6.02, over; the A55 timings settle it). */
     const val MAX_OVERDRAW = 8f
@@ -462,7 +478,7 @@ object SceneBudget {
 
     /** [layers] that fit, in order; [dropped] hears each one left out (its index in [layers]) and why. */
     fun fit(layers: List<SceneLayer>, dropped: (Int, String) -> Unit = { _, _ -> }): List<SceneLayer> {
-        var videos = 0
+        val videos = HashSet<String>()
         var shaders = 0
         var particles = 0
         var screens = 0f
@@ -471,7 +487,8 @@ object SceneBudget {
             val cost = cost(layer)
             val why = when {
                 out.size >= MAX_LAYERS -> "a scene draws at most $MAX_LAYERS layers"
-                layer is SceneLayer.Video && videos >= MAX_VIDEOS -> "a scene plays at most $MAX_VIDEOS videos"
+                layer is SceneLayer.Video && layer.path !in videos && videos.size >= MAX_VIDEOS ->
+                    "a scene plays one video file (${videos.first()}); more layers may show that one"
                 layer is SceneLayer.Shader && shaders >= MAX_SHADERS -> "a scene runs at most $MAX_SHADERS shader layers"
                 layer is SceneLayer.Particles && particles + layer.count > Scene.MAX_PARTICLES ->
                     "a scene keeps at most ${Scene.MAX_PARTICLES} particles (this layer needs ${layer.count}, $particles are taken)"
@@ -485,7 +502,7 @@ object SceneBudget {
                 out += layer
                 screens += cost
                 when (layer) {
-                    is SceneLayer.Video -> videos++
+                    is SceneLayer.Video -> videos += layer.path
                     is SceneLayer.Shader -> shaders++
                     is SceneLayer.Particles -> particles += layer.count
                     else -> Unit

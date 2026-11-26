@@ -6,11 +6,16 @@ import dev.xross.launcher.theme.shader.BoundImage
 import dev.xross.launcher.theme.shader.ImageWrap
 import dev.xross.launcher.theme.shader.LayerBlend
 import dev.xross.launcher.theme.shader.LayerPose
+import dev.xross.launcher.theme.shader.LayerRect
+import dev.xross.launcher.theme.shader.ProgramState
 import dev.xross.launcher.theme.shader.SceneInputs
 import dev.xross.launcher.theme.shader.SceneLayer
 import dev.xross.launcher.theme.shader.ScenePoser
 import dev.xross.launcher.theme.shader.SceneSource
 import dev.xross.launcher.theme.shader.ShaderImage
+import dev.xross.launcher.theme.shader.ShaderPreset
+import dev.xross.launcher.theme.shader.ShaderSpec
+import kotlin.math.roundToInt
 
 /**
  * The textured-quad program every scene shares (Live backgrounds § 3b): `scene_layer.vert` /
@@ -27,8 +32,11 @@ internal class SceneQuadProgram {
     var uTex = -1; var uMask = -1; var uHasMask = -1; var uOpacity = -1; var uMode = -1
     var uColorTop = -1; var uColorBottom = -1
 
-    /** One sampler per wrap mode (trilinear: every layer texture has mipmaps), and a clamped one for masks. */
-    private val samplers = IntArray(ImageWrap.entries.size)
+    /**
+     * One sampler per wrap mode (trilinear: every layer texture has mipmaps), plus a last, clamped
+     * bilinear one for the video copy, which has none (a mipmap filter would sample it black).
+     */
+    private val samplers = IntArray(ImageWrap.entries.size + 1)
 
     /** Compiles [vertexSource] + [fragmentSource] (null: missing from the APK); the last context's handle is gone already. */
     fun compile(vertexSource: String?, fragmentSource: String?) {
@@ -74,9 +82,17 @@ internal class SceneQuadProgram {
             GLES30.glSamplerParameteri(s, GLES30.GL_TEXTURE_MIN_FILTER, GLES30.GL_LINEAR_MIPMAP_LINEAR)
             GLES30.glSamplerParameteri(s, GLES30.GL_TEXTURE_MAG_FILTER, GLES30.GL_LINEAR)
         }
+        val v = samplers[ImageWrap.entries.size]
+        GLES30.glSamplerParameteri(v, GLES30.GL_TEXTURE_WRAP_S, GLES30.GL_CLAMP_TO_EDGE)
+        GLES30.glSamplerParameteri(v, GLES30.GL_TEXTURE_WRAP_T, GLES30.GL_CLAMP_TO_EDGE)
+        GLES30.glSamplerParameteri(v, GLES30.GL_TEXTURE_MIN_FILTER, GLES30.GL_LINEAR)
+        GLES30.glSamplerParameteri(v, GLES30.GL_TEXTURE_MAG_FILTER, GLES30.GL_LINEAR)
     }
 
     fun sampler(wrap: ImageWrap): Int = samplers[wrap.ordinal]
+
+    /** For textures without mipmaps (the video copy). */
+    val linearSampler: Int get() = samplers[ImageWrap.entries.size]
 
     private fun shader(type: Int, source: String): Int? {
         val s = GLES30.glCreateShader(type)
@@ -106,11 +122,19 @@ internal class SceneQuadProgram {
 }
 
 /**
- * A scene's layers on the GPU (Live backgrounds § 3b), owned by its [GlProgram]: one RGBA8 texture
- * with mipmaps per image the drawn layers read ([textureImages]), uploaded once from pixels
- * [ShaderImageLoader] decoded premultiplied on IO. [draw] lays the theme gradient, then each image
- * and sprite layer bottom to top with its blend, opacity, mask and pose ([ScenePoser]). Video,
- * shader and particle layers come with slices 3c and 3d; until then they are skipped.
+ * A scene's layers on the GPU (Live backgrounds § 3b, 3c), owned by its [GlProgram]:
+ *  - **Image and sprite layers:** one RGBA8 texture with mipmaps per image they read
+ *    ([textureImages]), uploaded once from pixels [ShaderImageLoader] decoded premultiplied on IO.
+ *  - **Video layers:** the § 2 copy ([VideoTexture]) of the scene's one video file, drawn like an
+ *    image (it is opaque, so premultiplied as it is). Before the first frame they are skipped.
+ *  - **Shader layers:** one [GlProgram] each (the prelude + the pack's text, compiled with the
+ *    scene and canary-guarded with it as one unit), with its own `images` ([shaderImages], straight
+ *    alpha like § 1). While the scene has one, it is drawn into a [SceneTargets] ping-pong pair:
+ *    each shader layer reads the layers so far as `uBelow` and writes the other target, and the
+ *    last target is blitted to the screen.
+ *
+ * [draw] lays the theme gradient, then each layer bottom to top with its blend, opacity, mask and
+ * pose ([ScenePoser]). Particle layers come with 3d; until then they are skipped.
  */
 internal class GlScene(val source: SceneSource) {
     private val layers: List<SceneLayer> = source.scene.layers.filter(::drawn)
@@ -125,11 +149,55 @@ internal class GlScene(val source: SceneSource) {
     private val layerTex = IntArray(layers.size) { paths.indexOf(layers[it].ownImage) }
     private val maskTex = IntArray(layers.size) { i -> layers[i].look.mask?.let(paths::indexOf) ?: -1 }
 
+    /** Each shader layer's program (null for other layers, and where the layer's text wasn't found). */
+    private val programs: Array<GlProgram?> = Array(layers.size) { i ->
+        (layers[i] as? SceneLayer.Shader)?.let { layer -> layerSpec(source, layer, i)?.let(::GlProgram) }
+    }
+
+    /** It has a shader layer to draw, so it renders through [SceneTargets]. */
+    val pingPong: Boolean = programs.any { it != null }
+
+    /** Every shader layer's images, layer after layer (each [GlProgram.spec]'s slots), decoded together within § 1's budget. */
+    val shaderImages: List<BoundImage?> = programs.filterNotNull().flatMap { it.spec.images }
+
     private val pose = LayerPose()
 
     /** Its textures are on the GPU (some may be missing; their layers are skipped). */
     var uploaded = false
         private set
+
+    /** The shader layers' images are on the GPU (true when there are none). */
+    var shaderImagesUploaded = shaderImages.isEmpty()
+        private set
+
+    /** Everything it draws is on the GPU: until then the scene is PENDING ([GlProgram.drawState]). */
+    val ready: Boolean get() = uploaded && shaderImagesUploaded
+
+    /** Starts compiling the shader layers with the scene's own program (the prelude, the fullscreen [vertex]). */
+    fun beginLayers(vertex: Int, prelude: String) {
+        for (p in programs) p?.begin(vertex, prelude, p.spec.source!!)
+    }
+
+    /** Every shader layer finished compiling and linking (see [GlProgram.complete]). */
+    fun layersComplete(parallel: Boolean): Boolean = programs.all { it?.complete(parallel) != false }
+
+    /**
+     * Reads the shader layers' results. A layer that failed is skipped when drawing, and its
+     * problem returned (`layers[3] glass.frag: …`); the rest of the scene still draws.
+     */
+    fun settleLayers(): List<String> {
+        val problems = ArrayList<String>()
+        for (p in programs) {
+            p ?: continue
+            val log = p.settle()
+            if (p.state == ProgramState.FAILED) {
+                Log.e("XrossScene", "${p.spec.label} ${p.cause?.name?.lowercase()} failed: ${p.error}")
+                if (log != null) Log.w("XrossScene", log.trim())
+                problems += "${p.spec.label}: ${p.error}"
+            }
+        }
+        return problems
+    }
 
     /** Uploads [slots] (parallel to [textureImages]; null: missing or left out). False when the driver refused one. */
     fun upload(slots: List<DecodedImage?>): Boolean {
@@ -159,8 +227,44 @@ internal class GlScene(val source: SceneSource) {
         return ok
     }
 
-    /** One frame on the current target ([width] × [height]): the gradient, then the layers. */
-    fun draw(quad: SceneQuadProgram, width: Int, height: Int, inputs: SceneInputs, top: FloatArray, bottom: FloatArray) {
+    /** Uploads the shader layers' images ([slots] parallel to [shaderImages]) into each layer's [ImageTextures]. */
+    fun uploadShaderImages(slots: List<DecodedImage?>): Boolean {
+        var ok = true
+        var at = 0
+        for (p in programs) {
+            p ?: continue
+            val n = p.spec.images.size
+            val mine = (at until at + n).map { slots.getOrNull(it) }
+            at += n
+            if (n == 0 || p.state == ProgramState.FAILED) continue
+            val textures = ImageTextures()
+            ok = textures.upload(mine) && ok
+            p.textures = textures
+        }
+        shaderImagesUploaded = true
+        return ok
+    }
+
+    /**
+     * One frame on a [width] × [height] target: the gradient, then the layers. [video] holds the
+     * scene's video frame (null: none yet). With shader layers and [targets] allocated, it draws
+     * through them and blits the result to framebuffer 0; [drawShader] draws a shader layer's
+     * program (every prelude uniform bound) with the given texture as `uBelow`. Without targets
+     * (the driver refused them) the shader layers are skipped.
+     */
+    fun draw(
+        quad: SceneQuadProgram,
+        width: Int,
+        height: Int,
+        inputs: SceneInputs,
+        top: FloatArray,
+        bottom: FloatArray,
+        video: VideoTexture?,
+        targets: SceneTargets?,
+        drawShader: (GlProgram, Int) -> Unit,
+    ) {
+        val through = pingPong && targets != null && targets.ensure(width, height)
+        if (through) targets!!.bindTarget()
         GLES30.glUseProgram(quad.handle)
         GLES30.glUniform1i(quad.uTex, 0)
         GLES30.glUniform1i(quad.uMask, 1)
@@ -177,13 +281,37 @@ internal class GlScene(val source: SceneSource) {
         val w = width.toFloat()
         val h = height.toFloat()
         for ((i, layer) in layers.withIndex()) {
-            val t = layerTex[i].takeIf { it >= 0 }?.let { tex[it] } ?: 0
+            if (layer is SceneLayer.Shader) {
+                val program = programs[i]
+                if (!through || program == null || program.state != ProgramState.READY) continue
+                unbindQuad()
+                shaderLayer(layer, program, targets!!, width, height, drawShader)
+                GLES30.glUseProgram(quad.handle)
+                GLES30.glEnable(GLES30.GL_BLEND)
+                continue
+            }
+            val t: Int
+            val tw: Int
+            val th: Int
+            val sampler: Int
+            if (layer is SceneLayer.Video) {
+                t = video?.texture ?: 0
+                tw = video?.size?.get(0)?.toInt() ?: 0
+                th = video?.size?.get(1)?.toInt() ?: 0
+                sampler = quad.linearSampler
+            } else {
+                val k = layerTex[i]
+                t = if (k >= 0) tex[k] else 0
+                tw = if (k >= 0) texW[k] else 0
+                th = if (k >= 0) texH[k] else 0
+                sampler = quad.sampler(layer.wrap)
+            }
             if (t == 0) continue
-            if (!ScenePoser.pose(layer, texW[layerTex[i]], texH[layerTex[i]], width, height, inputs, pose)) continue
+            if (!ScenePoser.pose(layer, tw, th, width, height, inputs, pose)) continue
             blend(layer.look.blend)
             GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
             GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, t)
-            GLES30.glBindSampler(0, quad.sampler(layer.wrap))
+            GLES30.glBindSampler(0, sampler)
             val mask = maskTex[i].takeIf { it >= 0 }?.let { tex[it] } ?: 0
             GLES30.glActiveTexture(GLES30.GL_TEXTURE1)
             GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, mask)
@@ -201,8 +329,48 @@ internal class GlScene(val source: SceneSource) {
             GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, 0, 4)
         }
         GLES30.glDisable(GLES30.GL_BLEND)
+        unbindQuad()
+        if (through) targets!!.present()
+    }
+
+    /**
+     * A shader layer: it writes the other target while reading this one as `uBelow`. Opaque and
+     * full-screen, it simply replaces the picture. With a `rect` or an `opacity` below 1, the
+     * picture is first copied across, then the layer is drawn inside the rect (a scissor) and mixed
+     * in at its opacity (a constant-alpha blend). Destination alpha is kept.
+     */
+    private fun shaderLayer(layer: SceneLayer.Shader, program: GlProgram, targets: SceneTargets, width: Int, height: Int, drawShader: (GlProgram, Int) -> Unit) {
+        val opacity = layer.look.opacity
+        if (opacity <= 1f / 512f) return
+        val rect = layer.look.rect
+        val partial = rect != null || opacity < 1f
+        if (partial) targets.copyAcross()
+        val below = targets.flip()
+        if (rect != null) {
+            val (x, y, rw, rh) = scissorOf(rect, width, height)
+            if (rw <= 0 || rh <= 0) return
+            GLES30.glEnable(GLES30.GL_SCISSOR_TEST)
+            GLES30.glScissor(x, y, rw, rh)
+        }
+        if (opacity < 1f) {
+            GLES30.glEnable(GLES30.GL_BLEND)
+            GLES30.glBlendColor(0f, 0f, 0f, opacity)
+            GLES30.glBlendFuncSeparate(GLES30.GL_CONSTANT_ALPHA, GLES30.GL_ONE_MINUS_CONSTANT_ALPHA, GLES30.GL_ZERO, GLES30.GL_ONE)
+        } else {
+            GLES30.glDisable(GLES30.GL_BLEND)
+        }
+        drawShader(program, below)
+        GLES30.glDisable(GLES30.GL_SCISSOR_TEST)
+        // Off unit 7 before the next layer writes the target it holds.
+        GLES30.glActiveTexture(GLES30.GL_TEXTURE0 + BELOW_UNIT)
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, 0)
+        GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
+    }
+
+    private fun unbindQuad() {
         GLES30.glBindSampler(0, 0)
         GLES30.glBindSampler(1, 0)
+        GLES30.glActiveTexture(GLES30.GL_TEXTURE1)
         GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, 0)
         GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
         GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, 0)
@@ -218,25 +386,56 @@ internal class GlScene(val source: SceneSource) {
     fun release() {
         for (i in tex.indices) if (tex[i] != 0) GLES30.glDeleteTextures(1, tex, i)
         tex.fill(0)
+        for (p in programs) p?.release()
         uploaded = false
+        shaderImagesUploaded = shaderImages.isEmpty()
     }
 
     companion object {
-        /** The layer types drawn so far (3b); the others are skipped until their slice lands. */
-        fun drawn(layer: SceneLayer): Boolean = layer is SceneLayer.Image || layer is SceneLayer.Sprite
+        /** Texture unit of a shader layer's `uBelow` (0 `uPrev`, 1 `uField`, 2–5 `uImage0..3`, 6 `uVideo`). */
+        const val BELOW_UNIT = 7
+
+        /** The layer types drawn so far (3c); particles are skipped until 3d. */
+        fun drawn(layer: SceneLayer): Boolean = layer !is SceneLayer.Particles
 
         /** A scene with at least one layer this renderer draws; else it shows its poster. */
         fun draws(source: SceneSource?): Boolean = source != null && source.scene.layers.any(::drawn)
 
-        /** Each distinct image the drawn layers and their masks read, bottom layer first. */
+        /** Each distinct image the drawn quad layers and their masks read, bottom layer first (shader layers' own images aren't here). */
         fun textureImages(source: SceneSource): List<BoundImage> {
             val out = LinkedHashMap<String, BoundImage>()
             for (layer in source.scene.layers.filter(::drawn)) {
+                if (layer is SceneLayer.Shader) continue
                 for (path in listOfNotNull(layer.ownImage, layer.look.mask)) {
                     out.getOrPut(path) { BoundImage(ShaderImage(path, mipmap = true), source.images[path]) }
                 }
             }
             return out.values.toList()
+        }
+
+        /**
+         * The program a shader layer runs: CUSTOM-like, keyed under the scene's key with the layer's
+         * index among the drawn layers, labelled `scene.json › layers[i] glass.frag`. Null when the
+         * layer's text wasn't found (the loader reported it).
+         */
+        fun layerSpec(source: SceneSource, layer: SceneLayer.Shader, index: Int): ShaderSpec? {
+            val text = source.shaders[layer.path] ?: return null
+            return ShaderSpec(
+                key = "${source.key}#$index",
+                preset = ShaderPreset.CUSTOM,
+                label = "${source.path} › layers[$index] ${layer.path}",
+                source = text,
+                images = layer.images.map { img -> img?.let { BoundImage(it, source.images[it.path]) } },
+            )
+        }
+
+        /** A `rect` (screen fractions, y down) as a GL scissor box on a [width] × [height] target (y up), clamped to it. */
+        fun scissorOf(rect: LayerRect, width: Int, height: Int): IntArray {
+            val x0 = (rect.x * width).roundToInt().coerceIn(0, width)
+            val x1 = ((rect.x + rect.width) * width).roundToInt().coerceIn(0, width)
+            val top = (rect.y * height).roundToInt().coerceIn(0, height)
+            val bottom = ((rect.y + rect.height) * height).roundToInt().coerceIn(0, height)
+            return intArrayOf(x0, height - bottom, x1 - x0, bottom - top)
         }
 
         /**
@@ -251,6 +450,98 @@ internal class GlScene(val source: SceneSource) {
                 LayerBlend.MULTIPLY -> GLES30.glBlendFuncSeparate(GLES30.GL_DST_COLOR, GLES30.GL_ONE_MINUS_SRC_ALPHA, GLES30.GL_ZERO, GLES30.GL_ONE)
             }
         }
+    }
+}
+
+/**
+ * The ping-pong pair a scene with shader layers draws into (Live backgrounds § 3c): two RGBA8
+ * targets at the surface size, the pattern [FeedbackTargets] uses. Layers draw into the current
+ * one; a shader layer [flip]s, reading the old one as `uBelow` while writing the other; [present]
+ * blits the current one to the screen. Owned by the renderer, allocated only while such a scene
+ * shows (~2 × 4 bytes per render pixel).
+ */
+internal class SceneTargets {
+    private val tex = IntArray(2)
+    private val fbo = IntArray(2)
+    private var cur = 0
+    private var width = 0
+    private var height = 0
+
+    val allocated: Boolean get() = fbo[0] != 0
+
+    /** Allocates at [w]×[h] (kept while the size holds); false when the driver refused. */
+    fun ensure(w: Int, h: Int): Boolean {
+        if (allocated && w == width && h == height) return true
+        release()
+        GLES30.glGenTextures(2, tex, 0)
+        GLES30.glGenFramebuffers(2, fbo, 0)
+        for (i in 0..1) {
+            GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, tex[i])
+            GLES30.glTexImage2D(GLES30.GL_TEXTURE_2D, 0, GLES30.GL_RGBA8, w, h, 0, GLES30.GL_RGBA, GLES30.GL_UNSIGNED_BYTE, null)
+            GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MIN_FILTER, GLES30.GL_LINEAR)
+            GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MAG_FILTER, GLES30.GL_LINEAR)
+            GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_S, GLES30.GL_CLAMP_TO_EDGE)
+            GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_T, GLES30.GL_CLAMP_TO_EDGE)
+            GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, fbo[i])
+            GLES30.glFramebufferTexture2D(GLES30.GL_FRAMEBUFFER, GLES30.GL_COLOR_ATTACHMENT0, GLES30.GL_TEXTURE_2D, tex[i], 0)
+            if (GLES30.glCheckFramebufferStatus(GLES30.GL_FRAMEBUFFER) != GLES30.GL_FRAMEBUFFER_COMPLETE) {
+                GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
+                GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, 0)
+                Log.e("XrossScene", "scene targets incomplete at ${w}x$h; shader layers are skipped")
+                release()
+                return false
+            }
+        }
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, 0)
+        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
+        width = w
+        height = h
+        cur = 0
+        return true
+    }
+
+    /** Draws go to the current target. */
+    fun bindTarget() {
+        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, fbo[cur])
+    }
+
+    /** Copies the current picture into the other target (a shader layer that only covers part, or mixes in). */
+    fun copyAcross() {
+        GLES30.glBindFramebuffer(GLES30.GL_READ_FRAMEBUFFER, fbo[cur])
+        GLES30.glBindFramebuffer(GLES30.GL_DRAW_FRAMEBUFFER, fbo[1 - cur])
+        GLES30.glBlitFramebuffer(0, 0, width, height, 0, 0, width, height, GLES30.GL_COLOR_BUFFER_BIT, GLES30.GL_NEAREST)
+        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, fbo[cur])
+    }
+
+    /** Makes the other target current and bound; returns the texture of the one just left (`uBelow`). */
+    fun flip(): Int {
+        val below = tex[cur]
+        cur = 1 - cur
+        bindTarget()
+        return below
+    }
+
+    /** Blits the current picture to the screen, leaving framebuffer 0 bound. */
+    fun present() {
+        GLES30.glBindFramebuffer(GLES30.GL_READ_FRAMEBUFFER, fbo[cur])
+        GLES30.glBindFramebuffer(GLES30.GL_DRAW_FRAMEBUFFER, 0)
+        GLES30.glBlitFramebuffer(0, 0, width, height, 0, 0, width, height, GLES30.GL_COLOR_BUFFER_BIT, GLES30.GL_NEAREST)
+        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
+    }
+
+    fun release() {
+        if (fbo[0] != 0) GLES30.glDeleteFramebuffers(2, fbo, 0)
+        if (tex[0] != 0) GLES30.glDeleteTextures(2, tex, 0)
+        forget()
+    }
+
+    /** The context died with its handles: drop them without GL calls. */
+    fun forget() {
+        fbo.fill(0)
+        tex.fill(0)
+        width = 0
+        height = 0
+        cur = 0
     }
 }
 

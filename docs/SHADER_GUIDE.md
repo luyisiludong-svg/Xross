@@ -22,6 +22,7 @@ settings, §8 `shaderPreset` / `shaderPath` and the rest of the `effects` keys),
 7. [`BLACK_HOLE`, a worked example](#7-black_hole-a-worked-example)
 8. [Images and the focus](#8-images-and-the-focus)
 9. [Video](#9-video)
+10. [Scene shader layers](#10-scene-shader-layers)
 
 ## 1. How the background is drawn
 
@@ -72,6 +73,7 @@ writes `fragColor`. Compile errors are reported with line numbers of your file, 
 | `uFocus` | `vec2` | the focused item's centre, 0…1 in `gl_FragCoord.xy / uResolution` space (y up), eased; [§8](#8-images-and-the-focus) |
 | `uImage0`…`uImage3`, `uImageSize0`…`uImageSize3` | | the pack's images, `effects.shaderImages`; [§8](#8-images-and-the-focus) |
 | `uVideo`, `uVideoSize`, `uVideoRect` | | the look's background video, `effects.videoPath`; [§9](#9-video) |
+| `uBelow` | `sampler2D` | in a scene's shader layer, the layers below it; [§10](#10-scene-shader-layers) |
 
 Conventions the built-ins follow:
 
@@ -205,7 +207,7 @@ Reference costs on the Galaxy A55, profiling build, watchdog p90 (§3.39):
   `videoFit`, the VIDEO preset's place in the cascade, the placements, the copy size and when the
   player plays, holds or lets go; `SceneTest` covers `scene.json` (every layer type, the problems,
   the budget), `effects.scenePath` in the cascade, the scene's key, its poster, the exporter, which images a
-  drawn scene decodes and the sharp resolution; `ScenePoseTest` (`:theme:engine`) covers a layer's
+  drawn scene decodes, the sharp resolution, and shader layers' programs (keys, images, rects); `ScenePoseTest` (`:theme:engine`) covers a layer's
   box, parallax, sway, pulse, the input drivers, sprite cells and scrolling.
 
 ## 7. `BLACK_HOLE`, a worked example
@@ -439,3 +441,37 @@ through rippled glass that follows the bass, shifted a little toward `uFocus`, w
 `plain` variant shows the same video through `VIDEO`. In the preview:
 `?frag=examples/video/glass.frag&theme=examples/video/theme.json`, or
 `?frag=../../app/src/main/assets/shaders/video.frag&video=<a .mp4>&fit=FIT` for the preset alone.
+
+## 10. Scene shader layers
+
+A `shader` layer in a [layered scene](THEME_SPECIFICATION.md#layered-scenes) is a full-screen
+shader like the ones above, drawn between the scene's other layers. It gets the whole prelude
+(time, colours, music, `uFocus`, its own `images` as `uImage0..3`, the scene's video as `uVideo`)
+plus one more input:
+
+```glsl
+uniform sampler2D uBelow;    // the layers below, composited so far (texture unit 7)
+```
+
+* **Sample it at `gl_FragCoord.xy / uResolution`.** It is RGBA8 at the render size, linear and
+  clamped, so small offsets (ripples, refraction, a blur of a few taps) are cheap.
+* **What you write replaces what is below** inside the layer's `rect` (the whole screen without
+  one), mixed in at its `opacity`. Write alpha 1; to leave a pixel as it was, return
+  `texture(uBelow, uv)`.
+* **Not available in a layer:** `uPrev` and `uField` (`uFresh` is 1 and `uPass` is 1). Outside a
+  scene `uBelow` samples black.
+* **Cost.** Each shader layer is a full pass and the scene draws through two render targets while
+  it has one, so the budget counts a shader layer as two screens. The watchdog times the whole
+  scene, not each layer.
+* **Errors.** A layer that doesn't compile is left out (its error in the notice, with its place in
+  `scene.json`) and the rest of the scene still draws. The scene is crash-guarded as one unit.
+
+```glsl
+// rain_glass.frag: the scene below, seen through running water (uImage0: a drop normal map).
+void main() {
+    vec2 uv = gl_FragCoord.xy / uResolution;
+    vec2 n = texture(uImage0, uv * vec2(2.0, 1.0) + vec2(0.0, uTime * 0.05)).xy * 2.0 - 1.0;
+    vec3 col = texture(uBelow, uv + n * 0.01).rgb;
+    fragColor = vec4(col * (0.9 + 0.1 * n.y), 1.0);
+}
+```

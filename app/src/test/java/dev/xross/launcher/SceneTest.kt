@@ -35,9 +35,10 @@ import org.robolectric.RobolectricTestRunner
 import java.io.File
 
 /**
- * Live backgrounds § 3, slice 3a: `scene.json` parsing (every layer type, the shared fields,
+ * Live backgrounds § 3, slices 3a–3c: `scene.json` parsing (every layer type, the shared fields,
  * motions), per-layer problems, the budget, `effects.scenePath` in the cascade, the loader, the
- * scene's key, the poster, and the exporter.
+ * scene's key, the poster, the exporter, what the renderer decodes, and the shader layers'
+ * programs (keys, labels, images, rects, the canary).
  */
 @RunWith(RobolectricTestRunner::class)
 class SceneTest {
@@ -191,8 +192,12 @@ class SceneTest {
         assertEquals(listOf(8), dropped.map { it.first })
         assertTrue(dropped.single().second, "8 screens" in dropped.single().second)
 
-        val videos = SceneBudget.fit(List(3) { SceneLayer.Video("v.mp4", dev.xross.launcher.theme.shader.LayerLook(rect = LayerRect(0f, 0f, 0.1f, 0.1f))) })
-        assertEquals(2, videos.size)
+        fun video(path: String) = SceneLayer.Video(path, dev.xross.launcher.theme.shader.LayerLook(rect = LayerRect(0f, 0f, 0.1f, 0.1f)))
+        assertEquals("layers may share the one video file", 3, SceneBudget.fit(List(3) { video("v.mp4") }).size)
+        val why = ArrayList<String>()
+        val oneFile = SceneBudget.fit(listOf(video("v.mp4"), video("w.mp4"), video("v.mp4"))) { _, w -> why += w }
+        assertEquals(listOf("v.mp4", "v.mp4"), oneFile.map { (it as SceneLayer.Video).path })
+        assertTrue(why.toString(), why.single().contains("one video file (v.mp4)"))
         val shaders = SceneBudget.fit(List(5) { SceneLayer.Shader("s.frag", look = dev.xross.launcher.theme.shader.LayerLook(rect = LayerRect(0f, 0f, 0.1f, 0.1f))) })
         assertEquals(4, shaders.size)
         val many = SceneBudget.fit(List(20) { image(LayerRect(0f, 0f, 0.1f, 0.1f)) })
@@ -283,9 +288,10 @@ class SceneTest {
         val spec = t.shaderLibrary.spec(key)!!
         assertEquals("the poster is uImage0", listOf("art/poster.png"), spec.images.map { it?.image?.path })
         assertNotNull(spec.images.single()!!.source)
-        assertFalse("only the built-in poster program runs for now", spec.untrusted)
+        assertTrue("its shader layer is pack code: the scene is canary-guarded as one unit", spec.untrusted)
         val night = t.shaderLibrary.spec(t.shaderLibrary.keyOf(t.look(category = "games").shader))!!
         assertNull("a missing poster binds an empty slot", night.images.single()!!.source)
+        assertFalse("no shader layer: only built-in programs run", night.untrusted)
     }
 
     @Test fun anUnreadableSceneIsReportedAndKeyedMissing() {
@@ -367,7 +373,7 @@ class SceneTest {
             dev.xross.launcher.ui.GlScene.textureImages(src).map { it.image.path },
         )
         assertTrue(dev.xross.launcher.ui.GlScene.textureImages(src).all { it.image.mipmap && it.source != null })
-        assertFalse("nothing drawable yet: the poster program shows it", dev.xross.launcher.ui.GlScene.draws(t.scenes.getValue("dots.json")))
+        assertFalse("particles only, until 3d: the poster program shows it", dev.xross.launcher.ui.GlScene.draws(t.scenes.getValue("dots.json")))
 
         val lib = t.shaderLibrary
         assertEquals(1920, dev.xross.launcher.ui.WaveRenderer.longSide(lib, lib.keyOf(t.look().shader)))
@@ -383,6 +389,76 @@ class SceneTest {
         val t = loader.load("keys")
         assertTrue(t.problems.toString(), t.problems.isEmpty())
     }
+
+    // region Video and shader layers (3c)
+
+    @Test fun videoAndShaderLayersAreDrawnAndShaderLayersAreTheirOwnPrograms() {
+        pack(
+            "city3c",
+            """"effects": {"scenePath": "scene.json"}""",
+            cityFiles + ("scene.json" to """{"layers": [
+                {"type": "image", "path": "art/sky.png"},
+                {"type": "video", "path": "loop.mp4", "blend": "SCREEN"},
+                {"type": "shader", "path": "glass.frag", "images": ["art/drops.png", null, {"path": "art/sky.png", "wrap": "REPEAT"}]},
+                {"type": "particles", "rate": 5},
+                {"type": "shader", "path": "missing.frag"},
+                {"type": "shader", "path": "glass.frag", "opacity": 0.5, "rect": [0, 0.5, 1, 0.5]}
+            ]}"""),
+        )
+        val t = loader.load("city3c")
+        assertTrue(t.problems.toString(), t.problems.any { "missing.frag" in it })
+        val src = t.scenes.getValue("scene.json")
+        assertEquals("loop.mp4", src.scene.video)
+        assertTrue(dev.xross.launcher.ui.GlScene.draws(src))
+        assertEquals(
+            "a shader layer's images are its own, not the quads' textures",
+            listOf("art/sky.png"),
+            dev.xross.launcher.ui.GlScene.textureImages(src).map { it.image.path },
+        )
+        // Drawn layers: sky 0, video 1, glass 2, missing 3, glass 4 (the particles aren't drawn yet).
+        val shaders = src.scene.layers.filterNot { it is SceneLayer.Particles }.withIndex().filter { it.value is SceneLayer.Shader }
+        val specs = shaders.map { (i, layer) -> dev.xross.launcher.ui.GlScene.layerSpec(src, layer as SceneLayer.Shader, i) }
+        assertNull("a layer whose text is missing has no program", specs[1])
+        val glass = specs[0]!!
+        assertEquals(ShaderPreset.CUSTOM, glass.preset)
+        assertEquals("${src.key}#2", glass.key)
+        assertEquals("scene.json › layers[2] glass.frag", glass.label)
+        assertEquals("void main() { fragColor = vec4(1.0); }\n", glass.source)
+        assertEquals(listOf("art/drops.png", null, "art/sky.png"), glass.images.map { it?.image?.path })
+        assertEquals(ImageWrap.REPEAT, glass.images[2]!!.image.wrap)
+        assertTrue("images are found like § 1's", glass.images.filterNotNull().all { it.source != null })
+        assertEquals("${src.key}#4", specs[2]!!.key)
+        assertTrue(specs[2]!!.images.isEmpty())
+    }
+
+    @Test fun aShaderLayerReportsTheFieldsItIgnores() {
+        val (scene, problems) = parse(
+            """{"layers": [{"type": "shader", "path": "a.frag", "opacity": 0.5, "rect": [0, 0, 1, 0.5], "blend": "ADD", "parallax": 0.3, "sway": 2}]}""",
+        )
+        val layer = scene!!.layers.single() as SceneLayer.Shader
+        assertEquals(0.5f, layer.look.opacity)
+        assertEquals(LayerRect(0f, 0f, 1f, 0.5f), layer.look.rect)
+        assertEquals(problems.toString(), 3, problems.size)
+        for (key in listOf("blend", "parallax", "sway")) {
+            assertTrue(problems.toString(), problems.any { it.startsWith("scene.json: layers[0].$key is ignored on a shader layer") })
+        }
+    }
+
+    @Test fun aRectIsAScissorBoxWithYUp() {
+        fun box(r: LayerRect) = dev.xross.launcher.ui.GlScene.scissorOf(r, 1000, 500).toList()
+        assertEquals("the bottom half", listOf(0, 0, 1000, 250), box(LayerRect(0f, 0.5f, 1f, 0.5f)))
+        assertEquals("the top-left quarter", listOf(0, 250, 500, 250), box(LayerRect(0f, 0f, 0.5f, 0.5f)))
+        assertEquals("clamped to the target", listOf(900, 0, 100, 500), box(LayerRect(0.9f, -1f, 0.5f, 3f)))
+        assertEquals("off screen is empty", 0, box(LayerRect(1.5f, 0f, 0.2f, 1f))[2])
+    }
+
+    @Test fun thePreludeDeclaresUBelow() {
+        val prelude = File("src/main/assets/shaders/prelude.glsl").readText()
+        assertTrue(prelude.contains("uniform sampler2D uBelow;"))
+        assertEquals(7, dev.xross.launcher.ui.GlScene.BELOW_UNIT)
+    }
+
+    // endregion
 
     // endregion
 }

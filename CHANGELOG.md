@@ -29,6 +29,11 @@
   parallax that follows the focused item, and motion driven by the music, category switches and
   the time of day. `"resolution": "sharp"` renders the background at 1920 px instead of 1280.
   Video, shader and particle layers follow in later updates.
+- **Layered scenes draw video and shader layers.** A video layer shows the scene's video (one
+  file per scene, which several layers may show) placed and blended like an image. A shader layer
+  is a full-screen shader that reads the layers below it as `uBelow` and replaces them inside its
+  `rect`, at its opacity; one that doesn't compile is left out with a notice. A scene with shader
+  layers is crash-guarded like a pack's shader. Particle layers follow in a later update.
 
 ## 0.2.2.0-beta — 2026-11-21
 

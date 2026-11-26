@@ -11,7 +11,7 @@ Status: ✅ done · ◐ code done, device check open · ⬜ not started.
 | --- | --- | --- | --- |
 | 1 | Image inputs for pack shaders (`uImage0..3`, `uFocus`) | M | ◐ on `feat/live-backgrounds-image-inputs`; A55 timing open |
 | 2 | Video backgrounds (`effects.videoPath`, `uVideo`, VIDEO preset) | L | ◐ on `feat/live-backgrounds-image-inputs`; emulator checked, A55 runs open; stretch not started |
-| 3 | Layered scenes (`scene.json`: images, sprites, video, effect shaders, GPU particles) | L × 5–6 | ◐ 3a, 3b on `feat/live-backgrounds-image-inputs` (emulator checked); 3c–3f not started |
+| 3 | Layered scenes (`scene.json`: images, sprites, video, effect shaders, GPU particles) | L × 5–6 | ◐ 3a–3c on `feat/live-backgrounds-image-inputs` (3b, 3c emulator checked); 3d–3f not started |
 
 **Order:** 1, then 2, then 3. Section 2 reuses § 1's texture units and upload path, and § 3 is
 built from § 1 and § 2 layers. Each section ships on its own: § 1 alone already enables painted
@@ -372,6 +372,53 @@ baseline.
 >   equations).
 > - **Next:** 3c, video layers (§ 2's copy pass, per layer) and shader layers with `uBelow` and
 >   ping-pong targets.
+>
+> **Progress (2026-11-26, 3c, same branch).** Code, unit tests, docs and an emulator run are done.
+> 3d–3f are not started.
+>
+> - **Video layers.** They draw § 2's `VideoTexture` copy through the quad program, posed and
+>   blended like an image, with a bilinear sampler of its own (the copy has no mipmaps).
+>   `MainActivity` gives the scene's video file (`Scene.video`) to the same `BackgroundVideo`
+>   player, so the policy (hold, release, the snap handoff) and the failure path are § 2's. A
+>   failed file leaves the layer empty and the rest of the scene drawn.
+> - **Shader layers.** Each is a `GlProgram` of its own (`GlScene.layerSpec`: CUSTOM, keyed
+>   `<scene key>#<i>`, labelled `scene.json › layers[i] glass.frag`), compiled with the scene's
+>   program and settled with it (`poll()` waits for both under parallel compile). Its `images` are
+>   decoded straight, all shader layers sharing § 1's 8 MP, and the scene stays PENDING until they
+>   are up. `drawCall` draws it, so every prelude uniform is bound, plus `uBelow` on unit 7.
+> - **Ping-pong.** `SceneTargets` in `GlScene.kt`: two RGBA8 targets owned by the renderer, made
+>   while a scene with a shader layer shows and freed when it leaves. Layers draw into the current
+>   one; a shader layer flips and reads the old one as `uBelow`; the last one is blitted to the
+>   screen, then the filter pass. A scene without shader layers still draws straight to the screen.
+> - **Canary.** `ShaderSpec.untrusted` is now true for a SCENE with shader layers: armed while it
+>   compiles (the layers with it) and until proven on screen, one unit as planned.
+> - **Deviations:**
+>   - **One video file per scene, not two video layers.** `SceneBudget.MAX_VIDEOS` is 1 distinct
+>     file; any number of layers may show it. That keeps § 2's rule of one hardware decoder in use
+>     and its one player.
+>   - **A shader layer isn't posed or blended.** It draws over its `rect` (a scissor; else the
+>     screen) and mixes in at its `opacity` (a constant-alpha blend after a copy across). `blend`,
+>     `fit`, `anchor`, `parallax`, `mask` and the motions are reported as ignored on it.
+>   - **No `uPrev` or `uField` in a layer** (`uFresh` = 1, `uPass` = 1, their units unbound).
+>   - **A shader layer that fails to compile is left out** with a notice, not the whole scene.
+> - **Tests:** `SceneTest` (+4, now 17): video and shader layers drawn, the layers' programs (keys,
+>   labels, texts, images, a missing text), a shader layer's ignored keys, rects as scissor boxes,
+>   `uBelow` in the prelude; the budget's one video file; the canary flag. The full
+>   `:app:testDebugUnitTest` and `:theme:engine:test` pass, and `validateShaders` is clean (13).
+> - **Emulator** (API 37, `-gpu host`, debug build, a generated 6-layer scene: a scrolling sky,
+>   two layers of one video (one SCREEN with sway), a full-screen ripple shader layer, a
+>   half-opacity tint shader layer over the bottom 40 % with its own image, and an image above):
+>   - Everything draws in order; the ripple bends the videos and sky, the tint stays inside its
+>     rect at half strength, and the image above it is sharp.
+>   - The video frame is copied at 640×360 and the player plays and holds by the § 2 policy.
+>   - The watchdog passed (p90 2.83 ms, glFinish). After a hot reload with a broken layer it
+>     tripped once (11.7 ms, while the launcher drew icons); emulator timings mean little, and 3f
+>     times it on the A55.
+>   - A layer that doesn't compile is reported (`layers[4] tint.frag compile failed: line 1:
+>     'nope' : undeclared identifier`) and left out; fixing the file reloads the scene under its
+>     old key.
+> - **Not checked:** the A55 (no device), and a crash in a shader layer tripping the canary.
+> - **Next:** 3d, GPU particles, and turning off the Compose particles under a scene.
 
 **Goal.** A stack of layers as in Wallpaper Engine's scene type. Each layer can move, react to
 focus, audio and time, and carry its own effect. Sections 1 and 2 are the building blocks.
@@ -426,7 +473,7 @@ the same way.
 
 **Budget.**
 - The loader estimates overdraw: the screen fractions covered by all layers, with shader layers
-  counted ×2. Above 8 screens (6 in the first draft; see the progress note), or with more than 16 layers, 2 video layers, 4 shader layers or
+  counted ×2. Above 8 screens (6 in the first draft; see the progress note), or with more than 16 layers, 1 video file (2 video layers in the first draft; see 3c), 4 shader layers or
   2,000 particles, it reports a problem and drops the topmost layers that don't fit.
 - The watchdog measures the whole scene as one program. A slow or crashing scene is retired to
   its `poster` (else its first image layer, drawn alone), not to the wave. That's a better
@@ -451,7 +498,7 @@ the scene, the same way it wins over a pack's shader today: opaque, covering, wa
 | --- | --- | --- |
 | 3a ✅ | `scene.json` model, loader, problems, key, poster; unit tests | M |
 | 3b ✅ | Quad program; image and sprite layers; fit, anchor, blend, opacity; motions; resolution switch | L |
-| 3c | Video layer (§ 2's copy pass); shader layers with `uBelow` and ping-pong targets | M |
+| 3c ✅ | Video layer (§ 2's copy pass); shader layers with `uBelow` and ping-pong targets | M |
 | 3d | GPU particles; turns off Compose particles under a scene | M–L |
 | 3e | Parallax from `uFocus`; tilt setting; audio, transition and daylight drivers | S–M |
 | 3f | Overdraw budget, poster fallback, canary as one unit; A55 timings; spec, guide, a sample scene pack | M |

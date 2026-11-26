@@ -26,6 +26,10 @@ uniform vec4 uImageSize0, uImageSize1, uImageSize2, uImageSize3; // w, h, 1/w, 1
 uniform sampler2D uVideo;
 uniform vec4 uVideoSize;     // w, h, 1/w, 1/h of the frame in texels; 0 with no video
 uniform vec4 uVideoRect;     // where effects.videoFit places it: left, bottom, width, height in render pixels
+// Scene shader layers only (Live backgrounds § 3c): the layers below, composited so far, on texture
+// unit 7 (RGBA8 at the render size, linear, clamped); sample at gl_FragCoord.xy / uResolution.
+// Your output replaces them inside the layer's rect. Black outside a scene.
+uniform sampler2D uBelow;
 // Feedback (optional): a shader that reads uPrev gets last frame's picture (RGBA8, the render
 // size, linear filtering, clamped). Fade it per second with uFrameDt, and ignore it where
 // uFresh is 1.0 (first frame, after a pause or resize, and in still/E-Ink mode).

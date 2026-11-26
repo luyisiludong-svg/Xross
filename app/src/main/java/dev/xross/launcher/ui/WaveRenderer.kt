@@ -226,6 +226,9 @@ class WaveRenderer(
     /** A layered scene's decoded textures, likewise (Live backgrounds § 3b). */
     private val decodedScenes = java.util.concurrent.ConcurrentLinkedQueue<Pair<GlProgram, DecodedImages>>()
 
+    /** A scene's shader layers' decoded images (Live backgrounds § 3c), straight alpha like § 1's. */
+    private val decodedLayers = java.util.concurrent.ConcurrentLinkedQueue<Pair<GlProgram, DecodedImages>>()
+
     /** What moves a scene this frame; filled in [renderScene]. */
     private val sceneInputs = SceneInputs()
 
@@ -262,6 +265,8 @@ class WaveRenderer(
     private val filterPass = ScreenFilterPass()
     /** The textured-quad program scenes are drawn with (Live backgrounds § 3b). */
     private val sceneQuad = SceneQuadProgram()
+    /** The ping-pong pair a scene with shader layers draws through (Live backgrounds § 3c). */
+    private val sceneTargets = SceneTargets()
     /** The background video's surface and its copy (Live backgrounds § 2). */
     private val video = VideoTexture { onVideoFrame?.invoke() }
     /** The driver refused the video's textures in this context: don't retry every frame. */
@@ -324,8 +329,10 @@ class WaveRenderer(
         feedback.forget()
         feedbackKey = null
         field.forget()
+        sceneTargets.forget()
         decoded.clear() // decoded for programs of the dead context; theirs are requested again
         decodedScenes.clear()
+        decodedLayers.clear()
         // The video's SurfaceTexture belonged to the old context: a new one, a new surface for the player.
         if (video.created) {
             video.forget()
@@ -524,20 +531,24 @@ class WaveRenderer(
         }
         // A scene whose file couldn't be read or parsed has nothing to draw (Live backgrounds § 3).
         val unreadable = spec.preset == ShaderPreset.SCENE && spec.scene == null
+        val custom = spec.preset == ShaderPreset.CUSTOM
         val body = when {
-            spec.untrusted -> spec.source
+            custom -> spec.source
             unreadable -> null
             else -> body(spec.preset)
         }
         val pre = prelude ?: asset(PRELUDE_FILE)?.also { prelude = it }
         when {
-            body == null -> program.fail(ShaderStatus.Cause.MISSING, if (spec.untrusted || unreadable) "can't read ${spec.label}" else "missing from the app")
+            body == null -> program.fail(ShaderStatus.Cause.MISSING, if (custom || unreadable) "can't read ${spec.label}" else "missing from the app")
             pre == null -> program.fail(ShaderStatus.Cause.MISSING, "the shader prelude is missing from the app")
             else -> {
-                if (spec.untrusted) canary?.arm(spec.key) // a driver that crashes compiling it
+                // A driver that crashes compiling it (a scene's shader layers compile with it).
+                if (spec.untrusted) canary?.arm(spec.key)
                 // A scene the quad program can draw shows its layers; else its poster (this program).
                 program.layered = sceneQuad.ready && GlScene.draws(spec.scene)
+                if (program.layered) program.scene = GlScene(spec.scene!!)
                 program.begin(vertex, pre, body)
+                if (program.state != ProgramState.FAILED) program.scene?.beginLayers(vertex, pre)
                 if (blocking || !parallel || program.state != ProgramState.PENDING) settle(program)
                 if (program.state != ProgramState.FAILED) requestImages(program)
             }
@@ -546,7 +557,12 @@ class WaveRenderer(
 
     private fun settle(program: GlProgram) {
         val log = program.settle()
+        // Live backgrounds § 3c: a scene's shader layers; one that fails is left out, the rest draws.
+        val layerProblems = program.scene?.takeIf { program.state == ProgramState.READY }?.settleLayers().orEmpty()
         if (program.spec.untrusted) canary?.disarm(program.spec.key)
+        if (layerProblems.isNotEmpty()) {
+            health?.notice("layers:${program.spec.key}", "Scene ${program.spec.label}: ${layerProblems.joinToString("; ")} · left out")
+        }
         if (log != null) {
             // The driver's own line, verbatim, then the whole log for context.
             val raw = log.lineSequence().map { it.trim() }.firstOrNull { it.startsWith("ERROR", true) } ?: log.lineSequence().firstOrNull().orEmpty()
@@ -575,14 +591,20 @@ class WaveRenderer(
         }
     }
 
-    /** Live backgrounds § 3b: decodes a layered scene's textures (premultiplied, within the scene budget). */
+    /**
+     * Live backgrounds § 3b: decodes a layered scene's textures (premultiplied, within the scene
+     * budget), and § 3c: its shader layers' images (straight alpha, within § 1's budget together).
+     */
     private fun requestScene(program: GlProgram) {
-        val source = program.spec.scene ?: return
-        val scene = GlScene(source)
-        program.scene = scene
+        val scene = program.scene ?: return
         val decoder = imageDecoder ?: return
         decoder.decode(scene.textureImages, maxImageSide, dev.xross.launcher.theme.shader.Scene.TEXTURE_BUDGET_PIXELS, premultiplied = true) { result ->
             decodedScenes.add(program to result)
+            onImagesDecoded?.invoke()
+        }
+        if (scene.shaderImages.isEmpty()) return
+        decoder.decode(scene.shaderImages, maxImageSide, ShaderImage.BUDGET_PIXELS, premultiplied = false) { result ->
+            decodedLayers.add(program to result)
             onImagesDecoded?.invoke()
         }
     }
@@ -600,6 +622,17 @@ class WaveRenderer(
                 health?.notice("images:${program.spec.key}", "Scene ${program.spec.label}: ${problems.joinToString("; ")}")
             } else if (BuildConfig.PERF_LOG) {
                 Log.i(TAG, "scene uploaded ${program.spec.key}: ${result.slots.joinToString { it?.let { d -> "${d.width}x${d.height}" } ?: "-" }}")
+            }
+        }
+        while (true) {
+            val (program, result) = decodedLayers.poll() ?: break
+            val scene = program.scene
+            if (programs[program.spec.key] !== program || program.handle == 0 || program.state == ProgramState.FAILED || scene == null) continue
+            val ok = scene.uploadShaderImages(result.slots)
+            val problems = result.problems + if (ok) emptyList() else listOf("the GPU refused an image")
+            if (problems.isNotEmpty()) {
+                Log.w(TAG, "${program.spec.label} shader layer images: ${problems.joinToString("; ")}")
+                health?.notice("layer-images:${program.spec.key}", "Scene ${program.spec.label}: ${problems.joinToString("; ")}")
             }
         }
         while (true) {
@@ -649,7 +682,7 @@ class WaveRenderer(
     private fun poll() {
         if (!parallel) return
         for (program in programs.values) {
-            if (program.state == ProgramState.PENDING && program.complete(parallel)) settle(program)
+            if (program.state == ProgramState.PENDING && program.complete(parallel) && program.scene?.layersComplete(parallel) != false) settle(program)
         }
     }
 
@@ -688,6 +721,7 @@ class WaveRenderer(
             feedbackKey = null
         }
         if (next?.usesField != true && field.allocated) field.release()
+        if (next?.scene?.pingPong != true && sceneTargets.allocated) sceneTargets.release()
         if (prev != null && prev !== next) {
             val gone = prev.spec.key !in (synced?.keys ?: emptySet()) && prev.spec.key != ShaderLibrary.WAVE_KEY
             if (gone) programs.remove(prev.spec.key)
@@ -706,7 +740,7 @@ class WaveRenderer(
         if (!program.warmed) {
             // Straight to the screen, never into the feedback history (a 1x1 corner of nothing).
             GLES30.glViewport(0, 0, 1, 1)
-            if (program.layered) renderScene(program, still) else drawCall(program, p, still, fresh = true)
+            if (program.layered) renderScene(program, p, still) else drawCall(program, p, still, fresh = true)
             GLES30.glViewport(0, 0, width, height)
             program.warmed = true
         }
@@ -809,7 +843,7 @@ class WaveRenderer(
      */
     private fun render(program: GlProgram, p: WaveParams, still: Boolean, now: Long) {
         if (program.layered) {
-            renderScene(program, still)
+            renderScene(program, p, still)
             return
         }
         // The field pass first (still frames need it too); unit 1 holds it for the full-size pass.
@@ -838,8 +872,12 @@ class WaveRenderer(
         feedbackNs = now
     }
 
-    /** Live backgrounds § 3b: a layered scene's frame, moved by this frame's time, focus, music, transition and daylight. */
-    private fun renderScene(program: GlProgram, still: Boolean) {
+    /**
+     * Live backgrounds § 3b, 3c: a layered scene's frame, moved by this frame's time, focus, music,
+     * transition and daylight. Video layers show the § 2 copy; shader layers are drawn with every
+     * prelude uniform, `uBelow` on unit 7, `uFresh` 1 and nothing on `uPrev` / `uField`.
+     */
+    private fun renderScene(program: GlProgram, p: WaveParams, still: Boolean) {
         val scene = program.scene ?: return
         val inputs = sceneInputs
         inputs.time = time
@@ -849,10 +887,13 @@ class WaveRenderer(
         inputs.beat = audioLevels[1]
         inputs.transition = if (still) 0f else transition
         inputs.daylight = daylight
-        scene.draw(sceneQuad, width, height, inputs, shownTop, shownBottom)
+        val frame = video.takeIf { it.created }
+        scene.draw(sceneQuad, width, height, inputs, shownTop, shownBottom, frame, sceneTargets) { layer, below ->
+            drawCall(layer, p, still, fresh = true, below = below)
+        }
     }
 
-    private fun drawCall(program: GlProgram, p: WaveParams, still: Boolean, fresh: Boolean, pass: Int = 1) {
+    private fun drawCall(program: GlProgram, p: WaveParams, still: Boolean, fresh: Boolean, pass: Int = 1, below: Int = 0) {
         GLES30.glUseProgram(program.handle)
         GLES30.glUniform1i(program.uPass, pass)
         GLES30.glUniform1i(program.uField, 1)
@@ -899,6 +940,13 @@ class WaveRenderer(
             video.place(p.videoFit ?: VideoFit.FILL, width, height, vw, vh)
             val r = video.rect
             GLES30.glUniform4f(program.uVideoRect, r[0], r[1], r[2], r[3])
+        }
+        if (program.uBelow >= 0) {
+            // A scene's shader layer (§ 3c): the layers so far.
+            GLES30.glActiveTexture(GLES30.GL_TEXTURE0 + GlScene.BELOW_UNIT)
+            GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, below)
+            GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
+            GLES30.glUniform1i(program.uBelow, GlScene.BELOW_UNIT)
         }
         // WAVE's own.
         GLES30.glUniform1f(program.uBright, 0.8f + 0.2f * daylight)
