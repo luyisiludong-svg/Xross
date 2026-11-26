@@ -11,7 +11,7 @@ Status: ✅ done · ◐ code done, device check open · ⬜ not started.
 | --- | --- | --- | --- |
 | 1 | Image inputs for pack shaders (`uImage0..3`, `uFocus`) | M | ◐ on `feat/live-backgrounds-image-inputs`; A55 timing open |
 | 2 | Video backgrounds (`effects.videoPath`, `uVideo`, VIDEO preset) | L | ◐ on `feat/live-backgrounds-image-inputs`; emulator checked, A55 runs open; stretch not started |
-| 3 | Layered scenes (`scene.json`: images, sprites, video, effect shaders, GPU particles) | L × 5–6 | ◐ 3a on `feat/live-backgrounds-image-inputs` (model, loader, key, poster); 3b–3f not started |
+| 3 | Layered scenes (`scene.json`: images, sprites, video, effect shaders, GPU particles) | L × 5–6 | ◐ 3a, 3b on `feat/live-backgrounds-image-inputs` (emulator checked); 3c–3f not started |
 
 **Order:** 1, then 2, then 3. Section 2 reuses § 1's texture units and upload path, and § 3 is
 built from § 1 and § 2 layers. Each section ships on its own: § 1 alone already enables painted
@@ -313,6 +313,65 @@ baseline.
 > - **Not checked:** the poster on a device or emulator (no device was attached). There is also
 >   no sample scene pack or shader-preview support yet; both belong to 3f.
 > - **Next:** 3b, the quad program with image and sprite layers and the resolution switch.
+>
+> **Progress (2026-11-26, 3b, same branch).** Code, unit tests, docs and an emulator run are done.
+> 3c–3f are not started.
+>
+> - **Pose math.** `theme/engine/.../shader/ScenePose.kt`: `ScenePoser.pose` turns a layer, its
+>   texture size, the screen and the frame's `SceneInputs` into a `LayerPose`. The pose is a
+>   parallelogram in render pixels plus a texture window and an opacity. It is pure and
+>   allocation-free: box (rect, fit, anchor), parallax with overscan, sway, pulse, the three
+>   drivers, sprite cells and scroll. Time-based terms are computed in double precision, so
+>   nothing drifts or jumps after days.
+> - **GL.** `ui/GlScene.kt`:
+>   - `SceneQuadProgram` is `scene_layer.vert` / `.frag`: a 4-vertex strip from `gl_VertexID`,
+>     placed by an origin and two edges. It has one sampler object per wrap mode (trilinear) and
+>     is compiled once per context, next to the filter pass.
+>   - `GlScene` holds a scene's textures (every one gets mipmaps) and draws the theme gradient,
+>     then each image and sprite layer with its blend, opacity and mask.
+>   - Blending is premultiplied: NORMAL `ONE, 1−SA`; ADD `ONE, ONE`; SCREEN `ONE, 1−SC`;
+>     MULTIPLY `DST_COLOR, 1−SA`. Destination alpha is kept.
+> - **Renderer.** `WaveRenderer` fills `SceneInputs` from its own time, the eased focus, the
+>   audio levels, `uTransition` and the daylight. `render()` and the 1×1 warm-up draw a layered
+>   program through `GlScene`.
+> - **Loading.** The scene's textures are decoded on IO by `ShaderImageLoader`, which can now
+>   decode premultiplied with a budget passed in (`Scene.TEXTURE_BUDGET_PIXELS`, 16 MP), and are
+>   uploaded through a queue of their own. Until they are on the GPU the program is PENDING, so
+>   `ShaderFallback` keeps the last program on screen.
+> - **Resolution.** `WaveRenderer.longSide` reads the wanted program's `resolution`, and
+>   `SurfaceSizer` in `WaveBackground` calls `setFixedSize` only when the size really changes.
+> - **Deviations:**
+>   - **No separate `SceneProgram`.** A SCENE's `GlProgram` is still the poster program and gets
+>     a `GlScene` component (`layered`, `scene`). So `select()`, `ShaderFallback`, the watchdog
+>     (it times the whole scene), the warm-up, the canary and context loss all work unchanged,
+>     and the poster program is already compiled for 3f's fallback.
+>   - A scene with no image or sprite layer (only video, shader or particles for now), or a
+>     context whose quad program didn't link, shows the poster.
+>   - The `audio`, `transition` and `daylight` drivers landed here with the other motions, since
+>     they are a few lines in the same function. 3e keeps tilt and the parallax tuning on a device.
+>   - Parallax: up to 3 % of the screen at 1, away from the focus. COVER and STRETCH layers are
+>     overscanned by that much.
+>   - `scroll` is in texels of the uploaded texture, which is at most 2048 px on its long side.
+>   - A mask is stretched over the layer's box and doesn't scroll. Sprites always clamp.
+>   - The gradient is drawn under the layers (one screen of fill, not counted in the budget).
+> - **Tests:**
+>   - `ScenePoseTest` (7, `:theme:engine`): rects, every fit and anchor, parallax and overscan,
+>     sway and pulse (including after days), drivers, sprite cells, scrolling.
+>   - `SceneTest` (+1, now 13): the textures a drawn scene decodes (each once, layer order,
+>     particles' left for 3d), when the poster stands in, and the sharp long side (0.82 on the
+>     A55).
+>   - The full `:app:testDebugUnitTest` and `:theme:engine:test` pass, and `validateShaders` is
+>     clean (13 units, including `scene_layer.vert` / `.frag`).
+> - **Emulator** (API 37, `-gpu host`, debug build, a generated 4-layer scene: a scrolling sky, a
+>   FIT/BOTTOM city, an ADD sprite, a masked swaying image):
+>   - All layers draw in order, and the sky scrolls and the sprite steps between two frames.
+>   - The surface is 1920×864 for `sharp`.
+>   - The watchdog passed (p90 3.26 ms, glFinish; emulator timings mean little).
+>   - An edit to `scene.json` hot-reloaded under a new key.
+> - **Not checked:** the A55 (no device), and SCREEN and MULTIPLY by eye (only by their blend
+>   equations).
+> - **Next:** 3c, video layers (§ 2's copy pass, per layer) and shader layers with `uBelow` and
+>   ping-pong targets.
 
 **Goal.** A stack of layers as in Wallpaper Engine's scene type. Each layer can move, react to
 focus, audio and time, and carry its own effect. Sections 1 and 2 are the building blocks.
@@ -391,7 +450,7 @@ the scene, the same way it wins over a pack's shader today: opaque, covering, wa
 | Slice | Scope | Size |
 | --- | --- | --- |
 | 3a ✅ | `scene.json` model, loader, problems, key, poster; unit tests | M |
-| 3b | Quad program; image and sprite layers; fit, anchor, blend, opacity; motions; resolution switch | L |
+| 3b ✅ | Quad program; image and sprite layers; fit, anchor, blend, opacity; motions; resolution switch | L |
 | 3c | Video layer (§ 2's copy pass); shader layers with `uBelow` and ping-pong targets | M |
 | 3d | GPU particles; turns off Compose particles under a scene | M–L |
 | 3e | Parallax from `uFocus`; tilt setting; audio, transition and daylight drivers | S–M |

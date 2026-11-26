@@ -340,6 +340,44 @@ class SceneTest {
         assertTrue("the scene stays home: $paths", cityFiles.keys.none { it in paths })
     }
 
+    // region Drawing (3b)
+
+    @Test fun layersDecodeOnceEachAndPostersStandInForUndrawnScenes() {
+        pack(
+            "drawn",
+            """"effects": {"scenePath": "scene.json"},
+               "variants": [{"id": "dots", "name": "Dots", "effects": {"scene": "dots.json"}}]""",
+            mapOf(
+                "scene.json" to """{"resolution": "sharp", "layers": [
+                    {"type": "image", "path": "sky.png", "mask": "m.png"},
+                    {"type": "particles", "path": "spark.png", "rate": 5},
+                    {"type": "sprite", "path": "sky.png", "frames": [2, 1]},
+                    {"type": "image", "path": "fg.png", "mask": "m.png"}
+                ]}""",
+                "dots.json" to """{"layers": [{"type": "particles", "rate": 5}]}""",
+                "sky.png" to "s", "m.png" to "m", "fg.png" to "f", "spark.png" to "p",
+            ),
+        )
+        val t = loader.load("drawn")
+        val src = t.scenes.getValue("scene.json")
+        assertTrue(dev.xross.launcher.ui.GlScene.draws(src))
+        assertEquals(
+            "each image once, bottom layer first; particles' images wait for 3d",
+            listOf("sky.png", "m.png", "fg.png"),
+            dev.xross.launcher.ui.GlScene.textureImages(src).map { it.image.path },
+        )
+        assertTrue(dev.xross.launcher.ui.GlScene.textureImages(src).all { it.image.mipmap && it.source != null })
+        assertFalse("nothing drawable yet: the poster program shows it", dev.xross.launcher.ui.GlScene.draws(t.scenes.getValue("dots.json")))
+
+        val lib = t.shaderLibrary
+        assertEquals(1920, dev.xross.launcher.ui.WaveRenderer.longSide(lib, lib.keyOf(t.look().shader)))
+        assertEquals(1280, dev.xross.launcher.ui.WaveRenderer.longSide(lib, lib.keyOf(t.look("dots").shader)))
+        assertEquals(1280, dev.xross.launcher.ui.WaveRenderer.longSide(lib, "WAVE"))
+        assertEquals("0.82 on the A55", 0.8205f, dev.xross.launcher.ui.WaveRenderer.renderScale(2340, 1080, 1920), 1e-4f)
+    }
+
+    // endregion
+
     @Test fun sceneKeysAreNotUnknownEffects() {
         pack("keys", """"effects": {"scenePath": "s.json"}, "variants": [{"id": "v", "name": "V", "effects": {"scene": "s.json"}}]""", mapOf("s.json" to """{"layers": [{"type": "particles", "rate": 1}]}"""))
         val t = loader.load("keys")

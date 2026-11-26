@@ -24,6 +24,11 @@
   scene's poster (or its first image) as the background; the layers are drawn in a later update.
   Editing the scene or any of its files reloads it, and exports carry them. See the theme
   specification's Layered scenes.
+- **Layered scenes draw their images and sprites.** Image and sprite-sheet layers are now drawn,
+  with placement, blend (normal, add, screen, multiply), opacity, masks, scrolling, sway, pulse,
+  parallax that follows the focused item, and motion driven by the music, category switches and
+  the time of day. `"resolution": "sharp"` renders the background at 1920 px instead of 1280.
+  Video, shader and particle layers follow in later updates.
 
 ## 0.2.2.0-beta — 2026-11-21
 

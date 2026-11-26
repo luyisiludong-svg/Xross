@@ -112,6 +112,9 @@ fun WaveBackground(
     renderer.library = shaders
     renderer.params = params
     renderer.frozen = frozen
+    // Live backgrounds § 3b: a sharp scene renders at 1920 on the long side, everything else at 1280.
+    val longSide = WaveRenderer.longSide(shaders, params.shader)
+    val surfaceSize = remember { SurfaceSizer(renderer) }
 
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val view = remember {
@@ -123,15 +126,7 @@ fun WaveBackground(
             renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
             // Render below native resolution; the compositor upscales for free.
             addOnLayoutChangeListener { v, l, t, r, b, _, _, _, _ ->
-                val w = r - l
-                val h = b - t
-                if (w > 0 && h > 0) {
-                    val scale = WaveRenderer.renderScale(w, h)
-                    val rw = (w * scale).roundToInt()
-                    (v as GLSurfaceView).holder.setFixedSize(rw, (h * scale).roundToInt())
-                    // Lines and stripes are sized in dp, snapped to the render target's pixels (2b.4f).
-                    renderer.pxPerDp = v.resources.displayMetrics.density * rw / w
-                }
+                surfaceSize.layout(v as GLSurfaceView, r - l, b - t)
             }
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
             // A still screen draws one frame per change: the one that uploads a shader's images too.
@@ -143,6 +138,7 @@ fun WaveBackground(
         }
     }
     val pacer = remember { VsyncPacer(view, refreshHz) }
+    androidx.compose.runtime.SideEffect { surfaceSize.longSide(view, longSide) }
     var resumed by remember { mutableStateOf(lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) }
     var started by remember { mutableStateOf(lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) }
     DisposableEffect(lifecycle, view) {
@@ -291,4 +287,40 @@ private class VsyncPacer(private val view: GLSurfaceView, refreshHz: Float) : Ch
 private fun supportsGles3(context: Context): Boolean {
     val am = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
     return am.deviceConfigurationInfo.reqGlEsVersion >= 0x30000
+}
+
+/**
+ * Sizes the GL surface below native resolution (the compositor upscales for free): the long side at
+ * [WaveRenderer.renderScale] of the view's, 1280 px, or 1920 for a sharp scene (Live backgrounds
+ * § 3b). A change of either resizes the buffer once; the renderer treats it like any resize.
+ */
+private class SurfaceSizer(private val renderer: WaveRenderer) {
+    private var width = 0
+    private var height = 0
+    private var side = WaveRenderer.SOFT_LONG_SIDE
+    private var applied = 0L
+
+    fun layout(view: GLSurfaceView, w: Int, h: Int) {
+        width = w
+        height = h
+        apply(view)
+    }
+
+    fun longSide(view: GLSurfaceView, longSide: Int) {
+        side = longSide
+        apply(view)
+    }
+
+    private fun apply(view: GLSurfaceView) {
+        if (width <= 0 || height <= 0) return
+        val scale = WaveRenderer.renderScale(width, height, side)
+        val rw = (width * scale).roundToInt()
+        val rh = (height * scale).roundToInt()
+        val key = (rw.toLong() shl 32) or rh.toLong()
+        if (key == applied) return
+        applied = key
+        view.holder.setFixedSize(rw, rh)
+        // Lines and stripes are sized in dp, snapped to the render target's pixels (2b.4f).
+        renderer.pxPerDp = view.resources.displayMetrics.density * rw / width
+    }
 }

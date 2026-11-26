@@ -16,15 +16,19 @@ import java.nio.ByteOrder
 import java.util.concurrent.Executor
 import java.util.concurrent.Executors
 
-/** One slot's pixels, ready for `glTexImage2D(RGBA8)`: straight alpha, the bottom row first. */
+/** One slot's pixels, ready for `glTexImage2D(RGBA8)`: straight alpha (premultiplied for a scene's layers), the bottom row first. */
 class DecodedImage(val image: ShaderImage, val width: Int, val height: Int, val pixels: ByteBuffer)
 
 /** A program's slots as decoded (null: empty), and what went wrong, for a notice. */
 class DecodedImages(val slots: List<DecodedImage?>, val problems: List<String>)
 
-/** Decodes a program's images off the GL thread; [done] runs on the decoder's thread. */
+/**
+ * Decodes a program's images off the GL thread; [done] runs on the decoder's thread. [budget] is
+ * the pixels the slots may share ([ShaderImage.BUDGET_PIXELS] for a shader); [premultiplied] is
+ * for a scene's layers, which are blended, so their edges don't fringe.
+ */
 fun interface ShaderImageDecoder {
-    fun decode(images: List<BoundImage?>, maxSide: Int, done: (DecodedImages) -> Unit)
+    fun decode(images: List<BoundImage?>, maxSide: Int, budget: Long, premultiplied: Boolean, done: (DecodedImages) -> Unit)
 }
 
 /**
@@ -42,12 +46,17 @@ class ShaderImageLoader(
     private val executor: Executor = Executors.newSingleThreadExecutor { r -> Thread(r, "XrossShaderImages").apply { isDaemon = true } },
 ) : ShaderImageDecoder {
 
-    override fun decode(images: List<BoundImage?>, maxSide: Int, done: (DecodedImages) -> Unit) {
-        executor.execute { done(load(images, maxSide)) }
+    override fun decode(images: List<BoundImage?>, maxSide: Int, budget: Long, premultiplied: Boolean, done: (DecodedImages) -> Unit) {
+        executor.execute { done(load(images, maxSide, budget, premultiplied)) }
     }
 
-    /** Blocking: [images] decoded at most [maxSide] on the long side, within the budget. */
-    fun load(images: List<BoundImage?>, maxSide: Int): DecodedImages {
+    /** Blocking: [images] decoded at most [maxSide] on the long side, within [budget] pixels. */
+    fun load(
+        images: List<BoundImage?>,
+        maxSide: Int,
+        budget: Long = ShaderImage.BUDGET_PIXELS,
+        premultiplied: Boolean = false,
+    ): DecodedImages {
         val problems = ArrayList<String>()
         val sizes = images.map { b ->
             val src = b?.source
@@ -58,15 +67,15 @@ class ShaderImageLoader(
                     .also { if (it == null) problems += "${b.image.path} can't be read as an image" }
             }
         }
-        val plan = ShaderImagePlan.fit(sizes, maxSide)
+        val plan = ShaderImagePlan.fit(sizes, maxSide, budget)
         val slots = images.mapIndexed { i, b ->
             val target = plan[i]
             if (b == null || b.source == null || sizes[i] == null) return@mapIndexed null
             if (target == null) {
-                problems += "${b.image.path} is over the ${ShaderImage.BUDGET_PIXELS / (1024 * 1024)} MP budget for one shader's images; left out"
+                problems += "${b.image.path} is over the ${budget / (1024 * 1024)} MP budget for ${if (premultiplied) "a scene's" else "one shader's"} images; left out"
                 return@mapIndexed null
             }
-            runCatching { pixels(b.image, b.source!!, target) }
+            runCatching { pixels(b.image, b.source!!, target, premultiplied) }
                 .onFailure { Log.w(TAG, "can't decode ${b.image.path}: ${it.message}") }
                 .getOrNull()
                 .also { if (it == null) problems += "${b.image.path} can't be decoded" }
@@ -84,13 +93,13 @@ class ShaderImageLoader(
         return if (opts.outWidth > 0 && opts.outHeight > 0) ImageSize(opts.outWidth, opts.outHeight) else null
     }
 
-    private fun pixels(image: ShaderImage, src: ShaderImageSource, target: ImageSize): DecodedImage {
+    private fun pixels(image: ShaderImage, src: ShaderImageSource, target: ImageSize, premultiplied: Boolean): DecodedImage {
         val source = src.file?.let { ImageDecoder.createSource(it) }
             ?: src.asset?.let { a -> ImageDecoder.createSource(assets ?: error("no assets"), a) }
             ?: error("no source")
         var bitmap = ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
             decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
-            decoder.isUnpremultipliedRequired = true
+            decoder.isUnpremultipliedRequired = !premultiplied
             if (info.size.width != target.width || info.size.height != target.height) decoder.setTargetSize(target.width, target.height)
         }
         if (bitmap.config != Bitmap.Config.ARGB_8888) {
@@ -98,7 +107,7 @@ class ShaderImageLoader(
             val copy = bitmap.copy(Bitmap.Config.ARGB_8888, false)
             bitmap.recycle()
             bitmap = copy
-            bitmap.isPremultiplied = false
+            if (!premultiplied) bitmap.isPremultiplied = false
         }
         try {
             return DecodedImage(image, bitmap.width, bitmap.height, flipped(bitmap))

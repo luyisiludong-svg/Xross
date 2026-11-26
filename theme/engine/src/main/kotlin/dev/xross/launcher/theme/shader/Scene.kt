@@ -28,7 +28,8 @@ import kotlin.math.ceil
  * (`rect`, `anchor`); speeds and sizes are in render pixels at 1280 on the long side, y down
  * (`velocity`, `size`); `scroll` is in texels of the layer's own image per second.
  *
- * Until the scene renderer lands (slice 3b), a scene is drawn as its [Scene.poster].
+ * Image and sprite layers are drawn (slice 3b, posed by [ScenePoser]); video, shader and particle
+ * layers are skipped until 3c / 3d. A scene with no drawn layer shows its [Scene.poster].
  */
 
 /** `scene.resolution`: how sharp the surface is while the scene shows. */
@@ -425,6 +426,12 @@ data class Scene(
             "opacity", "blend", "rect", "fit", "anchor", "parallax", "mask",
             "scroll", "sway", "pulse", "audio", "transition", "daylight",
         )
+
+        /**
+         * Pixels across a scene's layer textures (16 MP: 64 MB as RGBA8, ~85 MB with the mipmaps
+         * every layer texture gets). Images past it are left out, top layers first.
+         */
+        const val TEXTURE_BUDGET_PIXELS = 16L * 1024 * 1024
 
         /** Most particles across a scene's particle layers. */
         const val MAX_PARTICLES = 2000

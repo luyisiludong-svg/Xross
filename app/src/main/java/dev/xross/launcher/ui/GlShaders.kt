@@ -70,8 +70,17 @@ internal class GlProgram(val spec: ShaderSpec) {
     /** Its `effects.shaderImages` on the GPU, once uploaded; null for a program without images. */
     var textures: ImageTextures? = null
 
-    /** Waiting for its images to be decoded and uploaded ([ImageTextures]). */
-    val awaitingImages: Boolean get() = spec.images.isNotEmpty() && textures == null
+    /**
+     * Live backgrounds § 3b: a SCENE drawn layer by layer ([GlScene]) instead of as its poster. Set
+     * when it starts: the scene has a layer the renderer draws, and the shared quad program linked.
+     */
+    var layered = false
+
+    /** A layered scene's textures and draw; null until it is set up. */
+    var scene: GlScene? = null
+
+    /** Waiting for its images to be decoded and uploaded ([ImageTextures], or a layered scene's [GlScene]). */
+    val awaitingImages: Boolean get() = if (layered) scene?.uploaded != true else spec.images.isNotEmpty() && textures == null
 
     /**
      * The state [ShaderFallback] sees: a linked program is still PENDING until its images are on
@@ -166,6 +175,8 @@ internal class GlProgram(val spec: ShaderSpec) {
         handle = 0
         textures?.release()
         textures = null
+        scene?.release()
+        scene = null
     }
 
     companion object {

@@ -35,9 +35,9 @@ enum class ShaderPreset(val file: String?, val label: String) {
     VIDEO("video.frag", "Video"),
     /**
      * A layered scene (`effects.scenePath`, Live backgrounds § 3): the [Scene] a `scene.json`
-     * describes, one program as far as the library, the fallback and the watchdog go. Until the
-     * scene renderer lands (slice 3b), [file] draws the scene's poster ([SceneSource.posterImage],
-     * bound as `uImage0`) over the theme gradient.
+     * describes, one program as far as the library, the fallback and the watchdog go. Its image
+     * and sprite layers are drawn by the app's `GlScene` (slice 3b); [file] draws the scene's poster
+     * ([SceneSource.posterImage], bound as `uImage0`) when it has no layer of those kinds.
      */
     SCENE("scene_poster.frag", "Scene"),
     CUSTOM(null, "Custom shader"),

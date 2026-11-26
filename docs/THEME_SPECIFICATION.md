@@ -362,9 +362,11 @@ is accepted too), `FIT`, `STRETCH` or `CENTER`. `"none"` turns a video off.
 
 ### Layered scenes
 
-*In progress (Live backgrounds § 3).* The format below is read and checked today, and the scene
-shows as its **poster**; the layers themselves are drawn from a later update on. A pack written
-against this section keeps working as the renderer lands.
+*In progress (Live backgrounds § 3).* The whole format below is read and checked. **Image and
+sprite layers are drawn**, with their placement, blend, opacity, mask, parallax and motion, and
+`resolution` applies. Video, shader and particle layers are skipped until a later update. A scene
+with none of the drawn kinds shows its **poster**. A pack written against this section keeps
+working as the rest lands.
 
 `effects.scenePath` (alias `scene`) names a `.json` file in the pack that describes a stack of
 layers, drawn bottom to top. `"shaderPreset": "SCENE"` alone reads `scene.json`. A scene is one
@@ -415,7 +417,19 @@ Every path is relative to the pack root, like the rest of `theme.json`.
   `{ "scale", "opacity", "offset", "angle" }`: what that input adds at its full strength (the
   music's bass, a category switch, noon).
 * **Units:** pixels (`velocity`, `size`, `offset`) are at 1280 px on the screen's long side, y
-  down. Colours are `#rrggbb`, or `#aarrggbb` with alpha, as everywhere in a theme.
+  down. Colours are `#rrggbb`, or `#aarrggbb` with alpha, as everywhere in a theme. `scroll` is in
+  texels of the image as uploaded (at most 2048 px on its long side) per second.
+* **How layers are drawn.** The theme gradient goes down first, then each layer bottom to top.
+  `fit` without a `rect` places the image (a sprite: one cell) on the screen: `COVER` fills it,
+  `FIT` shows all of it, `STRETCH` distorts it to the screen, `CENTER` shows it at its own size
+  for a 1280 px screen. `anchor` decides which part stays in view. `parallax` shifts a layer
+  away from the focused item, by up to 3 % of the screen at 1. A `COVER` or `STRETCH` layer is
+  enlarged by that much, so its edges never show. `sway` and `pulse` turn and scale about the
+  layer's centre. A `mask` is stretched over the layer's box and doesn't scroll. Sprite sheets
+  are clamped at their edges. Images are blended with premultiplied alpha, so soft edges don't
+  fringe.
+* **Budget for images:** a scene's drawn images share 16 megapixels, each at most 2048 px on its
+  long side. Images past that are left out (top layers first) with a notice.
 * **Budget:** at most 16 layers, 2 video layers, 4 shader layers, 2,000 particles (`rate` × the
   longest `life`) and 8 screens of pixels per frame (each layer counts the part of the screen it
   covers, a shader layer twice). Layers are taken bottom to top while they fit; one that doesn't

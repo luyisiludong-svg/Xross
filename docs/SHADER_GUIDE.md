@@ -204,7 +204,9 @@ Reference costs on the Galaxy A55, profiling build, watchdog p90 (§3.39):
   upload sizes and budget, and `uFocus`; `BackgroundVideoTest` covers `effects.videoPath` and
   `videoFit`, the VIDEO preset's place in the cascade, the placements, the copy size and when the
   player plays, holds or lets go; `SceneTest` covers `scene.json` (every layer type, the problems,
-  the budget), `effects.scenePath` in the cascade, the scene's key, its poster and the exporter.
+  the budget), `effects.scenePath` in the cascade, the scene's key, its poster, the exporter, which images a
+  drawn scene decodes and the sharp resolution; `ScenePoseTest` (`:theme:engine`) covers a layer's
+  box, parallax, sway, pulse, the input drivers, sprite cells and scrolling.
 
 ## 7. `BLACK_HOLE`, a worked example
 
