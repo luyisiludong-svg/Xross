@@ -128,6 +128,8 @@ sealed interface Command {
     data class SetStandbyMotion(val mode: dev.xross.launcher.data.StandbyMotion) : Command
     /** Settings ▸ System ▸ Performance ▸ Background frame rate: ~60 fps ↔ the screen's full rate. */
     data object ToggleFullFrameRate : Command
+    /** Settings ▸ System ▸ Performance ▸ Tilt parallax: a scene's parallax follows the device's tilt, or not. */
+    data object ToggleTiltParallax : Command
     /** Settings ▸ System ▸ Performance ▸ Slow shaders: switch to the wave ↔ keep and warn. */
     data object CycleSlowShaders : Command
     data class SetSlowShaders(val mode: dev.xross.launcher.data.SlowShaders) : Command

@@ -22,7 +22,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
-/** Settings ▸ System ▸ Performance: standby motion, background frame rate, slow shaders. */
+/** Settings ▸ System ▸ Performance: standby motion, background frame rate, tilt parallax, slow shaders. */
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 class PerformanceSettingsTest {
@@ -37,6 +37,7 @@ class PerformanceSettingsTest {
         assertEquals(10_000L, s.standbyMotion.particleTimeoutMs)
         assertFalse(s.fullFrameRate)
         assertEquals(SlowShaders.RETIRE, s.slowShaders)
+        assertFalse(s.tiltParallax)
     }
 
     @Test fun particlesRestNoSoonerThanTenSecondsAndNeverWithNever() {
@@ -51,11 +52,14 @@ class PerformanceSettingsTest {
         assertEquals("Rests after 3 s · ~60 fps · slow shaders switch to the wave", folder.subtitle)
     }
 
-    @Test fun folderHasItsFourRows() {
-        assertEquals(listOf("perf:standby", "perf:fps", "perf:slow", "perf:retry"), rows().map { it.id })
+    @Test fun folderHasItsFiveRows() {
+        assertEquals(listOf("perf:standby", "perf:fps", "perf:tilt", "perf:slow", "perf:retry"), rows().map { it.id })
         val byId = rows().associateBy { it.id }
         assertEquals(NodeAction.Run(Command.CycleStandbyMotion), byId.getValue("perf:standby").action)
         assertEquals(NodeAction.Run(Command.ToggleFullFrameRate), byId.getValue("perf:fps").action)
+        assertEquals(NodeAction.Run(Command.ToggleTiltParallax), byId.getValue("perf:tilt").action)
+        assertTrue(byId.getValue("perf:tilt").subtitle!!.startsWith("Off"))
+        assertTrue(rows(XrossSettings(tiltParallax = true)).single { it.id == "perf:tilt" }.subtitle!!.startsWith("On"))
         assertEquals(NodeAction.Run(Command.CycleSlowShaders), byId.getValue("perf:slow").action)
         assertEquals(NodeAction.Run(Command.RetrySlowShaders), byId.getValue("perf:retry").action)
     }
@@ -75,11 +79,12 @@ class PerformanceSettingsTest {
     }
 
     @Test fun settingsFileRoundTripsAndToleratesJunk() {
-        val s = XrossSettings(standbyMotion = StandbyMotion.AFTER_30S, fullFrameRate = true, slowShaders = SlowShaders.WARN)
+        val s = XrossSettings(standbyMotion = StandbyMotion.AFTER_30S, fullFrameRate = true, slowShaders = SlowShaders.WARN, tiltParallax = true)
         assertEquals(s, ConfigCodec.decodeSettings(XrossSettings(), ConfigCodec.encodeSettings(s)))
         val old = ConfigCodec.decodeSettings(XrossSettings(), """{"display": {"theme": "OCEAN"}}""")
         assertEquals(StandbyMotion.AFTER_3S, old.standbyMotion)
         assertEquals(SlowShaders.RETIRE, old.slowShaders)
+        assertFalse(old.tiltParallax)
         val junk = ConfigCodec.decodeSettings(XrossSettings(), """{"performance": {"standbyMotion": "soon", "slowShaders": "warn"}}""")
         assertEquals(StandbyMotion.AFTER_3S, junk.standbyMotion)
         assertEquals(SlowShaders.WARN, junk.slowShaders)

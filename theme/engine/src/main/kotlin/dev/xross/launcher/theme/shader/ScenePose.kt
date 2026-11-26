@@ -20,6 +20,13 @@ class SceneInputs {
     var focusX = 0.5f
     var focusY = 0.5f
 
+    /**
+     * Tilt parallax (§ 3e), -1..1 on the screen's axes ([SceneTilt]); 0 with the setting off or no
+     * sensor. Added to the focus's pull, clamped to the overscan.
+     */
+    var tiltX = 0f
+    var tiltY = 0f
+
     /** `uAudioBass`, `uAudioBeat`, `uTransition`, and the daylight (0 at midnight .. 1 at noon). */
     var bass = 0f
     var beat = 0f
@@ -59,8 +66,9 @@ class LayerPose {
  *  - **Box.** `rect` in screen fractions; else `fit` (`FILL` covers, `FIT` contains, `STRETCH`
  *    fills, `CENTER` is the image's size at 1280 px on the screen's long side, shrunk to fit)
  *    placed by `anchor`. A sprite fits one cell, not the sheet.
- *  - **Parallax.** The layer shifts away from the focus by up to [PARALLAX_SHIFT] of the screen
- *    at `parallax` 1. A covering fit (FILL, STRETCH) is enlarged by that much, so its edges never
+ *  - **Parallax.** The layer shifts away from the focus, and with the tilt setting the way the
+ *    device tilts ([SceneInputs.tiltX], [pull]), by up to [PARALLAX_SHIFT] of the screen at
+ *    `parallax` 1. A covering fit (FILL, STRETCH) is enlarged by that much, so its edges never
  *    show.
  *  - **Motion.** `sway` and `pulse` are sines of their periods; `audio`, `transition` and
  *    `daylight` add their amounts times the input. Scale and rotation are about the box's centre.
@@ -153,8 +161,8 @@ object ScenePoser {
         drive(m.audio, inputs.audioLevel)
         drive(m.transition, inputs.transition)
         drive(m.daylight, inputs.daylight)
-        dx -= (inputs.focusX - 0.5f) * 2f * shiftX
-        dy -= (inputs.focusY - 0.5f) * 2f * shiftY
+        dx -= pull(inputs.focusX, inputs.tiltX) * shiftX
+        dy -= pull(inputs.focusY, inputs.tiltY) * shiftY
 
         opacity = opacity.coerceIn(0f, 1f)
         scale = scale.coerceAtLeast(0f)
@@ -194,6 +202,9 @@ object ScenePoser {
         out.scale = scale
         return true
     }
+
+    /** The parallax pull on one axis, -1..1: the focus away from the centre plus the tilt, clamped so the overscan holds. */
+    fun pull(focus: Float, tilt: Float): Float = ((focus - 0.5f) * 2f + tilt).coerceIn(-1f, 1f)
 
     /** -1..1 on a sine of [period] seconds, in double precision so it never jumps after days. */
     fun wave(time: Double, period: Float): Float = sin(2.0 * PI * (time / period.toDouble() % 1.0)).toFloat()

@@ -75,6 +75,8 @@ fun WaveBackground(
     videoResting: Boolean? = null,
     /** The player can't play [video] (why): the caller falls back to the wallpaper, else the wave. */
     onVideoFailed: (VideoSource, String) -> Unit = { _, _ -> },
+    /** Settings ▸ System ▸ Performance ▸ Tilt parallax (Live backgrounds § 3e): a scene's parallax follows the device's tilt. */
+    tiltParallax: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -184,6 +186,14 @@ fun WaveBackground(
         bgVideo.apply(video, videoAction)
         if (dev.xross.launcher.BuildConfig.PERF_LOG) android.util.Log.i("XrossVideo", "policy ${videoAction.name.lowercase()} video=${video?.file?.name} " +
             "started=$started resumed=$resumed still=$frozen covered=$paused resting=${videoResting ?: idle} other=$otherVideo")
+    }
+    // Live backgrounds § 3e: the tilt sensor only while it can move something on screen.
+    val tiltSensor = remember { TiltSensor(context, view, renderer) }
+    val tiltWanted = tiltParallax && !frozen && !paused && resumed &&
+        shaders.spec(params.shader)?.scene?.scene?.hasParallax == true
+    DisposableEffect(tiltSensor, tiltWanted) {
+        if (tiltWanted) tiltSensor.start()
+        onDispose { tiltSensor.stop() }
     }
     // Ahead-of-time compile of the pack's programs (2b.4a), on the GL thread between frames.
     LaunchedEffect(view, shaders) {

@@ -30,11 +30,16 @@
     Video (uVideo, uVideoSize, uVideoRect): the theme.json's effects.videoPath and videoFit, or
     ?video=loop.mp4&fit=FIT. A muted loop, uploaded each frame upright like on the device; open
     ?frag=../../app/src/main/assets/shaders/video.frag to see the VIDEO preset.
+    Scenes (Live backgrounds § 3): the theme.json's effects.scenePath, or ?scene=scene.json (its
+    files are pack-relative: next to theme.json when one is given, else next to scene.json). Drawn
+    by scene.js with the app's own scene_layer / scene_particles programs; uFocus (the mouse) and
+    the tilt sliders move parallax layers, the bass, beat, category switch and daylight drive them.
     Timings here say nothing about a phone: measure on the A55 (docs/SHADER_GUIDE.md §6).
   -->
   <canvas id="c"></canvas>
   <div class="bar">
     <label>frag <input id="frag" type="text"></label>
+    <label>scene <input id="scene" type="text" style="width:16em" placeholder="scene.json"></label>
     <button id="load">Load</button>
     <label>theme.json <input id="theme" type="text" style="width:22em"></label>
     <label>images <input id="images" type="text" style="width:22em" placeholder="a.png,b.png"></label>
@@ -53,12 +58,19 @@
       <option value="1280x576">1280×576 (A55 landscape)</option>
       <option value="576x1280">576×1280 (portrait)</option>
       <option value="1280x720">1280×720</option>
+      <option value="1920x864">1920×864 (A55, a sharp scene)</option>
     </select></label>
     <label><input id="rest" type="checkbox"> 20 fps (at rest)</label>
+  </div>
+  <div class="bar">
+    <label>tilt x <input id="tiltx" type="range" min="-1" max="1" step="0.01" value="0"></label>
+    <label>tilt y <input id="tilty" type="range" min="-1" max="1" step="0.01" value="0"></label>
+    <label>daylight <input id="day" type="range" min="0" max="1" step="0.01" value="0.5"></label>
   </div>
   <div id="stat"></div>
   <pre id="log"></pre>
 </main>
+<script src="scene.js"></script>
 <script>
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
@@ -66,6 +78,12 @@ $('frag').value = params.get('frag') || '';
 $('theme').value = params.get('theme') || '';
 $('images').value = params.get('images') || '';
 $('video').value = params.get('video') || '';
+$('scene').value = params.get('scene') || '';
+if (params.get('size')) $('size').value = params.get('size');
+{
+  const h = new Date().getHours() + new Date().getMinutes() / 60;
+  $('day').value = ((1 - Math.cos(h / 24 * 2 * Math.PI)) / 2).toFixed(2); // as WaveRenderer.daylight
+}
 if (params.get('fit')) $('fit').value = params.get('fit').toUpperCase().replace('COVER', 'FILL');
 if (params.get('t')) $('t').value = params.get('t');
 
@@ -188,6 +206,9 @@ async function loadTheme() {
     const listed = (th.effects && th.effects.shaderImages) || [];
     if (!$('images').value.trim()) imageList = [].concat(listed).map(i => typeof i === 'string' ? base + i : { ...i, path: base + i.path });
     const fx = th.effects || {};
+    const sp = fx.scenePath || fx.scene;
+    if (sp && !$('scene').value.trim() && !$('frag').value.trim()) $('scene').value = base + sp;
+    sceneBase = base;
     const vp = fx.videoPath || fx.video;
     if (vp && !/^(none|off)$/i.test(vp) && !$('video').value.trim()) $('video').value = base + vp;
     if (fx.videoFit && !params.get('fit')) $('fit').value = String(fx.videoFit).toUpperCase().replace('COVER', 'FILL');
@@ -199,10 +220,33 @@ async function loadTheme() {
   } catch (e) { $('log').textContent = 'theme.json: ' + e.message; }
 }
 
+let sceneBase = null;
 async function load() {
   $('log').textContent = '';
+  scene = null;
+  sceneBase = null;
+  if ($('theme').value.trim() && !$('frag').value.trim() && !$('scene').value.trim()) await loadTheme();
+  const scenePath = $('scene').value.trim();
+  if (scenePath) {
+    try {
+      const prelude = await fetch('../../app/src/main/assets/shaders/prelude.glsl').then(r => r.text());
+      if ($('theme').value.trim()) await loadTheme();
+      blit = blit || link(BLIT, 0);
+      const base = sceneBase ?? scenePath.slice(0, scenePath.lastIndexOf('/') + 1);
+      const s = await sceneLoad(scenePath, base, prelude);
+      if (s.sharp && !params.get('size')) $('size').value = '1920x864';
+      prog = null;
+      resize();
+      const kinds = s.layers.map(l => l.type).join(', ');
+      $('stat').textContent = `${scenePath} — ${s.layers.length} layer(s): ${kinds}${s.sharp ? ' · sharp' : ''}`;
+    } catch (e) {
+      scene = null;
+      $('log').textContent += e.message;
+    }
+    return;
+  }
   const path = $('frag').value.trim();
-  if (!path) { $('log').textContent = 'Give a ?frag= path.'; return; }
+  if (!path) { $('log').textContent = 'Give a ?frag= or ?scene= path (or a theme.json with a scenePath).'; return; }
   try {
     const [user, prelude] = await Promise.all([
       fetch(path).then(r => { if (!r.ok) throw new Error(path + ': ' + r.status); return r.text(); }),
@@ -241,33 +285,52 @@ function resize() {
   canvas.width = W; canvas.height = H;
   canvas.style.setProperty('--ar', `${W} / ${H}`);
   canvas.style.maxWidth = W > H ? '1280px' : '460px';
+  if (scene) { fresh = true; return; }
   field = usesField ? target(Math.ceil(W / 4), Math.ceil(H / 4)) : null;
   fb = usesPrev ? [target(W, H), target(W, H)] : [target(W, H), null];
   fresh = true;
 }
 
-function setUniforms(dt) {
-  gl.uniform1f(loc.uTime, time % 10000);
-  gl.uniform2f(loc.uResolution, W, H);
-  gl.uniform4fv(loc.uColorTop, palette.top);
-  gl.uniform4fv(loc.uColorBottom, palette.bottom);
-  gl.uniform4fv(loc.uAccent, palette.accent);
-  gl.uniform4fv(loc.uGlow, palette.glow);
-  gl.uniform1f(loc.uBatteryLevel, 1);
-  gl.uniform1f(loc.uAudioBass, Number($('bass').value));
-  gl.uniform1f(loc.uAudioBeat, beat > 0 ? 1 : 0);
-  gl.uniform1f(loc.uTransition, transition);
-  gl.uniform1f(loc.uFrameDt, Math.min(dt, 0.1));
-  gl.uniform1f(loc.uFresh, fresh ? 1 : 0);
-  gl.uniform2f(loc.uFocus, focus[0], focus[1]);
+function setUniforms(dt, L = loc, imgs = images) {
+  gl.uniform1f(L.uTime, time % 10000);
+  gl.uniform2f(L.uResolution, W, H);
+  gl.uniform4fv(L.uColorTop, palette.top);
+  gl.uniform4fv(L.uColorBottom, palette.bottom);
+  gl.uniform4fv(L.uAccent, palette.accent);
+  gl.uniform4fv(L.uGlow, palette.glow);
+  gl.uniform1f(L.uBatteryLevel, 1);
+  gl.uniform1f(L.uAudioBass, Number($('bass').value));
+  gl.uniform1f(L.uAudioBeat, beat > 0 ? 1 : 0);
+  gl.uniform1f(L.uTransition, transition);
+  gl.uniform1f(L.uFrameDt, Math.min(dt, 0.1));
+  gl.uniform1f(L.uFresh, fresh ? 1 : 0);
+  gl.uniform2f(L.uFocus, focus[0], focus[1]);
   for (let i = 0; i < 4; i++) {
-    const img = images[i];
+    const img = imgs[i];
     gl.activeTexture(gl.TEXTURE2 + i);
     gl.bindTexture(gl.TEXTURE_2D, img ? img.tex : null);
-    gl.uniform1i(loc['uImage' + i], 2 + i);
-    gl.uniform4f(loc['uImageSize' + i], img ? img.w : 0, img ? img.h : 0, img ? 1 / img.w : 0, img ? 1 / img.h : 0);
+    gl.uniform1i(L['uImage' + i], 2 + i);
+    gl.uniform4f(L['uImageSize' + i], img ? img.w : 0, img ? img.h : 0, img ? 1 / img.w : 0, img ? 1 / img.h : 0);
   }
-  // The video: this frame's picture, flipped so it is upright at gl_FragCoord / uResolution.
+  const [vw, vh] = uploadVideo();
+  gl.activeTexture(gl.TEXTURE6);
+  gl.bindTexture(gl.TEXTURE_2D, vw ? videoTex : null);
+  gl.uniform1i(L.uVideo, 6);
+  // The device copies at most 1280 on the long side; the size reported is the copy's.
+  const [cw, ch] = videoCopySize(vw, vh);
+  gl.uniform4f(L.uVideoSize, cw, ch, cw ? 1 / cw : 0, ch ? 1 / ch : 0);
+  gl.uniform4fv(L.uVideoRect, placeVideo($('fit').value, vw, vh));
+  gl.activeTexture(gl.TEXTURE0);
+}
+
+function videoCopySize(vw, vh) {
+  const kv = vw ? Math.min(1, 1280 / Math.max(vw, vh)) : 0;
+  return [Math.round(vw * kv), Math.round(vh * kv)];
+}
+
+// The video: this frame's picture, flipped so it is upright at gl_FragCoord / uResolution. Once a frame.
+let videoUploadedAt = -1;
+function uploadVideo() {
   let vw = 0, vh = 0;
   if (videoReady && videoEl.videoWidth) {
     vw = videoEl.videoWidth; vh = videoEl.videoHeight;
@@ -278,21 +341,17 @@ function setUniforms(dt) {
                             [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]])
         gl.texParameteri(gl.TEXTURE_2D, k, v);
     }
-    gl.activeTexture(gl.TEXTURE6);
-    gl.bindTexture(gl.TEXTURE_2D, videoTex);
-    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, videoEl);
-    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+    if (videoUploadedAt !== drawCount) {
+      videoUploadedAt = drawCount;
+      gl.activeTexture(gl.TEXTURE6);
+      gl.bindTexture(gl.TEXTURE_2D, videoTex);
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, videoEl);
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+      gl.activeTexture(gl.TEXTURE0);
+    }
   }
-  gl.activeTexture(gl.TEXTURE6);
-  gl.bindTexture(gl.TEXTURE_2D, vw ? videoTex : null);
-  gl.uniform1i(loc.uVideo, 6);
-  // The device copies at most 1280 on the long side; the size reported is the copy's.
-  const kv = vw ? Math.min(1, 1280 / Math.max(vw, vh)) : 0;
-  const cw = Math.round(vw * kv), ch = Math.round(vh * kv);
-  gl.uniform4f(loc.uVideoSize, cw, ch, cw ? 1 / cw : 0, ch ? 1 / ch : 0);
-  gl.uniform4fv(loc.uVideoRect, placeVideo($('fit').value, vw, vh));
-  gl.activeTexture(gl.TEXTURE0);
+  return [vw, vh];
 }
 
 function frame(now) {
@@ -311,7 +370,19 @@ function frame(now) {
   draw(dt);
 }
 
+let drawCount = 0;
 function draw(dt) {
+  drawCount++;
+  if (scene) {
+    const [vw, vh] = uploadVideo();
+    const [cw, ch] = videoCopySize(vw, vh);
+    sceneDraw({
+      time, focusX: focus[0], focusY: 1 - focus[1], // the mouse's GL y up back to the scene's y down
+      tiltX: Number($('tiltx').value), tiltY: Number($('tilty').value),
+      bass: Number($('bass').value), beat: beat > 0 ? 1 : 0, transition, daylight: Number($('day').value),
+    }, vw ? { tex: videoTex, w: cw, h: ch } : null, dt);
+    return;
+  }
   if (!prog) return;
 
   gl.useProgram(prog);

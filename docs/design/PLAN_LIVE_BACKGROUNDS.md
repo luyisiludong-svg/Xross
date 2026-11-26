@@ -11,7 +11,7 @@ Status: ✅ done · ◐ code done, device check open · ⬜ not started.
 | --- | --- | --- | --- |
 | 1 | Image inputs for pack shaders (`uImage0..3`, `uFocus`) | M | ◐ on `feat/live-backgrounds-image-inputs`; A55 timing open |
 | 2 | Video backgrounds (`effects.videoPath`, `uVideo`, VIDEO preset) | L | ◐ on `feat/live-backgrounds-image-inputs`; emulator checked, A55 runs open; stretch not started |
-| 3 | Layered scenes (`scene.json`: images, sprites, video, effect shaders, GPU particles) | L × 5–6 | ◐ 3a–3d on `feat/live-backgrounds-image-inputs` (3b–3d emulator checked); 3e–3f not started |
+| 3 | Layered scenes (`scene.json`: images, sprites, video, effect shaders, GPU particles) | L × 5–6 | ◐ 3a–3f on `feat/live-backgrounds-image-inputs` (3b–3f emulator checked); A55 timings, tilt tuning and the final overdraw cap open |
 
 **Order:** 1, then 2, then 3. Section 2 reuses § 1's texture units and upload path, and § 3 is
 built from § 1 and § 2 layers. Each section ships on its own: § 1 alone already enables painted
@@ -475,6 +475,82 @@ baseline.
 >   interleaved passes belong to 3f).
 > - **Next:** 3e, tilt parallax (the setting and the sensor) and tuning parallax on a device; the
 >   drivers already landed in 3b.
+>
+> **Progress (2026-11-26, 3e and 3f, same branch).** Code, unit tests, docs, the sample scene, the
+> preview and an emulator run are done. What needs the A55 is not: its timings, tuning tilt by
+> hand, and the final overdraw cap.
+>
+> - **Tilt (3e).**
+>   - `theme/engine/.../shader/SceneTilt.kt`, pure and tested. It reads the game rotation vector's
+>     quaternion relative to a rest pose, in the device's own frame, so any way of holding it
+>     works. It maps the turn onto the screen's axes for each display rotation: right edge away
+>     = +x, top edge towards you = +y, like the focus moving right and down. 12° is full scale,
+>     clamped. The rest pose follows the device with a 4 s time constant, so a held tilt drifts
+>     back to the middle.
+>   - `SceneInputs.tiltX/Y`. `ScenePoser.pull` adds them to the focus's pull and clamps the sum
+>     to -1..1, so the overscan always holds.
+>   - The setting: `XrossSettings.tiltParallax` (off by default), `settings.json`
+>     `performance.tiltParallax`, and Settings ▸ System ▸ Performance ▸ Tilt parallax
+>     (`Command.ToggleTiltParallax`).
+>   - `ui/TiltSensor.kt` listens at 50 ms (20 Hz) and hands the reading to `WaveRenderer.tiltX/Y`.
+>     The renderer eases it with the focus's 0.12 s. `WaveBackground` registers the sensor only
+>     while the setting is on and the wanted program is a scene with parallax
+>     (`Scene.hasParallax`, shader layers excluded), uncovered, not still, in a resumed activity.
+>     Stopping it eases the layers back to the middle.
+> - **Poster fallback (3f).**
+>   - A layered program the watchdog trips is not failed. `WaveRenderer.retireToPoster` notes
+>     why and posts a notice. It decodes the poster (`spec.images`, § 1's path) while the layers
+>     keep drawing; once the poster is uploaded, `dropLayers` frees the scene's textures, layer
+>     programs and targets. The program then draws as the built-in poster program, which isn't
+>     measured again.
+>   - A SCENE blocked by the canary starts poster-only, with a notice, instead of failing.
+>     `GlProgram.guarded` keeps the canary off a poster-only program.
+>   - Try retired shaders again drops poster-only programs, so they compile layered and are
+>     measured again; one still blocked by the canary stays a poster.
+>   - `SceneSource.canRetireToPoster`: only a poster whose file was found. Without one, the scene
+>     is retired to the wave as before.
+> - **Sample and preview (3f).**
+>   - `tools/shader-preview/examples/scene/` ("Neon Rain", generated art, 0.5 MB) uses every
+>     layer type: a scrolling sky with a daylight driver, the video over it in SCREEN, masked
+>     snow, a city at FIT/BOTTOM with audio and transition drivers, an ADD neon sprite, ADD embers,
+>     a rain shader layer (`rain.frag`, `uBelow` + a drop map) and ADD mist with sway. It is sharp
+>     and has a poster.
+>   - `tools/shader-preview/scene.js` ports `ScenePoser` and `GlScene.draw` onto the app's own
+>     `scene_layer` / `scene_particles` programs. `index.html` opens a scene from `?scene=` or a
+>     theme.json's `scenePath`, has tilt x/y and daylight sliders, and a 1920×864 size that a
+>     sharp scene selects.
+> - **Deviations:**
+>   - Tilt drives scenes only; `uFocus` for CUSTOM shaders stays the focus alone.
+>   - The sensor stays on while the screen rests (20 fps): tilting is a kind of input, and
+>     turning it off would ease the layers back to the middle on every rest.
+>   - A retired scene's video player keeps decoding (its layer is no longer drawn). Stopping it
+>     needs the retirement to reach `MainActivity`; left for the A55 battery run to judge.
+>   - The overdraw budget and the count limits landed in 3a, and the canary as one unit in 3c.
+> - **Tests:**
+>   - `SceneTiltTest` (4, `:theme:engine`): the first sample is the middle; the axes in all four
+>     rotations; the clamp, a zero quaternion and q = −q; the recentring and reset.
+>   - `ScenePoseTest` (+1, now 8): tilt adds to the focus and is clamped to the overscan.
+>   - `SceneTest` (+3, now 22): which scenes read the sensor, which can retire to their poster,
+>     and the sample pack loads with no problem, inside the budget.
+>   - `PerformanceSettingsTest` (+checks): the row, its command and text, the default, and the
+>     settings.json round trip.
+>   - The full `:app:testDebugUnitTest` (1,106) and `:theme:engine:test` (111) pass, and
+>     `validateShaders` is clean.
+> - **Preview:** the sample draws all 8 layers at 1920×864 with no console errors. Tilt x = 1
+>   moves the city layer (parallax 0.5) 29 px left, against 0.03 × 0.5 × 1920 = 28.8 expected.
+> - **Emulator** (API 37, `-gpu host`, debug build, the sample as a folder pack, tilt on):
+>   - The scene linked and uploaded six textures (1024×512 … 32×32). The video was copied at
+>     640×360, and everything draws in order under the XMB.
+>   - The watchdog passed (p90 9.01 ms of 10, glFinish; emulator timings mean little).
+>   - `dumpsys sensorservice` shows the game rotation vector registered at 50,000 µs while the
+>     scene shows. It was unregistered with Settings in front and registered again on return.
+> - **Not checked:**
+>   - The A55: the sample's watchdog p90 at soft and sharp, deadline jank while navigating, idle
+>     CPU, and the poster fallback after a forced slow verdict (three interleaved passes).
+>   - Tilt on a real device: its sign, its 12° range and its 4 s recentre, by hand.
+>   - A crash in a shader layer tripping the canary.
+>   - The sample as an `.xtheme` in `xross_themePacks` (videos are folder-pack only, so it would
+>     drop its video layer).
 
 **Goal.** A stack of layers as in Wallpaper Engine's scene type. Each layer can move, react to
 focus, audio and time, and carry its own effect. Sections 1 and 2 are the building blocks.
@@ -556,8 +632,8 @@ the scene, the same way it wins over a pack's shader today: opaque, covering, wa
 | 3b ✅ | Quad program; image and sprite layers; fit, anchor, blend, opacity; motions; resolution switch | L |
 | 3c ✅ | Video layer (§ 2's copy pass); shader layers with `uBelow` and ping-pong targets | M |
 | 3d ✅ | GPU particles; turns off Compose particles under a scene | M–L |
-| 3e | Parallax from `uFocus`; tilt setting; audio, transition and daylight drivers | S–M |
-| 3f | Overdraw budget, poster fallback, canary as one unit; A55 timings; spec, guide, a sample scene pack | M |
+| 3e ◐ | Parallax from `uFocus`; tilt setting; audio, transition and daylight drivers (tuning on the A55 open) | S–M |
+| 3f ◐ | Overdraw budget, poster fallback, canary as one unit; A55 timings (open); spec, guide, a sample scene pack | M |
 
 **Tests.**
 - Unit: the loader (every layer type, the problems, cascade, key), motions as pure functions of
@@ -574,7 +650,7 @@ the scene, the same way it wins over a pack's shader today: opaque, covering, wa
    consistent with today. The alternative is that the scene wins while it is the look's
    background.
 2. **Tilt parallax.** Proposed: an opt-in setting, off by default (it costs sensor wake-ups and
-   some find it distracting).
+   some find it distracting). Built that way in 3e; easy to flip if the A55 says otherwise.
 3. **Video from the user's own folders (§ 2 stretch).** In scope for § 2, or later?
 4. **`schemaVersion`.** Proposed: stays 2. All the new fields are optional, and an older Xross
    ignores them and shows the wave or wallpaper. There's no hard break worth a version bump.

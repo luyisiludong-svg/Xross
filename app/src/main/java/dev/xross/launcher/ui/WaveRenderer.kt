@@ -232,6 +232,15 @@ class WaveRenderer(
     /** What moves a scene this frame; filled in [renderScene]. */
     private val sceneInputs = SceneInputs()
 
+    /**
+     * Tilt parallax (Live backgrounds § 3e): the latest [dev.xross.launcher.theme.shader.SceneTilt]
+     * reading, -1..1 per axis, from the sensor's thread; 0 while the setting is off or no scene
+     * with parallax shows. Eased per frame like the focus.
+     */
+    @Volatile var tiltX = 0f
+    @Volatile var tiltY = 0f
+    private val shownTilt = FloatArray(2)
+
     /** `uFocus` on screen, eased toward params' (GL y up). */
     private val shownFocus = floatArrayOf(0.5f, 0.5f)
 
@@ -290,6 +299,9 @@ class WaveRenderer(
     private val verdicts = HashMap<String, FrameBudgetWatchdog.Verdict>()
     private val slowReasons = HashMap<String, String>()
     private val proven = HashSet<String>()
+
+    /** Live backgrounds § 3f: scenes retired to their poster this session, and why (cleared by Try retired shaders again). */
+    private val posterReasons = HashMap<String, String>()
     /** [ShaderHealth.retryGeneration] last acted on. */
     private var retrySeen = health?.retryGeneration ?: 0
     private var canaryKey: String? = null
@@ -400,6 +412,7 @@ class WaveRenderer(
         easeColor(shownGlow, p.glowRgb, k)
         val kf = if (still || lastFrameNs == 0L) 1f else focusStep(dt)
         easeFocus(shownFocus, p.focusX.coerceIn(0f, 1f), 1f - p.focusY.coerceIn(0f, 1f), kf)
+        easeFocus(shownTilt, if (still) 0f else tiltX.coerceIn(-1f, 1f), if (still) 0f else tiltY.coerceIn(-1f, 1f), kf)
         colorsShown = true
         if (lastFrameNs != 0L && !still) {
             stats?.record(now - lastFrameNs, stride)
@@ -525,8 +538,17 @@ class WaveRenderer(
         val program = GlProgram(spec)
         programs[spec.key] = program
         if (spec.untrusted && canary?.isBlocked(spec.key) == true) {
-            program.fail(ShaderStatus.Cause.CRASHED, "blocked after a crash")
-            return
+            // A scene's pack code is its shader layers: its poster is built in and still safe.
+            if (spec.scene?.canRetireToPoster == true) {
+                if (spec.key !in posterReasons) {
+                    posterReasons[spec.key] = "blocked after a crash"
+                    health?.notice(spec.key, "Scene ${spec.label} crashed here before · showing its poster")
+                }
+                program.posterOnly = true
+            } else {
+                program.fail(ShaderStatus.Cause.CRASHED, "blocked after a crash")
+                return
+            }
         }
         if (verdicts[spec.key] == FrameBudgetWatchdog.Verdict.TRIPPED) {
             program.fail(ShaderStatus.Cause.TOO_SLOW, slowReasons[spec.key].orEmpty())
@@ -545,10 +567,11 @@ class WaveRenderer(
             body == null -> program.fail(ShaderStatus.Cause.MISSING, if (custom || unreadable) "can't read ${spec.label}" else "missing from the app")
             pre == null -> program.fail(ShaderStatus.Cause.MISSING, "the shader prelude is missing from the app")
             else -> {
+                if (spec.key in posterReasons) program.posterOnly = true
                 // A driver that crashes compiling it (a scene's shader layers compile with it).
-                if (spec.untrusted) canary?.arm(spec.key)
+                if (program.guarded) canary?.arm(spec.key)
                 // A scene the quad program can draw shows its layers; else its poster (this program).
-                program.layered = sceneQuad.ready && GlScene.draws(spec.scene)
+                program.layered = !program.posterOnly && sceneQuad.ready && GlScene.draws(spec.scene)
                 if (program.layered) program.scene = GlScene(spec.scene!!)
                 program.begin(vertex, pre, body)
                 if (program.state != ProgramState.FAILED) program.scene?.beginLayers(vertex, pre)
@@ -562,7 +585,7 @@ class WaveRenderer(
         val log = program.settle()
         // Live backgrounds § 3c: a scene's shader layers; one that fails is left out, the rest draws.
         val layerProblems = program.scene?.takeIf { program.state == ProgramState.READY }?.settleLayers().orEmpty()
-        if (program.spec.untrusted) canary?.disarm(program.spec.key)
+        if (program.guarded) canary?.disarm(program.spec.key)
         if (layerProblems.isNotEmpty()) {
             health?.notice("layers:${program.spec.key}", "Scene ${program.spec.label}: ${layerProblems.joinToString("; ")} · left out")
         }
@@ -644,6 +667,8 @@ class WaveRenderer(
             val textures = ImageTextures()
             val ok = textures.upload(result.slots)
             program.textures = textures
+            // A scene being retired (§ 3f): its poster is up, so the layers go.
+            if (program.layered && program.spec.key in posterReasons) dropLayers(program)
             val problems = result.problems + if (ok) emptyList() else listOf("the GPU refused an image")
             if (problems.isNotEmpty()) {
                 Log.w(TAG, "${program.spec.label} images: ${problems.joinToString("; ")}")
@@ -735,7 +760,7 @@ class WaveRenderer(
 
     private fun draw(program: GlProgram, p: WaveParams, still: Boolean, now: Long) {
         val spec = program.spec
-        if (spec.untrusted && spec.key !in proven && canaryKey != spec.key) {
+        if (program.guarded && spec.key !in proven && canaryKey != spec.key) {
             canary?.arm(spec.key)
             canaryKey = spec.key
             canaryFrames = 0
@@ -799,6 +824,10 @@ class WaveRenderer(
                     Log.w(TAG, "watchdog kept slow ${program.spec.key}: $why (${method()}, ${dog.sampleCount} samples)")
                     return
                 }
+                if (program.layered && program.spec.scene?.canRetireToPoster == true) {
+                    retireToPoster(program, why)
+                    return
+                }
                 verdicts[program.spec.key] = FrameBudgetWatchdog.Verdict.TRIPPED
                 slowReasons[program.spec.key] = why
                 program.watchdog = null
@@ -806,6 +835,41 @@ class WaveRenderer(
                 Log.w(TAG, "watchdog tripped ${program.spec.key}: $why (${method()}, ${dog.sampleCount} samples)")
             }
         }
+    }
+
+    /**
+     * Live backgrounds § 3f: a slow scene is retired to its poster, not to the wave. The poster is
+     * decoded while the layers keep drawing; once it is on the GPU ([uploadDecoded]) the program
+     * drops its layers and draws as the poster program, which needs no measuring.
+     */
+    private fun retireToPoster(program: GlProgram, why: String) {
+        val key = program.spec.key
+        verdicts[key] = FrameBudgetWatchdog.Verdict.PASSED
+        posterReasons[key] = why
+        program.watchdog = null
+        health?.notice(key, "Scene ${program.spec.label} is slow here ($why) · showing its poster")
+        Log.w(TAG, "watchdog retired scene $key to its poster: $why (${method()})")
+        val decoder = imageDecoder
+        if (decoder == null) {
+            dropLayers(program)
+            return
+        }
+        decoder.decode(program.spec.images, maxImageSide, ShaderImage.BUDGET_PIXELS, premultiplied = false) { result ->
+            decoded.add(program to result)
+            onImagesDecoded?.invoke()
+        }
+    }
+
+    /** Draws [program] as its poster from now on: its scene's textures, layer programs and targets are freed. */
+    private fun dropLayers(program: GlProgram) {
+        program.posterOnly = true
+        if (!program.layered) return
+        program.layered = false
+        program.scene?.release()
+        program.scene = null
+        if (active === program && sceneTargets.allocated) sceneTargets.release()
+        if (canaryKey == program.spec.key) quiesce()
+        if (BuildConfig.PERF_LOG) Log.i(TAG, "scene ${program.spec.key} drawn as its poster")
     }
 
     private fun method() = if (timer?.supported == true) "timer query" else "glFinish"
@@ -825,6 +889,14 @@ class WaveRenderer(
                 (it.cause == ShaderStatus.Cause.TOO_SLOW || it.cause == ShaderStatus.Cause.CRASHED && canary?.isBlocked(it.spec.key) != true)
         }
         for (program in retired) {
+            programs.remove(program.spec.key)
+            program.release()
+        }
+        // Scenes retired to their poster (§ 3f) draw their layers again and are measured anew;
+        // one still blocked by the crash guard stays a poster.
+        posterReasons.keys.retainAll { canary?.isBlocked(it) == true }
+        val postered = programs.values.filter { it.posterOnly && it.spec.key !in posterReasons }
+        for (program in postered) {
             programs.remove(program.spec.key)
             program.release()
         }
@@ -886,6 +958,8 @@ class WaveRenderer(
         inputs.time = time
         inputs.focusX = shownFocus[0]
         inputs.focusY = 1f - shownFocus[1] // GL's y up back to the scene's y down
+        inputs.tiltX = shownTilt[0]
+        inputs.tiltY = shownTilt[1]
         inputs.bass = audioLevels[0]
         inputs.beat = audioLevels[1]
         inputs.transition = if (still) 0f else transition

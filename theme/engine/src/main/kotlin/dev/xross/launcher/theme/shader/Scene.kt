@@ -231,6 +231,9 @@ data class Scene(
     /** It draws its own particles (§ 3d): the Compose ambient particles stay off while it shows. */
     val hasParticles: Boolean get() = layers.any { it is SceneLayer.Particles }
 
+    /** A layer moves with the focus or the tilt (§ 3e): only then is the tilt sensor read. Shader layers ignore `parallax`. */
+    val hasParallax: Boolean get() = layers.any { it !is SceneLayer.Shader && it.look.parallax != 0f }
+
     /** Pack code runs in it: the scene is canary-guarded as one unit. */
     val hasShaderLayers: Boolean get() = layers.any { it is SceneLayer.Shader }
 
@@ -541,6 +544,12 @@ data class SceneSource(
 
     /** The poster as § 1's slot 0, so the poster program draws it: null when the scene has none, or its file is missing. */
     val posterImage: BoundImage? get() = scene.poster?.let { BoundImage(ShaderImage(it, mipmap = true), images[it]) }
+
+    /**
+     * A slow or crashed scene is retired to its poster (§ 3f), drawn alone by the built-in poster
+     * program, when there is a poster file to draw; else it is retired to the wave like any program.
+     */
+    val canRetireToPoster: Boolean get() = posterImage?.source != null
 
     /** Every file it names, pack-relative: what an export carries with it. */
     val files: List<String> get() = (listOf(path) + scene.imagePaths + scene.videoPaths + scene.shaderPaths).distinct()

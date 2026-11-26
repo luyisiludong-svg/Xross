@@ -207,8 +207,12 @@ Reference costs on the Galaxy A55, profiling build, watchdog p90 (§3.39):
   `videoFit`, the VIDEO preset's place in the cascade, the placements, the copy size and when the
   player plays, holds or lets go; `SceneTest` covers `scene.json` (every layer type, the problems,
   the budget), `effects.scenePath` in the cascade, the scene's key, its poster, the exporter, which images a
-  drawn scene decodes, the sharp resolution, and shader layers' programs (keys, images, rects); `ScenePoseTest` (`:theme:engine`) covers a layer's
-  box, parallax, sway, pulse, the input drivers, sprite cells and scrolling.
+  drawn scene decodes, the sharp resolution, shader layers' programs (keys, images, rects), which
+  scenes read the tilt sensor, which can retire to their poster, and the sample scene pack;
+  `ScenePoseTest` (`:theme:engine`) covers a layer's box, parallax (focus and tilt), sway, pulse,
+  the input drivers, sprite cells and scrolling; `SceneTiltTest` covers the tilt reading (relative
+  to how the device is held, the screen's axes per rotation, the clamp and the recentring);
+  `SceneParticlesTest` covers particle births and lives.
 
 ## 7. `BLACK_HOLE`, a worked example
 
@@ -462,9 +466,14 @@ uniform sampler2D uBelow;    // the layers below, composited so far (texture uni
   scene `uBelow` samples black.
 * **Cost.** Each shader layer is a full pass and the scene draws through two render targets while
   it has one, so the budget counts a shader layer as two screens. The watchdog times the whole
-  scene, not each layer.
+  scene, not each layer; a scene over budget is retired to its poster, not to the wave.
 * **Errors.** A layer that doesn't compile is left out (its error in the notice, with its place in
-  `scene.json`) and the rest of the scene still draws. The scene is crash-guarded as one unit.
+  `scene.json`) and the rest of the scene still draws. The scene is crash-guarded as one unit;
+  once blocked after a crash it shows its poster (the built-in poster program runs no pack code).
+* **Preview.** `tools/shader-preview/?theme=examples/scene/theme.json` draws a whole scene with the
+  app's own layer and particle programs, your shader layers over them; the mouse is the focus and
+  the tilt sliders stand in for the device. `examples/scene/rain.frag` is a shader layer to start
+  from.
 
 ```glsl
 // rain_glass.frag: the scene below, seen through running water (uImage0: a drop normal map).

@@ -478,6 +478,44 @@ class SceneTest {
         assertFalse(parse("""{"layers": [{"type": "image", "path": "sky.png"}]}""").first!!.hasParticles)
     }
 
+    @Test fun onlyAMovingLayerReadsTheTiltSensor() {
+        assertTrue(scene("""{"layers": [{"type": "image", "path": "sky.png"}, {"type": "particles", "rate": 5, "parallax": 0.4}]}""").hasParallax)
+        assertFalse(scene("""{"layers": [{"type": "image", "path": "sky.png"}]}""").hasParallax)
+        assertFalse(
+            "shader layers ignore parallax",
+            scene("""{"layers": [{"type": "image", "path": "sky.png"}, {"type": "shader", "path": "a.frag", "parallax": 1}]}""").hasParallax,
+        )
+    }
+
+    private fun scene(json: String) = parse(json).first!!
+
+    @Test fun theSampleScenePackLoadsCleanAndFitsTheBudget() {
+        // tools/shader-preview/examples/scene: every layer type, as a folder pack.
+        val sample = File("../tools/shader-preview/examples/scene").takeIf { it.isDirectory } ?: File("tools/shader-preview/examples/scene")
+        sample.copyRecursively(File(themes, "neon-rain"))
+        val t = loader.load("neon-rain")
+        assertEquals(emptyList<String>(), t.problems)
+        val src = t.scenes.getValue("scene.json")
+        val s = src.scene
+        assertEquals(listOf("image", "video", "particles", "image", "sprite", "particles", "shader", "image"), s.layers.map { it.type })
+        assertEquals(SceneResolution.SHARP, s.resolution)
+        assertTrue("under the overdraw cap: ${s.overdraw}", s.overdraw <= SceneBudget.MAX_OVERDRAW)
+        assertTrue(s.hasParallax && s.hasParticles && s.hasShaderLayers)
+        assertEquals("clouds.mp4", s.video)
+        assertTrue(src.canRetireToPoster)
+        assertEquals(setOf("rain.frag"), src.shaders.keys)
+    }
+
+    @Test fun aSceneRetiresToItsPosterOnlyWhenThereIsOneToDraw() {
+        pack(
+            "city",
+            """"effects": {"scenePath": "scene.json"}, "categoryOverrides": {"games": {"effects": {"scene": "night.json"}}}""",
+            cityFiles + ("night.json" to """{"layers": [{"type": "image", "path": "art/night.png"}]}"""))
+        val t = loader.load("city")
+        assertTrue("its poster file is in the pack", t.scenes.getValue("scene.json").canRetireToPoster)
+        assertFalse("a missing poster: retired to the wave like any program", t.scenes.getValue("night.json").canRetireToPoster)
+    }
+
     @Test fun theParticleProgramShipsWithItsOwnVersion() {
         for (name in listOf(dev.xross.launcher.ui.WaveRenderer.SCENE_PARTICLES_VERTEX_FILE, dev.xross.launcher.ui.WaveRenderer.SCENE_PARTICLES_FRAGMENT_FILE)) {
             val text = File("src/main/assets/shaders/$name").readText()

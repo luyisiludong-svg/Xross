@@ -82,6 +82,15 @@ internal class GlProgram(val spec: ShaderSpec) {
     /** A layered scene's textures and draw; null until it is set up. */
     var scene: GlScene? = null
 
+    /**
+     * Live backgrounds § 3f: a SCENE retired to its poster (too slow, or blocked after a crash).
+     * Only the built-in poster program runs, so the crash guard doesn't arm for it.
+     */
+    var posterOnly = false
+
+    /** A pack's own code runs in it: armed in the canary until proven ([ShaderSpec.untrusted], unless [posterOnly]). */
+    val guarded: Boolean get() = spec.untrusted && !posterOnly
+
     /** Waiting for its images to be decoded and uploaded ([ImageTextures], or a layered scene's [GlScene], shader layers' too). */
     val awaitingImages: Boolean get() = if (layered) scene?.ready != true else spec.images.isNotEmpty() && textures == null
 

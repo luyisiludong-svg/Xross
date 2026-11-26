@@ -1963,6 +1963,7 @@ class XmbViewModel(
             Command.CycleStandbyMotion -> settingsStore.update { it.copy(standbyMotion = it.standbyMotion.next()) }
             is Command.SetStandbyMotion -> settingsStore.update { it.copy(standbyMotion = command.mode) }
             Command.ToggleFullFrameRate -> settingsStore.update { it.copy(fullFrameRate = !it.fullFrameRate) }
+            Command.ToggleTiltParallax -> settingsStore.update { it.copy(tiltParallax = !it.tiltParallax) }
             Command.CycleSlowShaders -> setSlowShaders(settingsStore.current.slowShaders.next())
             is Command.SetSlowShaders -> setSlowShaders(command.mode)
             Command.RetrySlowShaders -> {

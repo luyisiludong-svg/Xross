@@ -121,6 +121,7 @@ fun AdaptiveWave(
         health = health,
         audio = audio,
         fullFrameRate = settings.fullFrameRate,
+        tiltParallax = settings.tiltParallax,
         video = video,
         otherVideo = otherVideo,
         videoResting = videoResting,

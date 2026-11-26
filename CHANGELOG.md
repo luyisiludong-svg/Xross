@@ -39,6 +39,14 @@
   life, speed, size and colour from the ranges, an image or a soft dot, and moving with the
   layer's parallax, sway and pulse. The field is full from the first frame and costs nothing while
   paused. Under a scene with particles of its own, the theme's foreground particles are off.
+- **Tilt parallax.** Settings ▸ System ▸ Performance ▸ Tilt parallax (off by default): a layered
+  scene's parallax layers also shift as you tilt the device, and drift back to the middle when you
+  hold it still. The motion sensor is read only while such a scene is on screen.
+- **Slow scenes show their poster.** A layered scene too slow for the device, or blocked after a
+  crash, now shows its poster image instead of switching to the wave. Try retired shaders again
+  draws its layers anew.
+- The shader preview draws layered scenes (every layer type, with the mouse as the focus and
+  sliders for tilt and daylight), and a complete sample scene, "Neon Rain", ships with it.
 
 ## 0.2.2.0-beta — 2026-11-21
 

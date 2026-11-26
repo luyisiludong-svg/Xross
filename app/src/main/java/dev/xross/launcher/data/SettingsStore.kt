@@ -197,6 +197,11 @@ data class XrossSettings(
     val fullFrameRate: Boolean = false,
     /** What the frame-budget watchdog does with a slow background shader. */
     val slowShaders: SlowShaders = SlowShaders.RETIRE,
+    /**
+     * A scene's parallax also follows the device's tilt (Live backgrounds § 3e): the game rotation
+     * sensor, read at 20 Hz only while a scene with parallax shows. Off by default.
+     */
+    val tiltParallax: Boolean = false,
 )
 
 /**

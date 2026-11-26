@@ -1791,6 +1791,15 @@ class MenuTree(private val s: MenuSnapshot) {
                 },
                 GlyphKey.DISPLAY, Command.ToggleFullFrameRate,
             ),
+            setting(
+                "perf:tilt", "Tilt parallax",
+                if (st.tiltParallax) {
+                    "On · layered scenes shift as the device tilts · reads the motion sensor while such a scene shows"
+                } else {
+                    "Off · layered scenes shift with the focus only"
+                },
+                GlyphKey.DISPLAY, Command.ToggleTiltParallax,
+            ),
             XmbNode(
                 id = "perf:slow",
                 title = "Slow shaders",

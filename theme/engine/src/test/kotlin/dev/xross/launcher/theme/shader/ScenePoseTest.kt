@@ -71,6 +71,26 @@ class ScenePoseTest {
         assertEquals("parallax 0 stays still", 0f, still[0], 0f)
     }
 
+    @Test fun tiltAddsToTheFocusWithinTheOverscan() {
+        val layer = image(LayerLook(fit = VideoFit.STRETCH, parallax = 1f))
+        val shift = ScenePoser.PARALLAX_SHIFT
+        inputs.focusX = 0.5f
+        inputs.focusY = 0.5f
+        inputs.tiltX = 0.5f
+        inputs.tiltY = -1f
+        val p = box(posed(layer))
+        assertEquals("half the shift left", -1280f * shift * 1.5f, p[0], 0.01f)
+        assertEquals("the full shift down", 0f, p[1], 0.01f)
+        inputs.focusX = 1f // focus right plus a tilt right: clamped to the overscan
+        val right = box(posed(layer))
+        assertEquals(-1280f * shift * 2, right[0], 0.01f)
+        assertEquals(1f, ScenePoser.pull(1f, 0.5f), 0f)
+        assertEquals(-1f, ScenePoser.pull(0f, -0.5f), 0f)
+        assertEquals(0.25f, ScenePoser.pull(0.5f, 0.25f), 0f)
+        inputs.tiltX = 0f
+        inputs.tiltY = 0f
+    }
+
     @Test fun swayAndPulseAreSinesOfTheirPeriods() {
         val layer = image(LayerLook(rect = LayerRect(0f, 0f, 0.5f, 0.5f), motion = LayerMotion(sway = Sway(angle = 90f, period = 4f), pulse = Pulse(scale = 0.5f, opacity = -0.5f, period = 4f))))
         inputs.time = 0.0
