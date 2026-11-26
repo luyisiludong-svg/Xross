@@ -362,11 +362,11 @@ is accepted too), `FIT`, `STRETCH` or `CENTER`. `"none"` turns a video off.
 
 ### Layered scenes
 
-*In progress (Live backgrounds § 3).* The whole format below is read and checked. **Image,
-sprite, video and shader layers are drawn**, with their placement, blend, opacity, mask, parallax
-and motion, and `resolution` applies. Particle layers are skipped until a later update. A scene
-with none of the drawn kinds shows its **poster**. A pack written against this section keeps
-working as the rest lands.
+*In progress (Live backgrounds § 3).* The whole format below is read, checked and drawn: **image,
+sprite, video, shader and particle layers**, with their placement, blend, opacity, mask, parallax
+and motion, and `resolution` applies. Until its images are loaded, the scene shows its
+**poster**. Still to come: tilt parallax, and the scene retiring to its poster when it is too
+slow. A pack written against this section keeps working as the rest lands.
 
 `effects.scenePath` (alias `scene`) names a `.json` file in the pack that describes a stack of
 layers, drawn bottom to top. `"shaderPreset": "SCENE"` alone reads `scene.json`. A scene is one
@@ -404,7 +404,7 @@ Every path is relative to the pack root, like the rest of `theme.json`.
   | `video` | `path` (MP4 or WebM, folder packs only, at most 30 MB), looped and muted; one file per scene, which several layers may show |
   | `sprite` | `path`, `frames` `[columns, rows]` (1–64 each), `fps` (default 8), `count` (default every cell) |
   | `shader` | `path` (a `.frag`), `images` (up to four, as `effects.shaderImages`); it reads the layers below it as `uBelow` |
-  | `particles` | `path` (optional; a soft dot without one), `rate` per second (required), `life` `[min, max]` s, `velocity` `[[xMin, xMax], [yMin, yMax]]` px/s, `size` `[min, max]` px, `color` `[start, end]` |
+  | `particles` | `path` (optional; a soft dot without one), `rate` per second (required), `life` `[min, max]` s (default `[2, 4]`), `velocity` `[[xMin, xMax], [yMin, yMax]]` px/s (default drifting up), `size` `[min, max]` px (default `[4, 8]`), `color` `[start, end]` (default white fading out) |
 
 * **Keys every layer has:** `opacity` (0–1), `blend` (`NORMAL`, `ADD`, `SCREEN`, `MULTIPLY`),
   `rect` `[x, y, width, height]` (fractions of the screen from its top-left corner) or `fit`
@@ -440,6 +440,18 @@ Every path is relative to the pack root, like the rest of `theme.json`.
   layer and are listed as problems. `uPrev` and `uField` aren't available in a layer (`uFresh` is
   1). A shader layer that doesn't compile is left out with a notice; the rest of the scene draws.
   A scene with shader layers is pack code: it is crash-guarded as one unit, like a pack's shader.
+* **Particle layers** are drawn on the GPU, all of a layer's particles in one draw. Particles are
+  born evenly at `rate` per second across the layer's box (its `rect`, else the whole screen), each
+  with its own life, velocity and size picked from the ranges. They move in a straight line, fade
+  in over their first moment (at most 0.25 s) and go from the first `color` to the last over their
+  life. The box itself takes `parallax`, `sway`, `pulse` and the drivers, so the whole field moves
+  together; particles may leave it. A `mask` is stretched over the box. `path` tints a premultiplied
+  image by the colour; without it each particle is a soft dot. `scroll` doesn't apply (it is listed
+  as a problem). The field is full from the first frame and never needs warming up, and a pause
+  costs nothing: each particle is worked out from the time alone. In Still mode they freeze.
+* **Ambient particles.** While a scene with particle layers is the background, the theme's
+  foreground particles (`cosmetics.particleField`, or the one you picked) aren't drawn: the scene
+  has its own.
 * **Budget for images:** a scene's drawn images share 16 megapixels, each at most 2048 px on its
   long side. Images past that are left out (top layers first) with a notice. Shader layers'
   `images` share another 8 megapixels, as one shader's `shaderImages` do.

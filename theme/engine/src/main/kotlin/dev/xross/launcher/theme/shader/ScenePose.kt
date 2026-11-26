@@ -48,6 +48,9 @@ class LayerPose {
     var du = 1f
     var dv = 1f
     var opacity = 1f
+
+    /** The motion's scale (pulse, drivers) on the box: a particle layer sizes its particles by it (§ 3d). */
+    var scale = 1f
 }
 
 /**
@@ -63,6 +66,9 @@ class LayerPose {
  *    `daylight` add their amounts times the input. Scale and rotation are about the box's centre.
  *    `scroll` moves the texture window, in texels of the uploaded texture per second.
  *  - **Sprite.** Cell `floor(time × fps) mod count`, left to right, top to bottom.
+ *  - **Particles** (§ 3d) are posed as their emitter's box: the layer's `rect`, else the screen
+ *    (the renderer passes the screen as the texture size, so a covering fit overscans it). The
+ *    particles move inside that box ([SceneParticles]), and the box carries parallax and motion.
  */
 object ScenePoser {
     /** Largest parallax shift, as a fraction of the screen's width and height. */
@@ -185,6 +191,7 @@ object ScenePoser {
         out.u0 -= scrolled(t, m.scroll.x, texW)
         out.v0 -= scrolled(t, m.scroll.y, texH)
         out.opacity = opacity
+        out.scale = scale
         return true
     }
 

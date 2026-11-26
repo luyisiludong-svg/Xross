@@ -11,7 +11,7 @@ Status: ✅ done · ◐ code done, device check open · ⬜ not started.
 | --- | --- | --- | --- |
 | 1 | Image inputs for pack shaders (`uImage0..3`, `uFocus`) | M | ◐ on `feat/live-backgrounds-image-inputs`; A55 timing open |
 | 2 | Video backgrounds (`effects.videoPath`, `uVideo`, VIDEO preset) | L | ◐ on `feat/live-backgrounds-image-inputs`; emulator checked, A55 runs open; stretch not started |
-| 3 | Layered scenes (`scene.json`: images, sprites, video, effect shaders, GPU particles) | L × 5–6 | ◐ 3a–3c on `feat/live-backgrounds-image-inputs` (3b, 3c emulator checked); 3d–3f not started |
+| 3 | Layered scenes (`scene.json`: images, sprites, video, effect shaders, GPU particles) | L × 5–6 | ◐ 3a–3d on `feat/live-backgrounds-image-inputs` (3b–3d emulator checked); 3e–3f not started |
 
 **Order:** 1, then 2, then 3. Section 2 reuses § 1's texture units and upload path, and § 3 is
 built from § 1 and § 2 layers. Each section ships on its own: § 1 alone already enables painted
@@ -419,6 +419,62 @@ baseline.
 >     old key.
 > - **Not checked:** the A55 (no device), and a crash in a shader layer tripping the canary.
 > - **Next:** 3d, GPU particles, and turning off the Compose particles under a scene.
+>
+> **Progress (2026-11-26, 3d, same branch).** Code, unit tests, docs and an emulator run are done.
+> 3e–3f are not started.
+>
+> - **Arithmetic.** `theme/engine/.../shader/SceneParticles.kt`, pure and tested, and the same
+>   steps in `scene_particles.vert`:
+>   - A layer has `count` = `ceil(rate × lifeMax)` slots. Slot `i` is born at `i / rate`, then
+>     every `period` = `count / rate` (never shorter than the longest life).
+>   - Each birth is a new particle: life, spawn point, velocity and size come from a 32-bit hash
+>     of the slot, the cycle (mod 256) and the layer's index (its seed).
+>   - The GPU gets `uPhase`: the time wrapped to 256 periods in double precision on the CPU. The
+>     time → (cycle mod 256, age) mapping is periodic in exactly that span, so the wrap is
+>     seamless, and float steps stay around 2 ms at the longest span (100 s × 256).
+>   - The field is full at time 0 (slots not yet born are in their previous cycle), and a pause
+>     costs nothing.
+>   - A fade-in over min(0.25 s, 10 % of the life); colour from `color[0]` to `color[1]` over the
+>     life, premultiplied.
+> - **GL.** `SceneParticleProgram` in `GlScene.kt` (`scene_particles.vert` / `.frag`, compiled
+>   once per context next to the quad program; the two now share `linkSceneProgram`). A layer is
+>   one `glDrawArraysInstanced` of a 4-vertex strip × `count`, with no buffers. Dead slots collapse
+>   to a point. The image (if any) is a premultiplied, mipmapped scene texture, tinted by the
+>   colour; without one, a soft dot. Blend modes are the quads'.
+> - **The emitter's box.** `ScenePoser.pose` poses the layer as an image the size of the screen:
+>   its `rect`, else the screen, overscanned by a covering fit. Parallax, sway, pulse and the
+>   drivers move the whole field. `LayerPose.scale` (new) carries the motion's scale, so the box
+>   before scaling (where particles move, in its own pixels) and the particles' size follow it.
+>   A `mask` is stretched over the box.
+> - **Compose particles.** `Scene.hasParticles`. `MainActivity` passes `sceneParticles` to
+>   `XmbScreen`, which doesn't draw `AmbientParticles` while such a scene is the background.
+> - **Deviations:**
+>   - `GlScene.drawn` is gone: every layer type is drawn, so a scene shows its poster only while
+>     its textures load or where the quad program didn't link. A shader layer's key and label
+>     now use its index in the file (`#5`, `layers[5]`), as particle layers are no longer
+>     filtered out first.
+>   - `scroll` on a particle layer is reported as ignored. The particles move by `velocity`.
+>   - Particles aren't rotated, and they may leave the box (it's where they're born, not a clip).
+>   - A particle program that doesn't link skips particle layers; the rest of the scene draws.
+>   - Compose particles stay off even while a user wallpaper covers the scene.
+> - **Tests:** `SceneParticlesTest` (8, `:theme:engine`): slots and period, births spread at the
+>   rate, about rate × mean life alive from the first frame, rebirths and seeds differ, ranges,
+>   the seamless wrap and precision after days, fade-in and progress, dead slots, the box's motion
+>   scale. `SceneTest` (+2, now 19): particle layers drawn and their images decoded, a
+>   particle-only scene drawn, the `scroll` notice, `hasParticles`, and the shader's constants
+>   matching `SceneParticles`. The full `:app:testDebugUnitTest` (1,103) and `:theme:engine:test`
+>   (106) pass, and `validateShaders` is clean (15 units).
+> - **Emulator** (API 37, `-gpu host`, debug build, a generated 4-layer scene at `sharp`: a sky, a
+>   soft-dot snow layer masked to the top, a city silhouette, and ADD embers with an image in the
+>   bottom 45 % with parallax and a pulse; the foreground particles set to SNOW in settings):
+>   - All four textures uploaded and both particle layers draw in order. The snow fades out under
+>     its mask, the embers rise over the city, and the frames change from second to second.
+>   - No ambient snow flakes over the scene.
+>   - The watchdog passed (p90 5.17 ms, glFinish; emulator timings mean little).
+> - **Not checked:** the A55 (no device), and the cost of 2,000 particles (the plan's three
+>   interleaved passes belong to 3f).
+> - **Next:** 3e, tilt parallax (the setting and the sensor) and tuning parallax on a device; the
+>   drivers already landed in 3b.
 
 **Goal.** A stack of layers as in Wallpaper Engine's scene type. Each layer can move, react to
 focus, audio and time, and carry its own effect. Sections 1 and 2 are the building blocks.
@@ -499,7 +555,7 @@ the scene, the same way it wins over a pack's shader today: opaque, covering, wa
 | 3a ✅ | `scene.json` model, loader, problems, key, poster; unit tests | M |
 | 3b ✅ | Quad program; image and sprite layers; fit, anchor, blend, opacity; motions; resolution switch | L |
 | 3c ✅ | Video layer (§ 2's copy pass); shader layers with `uBelow` and ping-pong targets | M |
-| 3d | GPU particles; turns off Compose particles under a scene | M–L |
+| 3d ✅ | GPU particles; turns off Compose particles under a scene | M–L |
 | 3e | Parallax from `uFocus`; tilt setting; audio, transition and daylight drivers | S–M |
 | 3f | Overdraw budget, poster fallback, canary as one unit; A55 timings; spec, guide, a sample scene pack | M |
 

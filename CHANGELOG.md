@@ -34,6 +34,11 @@
   is a full-screen shader that reads the layers below it as `uBelow` and replaces them inside its
   `rect`, at its opacity; one that doesn't compile is left out with a notice. A scene with shader
   layers is crash-guarded like a pack's shader. Particle layers follow in a later update.
+- **Layered scenes draw particles.** A particle layer is drawn on the GPU in one go, up to 2,000
+  particles per scene: born at its `rate` across its `rect` (or the screen), each with its own
+  life, speed, size and colour from the ranges, an image or a soft dot, and moving with the
+  layer's parallax, sway and pulse. The field is full from the first frame and costs nothing while
+  paused. Under a scene with particles of its own, the theme's foreground particles are off.
 
 ## 0.2.2.0-beta — 2026-11-21
 

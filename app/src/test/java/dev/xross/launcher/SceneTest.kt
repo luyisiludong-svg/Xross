@@ -368,12 +368,13 @@ class SceneTest {
         val src = t.scenes.getValue("scene.json")
         assertTrue(dev.xross.launcher.ui.GlScene.draws(src))
         assertEquals(
-            "each image once, bottom layer first; particles' images wait for 3d",
-            listOf("sky.png", "m.png", "fg.png"),
+            "each image once, bottom layer first, the particles' image too (3d)",
+            listOf("sky.png", "m.png", "spark.png", "fg.png"),
             dev.xross.launcher.ui.GlScene.textureImages(src).map { it.image.path },
         )
         assertTrue(dev.xross.launcher.ui.GlScene.textureImages(src).all { it.image.mipmap && it.source != null })
-        assertFalse("particles only, until 3d: the poster program shows it", dev.xross.launcher.ui.GlScene.draws(t.scenes.getValue("dots.json")))
+        assertTrue("particles alone are drawn since 3d", dev.xross.launcher.ui.GlScene.draws(t.scenes.getValue("dots.json")))
+        assertFalse(dev.xross.launcher.ui.GlScene.draws(null))
 
         val lib = t.shaderLibrary
         assertEquals(1920, dev.xross.launcher.ui.WaveRenderer.longSide(lib, lib.keyOf(t.look().shader)))
@@ -415,8 +416,8 @@ class SceneTest {
             listOf("art/sky.png"),
             dev.xross.launcher.ui.GlScene.textureImages(src).map { it.image.path },
         )
-        // Drawn layers: sky 0, video 1, glass 2, missing 3, glass 4 (the particles aren't drawn yet).
-        val shaders = src.scene.layers.filterNot { it is SceneLayer.Particles }.withIndex().filter { it.value is SceneLayer.Shader }
+        // Layers: sky 0, video 1, glass 2, particles 3, missing 4, glass 5 (every layer is drawn since 3d).
+        val shaders = src.scene.layers.withIndex().filter { it.value is SceneLayer.Shader }
         val specs = shaders.map { (i, layer) -> dev.xross.launcher.ui.GlScene.layerSpec(src, layer as SceneLayer.Shader, i) }
         assertNull("a layer whose text is missing has no program", specs[1])
         val glass = specs[0]!!
@@ -427,7 +428,7 @@ class SceneTest {
         assertEquals(listOf("art/drops.png", null, "art/sky.png"), glass.images.map { it?.image?.path })
         assertEquals(ImageWrap.REPEAT, glass.images[2]!!.image.wrap)
         assertTrue("images are found like § 1's", glass.images.filterNotNull().all { it.source != null })
-        assertEquals("${src.key}#4", specs[2]!!.key)
+        assertEquals("${src.key}#5", specs[2]!!.key)
         assertTrue(specs[2]!!.images.isEmpty())
     }
 
@@ -456,6 +457,37 @@ class SceneTest {
         val prelude = File("src/main/assets/shaders/prelude.glsl").readText()
         assertTrue(prelude.contains("uniform sampler2D uBelow;"))
         assertEquals(7, dev.xross.launcher.ui.GlScene.BELOW_UNIT)
+    }
+
+    // endregion
+
+    // region Particle layers (3d)
+
+    @Test fun particleLayersAreDrawnAndTurnTheAmbientParticlesOff() {
+        val (scene, problems) = parse(
+            """{"layers": [
+                {"type": "image", "path": "sky.png"},
+                {"type": "particles", "path": "ember.png", "rate": 30, "life": [3, 6], "scroll": [0, 4], "mask": "m.png", "blend": "ADD", "parallax": 0.7}
+            ]}""",
+        )
+        assertTrue(problems.toString(), problems.single().contains("layers[1].scroll is ignored on a particle layer"))
+        val embers = scene!!.layers[1] as SceneLayer.Particles
+        assertEquals("m.png", embers.look.mask)
+        assertEquals(LayerBlend.ADD, embers.look.blend)
+        assertTrue(scene.hasParticles)
+        assertFalse(parse("""{"layers": [{"type": "image", "path": "sky.png"}]}""").first!!.hasParticles)
+    }
+
+    @Test fun theParticleProgramShipsWithItsOwnVersion() {
+        for (name in listOf(dev.xross.launcher.ui.WaveRenderer.SCENE_PARTICLES_VERTEX_FILE, dev.xross.launcher.ui.WaveRenderer.SCENE_PARTICLES_FRAGMENT_FILE)) {
+            val text = File("src/main/assets/shaders/$name").readText()
+            assertTrue(name, text.trimStart().startsWith("#version 300 es"))
+        }
+        val vert = File("src/main/assets/shaders/scene_particles.vert").readText()
+        // The same constants as SceneParticles, which the arithmetic's tests run against.
+        assertTrue(vert.contains("const float CYCLES = ${dev.xross.launcher.theme.shader.SceneParticles.CYCLES}.0;"))
+        assertTrue(vert.contains("0x7feb352du") && vert.contains("0x846ca68bu") && vert.contains("0x9E3779B9u"))
+        assertTrue(vert.contains("min(${dev.xross.launcher.theme.shader.SceneParticles.FADE_IN_MAX}, ${dev.xross.launcher.theme.shader.SceneParticles.FADE_IN_FRACTION} * life)"))
     }
 
     // endregion

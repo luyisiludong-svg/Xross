@@ -10,6 +10,7 @@ import dev.xross.launcher.theme.shader.LayerRect
 import dev.xross.launcher.theme.shader.ProgramState
 import dev.xross.launcher.theme.shader.SceneInputs
 import dev.xross.launcher.theme.shader.SceneLayer
+import dev.xross.launcher.theme.shader.SceneParticles
 import dev.xross.launcher.theme.shader.ScenePoser
 import dev.xross.launcher.theme.shader.SceneSource
 import dev.xross.launcher.theme.shader.ShaderImage
@@ -42,28 +43,8 @@ internal class SceneQuadProgram {
     fun compile(vertexSource: String?, fragmentSource: String?) {
         handle = 0
         samplers.fill(0)
-        if (vertexSource == null || fragmentSource == null) {
-            Log.e(TAG, "scene layer program missing from the app")
-            return
-        }
-        val vs = shader(GLES30.GL_VERTEX_SHADER, vertexSource) ?: return
-        val fs = shader(GLES30.GL_FRAGMENT_SHADER, fragmentSource) ?: run {
-            GLES30.glDeleteShader(vs)
-            return
-        }
-        val program = GLES30.glCreateProgram()
-        GLES30.glAttachShader(program, vs)
-        GLES30.glAttachShader(program, fs)
-        GLES30.glLinkProgram(program)
-        GLES30.glDeleteShader(vs)
-        GLES30.glDeleteShader(fs)
-        val status = IntArray(1)
-        GLES30.glGetProgramiv(program, GLES30.GL_LINK_STATUS, status, 0)
-        if (status[0] == 0) {
-            Log.e(TAG, "scene layer program: ${GLES30.glGetProgramInfoLog(program)}")
-            GLES30.glDeleteProgram(program)
-            return
-        }
+        val program = linkSceneProgram("scene layer", vertexSource, fragmentSource)
+        if (program == 0) return
         handle = program
         fun loc(name: String) = GLES30.glGetUniformLocation(program, name)
         uOrigin = loc("uOrigin"); uAxisX = loc("uAxisX"); uAxisY = loc("uAxisY"); uUv = loc("uUv")
@@ -94,36 +75,99 @@ internal class SceneQuadProgram {
     /** For textures without mipmaps (the video copy). */
     val linearSampler: Int get() = samplers[ImageWrap.entries.size]
 
-    private fun shader(type: Int, source: String): Int? {
-        val s = GLES30.glCreateShader(type)
-        if (s == 0) return null
-        GLES30.glShaderSource(s, source)
-        GLES30.glCompileShader(s)
-        val status = IntArray(1)
-        GLES30.glGetShaderiv(s, GLES30.GL_COMPILE_STATUS, status, 0)
-        if (status[0] == 0) {
-            Log.e(TAG, "scene layer shader: ${GLES30.glGetShaderInfoLog(s)}")
-            GLES30.glDeleteShader(s)
-            return null
-        }
-        return s
-    }
-
     fun release() {
         if (handle != 0) GLES30.glDeleteProgram(handle)
         if (samplers[0] != 0) GLES30.glDeleteSamplers(samplers.size, samplers, 0)
         handle = 0
         samplers.fill(0)
     }
-
-    private companion object {
-        const val TAG = "XrossScene"
-    }
 }
 
 /**
- * A scene's layers on the GPU (Live backgrounds § 3b, 3c), owned by its [GlProgram]:
- *  - **Image and sprite layers:** one RGBA8 texture with mipmaps per image they read
+ * A scene's particle layers (Live backgrounds § 3d): `scene_particles.vert` / `.frag`, compiled
+ * once per context next to [SceneQuadProgram]. A layer is one instanced draw of its
+ * [SceneLayer.Particles.count] slots, each a pure function of its index and the time
+ * ([SceneParticles]). If it doesn't link, particle layers are skipped and the rest of the scene
+ * draws.
+ */
+internal class SceneParticleProgram {
+    var handle = 0
+        private set
+    val ready: Boolean get() = handle != 0
+
+    var uScreen = -1; var uOrigin = -1; var uAxisX = -1; var uAxisY = -1; var uBox = -1; var uRef = -1; var uScale = -1
+    var uPhase = -1; var uRate = -1; var uPeriod = -1; var uLife = -1; var uVelX = -1; var uVelY = -1; var uSize = -1
+    var uColor0 = -1; var uColor1 = -1; var uSeed = -1; var uHasTex = -1; var uHasMask = -1; var uOpacity = -1
+
+    fun compile(vertexSource: String?, fragmentSource: String?) {
+        handle = linkSceneProgram("scene particles", vertexSource, fragmentSource)
+        if (handle == 0) return
+        fun loc(name: String) = GLES30.glGetUniformLocation(handle, name)
+        uScreen = loc("uScreen"); uOrigin = loc("uOrigin"); uAxisX = loc("uAxisX"); uAxisY = loc("uAxisY")
+        uBox = loc("uBox"); uRef = loc("uRef"); uScale = loc("uScale"); uPhase = loc("uPhase"); uRate = loc("uRate")
+        uPeriod = loc("uPeriod"); uLife = loc("uLife"); uVelX = loc("uVelX"); uVelY = loc("uVelY"); uSize = loc("uSize")
+        uColor0 = loc("uColor0"); uColor1 = loc("uColor1"); uSeed = loc("uSeed")
+        uHasTex = loc("uHasTex"); uHasMask = loc("uHasMask"); uOpacity = loc("uOpacity")
+        GLES30.glUseProgram(handle)
+        GLES30.glUniform1i(loc("uTex"), 0)
+        GLES30.glUniform1i(loc("uMask"), 1)
+        GLES30.glUseProgram(0)
+    }
+
+    fun release() {
+        if (handle != 0) GLES30.glDeleteProgram(handle)
+        handle = 0
+    }
+}
+
+/** Compiles and links a scene program with its own `#version`; 0 when a source is missing or the driver refuses it. */
+private fun linkSceneProgram(what: String, vertexSource: String?, fragmentSource: String?): Int {
+    if (vertexSource == null || fragmentSource == null) {
+        Log.e(SCENE_TAG, "$what program missing from the app")
+        return 0
+    }
+    fun shader(type: Int, source: String): Int {
+        val s = GLES30.glCreateShader(type)
+        if (s == 0) return 0
+        GLES30.glShaderSource(s, source)
+        GLES30.glCompileShader(s)
+        val status = IntArray(1)
+        GLES30.glGetShaderiv(s, GLES30.GL_COMPILE_STATUS, status, 0)
+        if (status[0] == 0) {
+            Log.e(SCENE_TAG, "$what shader: ${GLES30.glGetShaderInfoLog(s)}")
+            GLES30.glDeleteShader(s)
+            return 0
+        }
+        return s
+    }
+    val vs = shader(GLES30.GL_VERTEX_SHADER, vertexSource)
+    if (vs == 0) return 0
+    val fs = shader(GLES30.GL_FRAGMENT_SHADER, fragmentSource)
+    if (fs == 0) {
+        GLES30.glDeleteShader(vs)
+        return 0
+    }
+    val program = GLES30.glCreateProgram()
+    GLES30.glAttachShader(program, vs)
+    GLES30.glAttachShader(program, fs)
+    GLES30.glLinkProgram(program)
+    GLES30.glDeleteShader(vs)
+    GLES30.glDeleteShader(fs)
+    val status = IntArray(1)
+    GLES30.glGetProgramiv(program, GLES30.GL_LINK_STATUS, status, 0)
+    if (status[0] == 0) {
+        Log.e(SCENE_TAG, "$what program: ${GLES30.glGetProgramInfoLog(program)}")
+        GLES30.glDeleteProgram(program)
+        return 0
+    }
+    return program
+}
+
+private const val SCENE_TAG = "XrossScene"
+
+/**
+ * A scene's layers on the GPU (Live backgrounds § 3b–3d), owned by its [GlProgram]:
+ *  - **Image, sprite and particle layers:** one RGBA8 texture with mipmaps per image they read
  *    ([textureImages]), uploaded once from pixels [ShaderImageLoader] decoded premultiplied on IO.
  *  - **Video layers:** the § 2 copy ([VideoTexture]) of the scene's one video file, drawn like an
  *    image (it is opaque, so premultiplied as it is). Before the first frame they are skipped.
@@ -132,12 +176,15 @@ internal class SceneQuadProgram {
  *    alpha like § 1). While the scene has one, it is drawn into a [SceneTargets] ping-pong pair:
  *    each shader layer reads the layers so far as `uBelow` and writes the other target, and the
  *    last target is blitted to the screen.
+ *  - **Particle layers:** one instanced draw each through [SceneParticleProgram], their emitter's
+ *    box posed like an image ([ScenePoser]) and each particle computed on the GPU
+ *    ([SceneParticles]). No buffers and no CPU state.
  *
  * [draw] lays the theme gradient, then each layer bottom to top with its blend, opacity, mask and
- * pose ([ScenePoser]). Particle layers come with 3d; until then they are skipped.
+ * pose ([ScenePoser]).
  */
 internal class GlScene(val source: SceneSource) {
-    private val layers: List<SceneLayer> = source.scene.layers.filter(::drawn)
+    private val layers: List<SceneLayer> = source.scene.layers
 
     /** The images to decode, in layer order (so the budget drops the top layers' first). */
     val textureImages: List<BoundImage> = textureImages(source)
@@ -246,7 +293,8 @@ internal class GlScene(val source: SceneSource) {
     }
 
     /**
-     * One frame on a [width] × [height] target: the gradient, then the layers. [video] holds the
+     * One frame on a [width] × [height] target: the gradient, then the layers ([particles] draws
+     * the particle layers; when it didn't link they are skipped). [video] holds the
      * scene's video frame (null: none yet). With shader layers and [targets] allocated, it draws
      * through them and blits the result to framebuffer 0; [drawShader] draws a shader layer's
      * program (every prelude uniform bound) with the given texture as `uBelow`. Without targets
@@ -254,6 +302,7 @@ internal class GlScene(val source: SceneSource) {
      */
     fun draw(
         quad: SceneQuadProgram,
+        particles: SceneParticleProgram,
         width: Int,
         height: Int,
         inputs: SceneInputs,
@@ -288,6 +337,10 @@ internal class GlScene(val source: SceneSource) {
                 shaderLayer(layer, program, targets!!, width, height, drawShader)
                 GLES30.glUseProgram(quad.handle)
                 GLES30.glEnable(GLES30.GL_BLEND)
+                continue
+            }
+            if (layer is SceneLayer.Particles) {
+                if (particles.ready && particleLayer(layer, i, quad, particles, width, height, inputs)) GLES30.glUseProgram(quad.handle)
                 continue
             }
             val t: Int
@@ -367,6 +420,61 @@ internal class GlScene(val source: SceneSource) {
         GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
     }
 
+    /**
+     * A particle layer: its emitter's box (the `rect`, else the screen, overscanned by a covering
+     * fit) posed like an image, then one instanced draw of every slot. False when nothing was drawn
+     * (the quad program is still bound then).
+     */
+    private fun particleLayer(layer: SceneLayer.Particles, index: Int, quad: SceneQuadProgram, program: SceneParticleProgram, width: Int, height: Int, inputs: SceneInputs): Boolean {
+        if (!ScenePoser.pose(layer, width, height, width, height, inputs, pose)) return false
+        val scale = pose.scale.takeIf { it > 0f } ?: return false
+        // The box before the motion scaled it: its edges' lengths over the scale.
+        val boxW = kotlin.math.hypot(pose.axisXx, pose.axisXy) / scale
+        val boxH = kotlin.math.hypot(pose.axisYx, pose.axisYy) / scale
+        if (boxW <= 0f || boxH <= 0f) return false
+        GLES30.glUseProgram(program.handle)
+        blend(layer.look.blend)
+        val k = layerTex[index]
+        val t = if (k >= 0) tex[k] else 0
+        GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, t)
+        GLES30.glBindSampler(0, quad.sampler(ImageWrap.CLAMP))
+        val mask = maskTex[index].takeIf { it >= 0 }?.let { tex[it] } ?: 0
+        GLES30.glActiveTexture(GLES30.GL_TEXTURE1)
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, mask)
+        GLES30.glBindSampler(1, quad.sampler(ImageWrap.CLAMP))
+        GLES30.glUniform1f(program.uHasTex, if (t != 0) 1f else 0f)
+        GLES30.glUniform1f(program.uHasMask, if (mask != 0) 1f else 0f)
+        GLES30.glUniform1f(program.uOpacity, pose.opacity)
+        GLES30.glUniform2f(program.uScreen, width.toFloat(), height.toFloat())
+        GLES30.glUniform2f(program.uOrigin, pose.originX, pose.originY)
+        GLES30.glUniform2f(program.uAxisX, pose.axisXx, pose.axisXy)
+        GLES30.glUniform2f(program.uAxisY, pose.axisYx, pose.axisYy)
+        GLES30.glUniform2f(program.uBox, boxW, boxH)
+        GLES30.glUniform1f(program.uRef, maxOf(width, height) / dev.xross.launcher.theme.shader.Scene.REFERENCE_W)
+        GLES30.glUniform1f(program.uScale, scale)
+        GLES30.glUniform1f(program.uPhase, SceneParticles.phase(inputs.time, layer))
+        GLES30.glUniform1f(program.uRate, layer.rate)
+        GLES30.glUniform1f(program.uPeriod, SceneParticles.period(layer))
+        GLES30.glUniform2f(program.uLife, layer.life.x, layer.life.y)
+        GLES30.glUniform2f(program.uVelX, layer.velocityX.x, layer.velocityX.y)
+        GLES30.glUniform2f(program.uVelY, layer.velocityY.x, layer.velocityY.y)
+        GLES30.glUniform2f(program.uSize, layer.size.x, layer.size.y)
+        color(program.uColor0, layer.colors.first)
+        color(program.uColor1, layer.colors.second)
+        GLES30.glUniform1i(program.uSeed, index)
+        GLES30.glDrawArraysInstanced(GLES30.GL_TRIANGLE_STRIP, 0, 4, layer.count)
+        return true
+    }
+
+    /** An `#aarrggbb` colour as a straight RGBA uniform. */
+    private fun color(location: Int, argb: Int) {
+        GLES30.glUniform4f(
+            location,
+            (argb ushr 16 and 0xFF) / 255f, (argb ushr 8 and 0xFF) / 255f, (argb and 0xFF) / 255f, (argb ushr 24 and 0xFF) / 255f,
+        )
+    }
+
     private fun unbindQuad() {
         GLES30.glBindSampler(0, 0)
         GLES30.glBindSampler(1, 0)
@@ -395,16 +503,13 @@ internal class GlScene(val source: SceneSource) {
         /** Texture unit of a shader layer's `uBelow` (0 `uPrev`, 1 `uField`, 2–5 `uImage0..3`, 6 `uVideo`). */
         const val BELOW_UNIT = 7
 
-        /** The layer types drawn so far (3c); particles are skipped until 3d. */
-        fun drawn(layer: SceneLayer): Boolean = layer !is SceneLayer.Particles
+        /** A scene with a layer to draw (every type is drawn since 3d); else it shows its poster. */
+        fun draws(source: SceneSource?): Boolean = source != null && source.scene.layers.isNotEmpty()
 
-        /** A scene with at least one layer this renderer draws; else it shows its poster. */
-        fun draws(source: SceneSource?): Boolean = source != null && source.scene.layers.any(::drawn)
-
-        /** Each distinct image the drawn quad layers and their masks read, bottom layer first (shader layers' own images aren't here). */
+        /** Each distinct image the quad and particle layers and their masks read, bottom layer first (shader layers' own images aren't here). */
         fun textureImages(source: SceneSource): List<BoundImage> {
             val out = LinkedHashMap<String, BoundImage>()
-            for (layer in source.scene.layers.filter(::drawn)) {
+            for (layer in source.scene.layers) {
                 if (layer is SceneLayer.Shader) continue
                 for (path in listOfNotNull(layer.ownImage, layer.look.mask)) {
                     out.getOrPut(path) { BoundImage(ShaderImage(path, mipmap = true), source.images[path]) }
@@ -415,7 +520,7 @@ internal class GlScene(val source: SceneSource) {
 
         /**
          * The program a shader layer runs: CUSTOM-like, keyed under the scene's key with the layer's
-         * index among the drawn layers, labelled `scene.json › layers[i] glass.frag`. Null when the
+         * index in the scene, labelled `scene.json › layers[i] glass.frag`. Null when the
          * layer's text wasn't found (the loader reported it).
          */
         fun layerSpec(source: SceneSource, layer: SceneLayer.Shader, index: Int): ShaderSpec? {
@@ -545,11 +650,12 @@ internal class SceneTargets {
     }
 }
 
-/** The image an image or sprite layer draws. */
+/** The image an image, sprite or particle layer draws. */
 private val SceneLayer.ownImage: String?
     get() = when (this) {
         is SceneLayer.Image -> path
         is SceneLayer.Sprite -> path
+        is SceneLayer.Particles -> path
         else -> null
     }
 

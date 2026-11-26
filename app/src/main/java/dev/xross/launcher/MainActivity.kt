@@ -296,6 +296,8 @@ class MainActivity : ComponentActivity() {
             val shaderKey = if (look.shader.preset == ShaderPreset.VIDEO && shownVideo == null) ShaderLibrary.WAVE_KEY else shaderLibrary.keyOf(look.shader)
             // Live backgrounds § 3: a scene is the pack's art, like its video (its poster for now).
             val packArtShown = shownVideo != null || look.shader.preset == ShaderPreset.SCENE && shaderKey != ShaderLibrary.WAVE_KEY
+            // § 3d: a scene with particle layers draws its own; the ambient (Compose) ones stay off.
+            val sceneParticles = isScene && shaderLibrary.spec(shaderKey)?.scene?.scene?.hasParticles == true
             if (BuildConfig.PERF_LOG) {
                 androidx.compose.runtime.LaunchedEffect(look.shader, look.cosmetics) {
                     val c = look.cosmetics
@@ -481,6 +483,7 @@ class MainActivity : ComponentActivity() {
                     loadWallpaper = { source, px -> container.wallpapers.load(source, px) },
                     wallpaperFit = state.settings.wallpaperFit,
                     particlesIdle = particlesIdle,
+                    sceneParticles = sceneParticles,
                     reveal = { bootReveal.menu },
                 )
                 }

@@ -29,8 +29,10 @@ import kotlin.math.ceil
  * (`velocity`, `size`); `scroll` is in texels of the layer's own image per second.
  *
  * Image, sprite and video layers are drawn as posed quads (slices 3b and 3c, [ScenePoser]); shader
- * layers are full-screen § 1 programs over the layers below them (`uBelow`, 3c). Particle layers
- * are skipped until 3d. A scene with no drawn layer shows its [Scene.poster].
+ * layers are full-screen § 1 programs over the layers below them (`uBelow`, 3c); particle layers
+ * are one instanced draw each, computed on the GPU from their index and the time (3d,
+ * [SceneParticles]). Until its textures are up, and where the renderer can't draw layers, a scene
+ * shows its [Scene.poster].
  */
 
 /** `scene.resolution`: how sharp the surface is while the scene shows. */
@@ -226,6 +228,9 @@ data class Scene(
 
     val shaderPaths: List<String> get() = layers.mapNotNull { (it as? SceneLayer.Shader)?.path }.distinct()
 
+    /** It draws its own particles (§ 3d): the Compose ambient particles stay off while it shows. */
+    val hasParticles: Boolean get() = layers.any { it is SceneLayer.Particles }
+
     /** Pack code runs in it: the scene is canary-guarded as one unit. */
     val hasShaderLayers: Boolean get() = layers.any { it is SceneLayer.Shader }
 
@@ -302,6 +307,8 @@ data class Scene(
                     p += "$key is ignored on a shader layer (it draws over its rect, else the whole screen, at its opacity)"
                 }
             }
+            // Particles move by their velocity; the box they are born in carries the other motions.
+            if (type == "particles" && "scroll" in obj) p += "scroll is ignored on a particle layer (its particles move by velocity)"
             val look = look(p, obj)
             return when (type) {
                 "image" -> p.image("path", obj["path"])?.let { SceneLayer.Image(it, p.enumOf<ImageWrap>("wrap", obj["wrap"]) ?: ImageWrap.CLAMP, look) }

@@ -219,6 +219,8 @@ fun XmbScreen(
     wallpaperFit: dev.xross.launcher.data.WallpaperFit = dev.xross.launcher.data.WallpaperFit.FILL,
     /** No input for [ParticleRest.IDLE_AFTER_MS]: the foreground particles rest. */
     particlesIdle: Boolean = false,
+    /** The background is a scene with particle layers of its own (Live backgrounds § 3d): no ambient particles over it. */
+    sceneParticles: Boolean = false,
     /** The menu's alpha on a cold start ([BootReveal.menu], 2b.5d): the fade-in, or 1 under the boot video. */
     reveal: () -> Float = { 1f },
 ) {
@@ -315,9 +317,10 @@ fun XmbScreen(
         val frostOff = snapOn || state.overlay != null
         androidx.compose.runtime.SideEffect { frost.suppressed = frostOff }
         // Layer 4: ambient particles over the art (2b.4e), hidden under a snap, full-screen media,
-        // the wave editor and E-Ink, resting when stopped or after 10 s without input.
+        // the wave editor and E-Ink, resting when stopped or after 10 s without input. Off under a
+        // scene that draws particles of its own (Live backgrounds § 3d).
         val particlePreset = (LocalThemeLook.current?.cosmetics ?: Cosmetics.NONE).particleField
-        if (particlePreset != ParticlePreset.NONE) {
+        if (particlePreset != ParticlePreset.NONE && !sceneParticles) {
             val stillMotion = LocalStillMotion.current
             val particleState = ParticleRest.of(
                 preset = particlePreset,

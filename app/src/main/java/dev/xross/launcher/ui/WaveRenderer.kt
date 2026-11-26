@@ -265,6 +265,8 @@ class WaveRenderer(
     private val filterPass = ScreenFilterPass()
     /** The textured-quad program scenes are drawn with (Live backgrounds § 3b). */
     private val sceneQuad = SceneQuadProgram()
+    /** The instanced program a scene's particle layers are drawn with (Live backgrounds § 3d). */
+    private val sceneParticles = SceneParticleProgram()
     /** The ping-pong pair a scene with shader layers draws through (Live backgrounds § 3c). */
     private val sceneTargets = SceneTargets()
     /** The background video's surface and its copy (Live backgrounds § 2). */
@@ -351,6 +353,7 @@ class WaveRenderer(
         if (vertex != 0) filterPass.compile(vertex, asset(FILTER_FILE))
         // Scenes' layers: compiled before any program, so a scene knows whether it can draw them.
         sceneQuad.compile(asset(SCENE_VERTEX_FILE), asset(SCENE_FRAGMENT_FILE))
+        sceneParticles.compile(asset(SCENE_PARTICLES_VERTEX_FILE), asset(SCENE_PARTICLES_FRAGMENT_FILE))
         loggedFilter = null
         sync()
         lastFrameNs = 0L
@@ -873,7 +876,7 @@ class WaveRenderer(
     }
 
     /**
-     * Live backgrounds § 3b, 3c: a layered scene's frame, moved by this frame's time, focus, music,
+     * Live backgrounds § 3b–3d: a layered scene's frame, moved by this frame's time, focus, music,
      * transition and daylight. Video layers show the § 2 copy; shader layers are drawn with every
      * prelude uniform, `uBelow` on unit 7, `uFresh` 1 and nothing on `uPrev` / `uField`.
      */
@@ -888,7 +891,7 @@ class WaveRenderer(
         inputs.transition = if (still) 0f else transition
         inputs.daylight = daylight
         val frame = video.takeIf { it.created }
-        scene.draw(sceneQuad, width, height, inputs, shownTop, shownBottom, frame, sceneTargets) { layer, below ->
+        scene.draw(sceneQuad, sceneParticles, width, height, inputs, shownTop, shownBottom, frame, sceneTargets) { layer, below ->
             drawCall(layer, p, still, fresh = true, below = below)
         }
     }
@@ -1038,6 +1041,10 @@ class WaveRenderer(
         /** The scenes' textured-quad program (Live backgrounds § 3b), with its own `#version` and uniforms. */
         const val SCENE_VERTEX_FILE = "scene_layer.vert"
         const val SCENE_FRAGMENT_FILE = "scene_layer.frag"
+
+        /** The scenes' instanced particle program (Live backgrounds § 3d). */
+        const val SCENE_PARTICLES_VERTEX_FILE = "scene_particles.vert"
+        const val SCENE_PARTICLES_FRAGMENT_FILE = "scene_particles.frag"
 
         /** The background filter pass (2b.4f), with its own `#version` and uniforms. */
         const val FILTER_FILE = "screen_filter.frag"
