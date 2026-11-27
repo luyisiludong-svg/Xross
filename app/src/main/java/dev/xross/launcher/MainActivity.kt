@@ -343,6 +343,8 @@ class MainActivity : ComponentActivity() {
             var backdropCovers by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
             // The focused item's centre as laid out (ScreenSignal.Focus), for shaders' uFocus.
             var focus by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(ScreenSignal.Focus(0.5f, 0.5f)) }
+            // The menu style's list transition, for the renderer only (no recomposition per frame).
+            val menuTransition = androidx.compose.runtime.remember { dev.xross.launcher.ui.MenuTransitionLevel() }
             // Cold-start intro (2b.5d): the black, the boot video or the shader ramp, then the menu.
             val bootReveal = rememberBootReveal(state.coldBoot, state.bootPending, state.boot)
             var bootCovers by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
@@ -410,6 +412,7 @@ class MainActivity : ComponentActivity() {
                     },
                     focusX = focus.x,
                     focusY = focus.y,
+                    menuTransition = menuTransition,
                     video = shownVideo,
                     otherVideo = snapPlaying != null,
                     videoResting = particlesIdle,
@@ -461,6 +464,7 @@ class MainActivity : ComponentActivity() {
                                 container.sounds.setCrosshair(signal.x)
                                 focus = signal
                             }
+                            is ScreenSignal.MenuTransition -> menuTransition.progress = signal.progress
                         }
                     },
                     snap = container.snaps,

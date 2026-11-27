@@ -129,7 +129,7 @@ fun StatusBar(
     val logo = LocalThemePack.current?.logos?.get(components.logo)
     val slot: @Composable (StatusSlot) -> Unit = { s ->
         when (s) {
-            StatusSlot.CLOCK -> ClockSlot(bar.clock, style)
+            StatusSlot.CLOCK -> StyledClock(bar.clock, style, components)
             StatusSlot.BATTERY -> BatterySlot(bar.battery, bar.batteryText(components.battery), components.battery, style, mono, heightDp)
             StatusSlot.WIFI -> bar.network?.let { NetworkSlot(it, heightDp) }
             StatusSlot.VOLUME -> bar.volume?.let { VolumeSlot(it, components.volumeAlways, heightDp) }
@@ -186,11 +186,6 @@ fun StatusBar(
             right.place(width - right.width, (height - right.height) / 2)
         }
     }
-}
-
-@Composable
-private fun ClockSlot(text: String, style: TextStyle) {
-    if (text.isNotEmpty()) Text(text, style = style, maxLines = 1, softWrap = false)
 }
 
 /** `BATTERY` in [mode]: [text] (from [StatusBarState.batteryText]) and/or the gauge; nothing before the first reading. */

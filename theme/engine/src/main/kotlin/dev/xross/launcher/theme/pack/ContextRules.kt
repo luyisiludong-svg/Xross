@@ -274,7 +274,20 @@ internal fun resolveRules(
             parseAspect(text)?.coerceIn(LayoutLimits.MIN_ASPECT, LayoutLimits.MAX_ASPECT)
                 ?: null.also { problems += "$where.apply.cardAspectRatio: $text isn't an aspect ratio like 16:9" }
         }
-        val layout = a.layout?.also { spec ->
+        // The menu style belongs to the base and the variants (Menu styles slice 1).
+        val ruleLayout = a.layout?.let { spec ->
+            var out = spec
+            if (spec.menuStyle != null) {
+                problems += "$where.apply.layout.menuStyle: only the pack's layout and its variants can set the menu style"
+                out = out.copy(menuStyle = null)
+            }
+            if (spec.slash != null) {
+                problems += "$where.apply.layout.slash: only the pack's layout can set the slash block"
+                out = out.copy(slash = null)
+            }
+            if (out === spec) spec else out.takeUnless { it == LayoutSpec() }
+        }
+        val layout = ruleLayout?.also { spec ->
             // Validate once at load; the same spec is applied over the pack's layout when it matches.
             val found = ArrayList<String>()
             resolveLayout(spec, emptyMap(), baseLayout, found)

@@ -40,6 +40,15 @@ import kotlin.math.roundToLong
  * Tunables for the background, read every frame so changes apply live (Settings ▸ Theme ▸
  * Wave settings previews them as the sliders move). Ranges: [dev.xross.launcher.theme.WaveLimits].
  */
+/**
+ * The menu's list transition as it runs (Menu styles slice 3, [ScreenSignal.MenuTransition]):
+ * written on the main thread every frame while a category switch or drill-down plays, read by
+ * the renderer, never through Compose state, so it costs no recomposition. 1 at rest.
+ */
+class MenuTransitionLevel {
+    @Volatile var progress: Float = 1f
+}
+
 data class WaveParams(
     val speed: Float = 1f,
     val palette: ThemePalette = XrossTheme.LAVENDER.palette(),
@@ -66,6 +75,8 @@ data class WaveParams(
      * ([ScreenSignal.Focus]); the renderer flips it to GL's y up and eases it.
      */
     val focusX: Float = 0.5f,
+    /** The SLASH style's list transition, when the menu drives `uTransition` itself; null: category switches kick it. */
+    val menuTransition: MenuTransitionLevel? = null,
     val focusY: Float = 0.5f,
     /**
      * The look's background video's placement (Live backgrounds § 2); null: no video, so the
@@ -446,6 +457,9 @@ class WaveRenderer(
             travel = (travel + step * transition * WARP_TRAVEL) % 1000.0
             transition *= exp(-step / TRANSITION_S)
         }
+        // A menu style's own list transition (SLASH's wipe or cascade) holds uTransition up while
+        // it plays, so a scene's `transition` driver moves in step with the menu.
+        p.menuTransition?.progress?.let { pr -> if (pr < 1f && !still) transition = max(transition, 1f - pr) }
         // Cold-start shader intro (2b.5d): the ramp drives uTransition until it ends.
         val intro = p.intro
         if (intro != null && intro.startedAtNanos != introDone && !still) {

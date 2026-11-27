@@ -18,4 +18,11 @@ sealed interface ScreenSignal {
      * the crosshair, where the focused item always sits.
      */
     data class Focus(val x: Float, val y: Float) : ScreenSignal
+
+    /**
+     * The menu's list transition (Menu styles slice 3): 0 as a category switch or drill-down
+     * begins, 1 when it has settled. Sent every frame while it runs, for scenes' `transition`
+     * driver; the receiver must not recompose on it.
+     */
+    data class MenuTransition(val progress: Float) : ScreenSignal
 }

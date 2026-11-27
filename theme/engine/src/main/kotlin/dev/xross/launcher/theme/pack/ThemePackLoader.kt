@@ -142,6 +142,13 @@ data class LoadedTheme(
     val components: ComponentsPatch = ComponentsPatch.NONE,
     /** Each logo file the base or a variant names (`components.logo`), by pack-relative path (unreadable ones absent). */
     val logos: Map<String, ThemeIcon> = emptyMap(),
+    /**
+     * Each image the menu names (Menu styles: `layout.slash` skins and decal, `components` plates),
+     * by pack-relative path, in load order, found (not decoded) here; missing ones absent.
+     */
+    val menuImages: Map<String, ShaderImageSource> = emptyMap(),
+    /** The [menuImages] that are sprite sheets (an animated category decal), capped at a larger side. */
+    val menuSheets: Set<String> = emptySet(),
     /** What the pack declared but couldn't be used (bad font, unreadable icon), for Settings. */
     val problems: List<String> = emptyList(),
     /** Bumped on every load, so a hot reload of the same files still counts as a change. */
@@ -254,8 +261,11 @@ data class LoadedTheme(
         // Category-wide tile shapes and focused-system layout patches depend on those two as well.
         val layoutContext = if (layoutHeld.isEmpty()) "" else "${category.orEmpty()}/${system.orEmpty()}"
         return looks.getOrPut(LookKey(v?.id.orEmpty(), cat, sys, held.map { it.index }, layoutHeld, layoutContext)) {
+            val ruled = if (layoutHeld.isEmpty()) null else applyRuleLayout(layout, rules, ctx)
+            // A variant's menu style (Menu styles slice 1) over the pack's, whatever the rules do.
+            val styled = v?.menuStyle?.let { (ruled ?: layout).copy(menuStyle = it) } ?: ruled
             cascade(roles, surfaceId, wave, v, categoryPatches[cat], systemPatches[sys], held, flags, shader, wallpaper, cosmetics, gains, soundLinks, bgm, video)
-                .copy(layout = if (layoutHeld.isEmpty()) null else applyRuleLayout(layout, rules, ctx))
+                .copy(layout = styled)
         }
     }
 
@@ -568,6 +578,15 @@ class ThemePackLoader(
             if (logo == null) problems += "Logo $path: not found in the pack, or not a readable SVG, PNG or WebP" else logos[path] = logo
         }
 
+        // Menu styles: the skins, decal and plates, found like shader images (both pack kinds).
+        val menuWanted = layout.slash.images + (listOf(components) + variants.mapNotNull { it.components }).flatMap { c -> c.images.map { it to false } }
+        val menuImages = LinkedHashMap<String, ShaderImageSource>()
+        val menuSheets = LinkedHashSet<String>()
+        for ((path, sheet) in menuWanted.distinctBy { it.first }) {
+            shaderImageSource(pack, path, problems, files, what = "Menu image")?.let { menuImages[path] = it }
+            if (sheet) menuSheets += path
+        }
+
         return LoadedTheme(
             info = pack,
             palette = palette,
@@ -604,6 +623,8 @@ class ThemePackLoader(
             customUiFilters = customUiFilters,
             components = components,
             logos = logos,
+            menuImages = menuImages,
+            menuSheets = menuSheets,
             problems = problems,
             revision = revisions.incrementAndGet(),
             files = files,
@@ -681,12 +702,18 @@ class ThemePackLoader(
      * bundled pack's asset. Only found and size-checked here; the renderer decodes it on IO when the
      * program is prepared, so a pack load never holds the pixels.
      */
-    private fun shaderImageSource(pack: ThemePackInfo, path: String, problems: MutableList<String>, files: MutableSet<String>): ShaderImageSource? =
+    private fun shaderImageSource(
+        pack: ThemePackInfo,
+        path: String,
+        problems: MutableList<String>,
+        files: MutableSet<String>,
+        what: String = "Shader image",
+    ): ShaderImageSource? =
         when (val s = pack.source) {
             is PackSource.Builtin -> {
                 val asset = "${s.dir}/$path"
                 if (!assetExists(asset)) {
-                    problems += "Shader image $path not found in the pack"
+                    problems += "$what $path not found in the pack"
                     null
                 } else {
                     files += path
@@ -697,11 +724,11 @@ class ThemePackLoader(
                 val file = inside(s.dir, path)?.takeIf { it.isFile }
                 when {
                     file == null -> {
-                        problems += "Shader image $path not found in the pack"
+                        problems += "$what $path not found in the pack"
                         null
                     }
                     file.length() > ShaderImage.MAX_BYTES -> {
-                        problems += "Shader image $path is larger than ${ShaderImage.MAX_BYTES / (1024 * 1024)} MB"
+                        problems += "$what $path is larger than ${ShaderImage.MAX_BYTES / (1024 * 1024)} MB"
                         null
                     }
                     else -> {

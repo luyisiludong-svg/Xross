@@ -13,12 +13,12 @@ Status: ✅ done · ◐ partly done · ⬜ not started.
 
 | # | Slice | Size | Status |
 | --- | --- | --- | --- |
-| 1 | Renderer seam: `layout.menuStyle`, `MenuAnchors`, `ScreenSignal.Focus`, menu image loading | M | ◐ `ScreenSignal.Focus` landed with Live backgrounds § 1 |
-| 2 | `SLASH` list: slanted rows, row skins, highlight, focused content, alignment, typography | M–L | ⬜ |
-| 3 | `SLASH` motion: entrance stagger, category transition, focus pop | M | ⬜ |
-| 4 | `SLASH` categories (icon bar with a focus decal, labels, glyphs), drill-down, framed art | M | ⬜ |
-| 5 | Clock and hint styles (`components`, every menu style) | S–M | ⬜ |
-| 6 | Rules (E-Ink, standby, `uiScale`), Layout panel, docs, sample pack, A55 timings | M | ⬜ |
+| 1 | Renderer seam: `layout.menuStyle`, `MenuAnchors`, `ScreenSignal.Focus`, menu image loading | M | ✅ on `feat/menu-styles`; the home screen is unchanged on the A55 |
+| 2 | `SLASH` list: slanted rows, row skins, highlight, focused content, alignment, typography | M–L | ✅ on `feat/menu-styles`; emulator only |
+| 3 | `SLASH` motion: entrance stagger, category transition, focus pop | M | ◐ built and unit tested; the wipe and shards not yet reviewed on screen |
+| 4 | `SLASH` categories (icon bar with a focus decal, labels, glyphs), drill-down, framed art | M | ◐ built; hero art not yet seen with a scraped library |
+| 5 | Clock and hint styles (`components`, every menu style) | S–M | ✅ on `feat/menu-styles`; emulator only |
+| 6 | Rules (E-Ink, standby, `uiScale`), Layout panel, docs, sample pack, A55 timings | M | ◐ A55 timings, the skin viewer and screenshots for the docs remain |
 
 **Total:** about 2.5–3 weeks (was 1.5–2 before the mockup revision: skins, focused logos, the
 category decal, framed art and slice 5 add about a week).
@@ -118,9 +118,115 @@ A P3-like look, as a sketch of the finished format:
   display font, but a fixed size, one line and no tilt or plate. The hints are one pill
   (`buttonHints`, `glyphOverride`).
 
+## Progress on slices 2–6 (2026-11-27, `feat/menu-styles`)
+
+Everything below is uncommitted on `feat/menu-styles`, on top of slice 1. `:app:testDebugUnitTest`
+and `:theme:engine:test` pass (1,247 tests together, 23 of them new in `SlashStyleTest`).
+
+**Built.**
+- **Format** (`theme/engine/.../pack/Slash.kt`): `SlashLayout` reads every `slash` key from
+  slices 2–4 over the Default pack's, reporting and clamping as `resolveLayout` does.
+  `LayoutSpec.slash` stays JSON so one bad key never costs the manifest. A rule's `slash` is
+  reported and stripped like its `menuStyle`; a variant's is reported. `SlashGeometry` holds the
+  pure parts: the per-row hash, tilt, nudge and skin pick, the highlight's corners, the scroll
+  window (`nextTop`), the row box with `bleed`, the cascade's timing and the shard polygons.
+- **Images at load.** `LoadedTheme.menuImages` / `menuSheets` find every skin `slash` and
+  `components` name (both pack kinds), add them to `files` for export, and report missing ones as
+  `Menu image … not found`. `XmbScreen` decodes them with slice 1's loader and provides
+  `LocalMenuImages`, plus a `MenuPaint` (`LocalMenuPaint`) that resolves `accent`, palette roles and
+  hex colors for tints and highlight colors.
+- **Slice 2** (`ui/SlashMenu.kt`): `SlashMetrics` (sizes from `XmbMetrics.s`, fractions of the
+  screen), rows skewed by one reused `Matrix` in `drawWithContent` and tilted in `graphicsLayer`,
+  row skins nine-sliced with patches cached per size, the `SHARD` highlight morphing between cached
+  corner sets on the focus spring (one reused `Path`), `SLAB`, `focusedSkin`, the `TITLE` / `LOGO` /
+  `LOGO_TITLE` panel (`WHEEL` art, the title shown until it arrives), outlined display-font text,
+  `unfocusedAlpha`, `textOverflow`, rows fading at the list's edges, and only the rows on screen
+  composed. The list scrolls only when the focus nears an edge.
+- **Slice 3.** `SlashMotion`: the list records into one of two `GraphicsLayer`s; on a new list key
+  the last one is frozen (it keeps the old list's picture) and drawn over the new list as it
+  cascades in. The swap happens in a `SideEffect`, so the new list's first frame is never recorded
+  into the old layer. One progress value drives every row's delay, `WIPE` (a skewed band, the old
+  list clipped ahead of it), `SHARDS` (the frozen picture clipped into 3–5 polygons that fly out)
+  and `FADE`. `pop` is an under-damped spring released with a push. The progress goes out as
+  `ScreenSignal.MenuTransition`. `MainActivity` writes it to a `MenuTransitionLevel` the renderer
+  reads every frame (no recomposition), which holds `uTransition` and scenes' `transition` driver
+  up while it plays.
+- **Slice 4.** `ICONS` (the bar scrolls only when it doesn't fit), `LABELS`, `GLYPHS`; the decal
+  follows the category spring and plays its sprite sheet, resting on frame 0 when still or idle;
+  drill-down slides the frozen parent out left (back: the child out right) under a slanted folder
+  header; `art: HERO / ICON` in a tilted box with a frame skin.
+- **Slice 5** (`ui/MenuChrome.kt`): `StyledClock` (`ClockFormat.lines` splits the clock text) and
+  `StyledHints` (`PILL`, `PLATES`, `PLAIN`), with `skewX` and `plate` modifiers. At their defaults
+  they take the old code path, which gives the identical clock and pill.
+- **Slice 6.** The Layout panel's rows come from a `LayoutPanelContext`: under `SLASH` the
+  crosshair and focused-scale rows hide, and a *Menu style* row (shown when the variants offer
+  more than one style) switches to the variant that draws the other. `INSTANT` and still motion
+  skip the cascade, transitions, pop, morph and decal frames; standby holds the decal.
+- **Sample pack** `xross_themePacks/Slash_Sample`: generated original art (torn paper rows, a slab
+  panel, a 4-frame star decal, a starred frame, clock and hint plates, a halftone wallpaper),
+  Arsenal (OFL), `LOGO_TITLE`, `HERO` art, a stacked clock on a plate and plated hints. Variants:
+  `cobalt` (palette) and `classic` (`XMB`). It loads with no problems.
+- **Docs:** `THEME_SPECIFICATION.md` § 16 (menu styles, skins, the `slash` block) and § 15 (the
+  clock and hint keys).
+
+**Deviations.**
+- `rowTextColor` and `focusedTextColor` are new keys. White text on light paper skins couldn't be
+  read on the emulator, and black text on dark slabs would have the same problem.
+- The art frame hides with the art when the focused item has none, instead of standing empty.
+- The torn-edge skins in the sample stretch whole, with no `slice`: nine-slicing smears a torn edge
+  along its side. The spec says when to use which.
+- Several XMB-only `layout` keys are ignored under `SLASH`, now including `focusedScale`. `SLASH`
+  has its own `slash.focusedScale`.
+- No separate theme-guide chapter: § 16 of the spec is the guide for now.
+
+**Checked on the emulator** (`xross_test`, `-gpu host`, debug build, the sample pack): the home
+list, moving the focus, drilling into All Games (header, hints gaining Back and Options) and a
+category switch starting. No crash in logcat.
+
+**Not done yet.**
+- A55 timings on a profiling build (§ 6 "Performance"), and `PERFORMANCE.md`.
+- A look at `WIPE` and `SHARDS` mid-switch (a recording), `LABELS` / `GLYPHS`, `bleed`, and hero
+  art and logos with a scraped library.
+- The shader preview's skin viewer, and screenshots for the docs.
+- Unit tests that need Compose (the transition's layer swap, `PILL` / `INLINE` pixel equality).
+
 ---
 
 ## 1. Renderer seam (M)
+
+> **Progress (2026-11-27, `feat/menu-styles`, on top of `feat/live-backgrounds-image-inputs`).**
+> Code, unit tests and the device check are done.
+>
+> - **Format.** `LayoutSpec.menuStyle` → `ThemeLayout.menuStyle` (`MenuStyle.XMB` / `SLASH`),
+>   resolved in `resolveLayout`. Variants gained `layout`, of which only `menuStyle` is read
+>   (`ResolvedVariant.menuStyle`, applied in `LoadedTheme.look` over the pack's and the rules'
+>   layout). A rule's `menuStyle` is reported and stripped; a rule left with nothing is "changes
+>   nothing". Category and system overrides have no `layout`, so nothing to block there. The
+>   exporter writes a flattened variant's style into `layout`.
+> - **Seam.** `CategoryBar`, `ItemColumn` and their helpers moved unchanged to `XmbMenu.kt`
+>   (731 lines), behind one `XmbMenu` composable. `XmbScreen` picks the style; `SLASH` draws as
+>   the XMB until slice 2.
+> - **`MenuAnchors`** (`ui/MenuAnchors.kt`): `focus` and `statusClearance`, from
+>   `MenuAnchors.of(style, metrics)`. They now feed the `Focus` signal, the status bar's
+>   `leftMaxHeight` and the game-boot overlay; nothing outside `XmbMetrics` reads the anchor values.
+> - **Skins and menu images.** `Skin` (path, `slice`, `tint`, `outset`; parsed from a string or an
+>   object, a bad part dropped on its own), `NineSlice.patches` and `MenuImagePlan` (1024 / 2048 for
+>   sheets, 6 MP, dropped in order) in `theme/engine/.../pack/MenuSkin.kt`. `MenuImageLoader`,
+>   `LocalMenuImages`, `rememberMenuImages` and `DrawScope.drawSkin` in `ui/MenuImages.kt`. No pack
+>   field names a skin yet (slice 2 adds the first), so nothing loads them.
+> - **Deviations:**
+>   - `MenuAnchors.panX` is dropped: sound panning keeps reading the focus's x from the `Focus`
+>     signal, which is now the focused item's centre in any style.
+>   - The Layout panel changes (hiding XMB-only rows, a "Menu style" row) move to slice 2. While
+>     `SLASH` draws as the XMB, hiding the crosshair row would be wrong.
+> - **Tests:** `MenuStylesTest` (8): style names and fallback, XMB fields under `SLASH`, base /
+>   variant / rule precedence and problems, the export, the XMB's anchors equal to the old numbers
+>   on four screens × three presets × three UI scales, skin parsing, nine-slice geometry, the image
+>   budget. The full `:app:testDebugUnitTest` (1,115) and `:theme:engine:test` (111) pass.
+> - **A55** (profiling builds of `0027271` and this branch, Memento_Mori, cold start): the home
+>   screen, one row down and one category right differ in 0.02–0.03% of the pixels below the
+>   status bar, all of them the pack's moving particles; none on the bar, the rows, the text or
+>   the hints.
 
 **Goal.** `XmbScreen` draws "the menu" without knowing which style it is. Other screens stay as
 they are.

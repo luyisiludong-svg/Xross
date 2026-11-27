@@ -29,6 +29,7 @@ studio proposal).
 13. [Focused game background](#13-focused-game-background)
 14. [The Default pack and icon tooling](#14-the-default-pack-and-icon-tooling)
 15. [Components](#15-components)
+16. [Menu styles](#16-menu-styles)
 
 ## 1. Where a look comes from
 
@@ -617,6 +618,10 @@ instead of being ignored silently, so a typo shows up.
 sounds. **Settings ▸ Theme ▸ Theme variant** (shown only for packs that have them) steps through
 them; the choice is saved as `display.themeVariant` in `settings.json`.
 
+A variant may also set `"layout": { "menuStyle": "XMB" }` (or `SLASH`) to draw the menu in another
+style; it is the only `layout` key a variant reads, and any other is reported. The pack's own style
+is `layout.menuStyle` (`XMB` by default; an unknown name is reported and draws the XMB). See §16.
+
 ### Category and system overrides
 
 `"categoryOverrides": { "MUSIC": {…} }` (`GAMES`, `MUSIC`, `PHOTO`, `VIDEO`, `APPS`, `SETTINGS`)
@@ -642,7 +647,10 @@ wave crossfades between palettes.
 * `match` takes any of `category` (`MUSIC`), `system` (a platform id or folder alias), `battery`
   (`<= 20`, `< 15`, `>= 80`, `charging`, `discharging`, `full`) and `time` (`21:00..06:00`,
   wrapping past midnight; start included, end excluded); every selector given must hold.
-* `apply` takes `palette` roles, any `effects` key (§8), `cardAspectRatio` and any `layout` key.
+* `apply` takes `palette` roles, any `effects` key (§8), `cardAspectRatio` and any `layout` key
+  except `menuStyle`, which only the pack's `layout` and its variants set, and `slash`, which only
+  the pack's `layout` sets (a rule's is reported and ignored: the whole menu switching or reshaping
+  while you navigate would be jarring).
 * Rules sit above the variant and the overrides, in file order, so the last matching rule wins.
 * A rule whose selector can't be read is reported and dropped, never applied everywhere.
 * Battery and time are re-checked when they change and once a minute, never per frame.
@@ -915,6 +923,27 @@ leaving the rest of the block.
 | `logo` | an SVG, PNG or WebP in the pack, or `none` |
 | `volumeAlways` | `true` / `false` |
 | `tileGlow` (`glow`) | `true` / `false` |
+| `clockLayout` | `INLINE` (the default), `STACKED` |
+| `clockSize` | 1–3 (default 1) |
+| `clockTilt` | degrees, −12–12 (default 0) |
+| `clockPlate` | a skin (§16) |
+| `hintStyle` | `PILL` (the default), `PLATES`, `PLAIN` |
+| `hintSkew` | degrees, −15–15 (default 0) |
+| `hintPlate` | a skin (§16) |
+
+### Clock and hint styles
+
+These work under every menu style, the XMB included.
+
+* `clockLayout: STACKED` puts the date letters of `clockFormat` (`y M d E`) on a first, smaller
+  line and the time letters (`H h m a`) on a second. A clock of only a date or only a time stays one
+  line. `clockSize` scales the clock over the status bar's text, `clockTilt` turns it, and
+  `clockPlate` is a skin drawn behind it. The other slots keep their size and stay level.
+* `hintStyle: PLATES` draws each button hint on its own plate: `hintPlate`, or a flat plate in the
+  palette's `surface` color without one. `PLAIN` draws the glyphs and labels alone. `hintSkew` slants
+  the pill, the plates or the bare text.
+* Left at their defaults (`INLINE`, size 1, no tilt, no plate; `PILL`, no skew) the clock and hints
+  draw exactly as before these keys existed. Settings ▸ Theme ▸ Components has no rows for them.
 
 ### Settings ▸ Theme ▸ Components
 
@@ -937,3 +966,114 @@ leaving the rest of the block.
 
 Saved as `display.components` in `settings.json` (`null` follows the pack); Reset to theme
 defaults clears it, quick profiles never touch it.
+
+## 16. Menu styles
+
+`layout.menuStyle` picks how the menu is drawn. Every style reads the same navigation: left and
+right switch category, up and down move the focus, confirm and back drill in and out.
+
+* `XMB` (the default): the cross media bar, shaped by the rest of `layout` (§3).
+* `SLASH`: a bold, slanted list of rows made of the pack's art, with a bigger focused panel that can
+  show the game's logo, categories on an icon bar with a decal, framed hero art, and motion that
+  cascades rows in and wipes or shatters the list it replaces.
+
+The XMB-only `layout` keys (`preset`, `crosshairX`/`Y`, tile aspects, `focusDivider`,
+`drillDownStyle`, `focusedScale`) are ignored under `SLASH` without a problem, so one pack can offer
+both styles through variants (§9). `uiScale`, `itemSpacingDp`, `unfocusedAlpha`, `textOverflow` and
+`motionProfile` apply to both. A pack sets the style in its `layout` or a variant's; a rule can't.
+Settings ▸ Theme ▸ Layout hides the crosshair and focused-scale rows under `SLASH`, and shows a
+*Menu style* row, which switches to the variant drawing the other style, when the pack's variants
+offer more than one.
+
+### Skins
+
+Row and panel art, the category decal, the art frame and the clock and hint plates are **skins**:
+
+```json
+{ "path": "menu/row.webp", "slice": [48, 14, 48, 14], "tint": "accent", "outset": [0, 4, 0, 4] }
+```
+
+* `path`: a PNG, JPEG or WebP inside the pack. A plain string is `{ "path": … }`.
+* `slice`: left, top, right, bottom insets in image pixels. The corners keep their size, the edges
+  stretch along their side and the middle both ways (a nine-slice). Without it the image stretches
+  whole, which suits torn or hand-drawn edges that would smear if stretched along a side.
+* `tint`: `accent`, a palette role name (`surface`, `accentSecondary`, `textPrimary`, …) or a hex
+  color, multiplied in. One grey skin then serves every colorway.
+* `outset`: how far the image reaches past its box, in dp, so stars or splashes can spill over.
+
+Images are found when the pack loads (a missing one is reported, and its element draws its plain
+fallback) and decoded once per look, off the main thread. Each image's long side is capped at 1024
+pixels (2048 for an animated decal's sprite sheet), and all of them together at 6 megapixels. Past
+that the later images are left out and reported. A hot reload picks up edited files.
+
+### The `slash` block
+
+Only the pack's base `layout` reads it. Every key is optional.
+
+```json
+"layout": {
+  "menuStyle": "SLASH",
+  "slash": {
+    "skewDeg": -10, "rowTilt": [-2, 1], "jitter": 0.2, "seed": 3,
+    "listX": 0.16, "listY": 0.40, "listWidth": 0.24, "bleed": false, "textAlign": "START",
+    "rowSkin": [{ "path": "menu/paper_a.webp" }, { "path": "menu/paper_b.webp" }],
+    "rowTextColor": "#141414",
+    "focusedSkin": { "path": "menu/panel.webp", "outset": [6, 4, 6, 4] },
+    "focusedContent": "LOGO_TITLE", "focusedHeight": 0.16, "focusedScale": 1.6,
+    "staggerMs": 28, "transition": "WIPE", "pop": 0.08,
+    "categories": "ICONS", "categoryY": 0.22,
+    "categoryDecal": { "path": "menu/star.webp", "size": 2.0, "frames": [4, 1], "fps": 6 },
+    "art": "HERO", "artRect": [0.56, 0.28, 0.38, 0.44], "artTilt": -3,
+    "artFrame": { "path": "menu/frame.webp", "slice": [64, 64, 64, 64], "outset": [24, 24, 24, 24] }
+  }
+}
+```
+
+| Key | Values (default) |
+| --- | --- |
+| `skewDeg` | every row's horizontal skew, −20–20 (−12) |
+| `rowTilt` | `[min, max]`: the range each row's rotation is drawn from, at most ±6° (`[-3, 2]`) |
+| `jitter` | 0–1: how much row offsets and the highlight's corners vary (0.35) |
+| `seed` | a whole number: rows keep their shape and skin across frames and visits (7) |
+| `listX`, `listY` | where the first row sits, as fractions of the screen (0.08, 0.30) |
+| `listWidth` | the rows' width, 0.15–0.6 of the screen (0.38) |
+| `bleed` | `true`: rows reach past the left edge and `listX` only places the text (`false`) |
+| `textAlign` | `START`, `CENTER`, `END` (`START`) |
+| `rowSkin` | a skin or a list of skins; with a list, neighbouring rows never share one (none: text only) |
+| `rowTextColor` | unfocused rows' text: `accent`, a palette role or a hex color (`#FFFFFF`) |
+| `highlight` | without a `focusedSkin`: `SHARD` (an irregular quad over a smaller offset shard), `SLAB`, `NONE` (`SHARD`) |
+| `highlightColors` | `[front, back]` (`["accent", "#000000"]`) |
+| `focusedSkin` | the panel behind the focused row; replaces `highlight` |
+| `focusedTextColor` | the focused row's text (black or white against the highlight; white on a `focusedSkin`) |
+| `focusedScale` | the focused row's size, 1–2.5 (1.6) |
+| `focusedContent` | `TITLE`, `LOGO` (the game's `WHEEL` art, else its title), `LOGO_TITLE` (`TITLE`) |
+| `focusedHeight` | the panel's height with a logo, 0.08–0.3 of the screen (0.16) |
+| `titleCase` | `AS_IS`, `UPPER` (`UPPER`) |
+| `outline` | a stroke behind the text in dp, 0–4; 0 draws a drop shadow instead (2) |
+| `staggerMs` | 0–80: the delay between rows sliding in; a whole cascade takes at most 300 ms (28) |
+| `transition` | how a category switch replaces the list: `WIPE`, `SHARDS`, `FADE` (`WIPE`) |
+| `pop` | 0–0.2: the focused row's overshoot as it lands (0.08) |
+| `categories` | `ICONS`, `LABELS` (a slanted strip of names), `GLYPHS` (the strip with glyphs) (`ICONS`) |
+| `categoryY` | the category bar's height on screen, a fraction (0.22) |
+| `categoryDecal` | a skin behind the focused category, plus `size` (1–3 times the icon), `frames` (`[columns, rows]` of a sprite sheet) and `fps` (0–30) |
+| `art` | what the empty side shows for the focused item: `HERO` (its hero art, else its logo), `ICON` (its box art), `NONE` (`NONE`) |
+| `artRect` | `[x, y, width, height]` as screen fractions, kept on screen (`[0.56, 0.28, 0.38, 0.44]`) |
+| `artTilt` | degrees, −10–10 (−3) |
+| `artFrame` | a skin drawn over the art's edge; it hides with the art when the item has none |
+
+Bad values are reported as `layout.slash.<key>` and keep the default (or the Default pack's);
+numbers out of range are clamped.
+
+* **Drill-down.** Confirm on a folder slides the list out to the left, skewed and dimmed, while the
+  new one cascades in, and the folder's title stays above it as a slanted header in the
+  `focusedSkin` (or the highlight color). Back reverses it. `layout.drillDownStyle` doesn't apply.
+* **Logos and art** load like the XMB's game art. A focused row shows its title until its logo
+  arrives. Items without one (folders, utilities, settings) always show their title.
+* **Scenes.** While a category switch or drill-down plays, it holds a scene's `transition` driver
+  (§8, layered scenes) up, so the background moves in step with the menu. Shaders' `uFocus`
+  follows the focused row in either style.
+* **Still and E-Ink.** Under `motionProfile: INSTANT` or still motion, nothing cascades, wipes, pops
+  or morphs: every change happens at once and the decal holds its first frame. Skins still draw.
+  While the screen rests the decal holds still.
+* `uiScale` scales the rows, their text and the skins' fixed edges; `listX`, `listY`, `listWidth`,
+  `categoryY` and `artRect` stay fractions of the screen.

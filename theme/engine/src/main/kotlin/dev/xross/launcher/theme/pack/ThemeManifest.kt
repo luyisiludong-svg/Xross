@@ -384,7 +384,8 @@ data class ThemeManifest(
 
 /**
  * One entry of `variants`: a colorway of the pack ("Cyber Lilac", "BIOS Matrix") that patches its
- * [palette] and [effects]; everything else (fonts, icons, sounds, layout) is the pack's.
+ * [palette] and [effects]; everything else (fonts, icons, sounds, layout) is the pack's, except
+ * the menu style ([layout] `menuStyle`).
  */
 @Serializable
 data class ThemeVariant(
@@ -396,6 +397,8 @@ data class ThemeVariant(
     val audio: ThemeManifest.Audio? = null,
     /** This colorway's `components` (2b.7a), over the pack's. */
     val components: Components? = null,
+    /** Only `menuStyle` (Menu styles slice 1): this variant's menu style. */
+    val layout: LayoutSpec? = null,
 )
 
 /**

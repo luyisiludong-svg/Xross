@@ -319,14 +319,23 @@ class ThemeController(
     /** Input while the Layout panel is open; false when it isn't. */
     fun onLayoutAction(action: NavAction): Boolean {
         val editor = _layoutEditor.value ?: return false
-        applyLayoutOutcome(editor, LayoutEditor.onAction(editor, action, settings.current.layoutOverrides, themes.active.value.layout))
+        applyLayoutOutcome(editor, LayoutEditor.onAction(editor, action, settings.current.layoutOverrides, themes.active.value.layout, layoutContext()))
         return true
+    }
+
+    /** The Layout panel's rows for the look on screen: its menu style and the styles the pack's variants offer. */
+    fun layoutContext(): LayoutPanelContext {
+        val pack = themes.active.value
+        val variant = pack.variant(settings.current.themeVariant)
+        val active = variant?.menuStyle ?: pack.layout.menuStyle
+        return LayoutPanelContext.of(active, pack.layout.menuStyle, pack.variants.map { it.id to it.menuStyle })
     }
 
     private fun applyLayoutOutcome(before: LayoutEditorState, outcome: LayoutEditorOutcome) {
         when {
             outcome.close -> return closeLayoutSettings()
             outcome.blocked -> host.refuse()
+            outcome.variant != null -> setThemeVariant(outcome.variant)
             outcome.overrides != null -> {
                 saveLayout(outcome.overrides)
                 sounds.play(UiSound.MOVE)
@@ -367,7 +376,7 @@ class ThemeController(
         val editor = _layoutEditor.value ?: return
         if (index == editor.index) {
             onLayoutAction(NavAction.CONFIRM)
-        } else if (index in LayoutEditor.rows.indices) {
+        } else if (index in layoutContext().rows.indices) {
             sounds.play(UiSound.MOVE)
             _layoutEditor.value = editor.copy(index = index)
         }
@@ -376,7 +385,7 @@ class ThemeController(
     /** Touch: a slider dragged or tapped at [fraction] of its track. */
     fun onLayoutSliderChanged(index: Int, fraction: Float) {
         val editor = _layoutEditor.value ?: return
-        val row = LayoutEditor.rows.getOrNull(index) ?: return
+        val row = layoutContext().rows.getOrNull(index) ?: return
         if (editor.index != index) _layoutEditor.value = editor.copy(index = index)
         val user = settings.current.layoutOverrides
         val next = LayoutEditor.setFraction(row, user, fraction)

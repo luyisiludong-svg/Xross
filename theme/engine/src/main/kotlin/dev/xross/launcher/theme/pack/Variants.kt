@@ -29,6 +29,8 @@ data class ResolvedVariant(
     val bgm: BgmRef? = null,
     /** `components` (2b.7a), checked. */
     val components: ComponentsPatch? = null,
+    /** `layout.menuStyle` (Menu styles slice 1), checked; null keeps the pack's. */
+    val menuStyle: MenuStyle? = null,
 )
 
 /** A checked `categoryOverrides` / `systemOverrides` entry (its tile aspect lives in [ThemeLayout]). */
@@ -203,9 +205,18 @@ internal fun resolveVariants(
             bgm = BgmRef.of("variants.$id", v.audio?.bgmFile, problems),
             video = VideoRef.of("variants.$id", v.effects?.videoPath, v.effects?.videoFit, problems),
             components = ComponentsPatch.of("variants.$id", v.components, problems),
+            menuStyle = variantMenuStyle("variants.$id", v.layout, problems),
         )
     }
     return out
+}
+
+/** A variant's `layout`: only `menuStyle` is read there; any other key is reported. */
+private fun variantMenuStyle(where: String, spec: LayoutSpec?, problems: MutableList<String>): MenuStyle? {
+    if (spec == null) return null
+    if (spec.copy(menuStyle = null) != LayoutSpec()) problems += "$where.layout: a variant can only set menuStyle"
+    val name = spec.menuStyle ?: return null
+    return MenuStyle.byName(name) ?: null.also { problems += "$where.layout.menuStyle: unknown value $name" }
 }
 
 /** `categoryOverrides` checked, keyed by category id in lower case ("games"). */

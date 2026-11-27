@@ -63,6 +63,8 @@ fun AdaptiveWave(
     /** The focused item's centre, 0..1 with y down ([ScreenSignal.Focus]), for `uFocus`. */
     focusX: Float = 0.5f,
     focusY: Float = 0.5f,
+    /** The menu style's list transition ([MenuTransitionLevel]); null: none. */
+    menuTransition: MenuTransitionLevel? = null,
     /** The look's background video (Live backgrounds § 2); null for none. */
     video: VideoSource? = null,
     /** A video snap or the boot video plays: the background video holds its frame. */
@@ -93,7 +95,7 @@ fun AdaptiveWave(
     }
     val s = settings
     val batteryLevel = level?.percent?.let { it.coerceIn(0, 100) / 100f } ?: 1f
-    val params = remember(palette, s.waveSpeed, s.waveLineCount, s.waveTurbulence, s.waveThickness, pulse, shader, category, batteryLevel, filter, intro, focusX, focusY, video?.fit) {
+    val params = remember(palette, s.waveSpeed, s.waveLineCount, s.waveTurbulence, s.waveThickness, pulse, shader, category, batteryLevel, filter, intro, focusX, focusY, video?.fit, menuTransition) {
         WaveParams(
             speed = s.waveSpeed,
             palette = palette,
@@ -108,6 +110,7 @@ fun AdaptiveWave(
             intro = intro,
             focusX = focusX,
             focusY = focusY,
+            menuTransition = menuTransition,
             videoFit = video?.fit,
         )
     }

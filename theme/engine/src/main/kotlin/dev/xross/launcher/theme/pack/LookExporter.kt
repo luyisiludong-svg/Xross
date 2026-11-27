@@ -363,8 +363,30 @@ object LookExporter {
             "logo" to str(c.logo),
             "volumeAlways" to JsonPrimitive(c.volumeAlways),
             "tileGlow" to JsonPrimitive(c.tileGlow),
-        ),
+            "clockLayout" to str(c.clockLayout.name),
+            "clockSize" to JsonPrimitive(c.clockSize),
+            "clockTilt" to JsonPrimitive(c.clockTilt),
+            "hintStyle" to str(c.hintStyle.name),
+            "hintSkew" to JsonPrimitive(c.hintSkew),
+        ).apply {
+            c.clockPlate?.let { put("clockPlate", skinJson(it)) }
+            c.hintPlate?.let { put("hintPlate", skinJson(it)) }
+        },
     )
+
+    /** A [Skin] as a pack writes it. */
+    internal fun skinJson(k: Skin): JsonElement {
+        if (k.slice == null && k.tint == null && k.outset == Skin.Edges.ZERO) return str(k.path)
+        fun edges(e: Skin.Edges) = JsonArray(listOf(e.left, e.top, e.right, e.bottom).map { JsonPrimitive(it) })
+        return JsonObject(
+            buildMap {
+                put("path", str(k.path))
+                k.slice?.let { put("slice", JsonArray(listOf(it.left, it.top, it.right, it.bottom).map { v -> JsonPrimitive(v.toInt()) })) }
+                k.tint?.let { put("tint", str(it)) }
+                if (k.outset != Skin.Edges.ZERO) put("outset", edges(k.outset))
+            },
+        )
+    }
 
     /** A manifest being edited: its base blocks, and every override and rule patch. */
     private class Doc(var root: JsonObject) {
@@ -468,6 +490,7 @@ object LookExporter {
                 setBlock("audio", audio)
             }
             if (v.components != null) root = root.set("components", componentsJson(pack.components(v.id)))
+            v.menuStyle?.let { setBlock("layout", block("layout").set("menuStyle", str(it.name))) }
         }
 
         /** The user's picks written into the base and taken out of every patch (current look). */
