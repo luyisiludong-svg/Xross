@@ -371,6 +371,8 @@ object LookExporter {
         ).apply {
             c.clockPlate?.let { put("clockPlate", skinJson(it)) }
             c.hintPlate?.let { put("hintPlate", skinJson(it)) }
+            c.batteryPlate?.let { put("batteryPlate", skinJson(it)) }
+            c.avatarPlate?.let { put("avatarPlate", skinJson(it)) }
         },
     )
 

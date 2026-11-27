@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
@@ -152,7 +154,7 @@ internal class SlashMetrics(val m: XmbMetrics, val l: SlashLayout, logo: Boolean
     val iconSize = s * 0.085f
     val iconPitch = s * 0.15f
     val categoryY = height * l.categoryY
-    val categoryLeft = width * l.listX + iconSize / 2
+    val categoryLeft = width * (l.categoryX ?: l.listX) + iconSize / 2
     val headerH = rowH * 1.25f
     val listTop = maxOf(height * l.listY, categoryY + iconSize * 0.9f + s * 0.06f)
     val listBottom = height - s * 0.14f
@@ -387,9 +389,10 @@ internal fun SlashMenu(
                 val y = sm.rowTop(fi, topPos.value, f, header) + (sm.rowHeight(fi, f) - sm.focusedH) / 2
                 val rowIn = rowProgress(tr, fi - floor(topPos.value).toInt(), sm, l, instant)
                 val slide = (1f - rowIn) * -sm.s * 0.4f
-                val w = sm.box.width * 1.04f * (1f + pop.value * l.pop)
+                val w = sm.box.width * l.focusedWidth * (1f + pop.value * l.pop)
                 val h = sm.focusedH
-                val x = sm.box.left + slide
+                // A wider panel grows out on both sides of the rows.
+                val x = sm.box.left - (w - sm.box.width) / 2 + slide
                 val tilt = SlashGeometry.rowTilt(l, fi) * 0.5f
                 withTransform({
                     translate(x, y)
@@ -426,7 +429,8 @@ internal fun SlashMenu(
     ) {
         val first = (floor(topPos.value).toInt() - 1).coerceAtLeast(0)
         val last = (ceil(topPos.value).toInt() + sm.visible + 1).coerceAtMost(state.items.lastIndex)
-        val dim = m.layout.unfocusedAlpha ?: 0.82f
+        // Skinned rows are art: opaque unless the pack dims them; bare text dims a little.
+        val dim = m.layout.unfocusedAlpha ?: if (l.rowSkins.isNotEmpty()) 1f else 0.82f
         val titleSp = with(density) { sm.titleSize.toSp() }
         val rowWdp = with(density) { sm.box.width.toDp() }
         val rowHdp = with(density) { sm.focusedH.toDp() }
@@ -713,7 +717,15 @@ private fun SlashRowContent(
     Box(Modifier.fillMaxSize().padding(start = startPad, end = endPad), contentAlignment = align) {
         val showLogo = logo != null && wantsLogo
         val logoOnly = showLogo && l.focusedContent == SlashFocusedContent.LOGO
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(with(density) { (sm.s * 0.03f).toDp() })) {
+        // Focused, the text may use the panel's width (wider than the row with `focusedWidth`).
+        val focusedRoom = with(density) { (sm.box.width * (1f + (l.focusedWidth - 1f) / 2f) - sm.box.textStart - sm.box.textEnd).coerceAtLeast(1f).toDp() }
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(with(density) { (sm.s * 0.03f).toDp() }),
+            modifier = if (focused && l.focusedWidth > 1f) {
+                Modifier.wrapContentWidth(Alignment.Start, unbounded = true).widthIn(max = focusedRoom)
+            } else Modifier,
+        ) {
             if (showLogo) {
                 val h = with(density) { (sm.focusedH * 0.78f).toDp() }
                 val w = h * (logo!!.width.toFloat() / logo.height.coerceAtLeast(1)).coerceIn(0.6f, 3.2f)
@@ -721,7 +733,7 @@ private fun SlashRowContent(
             }
             if (!logoOnly) {
                 val size = titleSp * (if (focused) 1f + (l.focusedScale - 1f) * 0.6f * focus() else 1f).let { if (showLogo) minOf(it, 1.2f) else it }
-                SlashText(title, size, if (focused) focusedText else rowText, l.outline, focused, sm.m.layout.textOverflow)
+                SlashText(title, size, if (focused) focusedText else rowText, if (focused) l.outline else (l.rowOutline ?: l.outline), focused, sm.m.layout.textOverflow)
             }
         }
     }
@@ -784,11 +796,13 @@ private fun SlashHeader(title: String, sm: SlashMetrics, shown: () -> Float, fro
     val image = images[skin?.path]
     val dpx = density.density * sm.m.layout.uiScale
     val pieces = remember(sm, image) { HashMap<Long, List<NineSlice.Patch>>() }
-    val w = sm.box.width * 0.8f
+    // As wide as the focused panel (at least 0.8 of a row), lined up with its left edge.
+    val w = sm.box.width * maxOf(0.8f, sm.l.focusedWidth * 0.9f)
+    val left = sm.box.left - sm.box.width * (sm.l.focusedWidth - 1f).coerceAtLeast(0f) / 2f
     val h = sm.headerH
     Box(
         Modifier
-            .offset { IntOffset((sm.box.left + sm.s * 0.02f - (1f - shown()) * sm.s * 0.3f).roundToInt(), (sm.listTop - sm.s * 0.01f).roundToInt()) }
+            .offset { IntOffset((left + sm.s * 0.02f - (1f - shown()) * sm.s * 0.3f).roundToInt(), (sm.listTop - sm.s * 0.01f).roundToInt()) }
             .size(with(density) { w.toDp() }, with(density) { h.toDp() })
             .graphicsLayer { rotationZ = -2f }
             .fadeAlpha(shown)
@@ -879,7 +893,7 @@ private fun SlashCategoryBar(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(with(density) { (sm.s * 0.04f).toDp() }),
                 modifier = Modifier
-                    .offset { IntOffset((sm.width * l.listX).roundToInt(), (sm.categoryY - sm.iconSize / 2).roundToInt()) }
+                    .offset { IntOffset((sm.width * (l.categoryX ?: l.listX)).roundToInt(), (sm.categoryY - sm.iconSize / 2).roundToInt()) }
                     .graphicsLayer { rotationZ = l.skewDeg * 0.2f }
                     .fadeAlpha { dim }
                     .drawWithContent { withTransform({ transform(skewAbout(sm.skew, size.height / 2)) }) { this@drawWithContent.drawContent() } },

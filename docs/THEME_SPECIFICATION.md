@@ -923,13 +923,15 @@ leaving the rest of the block.
 | `logo` | an SVG, PNG or WebP in the pack, or `none` |
 | `volumeAlways` | `true` / `false` |
 | `tileGlow` (`glow`) | `true` / `false` |
-| `clockLayout` | `INLINE` (the default), `STACKED` |
+| `clockLayout` | `INLINE` (the default), `STACKED`, `PLATES` |
 | `clockSize` | 1–3 (default 1) |
 | `clockTilt` | degrees, −12–12 (default 0) |
 | `clockPlate` | a skin (§16) |
 | `hintStyle` | `PILL` (the default), `PLATES`, `PLAIN` |
 | `hintSkew` | degrees, −15–15 (default 0) |
 | `hintPlate` | a skin (§16) |
+| `batteryPlate` | a skin behind the `BATTERY` slot (§16) |
+| `avatarPlate` | a skin behind the collapsed avatar; it fades as the mini-HUD opens (§16) |
 
 ### Clock and hint styles
 
@@ -937,8 +939,12 @@ These work under every menu style, the XMB included.
 
 * `clockLayout: STACKED` puts the date letters of `clockFormat` (`y M d E`) on a first, smaller
   line and the time letters (`H h m a`) on a second. A clock of only a date or only a time stays one
-  line. `clockSize` scales the clock over the status bar's text, `clockTilt` turns it, and
-  `clockPlate` is a skin drawn behind it. The other slots keep their size and stay level.
+  line. `clockLayout: PLATES` stacks them too, but puts each line on its own `clockPlate`: the
+  first right beside the next slot (the battery), the second stepping out to the right beneath it; figures are big and words (weekday, AM/PM) small and upper case,
+  the date's figures first ("11/25 WED") and the time's AM/PM first ("PM 7:44"). `clockSize` scales
+  the clock over the status bar's text, `clockTilt` turns it, and `clockPlate` is a skin drawn
+  behind it. The other slots keep their size and line up with the clock's top.
+* `batteryPlate` and `avatarPlate` put the battery and the collapsed avatar on plates of their own.
 * `hintStyle: PLATES` draws each button hint on its own plate: `hintPlate`, or a flat plate in the
   palette's `surface` color without one. `PLAIN` draws the glyphs and labels alone. `hintSkew` slants
   the pill, the plates or the bare text.
@@ -1046,15 +1052,18 @@ Only the pack's base `layout` reads it. Every key is optional.
 | `focusedSkin` | the panel behind the focused row; replaces `highlight` |
 | `focusedTextColor` | the focused row's text (black or white against the highlight; white on a `focusedSkin`) |
 | `focusedScale` | the focused row's size, 1–2.5 (1.6) |
+| `focusedWidth` | the focused panel's width over the rows', 1–2, growing out on both sides; its title and the drill-down header get the extra room (1.04) |
 | `focusedContent` | `TITLE`, `LOGO` (the game's `WHEEL` art, else its title), `LOGO_TITLE` (`TITLE`) |
 | `focusedHeight` | the panel's height with a logo, 0.08–0.3 of the screen (0.16) |
 | `titleCase` | `AS_IS`, `UPPER` (`UPPER`) |
 | `outline` | a stroke behind the text in dp, 0–4; 0 draws a drop shadow instead (2) |
+| `rowOutline` | the unfocused rows' stroke, 0–4 (the `outline`); 0 suits dark text on paper |
 | `staggerMs` | 0–80: the delay between rows sliding in; a whole cascade takes at most 300 ms (28) |
 | `transition` | how a category switch replaces the list: `WIPE`, `SHARDS`, `FADE` (`WIPE`) |
 | `pop` | 0–0.2: the focused row's overshoot as it lands (0.08) |
 | `categories` | `ICONS`, `LABELS` (a slanted strip of names), `GLYPHS` (the strip with glyphs) (`ICONS`) |
 | `categoryY` | the category bar's height on screen, a fraction (0.22) |
+| `categoryX` | where the category bar starts, a fraction of the width (`listX`) |
 | `categoryDecal` | a skin behind the focused category, plus `size` (1–3 times the icon), `frames` (`[columns, rows]` of a sprite sheet) and `fps` (0–30) |
 | `art` | what the empty side shows for the focused item: `HERO` (its hero art, else its logo), `ICON` (its box art), `NONE` (`NONE`) |
 | `artRect` | `[x, y, width, height]` as screen fractions, kept on screen (`[0.56, 0.28, 0.38, 0.44]`) |
@@ -1076,4 +1085,6 @@ numbers out of range are clamped.
   or morphs: every change happens at once and the decal holds its first frame. Skins still draw.
   While the screen rests the decal holds still.
 * `uiScale` scales the rows, their text and the skins' fixed edges; `listX`, `listY`, `listWidth`,
-  `categoryY` and `artRect` stay fractions of the screen.
+  `categoryX`, `categoryY` and `artRect` stay fractions of the screen.
+* Skinned rows aren't dimmed unless the pack sets `layout.unfocusedAlpha`; bare text rows dim a
+  little.

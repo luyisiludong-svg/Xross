@@ -178,10 +178,32 @@ and `:theme:engine:test` pass (1,247 tests together, 23 of them new in `SlashSty
 - Several XMB-only `layout` keys are ignored under `SLASH`, now including `focusedScale`. `SLASH`
   has its own `slash.focusedScale`.
 - No separate theme-guide chapter: § 16 of the spec is the guide for now.
+- For the P5 mockup (`xross_themePacks/Torn_Manifesto`, below): `focusedWidth` (the panel wider
+  than the rows, its title and the drill-down header given the room), `categoryX` (the icon bar
+  starting left of the list) and `rowOutline` (bare dark text on paper). Skinned rows are no
+  longer dimmed by default.
+
+- `clockLayout: PLATES` (each clock line on its own plate, figures big and words small),
+  `batteryPlate` and `avatarPlate`, and the right status cluster lining up with a styled clock's
+  top. The plated clock is right-aligned, so its first plate sits beside the battery and the second
+  steps out beneath it. Added to bring the personal `Phantom_Thieves` pack (the user's drawing as backdrop) closer
+  to `P5inspo.jpg`.
+
+**P5 mockup pack** `xross_themePacks/Torn_Manifesto`: `P5inspo.jpg`'s layout rebuilt with
+original generated art. That means torn paper rows, a pink-and-black slab 1.55 × their width, a
+star-burst decal, a starred frame for the focused game's hero art, a two-line clock on a black
+plate, hint tags, and a red collage of halftone, brush swirls, checkered tape, chains, splatter
+and stars. The mockup's character art, logo and emblem aren't used; the frame shows the game's own
+hero art (and hides without it). Seen on the emulator: home list, focus moves, two drill-downs.
 
 **Checked on the emulator** (`xross_test`, `-gpu host`, debug build, the sample pack): the home
 list, moving the focus, drilling into All Games (header, hints gaining Back and Options) and a
 category switch starting. No crash in logcat.
+
+**Seen on the A55** (2026-11-27, profiling build signed with the release key so it installs over
+the existing one: `assembleProfiling -Pxross.profilingReleaseSigned=true`): the `Phantom_Thieves`
+pack on the real library, with the plated clock, battery and avatar plates. No crash. Not yet
+timed.
 
 **Not done yet.**
 - A55 timings on a profiling build (§ 6 "Performance"), and `PERFORMANCE.md`.

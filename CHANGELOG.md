@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- **Menu styles: SLASH.** A theme can draw the menu as a bold, slanted list instead of the cross
+  media bar (`layout.menuStyle: "SLASH"`, with a `layout.slash` block). Rows can be made of the
+  theme's own art (torn paper, slabs), and the focused row becomes a bigger panel that can show
+  the game's logo. Categories sit on an icon bar with an animated decal under the focused one, or
+  as a slanted strip of names. The focused game's hero art can sit in a tilted, decorated frame.
+  Lists cascade in, and category switches wipe, shatter or fade the old list away. A theme can
+  offer both styles through its variants, and Settings ▸ Theme ▸ Layout then gets a *Menu style*
+  row. Still and E-Ink modes skip the motion. See the theme specification §16.
+- **Clock and hint styles**, for every menu style: a two-line clock (`clockLayout: STACKED`, or
+  `PLATES` with each line on its own plate, figures big and words small), larger, tilted and on a
+  plate. Hints can sit on slanted plates (`hintStyle: PLATES`) or appear bare (`PLAIN`), and the
+  battery and avatar can have plates of their own. Left alone, the clock and hints look as before.
+  See the theme specification §15.
 - **Images for theme shaders.** A pack's own background shader can sample up to four of its
   images (`effects.shaderImages`: PNG, JPEG or WebP, with `wrap`, `filter` and `mipmap`) as
   `uImage0`–`uImage3`, and gets the focused item's position as `uFocus`. Paintings can now ripple,

@@ -451,6 +451,18 @@ fun XmbScreen(
                     .clickable(remember { MutableInteractionSource() }, indication = null, onClick = { onEvent(XmbEvent.Ra.CloseAvatarHud) }),
             )
         }
+        // A pack's plate behind the collapsed avatar (Menu styles slice 5), fading as the HUD opens.
+        if (components.avatar && components.avatarPlate != null) {
+            val reach = 10.dp
+            Box(
+                Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = (statusTop - reach).coerceAtLeast(0.dp), end = (statusEnd - reach).coerceAtLeast(0.dp))
+                    .size(StatusAvatarBox + reach * 2)
+                    .fadeAlpha { 1f - hudExpansion.value }
+                    .plate(components.avatarPlate, null),
+            )
+        }
         if (components.avatar) AvatarHud(
             expansion = { hudExpansion.value },
             expanded = state.avatarFocused,

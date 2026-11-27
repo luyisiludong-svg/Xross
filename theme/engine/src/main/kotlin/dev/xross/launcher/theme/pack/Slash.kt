@@ -132,10 +132,14 @@ data class SlashLayout(
     val highlightColors: List<String> = listOf("accent", "#000000"),
     val focusedSkin: Skin? = null,
     val focusedScale: Float = 1.6f,
+    /** The focused panel's width over the rows', 1–2, growing out on both sides (1.04). */
+    val focusedWidth: Float = 1.04f,
     val focusedContent: SlashFocusedContent = SlashFocusedContent.TITLE,
     val focusedHeight: Float = 0.16f,
     val titleCase: SlashTitleCase = SlashTitleCase.UPPER,
     val outline: Float = 2f,
+    /** The unfocused rows' outline in dp, 0–4; null is [outline] (dark text on paper reads best bare). */
+    val rowOutline: Float? = null,
     /** Unfocused rows' text: `accent`, a palette role or a hex color (dark text on light paper skins). */
     val rowTextColor: String = "#FFFFFF",
     /** The focused row's text; null picks black or white against the highlight (white on a focused skin). */
@@ -148,6 +152,8 @@ data class SlashLayout(
     val categories: SlashCategories = SlashCategories.ICONS,
     val categoryDecal: SlashDecal? = null,
     val categoryY: Float = 0.22f,
+    /** Where the category bar starts, a fraction of the width; null starts it at [listX]. */
+    val categoryX: Float? = null,
     val art: SlashArt = SlashArt.NONE,
     /** x, y, w, h as fractions of the screen. */
     val artRect: List<Float> = listOf(0.56f, 0.28f, 0.38f, 0.44f),
@@ -178,6 +184,7 @@ data class SlashLayout(
         const val MIN_FOCUSED_HEIGHT = 0.08f
         const val MAX_FOCUSED_HEIGHT = 0.3f
         const val MAX_OUTLINE = 4f
+        const val MAX_FOCUSED_WIDTH = 2f
         const val MAX_STAGGER_MS = 80
         const val MAX_POP = 0.2f
         const val MAX_ART_TILT = 10f
@@ -188,7 +195,7 @@ data class SlashLayout(
         val KEYS = setOf(
             "skewDeg", "rowTilt", "jitter", "seed", "listX", "listY", "listWidth", "bleed", "textAlign",
             "rowSkin", "highlight", "highlightColors", "focusedSkin", "focusedScale", "focusedContent",
-            "focusedHeight", "titleCase", "outline", "rowTextColor", "focusedTextColor", "staggerMs", "transition", "pop", "categories",
+            "focusedHeight", "focusedWidth", "titleCase", "outline", "rowOutline", "categoryX", "rowTextColor", "focusedTextColor", "staggerMs", "transition", "pop", "categories",
             "categoryDecal", "categoryY", "art", "artRect", "artTilt", "artFrame",
         )
         private val DECAL_KEYS = setOf("size", "frames", "fps")
@@ -307,6 +314,9 @@ data class SlashLayout(
                 focusedHeight = number("focusedHeight", MIN_FOCUSED_HEIGHT, MAX_FOCUSED_HEIGHT, base.focusedHeight),
                 titleCase = pick("titleCase", SlashTitleCase.entries, base.titleCase),
                 outline = number("outline", 0f, MAX_OUTLINE, base.outline),
+                rowOutline = if ("rowOutline" in o) prim("rowOutline")?.let { number("rowOutline", 0f, MAX_OUTLINE, 0f) } else base.rowOutline,
+                focusedWidth = number("focusedWidth", 1f, MAX_FOCUSED_WIDTH, base.focusedWidth),
+                categoryX = if ("categoryX" in o) prim("categoryX")?.let { number("categoryX", 0f, 0.9f, 0f) } else base.categoryX,
                 rowTextColor = prim("rowTextColor")?.let { color("$w.rowTextColor", it.contentOrNull) } ?: base.rowTextColor,
                 focusedTextColor = if ("focusedTextColor" in o) prim("focusedTextColor")?.let { color("$w.focusedTextColor", it.contentOrNull) } else base.focusedTextColor,
                 staggerMs = stagger ?: base.staggerMs,

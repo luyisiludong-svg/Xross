@@ -65,6 +65,13 @@ enum class ClockLayout {
 
     /** The date letters on the first line, the time letters on the second. */
     STACKED,
+
+    /**
+     * Stacked, each line on its own plate, the second set off to the right; figures big and words
+     * (weekday, AM/PM) small and upper case, the date's figures first and the time's AM/PM first
+     * ([ClockFormat.parts]).
+     */
+    PLATES,
 }
 
 /** How the button hints are drawn (Menu styles slice 5, `components.hintStyle`). */
@@ -143,6 +150,10 @@ data class Components(
     val hintSkew: Float? = null,
     /** The [HintStyle.PLATES] plate's [Skin]; a flat plate in the surface color without one. */
     val hintPlate: kotlinx.serialization.json.JsonElement? = null,
+    /** A [Skin] behind the `BATTERY` slot. */
+    val batteryPlate: kotlinx.serialization.json.JsonElement? = null,
+    /** A [Skin] behind the collapsed avatar. */
+    val avatarPlate: kotlinx.serialization.json.JsonElement? = null,
 ) {
     companion object {
         /** Every property `components` recognizes, with its aliases. */
@@ -152,7 +163,7 @@ data class Components(
             "telemetryMode", "telemetry", "miniPlayerMode", "miniPlayer",
             "glyphOverride", "glyphs", "glyphStyle", "badgePills", "logo", "volumeAlways",
             "tileGlow", "glow",
-            "clockLayout", "clockSize", "clockTilt", "clockPlate", "hintStyle", "hintSkew", "hintPlate",
+            "clockLayout", "clockSize", "clockTilt", "clockPlate", "hintStyle", "hintSkew", "hintPlate", "batteryPlate", "avatarPlate",
         )
 
         /**
@@ -257,8 +268,24 @@ object ClockFormat {
     fun lines(text: String, layout: ClockLayout): List<String> {
         if (text.isEmpty()) return emptyList()
         if (layout == ClockLayout.INLINE) return listOf(text)
+        // STACKED and PLATES both split the date from the time.
         val at = text.indexOf("  ")
         return if (at < 0) listOf(text) else listOf(text.substring(0, at).trim(), text.substring(at + 2).trim()).filter { it.isNotEmpty() }
+    }
+
+    /**
+     * The pieces of one clock [line] for [ClockLayout.PLATES]: (text, small). Figures ("11/25",
+     * "7:44") are big; words (a weekday, AM/PM) are small and upper case, with commas and dots
+     * dropped ("a.m." is "AM"). On the date line ([time] false) the figures come first ("11/25 WED"); on the time
+     * line the words do ("PM 7:44"). A line is the time when [time] is null and it holds a `:`.
+     */
+    fun parts(line: String, time: Boolean? = null): List<Pair<String, Boolean>> {
+        val isTime = time ?: (':' in line)
+        val tokens = line.split(' ', ',', '\u00A0', '\u202F').map { it.trim().trimEnd('.') }.filter { it.isNotEmpty() }
+        val (words, figures) = tokens.partition { t -> t.none { it.isDigit() } }
+        val big = figures.map { it to false }
+        val small = words.map { it.replace(".", "").uppercase(java.util.Locale.ROOT) to true }.filter { it.first.isNotEmpty() }
+        return if (isTime) small + big else big + small
     }
 
     /** The date letters of [skeleton] (`y M d E`). */
@@ -306,6 +333,8 @@ data class ComponentsPatch(
     val hintStyle: HintStyle? = null,
     val hintSkew: Float? = null,
     val hintPlate: Skin? = null,
+    val batteryPlate: Skin? = null,
+    val avatarPlate: Skin? = null,
 ) {
     /** These values with every one [patch] sets replacing them. */
     fun over(patch: ComponentsPatch?): ComponentsPatch = if (patch == null) this else ComponentsPatch(
@@ -328,6 +357,8 @@ data class ComponentsPatch(
         hintStyle = patch.hintStyle ?: hintStyle,
         hintSkew = patch.hintSkew ?: hintSkew,
         hintPlate = patch.hintPlate ?: hintPlate,
+        batteryPlate = patch.batteryPlate ?: batteryPlate,
+        avatarPlate = patch.avatarPlate ?: avatarPlate,
     )
 
     val empty: Boolean get() = this == NONE
@@ -355,6 +386,8 @@ data class ComponentsPatch(
             hintStyle = hintStyle ?: HintStyle.PILL,
             hintSkew = hintSkew ?: 0f,
             hintPlate = hintPlate,
+            batteryPlate = batteryPlate,
+            avatarPlate = avatarPlate,
         )
     }
 
@@ -441,6 +474,8 @@ data class ComponentsPatch(
                 hintStyle = one("hintStyle", c.hintStyle, { t -> t?.let { HintStyle.entries.firstOrNull { e -> e.name == norm(it) } } }, HintStyle.entries.toTypedArray()),
                 hintSkew = c.hintSkew?.let { number(where, "hintSkew", it, -ComponentLimits.MAX_HINT_SKEW, ComponentLimits.MAX_HINT_SKEW, problems) },
                 hintPlate = Skin.of("$where.components.hintPlate", c.hintPlate, problems),
+                batteryPlate = Skin.of("$where.components.batteryPlate", c.batteryPlate, problems),
+                avatarPlate = Skin.of("$where.components.avatarPlate", c.avatarPlate, problems),
             )
             return patch.takeUnless { it.empty }
         }
@@ -457,7 +492,7 @@ data class ComponentsPatch(
     }
 
     /** Every skin these components name, in load order. */
-    val images: List<String> get() = listOfNotNull(clockPlate?.path, hintPlate?.path).distinct()
+    val images: List<String> get() = listOfNotNull(clockPlate?.path, hintPlate?.path, batteryPlate?.path, avatarPlate?.path).distinct()
 }
 
 /**
@@ -491,6 +526,9 @@ data class ResolvedComponents(
     val hintStyle: HintStyle = HintStyle.PILL,
     val hintSkew: Float = 0f,
     val hintPlate: Skin? = null,
+    /** A plate behind the battery slot, and one behind the collapsed avatar (slice 5). */
+    val batteryPlate: Skin? = null,
+    val avatarPlate: Skin? = null,
 ) {
     /** The clock is drawn as it was before slice 5 (one line, status-bar size, level, no plate). */
     val plainClock: Boolean get() = clockLayout == ClockLayout.INLINE && clockSize == 1f && clockTilt == 0f && clockPlate == null

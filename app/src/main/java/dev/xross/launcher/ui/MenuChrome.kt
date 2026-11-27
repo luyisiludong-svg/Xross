@@ -5,6 +5,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -75,8 +79,14 @@ internal fun StyledClock(text: String, style: TextStyle, c: ResolvedComponents) 
     val big = style.copy(fontSize = style.fontSize * c.clockSize)
     val plated = c.clockPlate != null
     val pad: Dp = with(LocalDensity.current) { (style.fontSize.toPx() * 0.45f).toDp() }
+    if (c.clockLayout == ClockLayout.PLATES) {
+        PlatedClock(lines, big, pad, c)
+        return
+    }
     Box(
         Modifier
+            // Its own height, whatever the status bar's row allows: a big clock overhangs the bar.
+            .wrapContentHeight(unbounded = true)
             .graphicsLayer { rotationZ = c.clockTilt }
             .plate(c.clockPlate, null)
             .then(if (plated) Modifier.padding(horizontal = pad * 1.4f, vertical = pad) else Modifier),
@@ -86,6 +96,47 @@ internal fun StyledClock(text: String, style: TextStyle, c: ResolvedComponents) 
                 // Stacked, the date sits smaller over the time.
                 val s = if (lines.size > 1 && i == 0) big.copy(fontSize = big.fontSize * 0.62f) else big
                 Text(line, style = s, maxLines = 1, softWrap = false)
+            }
+        }
+    }
+}
+
+/**
+ * [ClockLayout.PLATES]: each line on its own plate, right-aligned against the next slot, the
+ * second stepping out to the right and tucked under the first; figures big, words small ([ClockFormat.parts]), sitting on the figures' baseline.
+ */
+@Composable
+private fun PlatedClock(lines: List<String>, big: TextStyle, pad: Dp, c: ResolvedComponents) {
+    val small = big.copy(fontSize = big.fontSize * 0.5f)
+    // Right-aligned, so the first plate sits right beside the next slot (the battery).
+    Column(
+        horizontalAlignment = Alignment.End,
+        modifier = Modifier
+            .wrapContentHeight(unbounded = true)
+            .graphicsLayer { rotationZ = c.clockTilt },
+    ) {
+        lines.forEachIndexed { i, line ->
+            val time = if (lines.size > 1) i == 1 else null
+            Row(
+                verticalAlignment = Alignment.Bottom,
+                modifier = Modifier
+                    // The second plate steps out to the right (under the next slot, taking no room) and
+                    // tucks up under the first.
+                    .then(if (i > 0) Modifier.offset(x = pad * 3f, y = -pad * 0.6f) else Modifier)
+                    .plate(c.clockPlate, null)
+                    .padding(horizontal = pad * 1.2f, vertical = pad * 0.35f),
+            ) {
+                ClockFormat.parts(line, time).forEachIndexed { k, (part, isSmall) ->
+                    if (k > 0) Spacer(Modifier.width(pad * 0.5f))
+                    Text(
+                        part,
+                        style = if (isSmall) small else big,
+                        maxLines = 1,
+                        softWrap = false,
+                        // Small words ride a little above the figures' baseline.
+                        modifier = if (isSmall) Modifier.padding(bottom = pad * 0.45f) else Modifier,
+                    )
+                }
             }
         }
     }

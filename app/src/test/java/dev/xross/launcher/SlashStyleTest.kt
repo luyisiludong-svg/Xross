@@ -150,6 +150,22 @@ class SlashStyleTest {
         }
     }
 
+    @Test fun panelWidthCategoryStartAndRowOutline() {
+        val p = ArrayList<String>()
+        val l = slash("""{"focusedWidth": 1.55, "categoryX": 0.035, "rowOutline": 0, "outline": 3}""", p)
+        assertEquals(p.toString(), emptyList<String>(), p)
+        assertEquals(1.55f, l.focusedWidth)
+        assertEquals(0.035f, l.categoryX)
+        assertEquals(0f, l.rowOutline)
+        assertNull("the category bar starts at listX by default", SlashLayout.DEFAULT.categoryX)
+        assertNull("rows take the outline by default", SlashLayout.DEFAULT.rowOutline)
+        val bad = ArrayList<String>()
+        assertEquals(SlashLayout.MAX_FOCUSED_WIDTH, slash("""{"focusedWidth": 5}""", bad).focusedWidth)
+        assertTrue(bad.toString(), bad.single().startsWith("layout.slash.focusedWidth"))
+        val m = XmbMetrics(2400f, 1080f, ThemeLayout.DEFAULT.copy(menuStyle = MenuStyle.SLASH, slash = l))
+        assertEquals("the bar starts at categoryX", 2400f * 0.035f + SlashMetrics(m, l, false).iconSize / 2, SlashMetrics(m, l, false).categoryLeft, 0.01f)
+    }
+
     @Test fun aLayerKeepsWhatItLeavesOut() {
         val base = slash("""{"skewDeg": -5, "rowSkin": "menu/a.webp", "focusedSkin": "menu/p.webp"}""")
         val over = slash("""{"jitter": 0.9, "focusedSkin": null}""", base = base)
@@ -302,6 +318,25 @@ class SlashStyleTest {
         assertEquals("date only", listOf("Fri, Nov 14"), ClockFormat.lines("Fri, Nov 14", ClockLayout.STACKED))
         assertEquals("time only", listOf("21:41"), ClockFormat.lines("21:41", ClockLayout.STACKED))
         assertEquals(emptyList<String>(), ClockFormat.lines("", ClockLayout.STACKED))
+    }
+
+    @Test fun platedClockParts() {
+        assertEquals(listOf("11/25" to false, "WED" to true), ClockFormat.parts("Wed, 11/25", time = false))
+        assertEquals(listOf("PM" to true, "7:44" to false), ClockFormat.parts("7:44\u202FPM", time = true))
+        assertEquals("a 24 h time has no words", listOf("19:44" to false), ClockFormat.parts("19:44"))
+        assertEquals("a lone line with a colon is the time", listOf("AM" to true, "9:05" to false), ClockFormat.parts("9:05 a.m."))
+        assertEquals(listOf("11/25", "7:44 PM"), ClockFormat.lines("11/25  7:44 PM", ClockLayout.PLATES))
+    }
+
+    @Test fun batteryAndAvatarPlates() {
+        val p = ArrayList<String>()
+        val c = components("""{"clockLayout": "PLATES", "batteryPlate": "menu/b.png", "avatarPlate": {"path": "menu/a.png", "outset": [6, 6, 6, 6]}}""", p)
+        assertEquals(p.toString(), emptyList<String>(), p)
+        assertEquals(ClockLayout.PLATES, c.clockLayout)
+        assertEquals("menu/b.png", c.batteryPlate?.path)
+        assertEquals(Skin.Edges(6f, 6f, 6f, 6f), c.avatarPlate?.outset)
+        assertFalse(c.plainClock)
+        assertNull(ResolvedComponents.DEFAULT.batteryPlate)
     }
 
     private fun components(json: String, problems: MutableList<String> = ArrayList()): ResolvedComponents =
