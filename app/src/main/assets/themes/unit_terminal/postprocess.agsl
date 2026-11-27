@@ -1,0 +1,37 @@
+// UNIT//TERMINAL UI filter (Android 13+): prints the menu on parchment.
+//   * white UI turns parchment beige, and every colour is pulled a little toward sepia
+//   * a soft umber shadow 1 dp down and right of everything, like ink on paper
+//   * a very faint 3 dp line pattern and a light film grain, only where something is drawn
+// Nothing moves except the grain; nothing flashes.
+// Xross sets every uniform declared here, and only those; all three are used. (Leave out any
+// uniform the code doesn't read: an unused one is stripped, and setting it would fail.)
+uniform shader content;
+uniform float uTime;
+uniform float uPxPerDp;
+
+const half3 PAPER = half3(0.925, 0.898, 0.812);   // #ECE5CF: what pure white becomes
+const half3 SHADOW = half3(0.10, 0.09, 0.07);
+
+float hash(float2 p) {
+    return fract(sin(dot(p, float2(12.9898, 78.233))) * 43758.5453);
+}
+
+half4 main(float2 p) {
+    half4 c = content.eval(p);
+
+    // Sepia pull, in premultiplied terms: un-premultiply, tint, re-premultiply.
+    half3 rgb = c.a > 0.0 ? c.rgb / c.a : half3(0.0);
+    half lum = dot(rgb, half3(0.299, 0.587, 0.114));
+    rgb = mix(rgb, lum * half3(1.0, 0.93, 0.78), 0.35) * PAPER;
+
+    // Line pattern and grain, scaled by the pixel's own coverage.
+    float row = mod(p.y, 3.0 * uPxPerDp);
+    half lines = row < uPxPerDp ? 0.95 : 1.0;
+    half grain = half(1.0 + (hash(floor(p / 2.0) + floor(uTime * 12.0)) - 0.5) * 0.06);
+    rgb *= lines * grain;
+    half4 o = half4(rgb * c.a, c.a);
+
+    // The shadow sits under what is there.
+    half sa = content.eval(p - float2(uPxPerDp, uPxPerDp)).a * 0.45;
+    return o + half4(SHADOW * sa, sa) * (1.0 - o.a);
+}

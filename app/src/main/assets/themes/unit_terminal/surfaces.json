@@ -1,0 +1,75 @@
+{
+  "surfaces": {
+    "terminal_window": {
+      "label": "Terminal window",
+      "shape": { "type": "RECTANGLE" },
+      "fill": { "type": "SOLID", "color": "#2A2821", "opacity": 0.9 },
+      "borders": [
+        { "side": "TOP", "widthDp": 5.0, "color": "#DAD4BB", "opacity": 0.92 },
+        { "type": "OUTER", "widthDp": 1.0, "color": "#DAD4BB", "opacity": 0.6 },
+        { "type": "INNER", "widthDp": 1.0, "color": "#4E4B42", "opacity": 0.9 }
+      ],
+      "shadows": [
+        { "offsetDp": [4, 4], "blurDp": 0, "color": "#0E0D0A", "opacity": 0.55 }
+      ]
+    },
+    "parchment_glass": {
+      "label": "Parchment glass",
+      "backdropBlurDp": 18,
+      "shape": { "type": "RECTANGLE" },
+      "fill": {
+        "type": "LINEAR_GRADIENT",
+        "angle": 180,
+        "stops": [["#DAD4BB", 0.0, 0.16], ["#3A372E", 0.4, 0.78], ["#22201A", 1.0, 0.86]]
+      },
+      "borders": [
+        { "side": "LEFT", "widthDp": 3.0, "color": "#DAD4BB", "opacity": 0.85 },
+        { "type": "INNER", "widthDp": 1.0, "color": "#DAD4BB", "opacity": 0.35 }
+      ],
+      "shadows": [{ "offsetDp": [0, 3], "blurDp": 8, "color": "#000000", "opacity": 0.35 }]
+    },
+    "data_strip": {
+      "label": "Data strip",
+      "shape": { "type": "CHAMFERED", "cutDp": [0, 8, 0, 0] },
+      "fill": { "type": "SOLID", "color": "#1F1D18", "opacity": 0.9 },
+      "borders": [
+        {
+          "side": "LEFT",
+          "widthDp": 5.0,
+          "brush": {
+            "type": "LINEAR_GRADIENT",
+            "angle": 180,
+            "stops": [
+              ["#DAD4BB", 0.0, 1.0], ["#DAD4BB", 0.2, 1.0], ["#1F1D18", 0.2, 1.0], ["#1F1D18", 0.3, 1.0],
+              ["#DAD4BB", 0.3, 1.0], ["#DAD4BB", 0.5, 1.0], ["#1F1D18", 0.5, 1.0], ["#1F1D18", 0.6, 1.0],
+              ["#DAD4BB", 0.6, 1.0], ["#DAD4BB", 1.0, 1.0]
+            ]
+          }
+        },
+        { "side": "BOTTOM", "widthDp": 1.0, "color": "#DAD4BB", "opacity": 0.7 }
+      ],
+      "shadows": [{ "offsetDp": [3, 3], "blurDp": 0, "color": "#0E0D0A", "opacity": 0.5 }]
+    },
+    "intrusion_panel": {
+      "label": "Intrusion panel",
+      "shape": { "type": "RECTANGLE" },
+      "fill": { "type": "SOLID", "color": "#050505", "opacity": 0.9 },
+      "borders": [
+        { "type": "OUTER", "widthDp": 1.0, "color": "#F2F2F2", "opacity": 0.85 },
+        { "side": "TOP", "widthDp": 3.0, "color": "#F2F2F2", "opacity": 0.95 }
+      ],
+      "glow": { "color": "#FFFFFF", "radiusDp": 6, "intensity": 0.25 }
+    },
+    "alert_window": {
+      "label": "Alert window",
+      "shape": { "type": "RECTANGLE" },
+      "fill": { "type": "SOLID", "color": "#2A1511", "opacity": 0.92 },
+      "borders": [
+        { "side": "TOP", "widthDp": 5.0, "color": "#CD664D", "opacity": 1.0 },
+        { "type": "OUTER", "widthDp": 1.0, "color": "#CD664D", "opacity": 0.75 }
+      ],
+      "shadows": [{ "offsetDp": [4, 4], "blurDp": 0, "color": "#0A0504", "opacity": 0.6 }],
+      "glow": { "color": "#CD664D", "radiusDp": 8, "intensity": 0.3 }
+    }
+  }
+}

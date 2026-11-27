@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="256" height="256">
+  <!-- UNIT//TERMINAL: recent -->
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M8 30a22 22 0 1 0 44 0a22 22 0 1 0 -44 0zM10.5 30a19.5 19.5 0 1 0 39 0a19.5 19.5 0 1 0 -39 0z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M28.75 16h2.5v15h-2.5z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M28.75 28.75h12v2.5h-12z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M29 11h2v3h-2z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M29 46h2v3h-2z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M11 29h3v2h-3z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M46 29h3v2h-3z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M54 54h6v6h-6z"/>
+</svg>

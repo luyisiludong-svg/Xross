@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="256" height="256">
+  <!-- UNIT//TERMINAL: platform -->
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M8 16h44v28h-44zM10.5 18.5h39v23h-39z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M14 26h18v2.5h-18z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M40 34h6v4h-6z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M14 46h8v4h-8z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M38 46h8v4h-8z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M54 54h6v6h-6z"/>
+</svg>

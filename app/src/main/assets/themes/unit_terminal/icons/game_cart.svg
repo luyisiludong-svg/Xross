@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="256" height="256">
+  <!-- UNIT//TERMINAL: game_cart -->
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M12 6L44 6L50 12L50 52L12 52zM18 14h26v20h-26z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M18 40h4v8h-4z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M25 40h4v8h-4z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M32 40h4v8h-4z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M54 54h6v6h-6z"/>
+</svg>

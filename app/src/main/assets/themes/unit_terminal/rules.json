@@ -1,0 +1,24 @@
+{
+  "rules": [
+    {
+      "match": { "time": "22:00..06:00" },
+      "apply": {
+        "effects": { "foregroundParticles": "NONE" },
+        "audio": { "soundGains": { "cursor": 0.25, "category_switch": 0.3, "confirm": 0.4, "back": 0.4 }, "bgmFile": "none" }
+      }
+    },
+    {
+      "match": { "battery": "charging" },
+      "apply": {
+        "palette": { "accentSecondary": "#C8D3A0" }
+      }
+    },
+    {
+      "match": { "battery": "<= 20" },
+      "apply": {
+        "palette": { "canvas": "#24130F", "accent": "#E0927A", "accentSecondary": "#B5604C" },
+        "effects": { "surfaceStyle": "alert_window", "focusFrameStyle": "STATIC_NEON", "foregroundParticles": "NONE" }
+      }
+    }
+  ]
+}

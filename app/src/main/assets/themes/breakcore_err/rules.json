@@ -1,0 +1,31 @@
+{
+  "rules": [
+    {
+      "match": { "time": "00:00..05:00" },
+      "apply": {
+        "palette": { "canvas": "#05000F", "accent": "#7A2CFF", "accentSecondary": "#1AEBFF" },
+        "effects": { "backgroundFilter": "CRT", "foregroundParticles": "DUST_MOTES" },
+        "audio": { "soundGains": { "cursor": 0.25, "category_switch": 0.3, "confirm": 0.4 }, "bgmFile": "none" }
+      }
+    },
+    {
+      "match": { "battery": "charging" },
+      "apply": {
+        "palette": { "accentSecondary": "#39FF6A" }
+      }
+    },
+    {
+      "match": { "battery": "<= 20", "category": "GAMES" },
+      "apply": {
+        "effects": { "launchCurtain": "FADE_BLACK" }
+      }
+    },
+    {
+      "match": { "battery": "<= 20" },
+      "apply": {
+        "palette": { "canvas": "#140000", "accent": "#FF2A1A", "accentSecondary": "#FF7A1A" },
+        "effects": { "surfaceStyle": "low_power", "uiFilter": "NONE", "focusFrameStyle": "STATIC_NEON" }
+      }
+    }
+  ]
+}

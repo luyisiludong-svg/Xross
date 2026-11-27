@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="256" height="256">
+  <!-- UNIT//TERMINAL: folder -->
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M6 14L22 14L27 19L52 19L52 48L6 48zM10 25h38v19h-38z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M54 54h6v6h-6z"/>
+</svg>

@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="256" height="256">
+  <!-- UNIT//TERMINAL: emulators -->
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M16 16h28v28h-28zM18.5 18.5h23v23h-23z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M24 24h12v12h-12z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M19 8h3v6h-3z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M27 8h3v6h-3z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M35 8h3v6h-3z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M19 46h3v6h-3z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M27 46h3v6h-3z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M35 46h3v6h-3z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M8 19h6v3h-6z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M8 27h6v3h-6z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M8 35h6v3h-6z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M46 19h6v3h-6z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M46 27h6v3h-6z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M46 35h6v3h-6z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M54 54h6v6h-6z"/>
+</svg>

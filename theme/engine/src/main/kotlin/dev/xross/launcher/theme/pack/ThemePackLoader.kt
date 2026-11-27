@@ -548,7 +548,14 @@ class ThemePackLoader(
             ?: WallpaperRef.NONE
         val wallpaperRefs = listOf(wallpaper) + variants.mapNotNull { it.wallpaper } +
             (categoryPatches.values + systemPatches.values).mapNotNull { it.wallpaper } + rules.mapNotNull { it.patch?.wallpaper }
-        val wallpapers = wallpaperFiles(folder, wallpaperRefs, problems).also { it.values.forEach(::keep) }
+        val bundledDir = (pack.source as? PackSource.Builtin)?.dir
+        val wallpapers = wallpaperFiles(
+            folder, wallpaperRefs, problems,
+            asset = bundledDir?.let { dir -> { path: String -> if (path.split('/').any { it == ".." }) null else platform.assetFile("$dir/$path") } },
+        ).also { found ->
+            found.values.forEach(::keep)
+            if (bundledDir != null) files += found.keys
+        }
         // Live backgrounds § 2: a fit alone at the base is the fit later layers' videos inherit.
         val video = VideoRef.of("theme", m.effects?.videoPath, m.effects?.videoFit, problems)?.let { VideoRef.NONE.over(it) }
             ?: VideoRef.NONE
@@ -984,8 +991,14 @@ class ThemePackLoader(
         const val XROSS_ID = "xross"
         /** Gargantua: the ASCII black hole shader in Redaction 50. */
         const val BLACKHOLE_ID = "blackhole"
+        /** MEMENTO//MORI: cobalt and aqua, a dithered moon shader and the author's specimen illustration. */
+        const val MEMENTO_MORI_ID = "memento_mori"
+        /** UNIT//TERMINAL: sepia line work on umber paper, a ring-scanner shader and a printed-menu filter. */
+        const val UNIT_TERMINAL_ID = "unit_terminal"
+        /** BREAKCORE.ERR: a glitchcore showcase that sets nearly everything a pack can. */
+        const val BREAKCORE_ERR_ID = "breakcore_err"
         /** Packs shipped in the APK under `themes/<id>` besides Default, in menu order after it. */
-        val BUNDLED_IDS = listOf(XROSS_ID, BLACKHOLE_ID)
+        val BUNDLED_IDS = listOf(XROSS_ID, BLACKHOLE_ID, MEMENTO_MORI_ID, UNIT_TERMINAL_ID, BREAKCORE_ERR_ID)
         /**
          * Former ids of the Default pack: "xmb" was the classic look bundled beside it before it
          * became the Default. Settings that saved one load the Default pack, and the id stays reserved.

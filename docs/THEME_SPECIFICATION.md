@@ -751,7 +751,11 @@ The APK also bundles **Xross** in
 [`app/src/main/assets/themes/xross/`](../app/src/main/assets/themes/xross): the same sounds and
 surfaces with Phosphor icons (MIT, credited in [`CREDITS.md`](../CREDITS.md)), and **Gargantua** in
 [`app/src/main/assets/themes/blackhole/`](../app/src/main/assets/themes/blackhole): an ASCII black
-hole shader set in Redaction 50 (OFL, also credited there). Bundled packs are listed right
+hole shader set in Redaction 50 (OFL, also credited there). Since 0.2.3.0 it also bundles
+**MEMENTO//MORI** ([`memento_mori/`](../app/src/main/assets/themes/memento_mori)),
+**UNIT//TERMINAL** ([`unit_terminal/`](../app/src/main/assets/themes/unit_terminal)) and
+**BREAKCORE.ERR** ([`breakcore_err/`](../app/src/main/assets/themes/breakcore_err)): full showcase
+packs with their own shaders, surfaces, rules, variants and icons. Bundled packs are listed right
 after Default, load from the APK, and their ids are reserved (`ThemePackLoader.BUNDLED_IDS`).
 
 ### Console logos on system folders

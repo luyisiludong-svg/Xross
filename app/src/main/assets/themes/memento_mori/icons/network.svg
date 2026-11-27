@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="256" height="256">
+  <!-- MEMENTO//MORI: network -->
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M29.58 6L39.58 6L37.82 16L27.82 16z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M4.24 42L14.24 42L12.47 52L2.47 52z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M42.24 42L52.24 42L50.47 52L40.47 52z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M30.82 16L34.82 16L14.06 43L11.41 41z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M30.82 16L34.82 16L45.41 41L42.06 43z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M13.53 46L41.53 46L41.09 48.5L13.09 48.5z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M53.74 50.5L54.96 50.92L55.6 52.15L54.59 54.79L57.16 53.45L58.52 53.89L59.13 54.99L58.89 56.35L57.77 57.55L55.04 57.84L56.72 59.65L56.48 61.16L55.49 62.26L54.12 62.68L52.78 62.19L52.11 59.73L50.57 62.19L49.06 62.68L47.84 62.26L47.24 61.16L47.53 59.65L49.85 57.84L47.22 57.55L46.53 56.35L46.76 54.99L47.76 53.89L49.28 53.45L51.38 54.79L51.29 52.15L52.37 50.92zM54.39 57L53.99 57.9L53.22 58.56L52.27 58.8L51.42 58.56L50.87 57.9L50.79 57L51.19 56.1L51.97 55.44L52.91 55.2L53.77 55.44L54.31 56.1z"/>
+</svg>

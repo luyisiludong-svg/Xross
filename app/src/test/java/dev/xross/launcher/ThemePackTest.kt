@@ -119,8 +119,8 @@ class ThemePackTest {
         rawPack("old", """{"name": "Old v1", "palette": {"top": "#000000", "bottom": "#111111", "wave": "#FFFFFF"}}""")
         File(themes, "no-manifest").mkdirs()
         val scan = loader.scan()
-        assertEquals(listOf("default", "xross", "blackhole", "sakura"), scan.packs.map { it.id })
-        assertTrue(scan.packs[3].source is PackSource.Folder)
+        assertEquals(listOf("default", "xross", "blackhole", "memento_mori", "unit_terminal", "breakcore_err", "sakura"), scan.packs.map { it.id })
+        assertTrue(scan.packs.last().source is PackSource.Folder)
         // Skipped folders are reported, with the reason: v1 packs aren't read.
         val reasons = scan.rejected.associate { it.id to it.reason }
         assertEquals(setOf("broken", "nameless", "old"), reasons.keys)
@@ -196,7 +196,7 @@ class ThemePackTest {
         rawPack("old", """{"name": "Old"}""")
         val runtime = ThemeRuntime(loader)
         assertEquals("default", runtime.active.value.id)
-        assertEquals(listOf("default", "xross", "blackhole", "sakura"), runtime.rediscover().map { it.id })
+        assertEquals(listOf("default", "xross", "blackhole", "memento_mori", "unit_terminal", "breakcore_err", "sakura"), runtime.rediscover().map { it.id })
         assertEquals("sakura", runtime.select("sakura").id)
         assertEquals("default", runtime.select("gone").id)
         assertEquals(listOf("old"), runtime.rejected.value.map { it.id })

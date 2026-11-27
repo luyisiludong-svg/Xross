@@ -1,0 +1,96 @@
+{
+  "surfaces": {
+    "specimen_frame": {
+      "label": "Specimen frame",
+      "shape": { "type": "RECTANGLE" },
+      "fill": { "type": "SOLID", "color": "#020724", "opacity": 0.9 },
+      "borders": [
+        { "type": "OUTER", "widthDp": 1.5, "color": "#F4F8FF", "opacity": 1.0 },
+        { "side": "LEFT", "widthDp": 6.0, "color": "#1B3BFF", "opacity": 1.0 },
+        { "type": "INNER", "widthDp": 1.0, "color": "#3FE6FF", "opacity": 0.35 }
+      ],
+      "shadows": [
+        { "offsetDp": [5, 5], "blurDp": 0, "color": "#1B3BFF", "opacity": 0.9 },
+        { "offsetDp": [8, 8], "blurDp": 0, "color": "#000000", "opacity": 0.85 }
+      ]
+    },
+    "cobalt_slab": {
+      "label": "Cobalt slab",
+      "shape": { "type": "CHAMFERED", "cutDp": [14, 0, 14, 0] },
+      "fill": {
+        "type": "LINEAR_GRADIENT",
+        "angle": 135,
+        "stops": [["#1B3BFF", 0.0, 0.92], ["#1022AA", 0.55, 0.9], ["#030A2E", 1.0, 0.94]]
+      },
+      "borders": [
+        { "type": "OUTER", "widthDp": 1.5, "color": "#F4F8FF", "opacity": 0.95 },
+        { "side": "TOP", "widthDp": 4.0, "color": "#3FE6FF", "opacity": 1.0 }
+      ],
+      "shadows": [{ "offsetDp": [6, 6], "blurDp": 0, "color": "#000000", "opacity": 0.9 }]
+    },
+    "shattered_glass": {
+      "label": "Shattered glass",
+      "backdropBlurDp": 20,
+      "shape": { "type": "CHAMFERED", "cutDp": [0, 16, 0, 16] },
+      "fill": {
+        "type": "LINEAR_GRADIENT",
+        "angle": 160,
+        "stops": [["#BFD4FF", 0.0, 0.18], ["#0A1A6B", 0.38, 0.7], ["#020724", 1.0, 0.85]]
+      },
+      "sheen": { "heightPercent": 0.3, "gradient": [["#FFFFFF", 0.22], ["#FFFFFF", 0.0]] },
+      "borders": [
+        { "type": "INNER", "widthDp": 1.5, "brush": { "type": "SWEEP_GRADIENT", "colors": ["#F4F8FF", "#3FE6FF", "#1B3BFF", "#020724", "#F4F8FF"] } }
+      ],
+      "glow": { "color": "#3FE6FF", "radiusDp": 8, "intensity": 0.25 }
+    },
+    "barcode_strip": {
+      "label": "Barcode strip",
+      "shape": { "type": "RECTANGLE" },
+      "fill": { "type": "SOLID", "color": "#000000", "opacity": 0.9 },
+      "borders": [
+        {
+          "side": "LEFT",
+          "widthDp": 7.0,
+          "brush": {
+            "type": "LINEAR_GRADIENT",
+            "angle": 180,
+            "stops": [
+              ["#F4F8FF", 0.0, 1.0], ["#F4F8FF", 0.08, 1.0], ["#000000", 0.08, 1.0], ["#000000", 0.14, 1.0],
+              ["#F4F8FF", 0.14, 1.0], ["#F4F8FF", 0.18, 1.0], ["#000000", 0.18, 1.0], ["#000000", 0.30, 1.0],
+              ["#F4F8FF", 0.30, 1.0], ["#F4F8FF", 0.42, 1.0], ["#000000", 0.42, 1.0], ["#000000", 0.47, 1.0],
+              ["#F4F8FF", 0.47, 1.0], ["#F4F8FF", 0.51, 1.0], ["#000000", 0.51, 1.0], ["#000000", 0.62, 1.0],
+              ["#F4F8FF", 0.62, 1.0], ["#F4F8FF", 0.70, 1.0], ["#000000", 0.70, 1.0], ["#000000", 0.76, 1.0],
+              ["#F4F8FF", 0.76, 1.0], ["#F4F8FF", 0.79, 1.0], ["#000000", 0.79, 1.0], ["#000000", 0.88, 1.0],
+              ["#F4F8FF", 0.88, 1.0], ["#F4F8FF", 1.0, 1.0]
+            ]
+          }
+        },
+        { "side": "BOTTOM", "widthDp": 1.5, "color": "#1B3BFF", "opacity": 1.0 },
+        { "type": "OUTER", "widthDp": 1.0, "color": "#F4F8FF", "opacity": 0.55 }
+      ],
+      "shadows": [{ "offsetDp": [4, 4], "blurDp": 0, "color": "#1B3BFF", "opacity": 0.55 }]
+    },
+    "photocopy": {
+      "label": "Photocopy",
+      "shape": { "type": "RECTANGLE" },
+      "fill": { "type": "SOLID", "color": "#EEF2FA", "opacity": 0.94 },
+      "borders": [
+        { "type": "OUTER", "widthDp": 2.0, "color": "#02040F", "opacity": 1.0 },
+        { "side": "TOP", "widthDp": 6.0, "color": "#02040F", "opacity": 1.0 }
+      ],
+      "shadows": [
+        { "offsetDp": [5, 5], "blurDp": 0, "color": "#1B3BFF", "opacity": 0.85 }
+      ]
+    },
+    "dark_hour": {
+      "label": "Dark hour",
+      "shape": { "type": "RECTANGLE" },
+      "fill": { "type": "SOLID", "color": "#000000", "opacity": 0.92 },
+      "borders": [
+        { "type": "OUTER", "widthDp": 1.0, "color": "#3FE6FF", "opacity": 0.9 },
+        { "side": "TOP", "widthDp": 3.0, "color": "#3FE6FF", "opacity": 1.0 }
+      ],
+      "glow": { "color": "#3FE6FF", "radiusDp": 10, "intensity": 0.35 }
+    }
+  }
+}

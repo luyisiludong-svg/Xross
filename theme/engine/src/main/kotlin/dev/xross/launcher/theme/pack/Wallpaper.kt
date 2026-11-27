@@ -55,18 +55,23 @@ data class WallpaperRef(val path: String?) {
 }
 
 /**
- * The files of every wallpaper [refs] name, checked inside the folder pack [dir] (missing,
- * oversized and, for the built-in pack, any file are reported and left out, so they show no
- * wallpaper).
+ * The files of every wallpaper [refs] name: inside the folder pack [dir], or for a bundled pack
+ * the file [asset] makes of its asset. Missing and oversized ones (and any of a bundled pack when
+ * there is no [asset]) are reported and left out, so they show no wallpaper.
  */
-internal fun wallpaperFiles(dir: File?, refs: Collection<WallpaperRef>, problems: MutableList<String>): Map<String, File> {
+internal fun wallpaperFiles(
+    dir: File?,
+    refs: Collection<WallpaperRef>,
+    problems: MutableList<String>,
+    asset: ((String) -> File?)? = null,
+): Map<String, File> {
     val out = LinkedHashMap<String, File>()
     for (path in refs.mapNotNull { it.path }.distinct()) {
-        if (dir == null) {
+        if (dir == null && asset == null) {
             problems += "Wallpaper $path: only folder packs can bring a wallpaper"
             continue
         }
-        val file = ThemePackLoader.inside(dir, path)?.takeIf { it.isFile }
+        val file = (if (dir != null) ThemePackLoader.inside(dir, path) else asset!!(path))?.takeIf { it.isFile }
         when {
             file == null -> problems += "Wallpaper $path not found in the pack"
             file.length() > WallpaperRef.MAX_BYTES -> problems += "Wallpaper $path is larger than ${WallpaperRef.MAX_BYTES shr 20} MB"

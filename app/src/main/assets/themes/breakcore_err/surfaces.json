@@ -1,0 +1,82 @@
+{
+  "surfaces": {
+    "error_window": {
+      "label": "Error window",
+      "shape": { "type": "RECTANGLE" },
+      "fill": { "type": "SOLID", "color": "#07030C", "opacity": 0.94 },
+      "borders": [
+        { "type": "OUTER", "widthDp": 2.0, "color": "#FFFFFF", "opacity": 1.0 },
+        { "side": "TOP", "widthDp": 7.0, "color": "#FF1F8E", "opacity": 1.0 },
+        { "type": "INNER", "widthDp": 1.0, "color": "#C8FF00", "opacity": 0.55 }
+      ],
+      "shadows": [
+        { "offsetDp": [6, 6], "blurDp": 0, "color": "#000000", "opacity": 1.0 },
+        { "offsetDp": [10, 10], "blurDp": 0, "color": "#FF1F8E", "opacity": 0.55 }
+      ]
+    },
+    "chrome_slab": {
+      "label": "Chrome slab",
+      "shape": { "type": "CHAMFERED", "cutDp": [12, 0, 12, 0] },
+      "fill": {
+        "type": "LINEAR_GRADIENT",
+        "angle": 180,
+        "stops": [["#E8ECF4", 0.0, 0.30], ["#6B7088", 0.46, 0.55], ["#0B0C18", 0.5, 0.85], ["#2A2C40", 1.0, 0.9]]
+      },
+      "sheen": { "heightPercent": 0.45, "gradient": [["#FFFFFF", 0.30], ["#FFFFFF", 0.0]] },
+      "borders": [
+        {
+          "type": "OUTER",
+          "widthDp": 1.5,
+          "brush": { "type": "SWEEP_GRADIENT", "colors": ["#FFFFFF", "#8FA3C8", "#2A2C40", "#C8FF00", "#FFFFFF", "#FF1F8E", "#FFFFFF"] }
+        }
+      ],
+      "shadows": [{ "offsetDp": [0, 4], "blurDp": 10, "color": "#000000", "opacity": 0.5 }],
+      "glow": { "color": "#C8FF00", "radiusDp": 8, "intensity": 0.3 }
+    },
+    "acid_glass": {
+      "label": "Acid glass",
+      "backdropBlurDp": 22,
+      "shape": { "type": "CHAMFERED", "cutDp": [0, 10, 0, 10] },
+      "fill": {
+        "type": "LINEAR_GRADIENT",
+        "angle": 135,
+        "stops": [["#C8FF00", 0.0, 0.16], ["#12051F", 0.35, 0.72], ["#FF1F8E", 1.0, 0.22]]
+      },
+      "borders": [
+        { "type": "INNER", "widthDp": 1.5, "brush": { "type": "SWEEP_GRADIENT", "colors": ["#C8FF00", "#1AEBFF", "#FF1F8E", "#C8FF00"] } }
+      ],
+      "glow": { "color": "#FF1F8E", "radiusDp": 12, "intensity": 0.4 }
+    },
+    "bsod": {
+      "label": "Blue screen",
+      "shape": { "type": "RECTANGLE" },
+      "fill": { "type": "SOLID", "color": "#0A1EC8", "opacity": 0.96 },
+      "borders": [
+        { "type": "INNER", "widthDp": 2.0, "color": "#FFFFFF", "opacity": 1.0 },
+        { "side": "BOTTOM", "widthDp": 4.0, "color": "#FFFFFF", "opacity": 0.85 }
+      ],
+      "shadows": [{ "offsetDp": [5, 5], "blurDp": 0, "color": "#000000", "opacity": 0.9 }]
+    },
+    "hazard_tape": {
+      "label": "Hazard tape",
+      "shape": { "type": "RECTANGLE" },
+      "fill": { "type": "SOLID", "color": "#000000", "opacity": 0.92 },
+      "borders": [
+        { "side": "LEFT", "widthDp": 6.0, "brush": { "type": "LINEAR_GRADIENT", "angle": 180, "stops": [["#FFD400", 0.0, 1.0], ["#FFD400", 0.25, 1.0], ["#000000", 0.25, 1.0], ["#000000", 0.5, 1.0], ["#FFD400", 0.5, 1.0], ["#FFD400", 0.75, 1.0], ["#000000", 0.75, 1.0], ["#000000", 1.0, 1.0]] } },
+        { "type": "OUTER", "widthDp": 1.5, "color": "#FFD400", "opacity": 1.0 }
+      ],
+      "shadows": [{ "offsetDp": [4, 4], "blurDp": 0, "color": "#FFD400", "opacity": 0.35 }]
+    },
+    "low_power": {
+      "label": "Low power",
+      "shape": { "type": "RECTANGLE" },
+      "fill": { "type": "SOLID", "color": "#1A0000", "opacity": 0.94 },
+      "borders": [
+        { "type": "OUTER", "widthDp": 2.0, "color": "#FF2A1A", "opacity": 1.0 },
+        { "side": "TOP", "widthDp": 7.0, "color": "#FF2A1A", "opacity": 1.0 }
+      ],
+      "shadows": [{ "offsetDp": [6, 6], "blurDp": 0, "color": "#000000", "opacity": 1.0 }],
+      "glow": { "color": "#FF2A1A", "radiusDp": 10, "intensity": 0.45 }
+    }
+  }
+}

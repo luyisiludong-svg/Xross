@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="256" height="256">
+  <!-- UNIT//TERMINAL: video -->
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M6 12h46v34h-46zM8.5 14.5h41v29h-41z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M24 21L37 29L24 37z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M18 50h22v2.5h-22z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M54 54h6v6h-6z"/>
+</svg>

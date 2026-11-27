@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="256" height="256">
+  <!-- UNIT//TERMINAL: album -->
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M6 8h40v40h-40zM8.5 10.5h35v35h-35z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M22 28a14 14 0 1 0 28 0a14 14 0 1 0 -28 0zM24.5 28a11.5 11.5 0 1 0 23 0a11.5 11.5 0 1 0 -23 0z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M34 26h4v4h-4z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M54 54h6v6h-6z"/>
+</svg>

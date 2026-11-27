@@ -92,7 +92,7 @@ class ThemePackLoaderTest {
         File(themes, "xross").apply { mkdirs() }.resolve("theme.json").writeText("""{"schemaVersion": 2, "name": "Impostor"}""")
         File(themes, "sakura").apply { mkdirs() }.resolve("theme.json").writeText("""{"schemaVersion": 2, "name": "Sakura"}""")
         val packs = loader.discover()
-        assertEquals(listOf("default", "xross", "blackhole", "sakura"), packs.map { it.id })
+        assertEquals(listOf("default", "xross", "blackhole", "memento_mori", "unit_terminal", "breakcore_err", "sakura"), packs.map { it.id })
         assertEquals("XMB", packs[0].name)
         val xross = packs[1]
         assertEquals("Xross", xross.name)
@@ -105,7 +105,7 @@ class ThemePackLoaderTest {
 
     @Test fun theFormerXmbIdLoadsTheDefaultPackAndStaysReserved() {
         File(themes, "xmb").apply { mkdirs() }.resolve("theme.json").writeText("""{"schemaVersion": 2, "name": "Impostor"}""")
-        assertEquals(listOf("default", "xross", "blackhole"), loader.discover().map { it.id })
+        assertEquals(listOf("default", "xross", "blackhole", "memento_mori", "unit_terminal", "breakcore_err"), loader.discover().map { it.id })
         val t = loader.load("xmb")
         assertEquals(ThemePackLoader.DEFAULT_ID, t.id)
         assertEquals("XMB", t.info.name)
@@ -123,6 +123,27 @@ class ThemePackLoaderTest {
         assertTrue(t.customShaders.values.single().contains("Gargantua"))
         assertTrue("black_hole.frag" in t.files)
         assertTrue(t.fonts.display != null && t.fonts.body != null && t.fonts.mono != null)
+    }
+
+    @Test fun theBundledShowcasePacksLoadFromTheApkWithNoProblems() {
+        val names = mapOf(
+            ThemePackLoader.MEMENTO_MORI_ID to "MEMENTO//MORI",
+            ThemePackLoader.UNIT_TERMINAL_ID to "UNIT//TERMINAL",
+            ThemePackLoader.BREAKCORE_ERR_ID to "BREAKCORE.ERR",
+        )
+        for ((id, name) in names) {
+            val t = loader.load(id)
+            assertEquals(id, t.id)
+            assertTrue(t.info.builtIn)
+            assertEquals(name, t.info.name)
+            assertTrue("$id: ${t.problems}", t.problems.isEmpty())
+            assertEquals("$id draws its own shader", ShaderPreset.CUSTOM, t.shader.preset)
+            assertTrue("$id has its surfaces", t.surfaces.keys.any { it !in SurfacePreset.entries.map { p -> p.name } })
+        }
+        // A bundled pack's wallpaper is drawn from a file the platform makes of its asset.
+        val memento = loader.load(ThemePackLoader.MEMENTO_MORI_ID)
+        assertTrue(memento.hasWallpaper)
+        assertTrue("wallpapers/specimen.png" in memento.files)
     }
 
     @Test fun theBundledXrossPackLoadsEveryIconAndSoundFromItsOwnAssets() {

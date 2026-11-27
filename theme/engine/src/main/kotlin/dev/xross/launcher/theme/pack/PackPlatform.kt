@@ -37,4 +37,11 @@ interface PackPlatform {
 
     /** The font in [file] (a `.ttf` or `.otf` in a folder pack); null when it can't be read. */
     fun fileFont(file: File): ThemeFont?
+
+    /**
+     * The bundled asset at [path] as a file, for the layers drawn from files (a bundled pack's
+     * wallpaper): on Android a copy made once in the app's cache. Null when it isn't there or the
+     * platform can't make one, and that layer is then left out with a problem.
+     */
+    fun assetFile(path: String): File? = null
 }

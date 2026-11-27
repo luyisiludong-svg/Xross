@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="256" height="256">
+  <!-- UNIT//TERMINAL: music -->
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M14 38h10v8h-10z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M36 34h10v8h-10z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M21 12h2.5v30h-2.5z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M43 8h2.5v30h-2.5z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M21 12L45.5 8L45.5 14L21 18z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M54 54h6v6h-6z"/>
+</svg>
