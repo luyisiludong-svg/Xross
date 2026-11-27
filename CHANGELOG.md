@@ -1,5 +1,73 @@
 # Changelog
 
+## 0.2.3.0-beta — 2026-11-27
+
+- **Three more built-in theme packs.** MEMENTO//MORI (cobalt and aqua, a dithered moon shader and
+  an illustrated specimen sheet), UNIT//TERMINAL (sepia line work on umber paper, a ring scanner and
+  a printed-menu filter) and BREAKCORE.ERR (a glitchcore showcase that sets nearly everything a pack
+  can) now ship in the APK, listed after Gargantua. Their ids are reserved, so a folder pack of the
+  same name in `Xross/themes/` is shadowed by the built-in one.
+- Built-in packs can bring a wallpaper: it is copied once into the app's cache and drawn like a
+  folder pack's.
+- **Menu styles: SLASH.** A theme can draw the menu as a bold, slanted list instead of the cross
+  media bar (`layout.menuStyle: "SLASH"`, with a `layout.slash` block). Rows can be made of the
+  theme's own art (torn paper, slabs), and the focused row becomes a bigger panel that can show
+  the game's logo. Categories sit on an icon bar with an animated decal under the focused one, or
+  as a slanted strip of names. The focused game's hero art can sit in a tilted, decorated frame.
+  Lists cascade in, and category switches wipe, shatter or fade the old list away. A theme can
+  offer both styles through its variants, and Settings ▸ Theme ▸ Layout then gets a *Menu style*
+  row. Still and E-Ink modes skip the motion. See the theme specification §16.
+- **Clock and hint styles**, for every menu style: a two-line clock (`clockLayout: STACKED`, or
+  `PLATES` with each line on its own plate, figures big and words small), larger, tilted and on a
+  plate. Hints can sit on slanted plates (`hintStyle: PLATES`) or appear bare (`PLAIN`), and the
+  battery and avatar can have plates of their own. Left alone, the clock and hints look as before.
+  See the theme specification §15.
+- **Images for theme shaders.** A pack's own background shader can sample up to four of its
+  images (`effects.shaderImages`: PNG, JPEG or WebP, with `wrap`, `filter` and `mipmap`) as
+  `uImage0`–`uImage3`, and gets the focused item's position as `uFocus`. Paintings can now ripple,
+  drift in haze and shift in depth. Images are capped at 2048 px and 8 MP per shader; replacing one
+  reloads like an edit to the shader. See the shader guide §8 and the tutorial's painted scene.
+- The desktop shader preview binds a pack's shader images and moves `uFocus` with the mouse.
+- **Video backgrounds.** A theme can bring a looping, muted video (`effects.videoPath`: MP4 with
+  H.264 or HEVC, or WebM with VP9) placed by `effects.videoFit` (`FILL`, `FIT`, `STRETCH`,
+  `CENTER`). Left at the wave it plays as is, through the new `VIDEO` background; a theme's own
+  shader reads it as `uVideo` and can bend it (glass, haze, parallax), and the background filter
+  still applies. It holds its frame while art covers it, while a snap or the boot video plays and
+  when the screen rests (never sooner than 10 s after a button); a game in front frees its decoder,
+  and it picks up where it left off on return. Still mode shows a poster. A video the device can't
+  play shows the theme's wallpaper, else the wave. See the theme specification and shader guide §9.
+- The shader preview plays a theme's video (`?video=`, `&fit=`) and has a video example.
+- **Layered scenes, first part.** A theme can describe its background as a stack of layers in a
+  `scene.json` (`effects.scenePath`): images, videos, sprite sheets, shader layers and particles,
+  each with opacity, blend, placement, parallax, a mask and motion. Xross reads and checks the
+  whole format now, lists any problem per layer, keeps a scene within its budget, and shows the
+  scene's poster (or its first image) as the background; the layers are drawn in a later update.
+  Editing the scene or any of its files reloads it, and exports carry them. See the theme
+  specification's Layered scenes.
+- **Layered scenes draw their images and sprites.** Image and sprite-sheet layers are now drawn,
+  with placement, blend (normal, add, screen, multiply), opacity, masks, scrolling, sway, pulse,
+  parallax that follows the focused item, and motion driven by the music, category switches and
+  the time of day. `"resolution": "sharp"` renders the background at 1920 px instead of 1280.
+  Video, shader and particle layers follow in later updates.
+- **Layered scenes draw video and shader layers.** A video layer shows the scene's video (one
+  file per scene, which several layers may show) placed and blended like an image. A shader layer
+  is a full-screen shader that reads the layers below it as `uBelow` and replaces them inside its
+  `rect`, at its opacity; one that doesn't compile is left out with a notice. A scene with shader
+  layers is crash-guarded like a pack's shader. Particle layers follow in a later update.
+- **Layered scenes draw particles.** A particle layer is drawn on the GPU in one go, up to 2,000
+  particles per scene: born at its `rate` across its `rect` (or the screen), each with its own
+  life, speed, size and colour from the ranges, an image or a soft dot, and moving with the
+  layer's parallax, sway and pulse. The field is full from the first frame and costs nothing while
+  paused. Under a scene with particles of its own, the theme's foreground particles are off.
+- **Tilt parallax.** Settings ▸ System ▸ Performance ▸ Tilt parallax (off by default): a layered
+  scene's parallax layers also shift as you tilt the device, and drift back to the middle when you
+  hold it still. The motion sensor is read only while such a scene is on screen.
+- **Slow scenes show their poster.** A layered scene too slow for the device, or blocked after a
+  crash, now shows its poster image instead of switching to the wave. Try retired shaders again
+  draws its layers anew.
+- The shader preview draws layered scenes (every layer type, with the mouse as the focus and
+  sliders for tilt and daylight), and a complete sample scene, "Neon Rain", ships with it.
+
 ## 0.2.2.0-beta — 2026-11-21
 
 - **Metadata & Media editor.** Options ▸ Metadata & Media now opens a full screen for the game

@@ -23,7 +23,10 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlin.math.roundToInt
+import dev.xross.launcher.media.BackgroundVideo
+import dev.xross.launcher.media.BackgroundVideoPolicy
 import dev.xross.launcher.media.energy.AudioLevels
+import dev.xross.launcher.theme.pack.VideoSource
 import dev.xross.launcher.theme.shader.ShaderHealth
 import dev.xross.launcher.theme.shader.ShaderLibrary
 import dev.xross.launcher.theme.topColor
@@ -40,6 +43,11 @@ import dev.xross.launcher.theme.bottomColor
  * [shaders] is every program the active pack can show; a new library is compiled ahead of time on
  * the GL thread ([WaveRenderer.prepare]) while the current program keeps drawing. [params]'
  * `shader` picks the one shown.
+ *
+ * [video] (Live backgrounds § 2) is the look's background video: a [BackgroundVideo] player
+ * decodes it into a surface the renderer made, and programs read it as `uVideo`. It follows
+ * [BackgroundVideoPolicy]: released while the activity is stopped (a game is in front), held on
+ * its last frame while covered, resting, still or while [otherVideo] plays, else playing.
  */
 @Composable
 fun WaveBackground(
@@ -53,6 +61,22 @@ fun WaveBackground(
     health: ShaderHealth? = null,
     /** Music levels for `uAudioBass` / `uAudioBeat` (2b.4b); null binds 0. */
     audio: AudioLevels? = null,
+    /** In use, draw at the screen's full refresh rate instead of pacing 90 Hz+ screens to ~60 fps. */
+    fullFrameRate: Boolean = false,
+    /** The look's background video (Live backgrounds § 2); null for none. */
+    video: VideoSource? = null,
+    /** A video snap or the boot video is playing: the background video holds its frame meanwhile. */
+    otherVideo: Boolean = false,
+    /**
+     * The background video rests (holds its frame): Standby motion's timeout, but never sooner than
+     * the particles' 10 s ([dev.xross.launcher.data.StandbyMotion.particleTimeoutMs]), so a loop
+     * doesn't freeze 3 s after each press. Null follows [idle].
+     */
+    videoResting: Boolean? = null,
+    /** The player can't play [video] (why): the caller falls back to the wallpaper, else the wave. */
+    onVideoFailed: (VideoSource, String) -> Unit = { _, _ -> },
+    /** Settings ▸ System ▸ Performance ▸ Tilt parallax (Live backgrounds § 3e): a scene's parallax follows the device's tilt. */
+    tiltParallax: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -67,11 +91,35 @@ fun WaveBackground(
     val refreshHz = remember {
         (context.getSystemService(Context.WINDOW_SERVICE) as android.view.WindowManager).defaultDisplay.refreshRate
     }
-    val renderer = remember { WaveRenderer(refreshRateHz = refreshHz, assets = context.assets, health = health, audio = audio) }
+    val onVideoFailedState = remember { mutableStateOf(onVideoFailed) }
+    val renderer = remember {
+        WaveRenderer(
+            refreshRateHz = refreshHz,
+            assets = context.assets,
+            health = health,
+            audio = audio,
+            imageDecoder = ShaderImageLoader(context.assets),
+        )
+    }
+    val bgVideo = remember {
+        BackgroundVideo(
+            context,
+            onFailed = { v, why -> onVideoFailedState.value(v, why) },
+            onNotice = { v, text -> health?.notice("video:${v.key}", "Background video ${v.file.name}: $text") },
+            onSize = renderer::videoSize,
+            copies = { renderer.videoCopies },
+        )
+    }
+    // Scenes drawn as their poster (§ 3f): their video isn't shown, so the player lets go of it.
+    val posterScenes = remember { mutableStateOf(emptySet<String>()) }
+    onVideoFailedState.value = onVideoFailed
     // The library before the params that may name one of its programs.
     renderer.library = shaders
     renderer.params = params
     renderer.frozen = frozen
+    // Live backgrounds § 3b: a sharp scene renders at 1920 on the long side, everything else at 1280.
+    val longSide = WaveRenderer.longSide(shaders, params.shader)
+    val surfaceSize = remember { SurfaceSizer(renderer) }
 
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val view = remember {
@@ -83,21 +131,22 @@ fun WaveBackground(
             renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
             // Render below native resolution; the compositor upscales for free.
             addOnLayoutChangeListener { v, l, t, r, b, _, _, _, _ ->
-                val w = r - l
-                val h = b - t
-                if (w > 0 && h > 0) {
-                    val scale = WaveRenderer.renderScale(w, h)
-                    val rw = (w * scale).roundToInt()
-                    (v as GLSurfaceView).holder.setFixedSize(rw, (h * scale).roundToInt())
-                    // Lines and stripes are sized in dp, snapped to the render target's pixels (2b.4f).
-                    renderer.pxPerDp = v.resources.displayMetrics.density * rw / w
-                }
+                surfaceSize.layout(v as GLSurfaceView, r - l, b - t)
             }
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            // A still screen draws one frame per change: the one that uploads a shader's images too.
+            renderer.onImagesDecoded = { if (renderer.frozen) requestRender() }
+            // The background video's surface comes from the GL thread; the player lives on the main one.
+            val main = android.os.Handler(android.os.Looper.getMainLooper())
+            renderer.onVideoSurface = { surface -> main.post { bgVideo.setSurface(surface) } }
+            renderer.onVideoFrame = { if (renderer.frozen) requestRender() }
+            renderer.onPosterScenes = { keys -> main.post { posterScenes.value = keys } }
         }
     }
     val pacer = remember { VsyncPacer(view, refreshHz) }
+    androidx.compose.runtime.SideEffect { surfaceSize.longSide(view, longSide) }
     var resumed by remember { mutableStateOf(lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) }
+    var started by remember { mutableStateOf(lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) }
     DisposableEffect(lifecycle, view) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
@@ -110,6 +159,9 @@ fun WaveBackground(
                     view.onPause()
                     renderer.quiesce() // the GL thread is parked: nothing of a pack shader is in flight
                 }
+                // A game or app in front: the background video lets go of its decoder (§ 2).
+                Lifecycle.Event.ON_START -> started = true
+                Lifecycle.Event.ON_STOP -> started = false
                 else -> Unit
             }
         }
@@ -119,7 +171,34 @@ fun WaveBackground(
             pacer.stop()
             view.onPause()
             renderer.quiesce()
+            bgVideo.release()
+            bgVideo.setSurface(null)
+            renderer.abandonVideo()
         }
+    }
+    // Live backgrounds § 2: the background video's player follows the policy.
+    val videoAction = BackgroundVideoPolicy.action(
+        hasVideo = video != null,
+        started = started,
+        still = frozen,
+        // Paused (not resumed) stops the GL loop too: nothing would show the frames.
+        covered = paused || !resumed,
+        standby = videoResting ?: idle,
+        otherVideo = otherVideo,
+        posterOnly = params.shader in posterScenes.value,
+    )
+    LaunchedEffect(bgVideo, video, videoAction) {
+        bgVideo.apply(video, videoAction)
+        if (dev.xross.launcher.BuildConfig.PERF_LOG) android.util.Log.i("XrossVideo", "policy ${videoAction.name.lowercase()} video=${video?.file?.name} " +
+            "started=$started resumed=$resumed still=$frozen covered=$paused resting=${videoResting ?: idle} other=$otherVideo")
+    }
+    // Live backgrounds § 3e: the tilt sensor only while it can move something on screen.
+    val tiltSensor = remember { TiltSensor(context, view, renderer) }
+    val tiltWanted = tiltParallax && !frozen && !paused && resumed &&
+        shaders.spec(params.shader)?.scene?.scene?.hasParallax == true
+    DisposableEffect(tiltSensor, tiltWanted) {
+        if (tiltWanted) tiltSensor.start()
+        onDispose { tiltSensor.stop() }
     }
     // Ahead-of-time compile of the pack's programs (2b.4a), on the GL thread between frames.
     LaunchedEffect(view, shaders) {
@@ -127,7 +206,11 @@ fun WaveBackground(
     }
     // Covered: stop drawing frames (the GL thread sleeps) but keep the surface. Otherwise run at
     // full rate when that is already at or under the ceiling, else paced to every n-th vsync.
-    val stride = if (idle) WaveRenderer.idleStride(refreshHz) else WaveRenderer.activeStride(refreshHz)
+    val stride = when {
+        idle -> WaveRenderer.idleStride(refreshHz)
+        fullFrameRate -> 1
+        else -> WaveRenderer.activeStride(refreshHz)
+    }
     LaunchedEffect(view, paused, stride, resumed, frozen) {
         renderer.stride = stride
         val loop = waveLoop(paused = paused, resumed = resumed, stride = stride, frozen = frozen)
@@ -219,4 +302,40 @@ private class VsyncPacer(private val view: GLSurfaceView, refreshHz: Float) : Ch
 private fun supportsGles3(context: Context): Boolean {
     val am = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
     return am.deviceConfigurationInfo.reqGlEsVersion >= 0x30000
+}
+
+/**
+ * Sizes the GL surface below native resolution (the compositor upscales for free): the long side at
+ * [WaveRenderer.renderScale] of the view's, 1280 px, or 1920 for a sharp scene (Live backgrounds
+ * § 3b). A change of either resizes the buffer once; the renderer treats it like any resize.
+ */
+private class SurfaceSizer(private val renderer: WaveRenderer) {
+    private var width = 0
+    private var height = 0
+    private var side = WaveRenderer.SOFT_LONG_SIDE
+    private var applied = 0L
+
+    fun layout(view: GLSurfaceView, w: Int, h: Int) {
+        width = w
+        height = h
+        apply(view)
+    }
+
+    fun longSide(view: GLSurfaceView, longSide: Int) {
+        side = longSide
+        apply(view)
+    }
+
+    private fun apply(view: GLSurfaceView) {
+        if (width <= 0 || height <= 0) return
+        val scale = WaveRenderer.renderScale(width, height, side)
+        val rw = (width * scale).roundToInt()
+        val rh = (height * scale).roundToInt()
+        val key = (rw.toLong() shl 32) or rh.toLong()
+        if (key == applied) return
+        applied = key
+        view.holder.setFixedSize(rw, rh)
+        // Lines and stripes are sized in dp, snapped to the render target's pixels (2b.4f).
+        renderer.pxPerDp = view.resources.displayMetrics.density * rw / width
+    }
 }

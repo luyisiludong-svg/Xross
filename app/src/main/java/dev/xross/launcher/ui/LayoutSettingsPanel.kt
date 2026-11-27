@@ -39,6 +39,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.xross.launcher.state.LayoutEditor
 import dev.xross.launcher.state.LayoutEditorState
+import dev.xross.launcher.state.LayoutPanelContext
 import dev.xross.launcher.state.LayoutRow
 import dev.xross.launcher.theme.pack.LayoutOverrides
 import dev.xross.launcher.theme.pack.ThemeLayout
@@ -64,6 +65,8 @@ internal fun LayoutSettingsPanel(
     onRowTap: (Int) -> Unit,
     onSlider: (Int, Float) -> Unit,
     onDismiss: () -> Unit,
+    /** The rows for the menu style on screen (Menu styles slice 6). */
+    ctx: LayoutPanelContext = LayoutPanelContext.XMB,
 ) {
     var shown by remember { mutableStateOf(editor) }
     if (editor != null) shown = editor
@@ -101,8 +104,9 @@ internal fun LayoutSettingsPanel(
                 Text("Layout", style = shadowed(m.titleSize.sp(), weight = FontWeight.Bold))
                 Text("The menu behind moves as you adjust", style = shadowed((m.subtitleSize * 0.8f).sp(), color = TextDim))
                 Spacer(Modifier.height((m.s * 0.015f).dp()))
-                LayoutEditor.rows.forEachIndexed { i, row ->
+                ctx.rows.forEachIndexed { i, row ->
                     LayoutRowView(
+                        ctx = ctx,
                         row = row,
                         focused = i == state.index,
                         user = user,
@@ -114,7 +118,7 @@ internal fun LayoutSettingsPanel(
                     )
                 }
                 Spacer(Modifier.height((m.s * 0.015f).dp()))
-                val confirmLabel = if (state.row == LayoutRow.RESET) "Reset" else "Theme pack"
+                val confirmLabel = if (state.row(ctx) == LayoutRow.RESET) "Reset" else "Theme pack"
                 val hint = (m.subtitleSize * 0.78f).sp()
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.align(Alignment.End)) {
                     Hint("↔", "Adjust", hint)
@@ -128,6 +132,7 @@ internal fun LayoutSettingsPanel(
 
 @Composable
 private fun LayoutRowView(
+    ctx: LayoutPanelContext,
     row: LayoutRow,
     focused: Boolean,
     user: LayoutOverrides,
@@ -158,7 +163,7 @@ private fun LayoutRowView(
             )
             // The user's own values in full white; the pack's dimmed.
             Text(
-                LayoutEditor.value(row, user, pack),
+                LayoutEditor.value(row, user, pack, ctx),
                 style = shadowed(text, color = if (focused) Pastel.Amber else if (own) TextBright else TextDim),
                 maxLines = 1,
             )

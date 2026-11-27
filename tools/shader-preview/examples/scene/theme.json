@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 2,
+  "name": "Neon Rain",
+  "author": "Xross examples",
+  "palette": { "canvas": "#1B1440", "accent": "#FFB354", "accentSecondary": "#C24FD8" },
+  "effects": {
+    "scenePath": "scene.json"
+  },
+  "variants": [
+    { "id": "wave", "name": "Plain wave", "effects": { "shaderPreset": "WAVE" } }
+  ]
+}

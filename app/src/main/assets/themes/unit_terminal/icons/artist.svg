@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="256" height="256">
+  <!-- UNIT//TERMINAL: artist -->
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M22 8h16v16h-16zM24.5 10.5h11v11h-11z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M10 50L16 32L44 32L50 50z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M54 54h6v6h-6z"/>
+</svg>

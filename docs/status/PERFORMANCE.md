@@ -83,3 +83,48 @@ Unisoc T618) before calling it final.**
 | Idle RAM ≤ 150 MB with an emulator in front | ✅ 42 MB PSS in the background on the emulator; 83–122 MB on the Galaxy A55 (84 MB on 2026-11-12, [§3.21](../phase-2b/2b.3/STATUS.md#s3.21)) |
 | Suspend GL on screen-off / app in background | ✅ No GL frames and 0% CPU while an emulator is in front |
 | Daemon CPU < 3% idle | n/a (no daemons yet) |
+
+<a id="s4.4"></a>
+
+## 4.4 Live backgrounds on the Galaxy A55
+
+2026-11-27, `feat/live-backgrounds-image-inputs` at `2a8d6d6`, `profiling` build (release-signed
+with `-Pxross.profilingReleaseSigned=true` so it installed over the phone's release build). The
+sample packs from `tools/shader-preview/examples/` as folder packs. Each run: cold start, then
+DPAD up/down every 0.4 s for 14 s; three rounds interleaved. GPU at its 450 MHz floor
+throughout. The watchdog's limit is 10 ms p90 (timer query).
+
+| Pack | Watchdog p90 (3 rounds) | GL loop after start | UI janky (deadline) |
+| --- | --- | --- | --- |
+| Painted Valley (§ 1, `scene.frag` + 2 images) | 1.46–1.65 ms | 60 fps, 0 missed | 0–0.06% |
+| Video sample (§ 2, H.264 640×360 + `glass.frag`) | 0.51–0.56 ms | 60 fps, 0–2 missed | 0% |
+| Neon Rain scene (§ 3, 8 layers), `sharp` (1920 long side) | 5.51–5.56 ms | 60 fps, 0–1 missed | 0.05–0.11% |
+| Neon Rain scene, `soft` (1280) | 2.61–2.66 ms | 60 fps, 0 missed | 0–0.06% |
+
+- Legacy jank (gfxinfo's 16 ms threshold) swung between 1% and 98% in the same configuration,
+  the bimodal frame cost known from particles; deadline jank is the figure that matters.
+- **Codecs.** H.264, HEVC and VP9 versions of the loop decode on the hardware decoders
+  (`c2.exynos.h264/hevc/vp9.decoder`) and copy at 640×360. Every codec misses 4–13 GL frames in
+  the first 5 s (cold start, max 70–127 ms), then 0.
+- **CPU and GPU** (% of one core, 2 rounds; Standby motion on the phone is `AFTER_30S`):
+
+  | Pack | Navigating: Xross / codec / SurfaceFlinger / GPU busy | Video held (no input > 30 s): codec, before → after the park fix |
+  | --- | --- | --- |
+  | Default (WAVE) | 88–96% / 0% / 42–44% / 37–38% | 0% (no video) |
+  | Video sample | 108–111% / 19–20% / 44–46% / 25% | 4.5–16% → 0% |
+  | Neon Rain (sharp) | 109–112% / 18–20% / 40% / 61% | — |
+
+  With Xross stopped the codec service uses ~0.15%. Xross itself and the GPU are idle while the
+  video is held (0 ticks, GPU 1%).
+- **Poster fallback.** A copy of the scene with a deliberately slow `rain.frag` measured p90
+  12.1–13.1 ms. With Performance ▸ Slow shaders on Warn it stays on with a notice; on Retire it
+  went to its poster (1280×576 uploaded, no flash), and the GL loop returned to 0 missed frames.
+  Its video kept decoding afterwards (~17% of a core in the codec service); since the fix
+  below it is released (0%).
+- **Fix (same day).** A held player now parks: after 2 s it is released once one of its
+  frames has been copied, and the copy stays on screen; the next input prepares it again at
+  the saved position. A scene drawn as its poster releases its video. Checked on the A55:
+  0 codec ticks in 20 s while parked, playback resumes on input, the parked frame stays.
+- **Not measured:** battery over 30 min (needs the phone unplugged; USB charging makes
+  batterystats meaningless), tilt by hand, the snap handoff and loop seam, a crash in a shader
+  layer, the upload hitch for two 2048² images (the sample's images are small).

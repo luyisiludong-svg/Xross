@@ -34,6 +34,8 @@ class FilePackPlatform(private val assets: File) : PackPlatform {
 
     override fun fileFont(file: File): ThemeFont? = file.takeIf { it.isFile && it.length() > 0 }?.let { FileFont(it.name) }
 
+    override fun assetFile(path: String): File? = asset(path)?.takeIf { it.isFile }
+
     private fun asset(path: String): File? =
         if (path.split('/').any { it == ".." }) null else File(assets, path).takeIf { it.exists() }
 

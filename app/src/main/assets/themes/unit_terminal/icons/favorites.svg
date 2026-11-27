@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="256" height="256">
+  <!-- UNIT//TERMINAL: favorites -->
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M30 6L35 25L54 30L35 35L30 54L25 35L6 30L25 25z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M54 54h6v6h-6z"/>
+</svg>

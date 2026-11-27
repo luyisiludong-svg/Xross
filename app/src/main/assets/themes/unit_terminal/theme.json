@@ -1,0 +1,250 @@
+{
+  "schemaVersion": 2,
+  "name": "UNIT//TERMINAL",
+  "author": "Beluwhal",
+  "version": "1.0",
+  "description": "A field terminal for androids: sepia line work on umber paper, a slow ring scanner, rising data squares and a crawling status ticker, with the menu printed on parchment by its own UI filter. Comes with a monochrome INTRUSION mode (its own shader and filter), soft synthesized UI tones and two ambient loops. Original work, inspired by the look of NieR:Automata's in-game menus; no game assets are used.",
+  "imports": [
+    "surfaces.json",
+    "rules.json"
+  ],
+  "palette": {
+    "canvas": "#2E2C25",
+    "accent": "#DAD4BB",
+    "accentSecondary": "#B8B198",
+    "focusGold": "#E6DFC4",
+    "textPrimary": "#ECE5CF",
+    "textSecondary": "#B8B198",
+    "circadianCurve": false,
+    "batteryTint": false
+  },
+  "wave": {
+    "speed": 1.0,
+    "lineCount": 3,
+    "turbulence": 0.6,
+    "ribbonThickness": 0.8,
+    "gradient": [
+      "#2E2C25",
+      "#14130F"
+    ]
+  },
+  "audio": {
+    "sounds": {
+      "opening": "opening.wav",
+      "gameboot": "gameboot.wav"
+    },
+    "soundGains": {
+      "cursor": 0.5,
+      "category_switch": 0.6,
+      "confirm": 0.7,
+      "drill_in": 0.6,
+      "drill_out": 0.6,
+      "back": 0.6,
+      "option": 0.6,
+      "ok": 0.65,
+      "system_ng": 0.65,
+      "trophy": 0.8,
+      "opening": 0.85,
+      "gameboot": 0.85
+    },
+    "panAmount": 0.4,
+    "cursorJitter": true,
+    "bgmFile": "none"
+  },
+  "effects": {
+    "shaderPath": "terminal.frag",
+    "surfaceStyle": "terminal_window",
+    "adaptiveGamePalette": false,
+    "focusFrameStyle": "HARD_SHADOW",
+    "iconMask": "NONE",
+    "iconFilter": "DUOTONE",
+    "foregroundParticles": "DUST_MOTES",
+    "backgroundFilter": "SCANLINES",
+    "uiFilterPath": "postprocess.agsl",
+    "bootIntro": "SHADER",
+    "launchCurtain": "FLASH"
+  },
+  "layout": {
+    "crosshairX": 0.2,
+    "crosshairY": 0.26,
+    "cardAspectRatio": "16:9",
+    "tile": {
+      "music": "1:1",
+      "photo": "4:3",
+      "video": "16:9"
+    },
+    "itemSpacingDp": 10,
+    "focusedScale": 1.25,
+    "unfocusedAlpha": 0.42,
+    "uiScale": 1.0,
+    "focusDivider": "TITLE_UNDERLINE",
+    "drillDownStyle": "BREADCRUMB",
+    "textOverflow": "EDGE_FADE",
+    "motionProfile": "CRISP"
+  },
+  "components": {
+    "topLeftCluster": "EMPTY",
+    "statusBarLeft": [
+      "LOGO"
+    ],
+    "statusBarRight": [
+      "WIFI",
+      "CLOCK",
+      "BATTERY",
+      "AVATAR"
+    ],
+    "logo": "logo.svg",
+    "batteryMode": "PERCENTAGE",
+    "clockFormat": "yMdHm",
+    "volumeAlways": false,
+    "telemetryMode": "RICH_CARD",
+    "miniPlayerMode": "STATUS_TICKER",
+    "glyphOverride": "MONOCHROME_MINIMAL",
+    "badgePills": [
+      "SYSTEM",
+      "YEAR",
+      "PLAYTIME",
+      "RA_PROGRESS"
+    ],
+    "tileGlow": true
+  },
+  "variants": [
+    {
+      "id": "machine-red",
+      "name": "RED ALERT",
+      "palette": {
+        "canvas": "#24130F",
+        "accent": "#E0927A",
+        "accentSecondary": "#B5604C",
+        "focusGold": "#F0B9A6",
+        "textSecondary": "#E0927A"
+      },
+      "effects": {
+        "surfaceStyle": "alert_window",
+        "focusFrameStyle": "STATIC_NEON",
+        "backgroundFilter": "CRT",
+        "launchCurtain": "FADE_BLACK"
+      },
+      "audio": {
+        "bgmFile": "none"
+      }
+    },
+    {
+      "id": "desert-ops",
+      "name": "DESERT OPS",
+      "palette": {
+        "canvas": "#3A2F20",
+        "accent": "#F0DDB0",
+        "accentSecondary": "#C9A86A",
+        "focusGold": "#F5E2B0",
+        "textSecondary": "#C9A86A"
+      },
+      "effects": {
+        "surfaceStyle": "parchment_glass",
+        "foregroundParticles": "DUST_MOTES",
+        "backgroundFilter": "NONE"
+      }
+    },
+    {
+      "id": "quiet",
+      "name": "QUIET (low stimulation)",
+      "effects": {
+        "shaderPreset": "WAVE",
+        "uiFilter": "NONE",
+        "backgroundFilter": "NONE",
+        "foregroundParticles": "NONE",
+        "launchCurtain": "FADE_BLACK",
+        "bootIntro": "OFF"
+      }
+    }
+  ],
+  "categoryOverrides": {
+    "MUSIC": {
+      "effects": {
+        "surfaceStyle": "parchment_glass"
+      },
+      "audio": {
+        "soundGains": {
+          "cursor": 0.35
+        }
+      }
+    },
+    "PHOTO": {
+      "effects": {
+        "surfaceStyle": "parchment_glass",
+        "foregroundParticles": "NONE",
+        "uiFilter": "NONE",
+        "backgroundFilter": "NONE"
+      }
+    },
+    "VIDEO": {
+      "effects": {
+        "foregroundParticles": "NONE",
+        "launchCurtain": "FADE_BLACK",
+        "uiFilter": "NONE",
+        "backgroundFilter": "NONE"
+      }
+    },
+    "APPS": {
+      "effects": {
+        "surfaceStyle": "data_strip",
+        "iconFilter": "MONOCHROME"
+      }
+    },
+    "SETTINGS": {
+      "palette": {
+        "canvas": "#0C0C0C",
+        "accent": "#F2F2F2",
+        "accentSecondary": "#9C9C9C"
+      },
+      "effects": {
+        "shaderPath": "hacking.frag",
+        "uiFilterPath": "hack_filter.agsl",
+        "surfaceStyle": "intrusion_panel",
+        "focusFrameStyle": "STATIC_NEON",
+        "foregroundParticles": "NONE",
+        "backgroundFilter": "NONE"
+      },
+      "audio": {
+        "bgmFile": "none"
+      }
+    }
+  },
+  "systemOverrides": {
+    "gb": {
+      "palette": {
+        "accent": "#C9D6A3",
+        "accentSecondary": "#8FA06A"
+      },
+      "effects": {
+        "backgroundFilter": "LCD_GRID"
+      },
+      "cardAspectRatio": "1:1"
+    },
+    "gba": {
+      "effects": {
+        "backgroundFilter": "LCD_GRID"
+      },
+      "cardAspectRatio": "1.5"
+    },
+    "psx": {
+      "effects": {
+        "surfaceStyle": "data_strip",
+        "launchCurtain": "IRIS"
+      },
+      "cardAspectRatio": "1:1"
+    },
+    "ps2": {
+      "effects": {
+        "launchCurtain": "IRIS"
+      },
+      "cardAspectRatio": "3:4"
+    },
+    "arcade": {
+      "effects": {
+        "backgroundFilter": "CRT"
+      },
+      "cardAspectRatio": "3:4"
+    }
+  }
+}

@@ -6,6 +6,8 @@ import dev.xross.launcher.theme.ThemePalette
 import dev.xross.launcher.theme.WaveColors
 import dev.xross.launcher.theme.WaveTint
 import dev.xross.launcher.theme.XrossTheme
+import dev.xross.launcher.theme.shader.SceneSource
+import dev.xross.launcher.theme.shader.ShaderImage
 import dev.xross.launcher.theme.shader.ShaderPreset
 import dev.xross.launcher.theme.shader.ShaderRef
 import kotlinx.serialization.json.JsonArray
@@ -200,9 +202,9 @@ object LookExporter {
             wallpaper = pack.wallpaper.path.takeIf { sourceBaseWallpaper },
             bgm = pack.bgm.path.takeIf { sourceBaseBgm },
         )
-        val before = refs(pack.info.manifest, defaults)
+        val before = refs(pack.info.manifest, defaults, pack.scenes)
         val out = ThemeManifest.JSON.decodeFromJsonElement(ThemeManifest.serializer(), body)
-        val after = refs(out, defaults).let { r -> if (ignoreWallpapers) r - r.wallpapers else r }
+        val after = refs(out, defaults, pack.scenes).let { r -> if (ignoreWallpapers) r - r.wallpapers else r }
         val dropped = (before.all - after.all).mapTo(HashSet()) { it.lowercase(Locale.ROOT) }
         return pack.files.filter { it.lowercase(Locale.ROOT) !in dropped }
     }
@@ -213,16 +215,27 @@ object LookExporter {
         operator fun minus(other: Set<String>) = Refs(all - other, wallpapers - other)
     }
 
-    /** Every patchable file [m] names in its base, variants, overrides and rules (pack-relative). */
-    private fun refs(m: ThemeManifest, d: Defaults): Refs {
+    /** Every patchable file [m] names in its base, variants, overrides and rules (pack-relative); a scene's files come from [scenes]. */
+    private fun refs(m: ThemeManifest, d: Defaults, scenes: Map<String, SceneSource>): Refs {
         val ignored = ArrayList<String>()
         val all = LinkedHashSet<String>()
         val wallpapers = LinkedHashSet<String>()
         fun effects(e: ThemeManifest.Effects?, base: Boolean) {
-            ShaderRef.of("x", e?.shaderPreset, e?.shaderPath, ignored)?.takeIf { it.preset == ShaderPreset.CUSTOM }?.let { all += it.path }
+            ShaderRef.of("x", e?.shaderPreset, e?.shaderPath, ignored, e?.shaderImages, e?.scenePath)?.let { ref ->
+                when (ref.preset) {
+                    ShaderPreset.CUSTOM -> {
+                        all += ref.path
+                        ref.images.forEach { img -> img?.let { all += it.path } }
+                    }
+                    // The scene and every file it names travel together (Live backgrounds § 3).
+                    ShaderPreset.SCENE -> all += scenes[ref.path]?.files ?: listOf(ref.path)
+                    else -> Unit
+                }
+            }
             UiFilterRef.of("x", e?.uiFilter, e?.uiFilterPath, ignored)?.takeIf { it.filter == UiFilter.CUSTOM }?.let { all += it.path }
             val w = WallpaperRef.of("x", e?.wallpaperPath, ignored)
             (if (w == null && base) d.wallpaper else w?.path)?.let { all += it; wallpapers += it }
+            VideoRef.of("x", e?.videoPath, null, ignored)?.path?.let { all += it }
         }
         fun audio(a: ThemeManifest.Audio?, base: Boolean) {
             val b = BgmRef.of("x", a?.bgmFile, ignored)
@@ -266,8 +279,9 @@ object LookExporter {
     private val EFFECT_UNITS: Map<String, Set<String>> = mapOf(
         "surfaceStyle" to setOf("surfaceStyle"),
         "adaptiveGamePalette" to setOf("adaptiveGamePalette"),
-        "shaderPreset" to setOf("shaderPreset", "shader", "shaderPath"),
+        "shaderPreset" to setOf("shaderPreset", "shader", "shaderPath", "shaderImages", "scenePath", "scene"),
         "wallpaperPath" to setOf("wallpaperPath", "wallpaper"),
+        "videoPath" to setOf("videoPath", "video", "videoFit"),
         "focusFrameStyle" to setOf("focusFrameStyle", "focusFrame"),
         "iconMask" to setOf("iconMask"),
         "iconFilter" to setOf("iconFilter"),
@@ -306,8 +320,30 @@ object LookExporter {
         p.textSecondary?.let { put("textSecondary", str(it)) }
     }
 
-    private fun shaderJson(s: ShaderRef): Map<String, JsonElement> =
-        if (s.preset == ShaderPreset.CUSTOM) mapOf("shaderPreset" to str(s.preset.name), "shaderPath" to str(s.path)) else mapOf("shaderPreset" to str(s.preset.name))
+    private fun shaderJson(s: ShaderRef): Map<String, JsonElement> = when {
+        s.preset == ShaderPreset.SCENE -> mapOf("shaderPreset" to str(s.preset.name), "scenePath" to str(s.path))
+        s.preset != ShaderPreset.CUSTOM -> mapOf("shaderPreset" to str(s.preset.name))
+        s.images.isEmpty() -> mapOf("shaderPreset" to str(s.preset.name), "shaderPath" to str(s.path))
+        else -> mapOf("shaderPreset" to str(s.preset.name), "shaderPath" to str(s.path), "shaderImages" to shaderImagesJson(s.images))
+    }
+
+    /** `effects.shaderImages` back as JSON: a plain path where the settings are the defaults. An unusable slot stays an empty path's place. */
+    private fun shaderImagesJson(images: List<ShaderImage?>): JsonArray = JsonArray(
+        images.map { img ->
+            when {
+                img == null -> str("")
+                img == ShaderImage(img.path) -> str(img.path)
+                else -> JsonObject(
+                    linkedMapOf(
+                        "path" to str(img.path),
+                        "wrap" to str(img.wrap.name),
+                        "filter" to str(img.filter.name),
+                        "mipmap" to JsonPrimitive(img.mipmap),
+                    ),
+                )
+            }
+        },
+    )
 
     private fun uiFilterJson(f: UiFilterRef): Map<String, JsonElement> =
         if (f.filter == UiFilter.CUSTOM) mapOf("uiFilter" to str(f.filter.name), "uiFilterPath" to str(f.path)) else mapOf("uiFilter" to str(f.filter.name))
@@ -327,8 +363,32 @@ object LookExporter {
             "logo" to str(c.logo),
             "volumeAlways" to JsonPrimitive(c.volumeAlways),
             "tileGlow" to JsonPrimitive(c.tileGlow),
-        ),
+            "clockLayout" to str(c.clockLayout.name),
+            "clockSize" to JsonPrimitive(c.clockSize),
+            "clockTilt" to JsonPrimitive(c.clockTilt),
+            "hintStyle" to str(c.hintStyle.name),
+            "hintSkew" to JsonPrimitive(c.hintSkew),
+        ).apply {
+            c.clockPlate?.let { put("clockPlate", skinJson(it)) }
+            c.hintPlate?.let { put("hintPlate", skinJson(it)) }
+            c.batteryPlate?.let { put("batteryPlate", skinJson(it)) }
+            c.avatarPlate?.let { put("avatarPlate", skinJson(it)) }
+        },
     )
+
+    /** A [Skin] as a pack writes it. */
+    internal fun skinJson(k: Skin): JsonElement {
+        if (k.slice == null && k.tint == null && k.outset == Skin.Edges.ZERO) return str(k.path)
+        fun edges(e: Skin.Edges) = JsonArray(listOf(e.left, e.top, e.right, e.bottom).map { JsonPrimitive(it) })
+        return JsonObject(
+            buildMap {
+                put("path", str(k.path))
+                k.slice?.let { put("slice", JsonArray(listOf(it.left, it.top, it.right, it.bottom).map { v -> JsonPrimitive(v.toInt()) })) }
+                k.tint?.let { put("tint", str(it)) }
+                if (k.outset != Skin.Edges.ZERO) put("outset", edges(k.outset))
+            },
+        )
+    }
 
     /** A manifest being edited: its base blocks, and every override and rule patch. */
     private class Doc(var root: JsonObject) {
@@ -405,6 +465,13 @@ object LookExporter {
             v.surfaceId?.let { setEffect("surfaceStyle", mapOf("surfaceStyle" to str(it))) }
             v.shader?.let { setEffect("shaderPreset", shaderJson(it)) }
             v.wallpaper?.let { setEffect("wallpaperPath", mapOf("wallpaperPath" to str(it.path ?: "none"))) }
+            v.video?.let { video ->
+                // A fit-only layer keeps the base's video: write its fit next to whatever the base names.
+                val base = block("effects")
+                val path = if (video.isFitOnly) (base["videoPath"] ?: base["video"]) else str(video.path ?: "none")
+                val fit = video.fit?.let { str(it.name) } ?: if (video.isFitOnly) null else base["videoFit"]
+                setEffect("videoPath", listOfNotNull(path?.let { "videoPath" to it }, fit?.let { "videoFit" to it }).toMap())
+            }
             v.cosmetics?.let { c ->
                 c.focusFrame?.let { setEffect("focusFrameStyle", mapOf("focusFrameStyle" to str(it.name))) }
                 c.iconMask?.let { setEffect("iconMask", mapOf("iconMask" to str(it.name))) }
@@ -425,6 +492,7 @@ object LookExporter {
                 setBlock("audio", audio)
             }
             if (v.components != null) root = root.set("components", componentsJson(pack.components(v.id)))
+            v.menuStyle?.let { setBlock("layout", block("layout").set("menuStyle", str(it.name))) }
         }
 
         /** The user's picks written into the base and taken out of every patch (current look). */

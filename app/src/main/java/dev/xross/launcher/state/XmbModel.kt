@@ -123,6 +123,18 @@ sealed interface Command {
     data object ToggleBootSound : Command
     data object ToggleGameBootSound : Command
     data object ToggleLargeImageHashing : Command
+    /** Settings ▸ System ▸ Performance ▸ Standby motion: the next choice, or one from Options. */
+    data object CycleStandbyMotion : Command
+    data class SetStandbyMotion(val mode: dev.xross.launcher.data.StandbyMotion) : Command
+    /** Settings ▸ System ▸ Performance ▸ Background frame rate: ~60 fps ↔ the screen's full rate. */
+    data object ToggleFullFrameRate : Command
+    /** Settings ▸ System ▸ Performance ▸ Tilt parallax: a scene's parallax follows the device's tilt, or not. */
+    data object ToggleTiltParallax : Command
+    /** Settings ▸ System ▸ Performance ▸ Slow shaders: switch to the wave ↔ keep and warn. */
+    data object CycleSlowShaders : Command
+    data class SetSlowShaders(val mode: dev.xross.launcher.data.SlowShaders) : Command
+    /** Settings ▸ System ▸ Performance ▸ Try retired shaders again. */
+    data object RetrySlowShaders : Command
     data object RecheckFingerprints : Command
     data object OpenHomeSettings : Command
     data object OpenAndroidSettings : Command

@@ -6,6 +6,7 @@ local.properties
 .DS_Store
 captures/
 .kotlin/
+.claude/
 
 # Local secrets and test media
 .env

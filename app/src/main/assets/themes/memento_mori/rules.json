@@ -1,0 +1,32 @@
+{
+  "rules": [
+    {
+      "match": { "time": "22:00..06:00" },
+      "apply": {
+        "effects": { "foregroundParticles": "NONE" },
+        "audio": { "soundGains": { "cursor": 0.25, "category_switch": 0.3, "confirm": 0.4, "back": 0.4, "drill_in": 0.4, "drill_out": 0.4 } }
+      }
+    },
+    {
+      "match": { "time": "00:00..01:00" },
+      "apply": {
+        "palette": { "canvas": "#000000", "accent": "#3FE6FF", "accentSecondary": "#0B2A9E" },
+        "effects": { "wallpaperPath": "none", "surfaceStyle": "dark_hour", "focusFrameStyle": "STATIC_NEON", "backgroundFilter": "SCANLINES" },
+        "audio": { "bgmFile": "none" }
+      }
+    },
+    {
+      "match": { "battery": "charging" },
+      "apply": {
+        "palette": { "accent": "#7FF3FF" }
+      }
+    },
+    {
+      "match": { "battery": "<= 20" },
+      "apply": {
+        "palette": { "canvas": "#000000", "accent": "#FFFFFF", "accentSecondary": "#3A4A7A" },
+        "effects": { "surfaceStyle": "barcode_strip", "focusFrameStyle": "STATIC_NEON", "foregroundParticles": "NONE", "wallpaperPath": "none" }
+      }
+    }
+  ]
+}

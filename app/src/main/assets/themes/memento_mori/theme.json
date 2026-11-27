@@ -1,0 +1,256 @@
+{
+  "schemaVersion": 2,
+  "name": "MEMENTO//MORI",
+  "author": "Beluwhal",
+  "version": "1.0",
+  "description": "A deconstructed album cover in royal blue, navy, black and white: a melancholic student cut out of a cobalt slab, forget-me-nots, glass shards and specimen boxes with anchor handles over a live specimen sheet (a dithered moon in dashed orbits, a diagonal split, a tracking box, hex callouts, a barcode, a scrolling spine and a big angled MEMENTO MORI). Distressed serif type, a photocopy UI filter, glass-and-Rhodes UI sounds and two loops: a 170 BPM breakcore piece and a slow piano for the dark hour. Variants: THE DARK HOUR, PHOTOCOPY, COBALT SIGNAL and QUIET. Original work, inspired by the Persona 3 era of 2000s anime UI, cyber-grunge and breakcore; no game assets are used.",
+  "imports": [
+    "surfaces.json",
+    "rules.json"
+  ],
+  "palette": {
+    "canvas": "#030A2E",
+    "accent": "#3FE6FF",
+    "accentSecondary": "#1B3BFF",
+    "focusGold": "#CFE0FF",
+    "textPrimary": "#F4F8FF",
+    "textSecondary": "#8EA4E8",
+    "circadianCurve": false,
+    "batteryTint": false
+  },
+  "wave": {
+    "speed": 1.0,
+    "lineCount": 3,
+    "turbulence": 0.7,
+    "ribbonThickness": 0.9,
+    "gradient": [
+      "#030A2E",
+      "#000105"
+    ]
+  },
+  "typography": {
+    "display": "fonts/Arsenal-Bold.ttf",
+    "body": "fonts/Arsenal-Regular.ttf",
+    "mono": "fonts/Redaction50-Regular.ttf"
+  },
+  "audio": {
+    "bgmFile": "none"
+  },
+  "effects": {
+    "shaderPath": "dark_hour.frag",
+    "wallpaperPath": "wallpapers/specimen.png",
+    "surfaceStyle": "specimen_frame",
+    "adaptiveGamePalette": false,
+    "focusFrameStyle": "HARD_SHADOW",
+    "iconMask": "NONE",
+    "iconFilter": "DUOTONE",
+    "foregroundParticles": "DUST_MOTES",
+    "backgroundFilter": "NONE",
+    "bootIntro": "SHADER",
+    "launchCurtain": "FLASH"
+  },
+  "layout": {
+    "crosshairX": 0.2,
+    "crosshairY": 0.26,
+    "cardAspectRatio": "16:9",
+    "tile": {
+      "music": "1:1",
+      "photo": "4:3",
+      "video": "16:9"
+    },
+    "itemSpacingDp": 10,
+    "focusedScale": 1.25,
+    "unfocusedAlpha": 0.4,
+    "uiScale": 1.0,
+    "focusDivider": "FULL_BLEED_LINE",
+    "drillDownStyle": "BREADCRUMB",
+    "textOverflow": "EDGE_FADE",
+    "motionProfile": "SNAPPY"
+  },
+  "components": {
+    "topLeftCluster": "EMPTY",
+    "statusBarLeft": [
+      "LOGO"
+    ],
+    "statusBarRight": [
+      "WIFI",
+      "CLOCK",
+      "BATTERY",
+      "AVATAR"
+    ],
+    "logo": "logo.svg",
+    "batteryMode": "PERCENTAGE",
+    "clockFormat": "EMMMdHm",
+    "volumeAlways": false,
+    "telemetryMode": "RICH_CARD",
+    "miniPlayerMode": "STATUS_TICKER",
+    "glyphOverride": "MONOCHROME_MINIMAL",
+    "badgePills": [
+      "SYSTEM",
+      "YEAR",
+      "PLAYTIME",
+      "RA_PROGRESS"
+    ],
+    "tileGlow": true
+  },
+  "variants": [
+    {
+      "id": "dark-hour",
+      "name": "THE DARK HOUR",
+      "palette": {
+        "canvas": "#000000",
+        "accent": "#3FE6FF",
+        "accentSecondary": "#0B2A9E",
+        "focusGold": "#3FE6FF",
+        "textSecondary": "#5FA8D8"
+      },
+      "effects": {
+        "wallpaperPath": "none",
+        "surfaceStyle": "dark_hour",
+        "focusFrameStyle": "STATIC_NEON",
+        "foregroundParticles": "NONE",
+        "backgroundFilter": "SCANLINES",
+        "launchCurtain": "IRIS"
+      },
+      "audio": {
+        "bgmFile": "none"
+      },
+      "components": {
+        "telemetryMode": "COMPACT_PILL"
+      }
+    },
+    {
+      "id": "photocopy",
+      "name": "PHOTOCOPY (zine)",
+      "palette": {
+        "canvas": "#E9EDF5",
+        "accent": "#1B3BFF",
+        "accentSecondary": "#0018D8",
+        "focusGold": "#FFFFFF",
+        "textSecondary": "#B8C4E0"
+      },
+      "effects": {
+        "wallpaperPath": "none",
+        "surfaceStyle": "barcode_strip",
+        "focusFrameStyle": "HARD_SHADOW",
+        "iconFilter": "MONOCHROME",
+        "foregroundParticles": "NONE",
+        "launchCurtain": "FADE_BLACK"
+      }
+    },
+    {
+      "id": "cobalt",
+      "name": "COBALT SIGNAL",
+      "palette": {
+        "canvas": "#0012B0",
+        "accent": "#FFFFFF",
+        "accentSecondary": "#00C8FF",
+        "focusGold": "#FFFFFF",
+        "textSecondary": "#BFD4FF"
+      },
+      "effects": {
+        "surfaceStyle": "cobalt_slab",
+        "focusFrameStyle": "STATIC_NEON",
+        "foregroundParticles": "BOKEH"
+      }
+    },
+    {
+      "id": "quiet",
+      "name": "QUIET (low stimulation)",
+      "effects": {
+        "shaderPreset": "WAVE",
+        "wallpaperPath": "none",
+        "backgroundFilter": "NONE",
+        "foregroundParticles": "NONE",
+        "launchCurtain": "FADE_BLACK",
+        "bootIntro": "OFF"
+      },
+      "audio": {
+        "bgmFile": "none"
+      }
+    }
+  ],
+  "categoryOverrides": {
+    "MUSIC": {
+      "effects": {
+        "surfaceStyle": "shattered_glass"
+      }
+    },
+    "PHOTO": {
+      "effects": {
+        "surfaceStyle": "shattered_glass",
+        "foregroundParticles": "NONE",
+        "uiFilter": "NONE",
+        "backgroundFilter": "NONE"
+      }
+    },
+    "VIDEO": {
+      "effects": {
+        "foregroundParticles": "NONE",
+        "launchCurtain": "FADE_BLACK",
+        "uiFilter": "NONE",
+        "backgroundFilter": "NONE"
+      }
+    },
+    "APPS": {
+      "effects": {
+        "surfaceStyle": "barcode_strip",
+        "iconFilter": "MONOCHROME"
+      }
+    },
+    "SETTINGS": {
+      "palette": {
+        "canvas": "#000000",
+        "accent": "#3FE6FF",
+        "accentSecondary": "#0B2A9E"
+      },
+      "effects": {
+        "wallpaperPath": "none",
+        "surfaceStyle": "dark_hour",
+        "focusFrameStyle": "STATIC_NEON",
+        "foregroundParticles": "NONE"
+      },
+      "audio": {
+        "bgmFile": "none"
+      }
+    }
+  },
+  "systemOverrides": {
+    "gb": {
+      "palette": {
+        "accent": "#9FD8FF",
+        "accentSecondary": "#3A6ACF"
+      },
+      "effects": {
+        "backgroundFilter": "LCD_GRID"
+      },
+      "cardAspectRatio": "1:1"
+    },
+    "gba": {
+      "effects": {
+        "backgroundFilter": "LCD_GRID"
+      },
+      "cardAspectRatio": "1.5"
+    },
+    "psx": {
+      "effects": {
+        "surfaceStyle": "barcode_strip",
+        "launchCurtain": "IRIS"
+      },
+      "cardAspectRatio": "1:1"
+    },
+    "ps2": {
+      "effects": {
+        "surfaceStyle": "cobalt_slab",
+        "launchCurtain": "FLASH"
+      },
+      "cardAspectRatio": "3:4"
+    },
+    "arcade": {
+      "effects": {
+        "backgroundFilter": "CRT"
+      },
+      "cardAspectRatio": "3:4"
+    }
+  }
+}

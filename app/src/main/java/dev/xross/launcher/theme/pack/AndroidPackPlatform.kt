@@ -26,8 +26,12 @@ data class TypefaceFont(val typeface: Typeface) : ThemeFont
 /** The Android typeface of a pack font role; null when the pack has none (or it isn't Android's). */
 val ThemeFont?.typeface: Typeface? get() = (this as? TypefaceFont)?.typeface
 
-/** The theme engine's Android platform: the APK's assets, [SvgIcon], [BitmapFactory] and [Typeface]. */
-class AndroidPackPlatform(private val assets: AssetManager) : PackPlatform {
+/**
+ * The theme engine's Android platform: the APK's assets, [SvgIcon], [BitmapFactory] and [Typeface].
+ * [assetCache], when set, is where [assetFile] copies bundled assets that are drawn from files (a
+ * bundled pack's wallpaper); it should be a folder only this APK version uses.
+ */
+class AndroidPackPlatform(private val assets: AssetManager, private val assetCache: File? = null) : PackPlatform {
     override fun openAsset(path: String): InputStream = assets.open(path)
 
     override fun listAssets(path: String): List<String> = assets.list(path)?.toList().orEmpty()
@@ -52,6 +56,22 @@ class AndroidPackPlatform(private val assets: AssetManager) : PackPlatform {
 
     override fun fileFont(file: File): ThemeFont = TypefaceFont(Typeface.Builder(file).build())
 
+    override fun assetFile(path: String): File? {
+        val root = assetCache ?: return null
+        if (path.split('/').any { it == ".." || it.isEmpty() }) return null
+        val out = File(root, path)
+        val size = assetSize(path)
+        if (out.isFile && (size == null || out.length() == size)) return out
+        return synchronized(this) {
+            runCatching {
+                out.parentFile?.mkdirs()
+                val tmp = File(out.parentFile, ".${out.name}.tmp")
+                assets.open(path).use { input -> tmp.outputStream().use { input.copyTo(it) } }
+                if (!tmp.renameTo(out)) { tmp.delete(); null } else out
+            }.getOrNull()
+        }
+    }
+
     private fun decodeBitmap(data: ByteArray): ImageBitmap? {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeByteArray(data, 0, data.size, bounds)
@@ -62,6 +82,9 @@ class AndroidPackPlatform(private val assets: AssetManager) : PackPlatform {
     }
 }
 
-/** A [ThemePackLoader] on the APK's [assets], with folder packs in [themesDir]. */
-fun ThemePackLoader(assets: AssetManager, themesDir: () -> File): ThemePackLoader =
-    ThemePackLoader(AndroidPackPlatform(assets), themesDir)
+/**
+ * A [ThemePackLoader] on the APK's [assets], with folder packs in [themesDir]; bundled assets drawn
+ * from files are copied into [assetCache].
+ */
+fun ThemePackLoader(assets: AssetManager, assetCache: File? = null, themesDir: () -> File): ThemePackLoader =
+    ThemePackLoader(AndroidPackPlatform(assets, assetCache), themesDir)

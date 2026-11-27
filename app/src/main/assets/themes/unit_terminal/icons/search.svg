@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="256" height="256">
+  <!-- UNIT//TERMINAL: search -->
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M26 10L42 26L26 42L10 26zM26 15.656L36.344 26L26 36.344L15.656 26z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M36 39L39 36L51 48L48 51z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M54 54h6v6h-6z"/>
+</svg>

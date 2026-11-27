@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="256" height="256">
+  <!-- UNIT//TERMINAL: add -->
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M27 10h6v40h-6z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M10 27h17v6h-17z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M33 27h17v6h-17z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M54 54h6v6h-6z"/>
+</svg>

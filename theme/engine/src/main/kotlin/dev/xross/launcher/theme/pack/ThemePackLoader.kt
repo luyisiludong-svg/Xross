@@ -3,9 +3,13 @@ package dev.xross.launcher.theme.pack
 import androidx.compose.runtime.Immutable
 import dev.xross.launcher.model.GlyphKey
 import dev.xross.launcher.theme.ThemePalette
+import dev.xross.launcher.theme.shader.ShaderImage
+import dev.xross.launcher.theme.shader.ShaderImageSource
 import dev.xross.launcher.theme.shader.ShaderLibrary
 import dev.xross.launcher.theme.shader.ShaderPreset
 import dev.xross.launcher.theme.shader.ShaderRef
+import dev.xross.launcher.theme.shader.Scene
+import dev.xross.launcher.theme.shader.SceneSource
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -112,10 +116,18 @@ data class LoadedTheme(
     val shader: ShaderRef = ShaderRef.WAVE,
     /** Text of each CUSTOM shader file the pack names, by its pack-relative path (unreadable ones absent). */
     val customShaders: Map<String, String> = emptyMap(),
+    /** Each image a CUSTOM shader samples (`effects.shaderImages`), by its pack-relative path (missing ones absent). */
+    val shaderImages: Map<String, ShaderImageSource> = emptyMap(),
+    /** Each layered scene the pack names (`effects.scenePath`, Live backgrounds § 3), by its pack-relative path (unusable ones absent). */
+    val scenes: Map<String, SceneSource> = emptyMap(),
     /** The pack's own wallpaper (2b.4c): `effects.wallpaperPath`, else its `wallpaper.png`, else none. */
     val wallpaper: WallpaperRef = WallpaperRef.NONE,
     /** Each wallpaper file the pack names, by its pack-relative path (missing ones absent). */
     val wallpapers: Map<String, File> = emptyMap(),
+    /** The pack's own background video (Live backgrounds § 2): `effects.videoPath` / `videoFit`, else none. */
+    val video: VideoRef = VideoRef.NONE,
+    /** Each video file the pack names, by its pack-relative path (missing and oversized ones absent). */
+    val videos: Map<String, File> = emptyMap(),
     /** The pack's own music loop (2b.5c): `audio.bgmFile`, else its `bgm.ogg` / `bgm.mp3`, else none. */
     val bgm: BgmRef = BgmRef.NONE,
     /** Each loop file the pack names, by its pack-relative path (missing and oversized ones absent). */
@@ -130,6 +142,13 @@ data class LoadedTheme(
     val components: ComponentsPatch = ComponentsPatch.NONE,
     /** Each logo file the base or a variant names (`components.logo`), by pack-relative path (unreadable ones absent). */
     val logos: Map<String, ThemeIcon> = emptyMap(),
+    /**
+     * Each image the menu names (Menu styles: `layout.slash` skins and decal, `components` plates),
+     * by pack-relative path, in load order, found (not decoded) here; missing ones absent.
+     */
+    val menuImages: Map<String, ShaderImageSource> = emptyMap(),
+    /** The [menuImages] that are sprite sheets (an animated category decal), capped at a larger side. */
+    val menuSheets: Set<String> = emptySet(),
     /** What the pack declared but couldn't be used (bad font, unreadable icon), for Settings. */
     val problems: List<String> = emptyList(),
     /** Bumped on every load, so a hot reload of the same files still counts as a change. */
@@ -138,8 +157,9 @@ data class LoadedTheme(
      * Every file of this pack the load read and uses (2b.8-prep), as pack-relative paths with `/`
      * ("icons/games.svg", "sounds/cursor.wav", "wallpaper.png"), resolved against [info]'s
      * [PackSource]: the APK asset folder for the built-in pack, the pack folder otherwise. Fonts,
-     * icons, logos, sounds, CUSTOM shaders, CUSTOM UI filters, wallpapers, music loops and the boot
-     * video, in any variant, override or rule. Not the JSON files ([sourceJson] holds them), not
+     * icons, logos, sounds, CUSTOM shaders and their images, CUSTOM UI filters, wallpapers, background
+     * videos, scenes (their `scene.json` and every file they name), music loops and the boot video, in
+     * any variant, override or rule. Not the manifest's JSON files ([sourceJson] holds them), not
      * what the Default pack lends a folder pack, and not a file that was missing or unusable.
      */
     val files: Set<String> = emptySet(),
@@ -169,10 +189,12 @@ data class LoadedTheme(
             variants.forEach { v -> v.shader?.let(::add) }
             (categoryPatches.values + systemPatches.values).forEach { p -> p.shader?.let(::add) }
             rules.forEach { r -> r.patch?.shader?.let(::add) }
+            // A look with a video and the wave draws it through VIDEO (withVideoShader).
+            if (videos.isNotEmpty()) add(ShaderRef(ShaderPreset.VIDEO))
         }
 
     /** [shadersUsed] as programs, compiled ahead of time when this pack becomes active. */
-    val shaderLibrary: ShaderLibrary by lazy { ShaderLibrary.of(shadersUsed, customShaders) }
+    val shaderLibrary: ShaderLibrary by lazy { ShaderLibrary.of(shadersUsed, customShaders, shaderImages, scenes) }
 
     /**
      * [shaderLibrary] plus [extra] (the user's Settings ▸ Theme ▸ Background shader, 2b.4f), so
@@ -180,13 +202,19 @@ data class LoadedTheme(
      */
     fun shaderLibrary(extra: ShaderPreset?): ShaderLibrary =
         if (extra == null || extra == ShaderPreset.CUSTOM || shadersUsed.any { it.preset == extra }) shaderLibrary
-        else ShaderLibrary.of(shadersUsed + ShaderRef(extra), customShaders)
+        else ShaderLibrary.of(shadersUsed + ShaderRef(extra), customShaders, shaderImages, scenes)
 
     /** True when the base, a variant, an override or a rule can show a wallpaper. */
     val hasWallpaper: Boolean get() = wallpapers.isNotEmpty()
 
     /** The file of [ref] (the look's wallpaper); null for none or a file that wasn't found. */
     fun wallpaperFile(ref: WallpaperRef): File? = ref.path?.let(wallpapers::get)
+
+    /** True when the base, a variant, an override or a rule can show a background video. */
+    val hasVideo: Boolean get() = videos.isNotEmpty()
+
+    /** The video [ref] names (the look's), with its fit; null for none or a file that wasn't found. */
+    fun videoSource(ref: VideoRef): VideoSource? = ref.path?.let(videos::get)?.let { VideoSource(it, ref.shownFit) }
 
     /** True when the base, a variant, an override or a rule can play theme music (2b.5c). */
     val hasBgm: Boolean get() = bgmFiles.isNotEmpty()
@@ -233,8 +261,11 @@ data class LoadedTheme(
         // Category-wide tile shapes and focused-system layout patches depend on those two as well.
         val layoutContext = if (layoutHeld.isEmpty()) "" else "${category.orEmpty()}/${system.orEmpty()}"
         return looks.getOrPut(LookKey(v?.id.orEmpty(), cat, sys, held.map { it.index }, layoutHeld, layoutContext)) {
-            cascade(roles, surfaceId, wave, v, categoryPatches[cat], systemPatches[sys], held, flags, shader, wallpaper, cosmetics, gains, soundLinks, bgm)
-                .copy(layout = if (layoutHeld.isEmpty()) null else applyRuleLayout(layout, rules, ctx))
+            val ruled = if (layoutHeld.isEmpty()) null else applyRuleLayout(layout, rules, ctx)
+            // A variant's menu style (Menu styles slice 1) over the pack's, whatever the rules do.
+            val styled = v?.menuStyle?.let { (ruled ?: layout).copy(menuStyle = it) } ?: ruled
+            cascade(roles, surfaceId, wave, v, categoryPatches[cat], systemPatches[sys], held, flags, shader, wallpaper, cosmetics, gains, soundLinks, bgm, video)
+                .copy(layout = styled)
         }
     }
 
@@ -279,7 +310,9 @@ sealed interface PackLoad {
  *   sounds/      cursor.wav, confirm.wav, back.wav, option.wav, ok.wav, system_ng.wav,
  *                trophy.wav, 01. opening.wav, gameboot.wav
  *   shader.frag  GLSL ES 3.0 fragment shader for "effects": { "shaderPreset": "CUSTOM" } (or effects.shaderPath)
+ *                plus up to four PNG / JPEG / WebP images it samples (effects.shaderImages)
  *   wallpaper.png  static wallpaper behind the menu (or .jpg / .webp, or effects.wallpaperPath)
+ *   *.mp4 / *.webm looping, muted background video named by effects.videoPath (at most 30 MB)
  *   bgm.ogg      ambient music loop (or bgm.mp3, or audio.bgmFile), at most 20 MB
  *   boot.mp4     cold-start video (or audio.bootVideo), at most 30 MB, cut at 15 s
  * ```
@@ -489,22 +522,46 @@ class ThemePackLoader(
             resolveRules(m.rules, surfaces.keys, base?.layout ?: ThemeLayout.DEFAULT, problems),
         )
 
-        val shader = ShaderRef.of("theme", m.effects?.shaderPreset, m.effects?.shaderPath, problems) ?: base?.shader ?: ShaderRef.WAVE
+        val shader = ShaderRef.of("theme", m.effects?.shaderPreset, m.effects?.shaderPath, problems, m.effects?.shaderImages, m.effects?.scenePath)
+            ?: base?.shader ?: ShaderRef.WAVE
         val variants = resolveVariants(m.variants, palette != null, surfaces.keys, problems)
         val categoryPatches = resolveCategoryPatches(m.categoryOverrides, surfaces.keys, problems)
         val systemPatches = resolveSystemPatches(systems, surfaces.keys, problems)
-        val customPaths = (listOf(shader) + variants.mapNotNull { it.shader } + (categoryPatches.values + systemPatches.values).mapNotNull { it.shader } +
-            rules.mapNotNull { it.patch?.shader })
-            .filter { it.preset == ShaderPreset.CUSTOM }.map { it.path }.distinct()
+        val shaderRefs = listOf(shader) + variants.mapNotNull { it.shader } + (categoryPatches.values + systemPatches.values).mapNotNull { it.shader } +
+            rules.mapNotNull { it.patch?.shader }
+        val customRefs = shaderRefs.filter { it.preset == ShaderPreset.CUSTOM }
         val customShaders = LinkedHashMap<String, String>()
-        for (path in customPaths) shaderText(pack, path, problems, files)?.let { customShaders[path] = it }
+        for (path in customRefs.map { it.path }.distinct()) shaderText(pack, path, problems, files)?.let { customShaders[path] = it }
+        // Live backgrounds § 1: the images those shaders sample, found (not decoded) here.
+        val shaderImages = LinkedHashMap<String, ShaderImageSource>()
+        for (path in customRefs.flatMap { r -> r.images.mapNotNull { it?.path } }.distinct()) {
+            shaderImageSource(pack, path, problems, files)?.let { shaderImages[path] = it }
+        }
+        // Live backgrounds § 3: each scene, parsed, with its files found (not decoded) here.
+        val scenes = LinkedHashMap<String, SceneSource>()
+        for (path in shaderRefs.filter { it.preset == ShaderPreset.SCENE }.map { it.path }.distinct()) {
+            scene(pack, folder, path, problems, files)?.let { scenes[path] = it }
+        }
 
         val wallpaper = WallpaperRef.of("theme", m.effects?.wallpaperPath, problems)
             ?: folder?.let(WallpaperRef::defaultIn)?.let(::WallpaperRef)
             ?: WallpaperRef.NONE
         val wallpaperRefs = listOf(wallpaper) + variants.mapNotNull { it.wallpaper } +
             (categoryPatches.values + systemPatches.values).mapNotNull { it.wallpaper } + rules.mapNotNull { it.patch?.wallpaper }
-        val wallpapers = wallpaperFiles(folder, wallpaperRefs, problems).also { it.values.forEach(::keep) }
+        val bundledDir = (pack.source as? PackSource.Builtin)?.dir
+        val wallpapers = wallpaperFiles(
+            folder, wallpaperRefs, problems,
+            asset = bundledDir?.let { dir -> { path: String -> if (path.split('/').any { it == ".." }) null else platform.assetFile("$dir/$path") } },
+        ).also { found ->
+            found.values.forEach(::keep)
+            if (bundledDir != null) files += found.keys
+        }
+        // Live backgrounds § 2: a fit alone at the base is the fit later layers' videos inherit.
+        val video = VideoRef.of("theme", m.effects?.videoPath, m.effects?.videoFit, problems)?.let { VideoRef.NONE.over(it) }
+            ?: VideoRef.NONE
+        val videoRefs = listOf(video) + variants.mapNotNull { it.video } +
+            (categoryPatches.values + systemPatches.values).mapNotNull { it.video } + rules.mapNotNull { it.patch?.video }
+        val videos = videoFiles(folder, videoRefs, problems).also { it.values.forEach(::keep) }
         val bgm = BgmRef.of("theme", m.audio?.bgmFile, problems)
             ?: BgmRef.ofList("theme", m.audio?.bgmFiles, m.audio?.bgmOrder, problems)
             ?: folder?.let(BgmRef::defaultIn)?.let { BgmRef(it) }
@@ -526,6 +583,15 @@ class ThemePackLoader(
         for (path in (listOfNotNull(components.logo) + variants.mapNotNull { it.components?.logo }).filter { it.isNotEmpty() }.distinct()) {
             val logo = logo(pack, path, files)
             if (logo == null) problems += "Logo $path: not found in the pack, or not a readable SVG, PNG or WebP" else logos[path] = logo
+        }
+
+        // Menu styles: the skins, decal and plates, found like shader images (both pack kinds).
+        val menuWanted = layout.slash.images + (listOf(components) + variants.mapNotNull { it.components }).flatMap { c -> c.images.map { it to false } }
+        val menuImages = LinkedHashMap<String, ShaderImageSource>()
+        val menuSheets = LinkedHashSet<String>()
+        for ((path, sheet) in menuWanted.distinctBy { it.first }) {
+            shaderImageSource(pack, path, problems, files, what = "Menu image")?.let { menuImages[path] = it }
+            if (sheet) menuSheets += path
         }
 
         return LoadedTheme(
@@ -551,8 +617,12 @@ class ThemePackLoader(
             flags = ColorFlags.of(m.palette, m.effects),
             shader = shader,
             customShaders = customShaders,
+            shaderImages = shaderImages,
+            scenes = scenes,
             wallpaper = wallpaper,
             wallpapers = wallpapers,
+            video = video,
+            videos = videos,
             bgm = bgm,
             bgmFiles = bgmFiles,
             bootVideo = bootVideo,
@@ -560,6 +630,8 @@ class ThemePackLoader(
             customUiFilters = customUiFilters,
             components = components,
             logos = logos,
+            menuImages = menuImages,
+            menuSheets = menuSheets,
             problems = problems,
             revision = revisions.incrementAndGet(),
             files = files,
@@ -630,6 +702,67 @@ class ThemePackLoader(
         }
         files += path
         return text
+    }
+
+    /**
+     * Where an image a CUSTOM shader samples is (Live backgrounds § 1): a folder pack's file or a
+     * bundled pack's asset. Only found and size-checked here; the renderer decodes it on IO when the
+     * program is prepared, so a pack load never holds the pixels.
+     */
+    private fun shaderImageSource(
+        pack: ThemePackInfo,
+        path: String,
+        problems: MutableList<String>,
+        files: MutableSet<String>,
+        what: String = "Shader image",
+    ): ShaderImageSource? =
+        when (val s = pack.source) {
+            is PackSource.Builtin -> {
+                val asset = "${s.dir}/$path"
+                if (!assetExists(asset)) {
+                    problems += "$what $path not found in the pack"
+                    null
+                } else {
+                    files += path
+                    ShaderImageSource(asset = asset)
+                }
+            }
+            is PackSource.Folder -> {
+                val file = inside(s.dir, path)?.takeIf { it.isFile }
+                when {
+                    file == null -> {
+                        problems += "$what $path not found in the pack"
+                        null
+                    }
+                    file.length() > ShaderImage.MAX_BYTES -> {
+                        problems += "$what $path is larger than ${ShaderImage.MAX_BYTES / (1024 * 1024)} MB"
+                        null
+                    }
+                    else -> {
+                        relativePath(s.dir, file)?.let(files::add)
+                        ShaderImageSource(file = file, bytes = file.length(), modified = file.lastModified())
+                    }
+                }
+            }
+        }
+
+    /**
+     * The scene at [path] (Live backgrounds § 3): its text read and parsed, and every file it
+     * names found the way the other background files are: images as shader images (both pack
+     * kinds), videos as background videos (folder packs only), shader layers as shader text.
+     * Null when the file can't be read or keeps no usable layer; missing layer files are
+     * reported and kept as missing (the layer draws nothing).
+     */
+    private fun scene(pack: ThemePackInfo, folder: File?, path: String, problems: MutableList<String>, files: MutableSet<String>): SceneSource? {
+        val text = packText(pack, "Scene", path, problems, files) ?: return null
+        val scene = Scene.parse(path, text, problems) ?: return null
+        val images = LinkedHashMap<String, ShaderImageSource>()
+        for (p in scene.imagePaths) shaderImageSource(pack, p, problems, files)?.let { images[p] = it }
+        val videos = videoFiles(folder, scene.videoPaths.map { VideoRef(it) }, problems)
+        for (file in videos.values) relativePath(folder ?: continue, file)?.let(files::add)
+        val shaders = LinkedHashMap<String, String>()
+        for (p in scene.shaderPaths) shaderText(pack, p, problems, files)?.let { shaders[p] = it }
+        return SceneSource(path, text, scene, images, videos, shaders)
     }
 
     /** A bare file name is looked up in `sounds/`; a path ("audio/tick.wav") from the pack root. */
@@ -858,8 +991,14 @@ class ThemePackLoader(
         const val XROSS_ID = "xross"
         /** Gargantua: the ASCII black hole shader in Redaction 50. */
         const val BLACKHOLE_ID = "blackhole"
+        /** MEMENTO//MORI: cobalt and aqua, a dithered moon shader and the author's specimen illustration. */
+        const val MEMENTO_MORI_ID = "memento_mori"
+        /** UNIT//TERMINAL: sepia line work on umber paper, a ring-scanner shader and a printed-menu filter. */
+        const val UNIT_TERMINAL_ID = "unit_terminal"
+        /** BREAKCORE.ERR: a glitchcore showcase that sets nearly everything a pack can. */
+        const val BREAKCORE_ERR_ID = "breakcore_err"
         /** Packs shipped in the APK under `themes/<id>` besides Default, in menu order after it. */
-        val BUNDLED_IDS = listOf(XROSS_ID, BLACKHOLE_ID)
+        val BUNDLED_IDS = listOf(XROSS_ID, BLACKHOLE_ID, MEMENTO_MORI_ID, UNIT_TERMINAL_ID, BREAKCORE_ERR_ID)
         /**
          * Former ids of the Default pack: "xmb" was the classic look bundled beside it before it
          * became the Default. Settings that saved one load the Default pack, and the id stays reserved.

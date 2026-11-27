@@ -1,5 +1,9 @@
 package dev.xross.launcher.ui
 
+import androidx.compose.foundation.layout.padding
+
+import androidx.compose.foundation.layout.Box
+
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -129,8 +133,13 @@ fun StatusBar(
     val logo = LocalThemePack.current?.logos?.get(components.logo)
     val slot: @Composable (StatusSlot) -> Unit = { s ->
         when (s) {
-            StatusSlot.CLOCK -> ClockSlot(bar.clock, style)
-            StatusSlot.BATTERY -> BatterySlot(bar.battery, bar.batteryText(components.battery), components.battery, style, mono, heightDp)
+            StatusSlot.CLOCK -> StyledClock(bar.clock, style, components)
+            StatusSlot.BATTERY -> Box(
+                // A pack's plate behind the battery (slice 5); nothing extra without one.
+                if (components.batteryPlate == null) Modifier else Modifier.plate(components.batteryPlate, null).padding(horizontal = heightDp * 0.5f, vertical = heightDp * 0.3f),
+            ) {
+                BatterySlot(bar.battery, bar.batteryText(components.battery), components.battery, style, mono, heightDp)
+            }
             StatusSlot.WIFI -> bar.network?.let { NetworkSlot(it, heightDp) }
             StatusSlot.VOLUME -> bar.volume?.let { VolumeSlot(it, components.volumeAlways, heightDp) }
             StatusSlot.LOGO -> logo?.let { LogoSlot(it, heightDp * 0.72f) }
@@ -150,10 +159,12 @@ fun StatusBar(
                 // The social stack follows the left slots in the same clipped row (2b.7c).
                 if (social.isNotEmpty()) SocialStackSlot(social, socialBadge, heightDp * 1.15f, textSize, socialOpen, socialGlow, onSocialTap)
             }
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            // A big styled clock (slice 5) keeps the other slots level with its top line.
+            val rightAlign = if (components.plainClock) Alignment.CenterVertically else Alignment.Top
+            Row(verticalAlignment = rightAlign) {
                 // Read in the draw phase, so the HUD's expansion never recomposes or re-lays-out the bar.
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fadeAlpha(contentAlpha)) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(gap)) {
+                Row(verticalAlignment = rightAlign, modifier = Modifier.fadeAlpha(contentAlpha)) {
+                    Row(verticalAlignment = rightAlign, horizontalArrangement = Arrangement.spacedBy(gap)) {
                         for (s in components.rightOfText) slot(s)
                     }
                     // The ticker brings its own gap, so the bar is unchanged while nothing plays.
@@ -186,11 +197,6 @@ fun StatusBar(
             right.place(width - right.width, (height - right.height) / 2)
         }
     }
-}
-
-@Composable
-private fun ClockSlot(text: String, style: TextStyle) {
-    if (text.isNotEmpty()) Text(text, style = style, maxLines = 1, softWrap = false)
 }
 
 /** `BATTERY` in [mode]: [text] (from [StatusBarState.batteryText]) and/or the gauge; nothing before the first reading. */

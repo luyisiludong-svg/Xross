@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 2,
+  "name": "Video sample",
+  "palette": { "canvas": "#1b1f3a", "accent": "#ff8a3d", "accentSecondary": "#6a3d9a" },
+  "effects": {
+    "videoPath": "loop.mp4",
+    "videoFit": "FILL",
+    "shaderPath": "glass.frag"
+  },
+  "variants": [
+    { "id": "plain", "name": "Plain video", "effects": { "shaderPreset": "VIDEO" } }
+  ]
+}

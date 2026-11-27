@@ -233,10 +233,29 @@ data class ThemeManifest(
         /** CUSTOM's fragment shader, from the pack root (default `shader.frag`); alone it implies CUSTOM. */
         val shaderPath: String? = null,
         /**
+         * Up to four images CUSTOM's shader samples as `uImage0..3` (Live backgrounds § 1): pack
+         * paths, or `{ "path", "wrap", "filter", "mipmap" }` objects ([dev.xross.launcher.theme.shader.ShaderImage]).
+         */
+        val shaderImages: kotlinx.serialization.json.JsonElement? = null,
+        /**
+         * A layered scene (Live backgrounds § 3): a `.json` file in the pack describing a stack of
+         * image, video, sprite, shader and particle layers ([dev.xross.launcher.theme.shader.Scene]).
+         * It replaces the shader keys of the same layer and cascades like them.
+         */
+        @kotlinx.serialization.json.JsonNames("scene") val scenePath: String? = null,
+        /**
          * Static wallpaper behind the menu ([WallpaperRef], 2b.4c): a PNG, JPEG or WebP from the
          * pack root, or `none`. Unset: the pack's `wallpaper.png` if it has one.
          */
         @kotlinx.serialization.json.JsonNames("wallpaper") val wallpaperPath: String? = null,
+        /**
+         * A looping, muted background video ([VideoRef], Live backgrounds § 2): an MP4 (H.264 or
+         * HEVC) or WebM (VP9) from the pack, or `none`. Drawn by the VIDEO preset when the look's
+         * shader is the wave; a CUSTOM shader reads it as `uVideo`.
+         */
+        @kotlinx.serialization.json.JsonNames("video") val videoPath: String? = null,
+        /** How [videoPath] is placed ([VideoFit]): `FILL` (default, alias `COVER`), `FIT`, `STRETCH`, `CENTER`. */
+        val videoFit: String? = null,
         /**
          * The focused item's frame ([FocusFrameStyle], 2b.4d): `BREATHING_HALO` (default),
          * `STATIC_NEON`, `HARD_SHADOW` or `GOLD_BEZEL`.
@@ -282,8 +301,8 @@ data class ThemeManifest(
              */
             val KEYS: Set<String> = setOf(
                 "surfaceStyle", "adaptiveGamePalette",
-                "shaderPreset", "shader", "shaderPath",
-                "wallpaperPath", "wallpaper",
+                "shaderPreset", "shader", "shaderPath", "shaderImages", "scenePath", "scene",
+                "wallpaperPath", "wallpaper", "videoPath", "video", "videoFit",
                 "focusFrameStyle", "focusFrame", "iconMask", "iconFilter",
                 "foregroundParticles", "particles",
                 "backgroundFilter", "uiFilter", "postProcess", "uiFilterPath", "postProcessPath",
@@ -365,7 +384,8 @@ data class ThemeManifest(
 
 /**
  * One entry of `variants`: a colorway of the pack ("Cyber Lilac", "BIOS Matrix") that patches its
- * [palette] and [effects]; everything else (fonts, icons, sounds, layout) is the pack's.
+ * [palette] and [effects]; everything else (fonts, icons, sounds, layout) is the pack's, except
+ * the menu style ([layout] `menuStyle`).
  */
 @Serializable
 data class ThemeVariant(
@@ -377,6 +397,8 @@ data class ThemeVariant(
     val audio: ThemeManifest.Audio? = null,
     /** This colorway's `components` (2b.7a), over the pack's. */
     val components: Components? = null,
+    /** Only `menuStyle` (Menu styles slice 1): this variant's menu style. */
+    val layout: LayoutSpec? = null,
 )
 
 /**

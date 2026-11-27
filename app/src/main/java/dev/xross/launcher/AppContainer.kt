@@ -64,7 +64,11 @@ class AppContainer(context: Context) {
     val launcher: GameLauncher by lazy { AndroidIntentGameLauncher(appContext) }
     /** Theme packs: the built-in Default pack and folders in `Xross/themes/`. */
     val themePacks: ThemePackLoader by lazy {
-        ThemePackLoader(appContext.assets) { environment.current.themes }
+        // Bundled packs' wallpapers are copied here once per app version; older versions' copies go.
+        val bundled = java.io.File(appContext.cacheDir, "bundled_packs")
+        val current = java.io.File(bundled, BuildConfig.VERSION_CODE.toString())
+        bundled.listFiles()?.filter { it != current }?.forEach { it.deleteRecursively() }
+        ThemePackLoader(appContext.assets, current) { environment.current.themes }
     }
     /**
      * Background shader status, toasts and the crash-loop canary (`Xross/cache/`). Its creation
@@ -73,6 +77,7 @@ class AppContainer(context: Context) {
     val shaderHealth: ShaderHealth by lazy {
         ShaderHealth(
             ShaderCanary { java.io.File(environment.current.root, CACHE_DIR) },
+            lastExitWasCrash = { markedAt -> ProcessExits.wasCrash(appContext, since = markedAt) },
         )
     }
     val themes: ThemeRuntime by lazy { ThemeRuntime(themePacks) }

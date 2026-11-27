@@ -29,6 +29,7 @@ studio proposal).
 13. [Focused game background](#13-focused-game-background)
 14. [The Default pack and icon tooling](#14-the-default-pack-and-icon-tooling)
 15. [Components](#15-components)
+16. [Menu styles](#16-menu-styles)
 
 ## 1. Where a look comes from
 
@@ -61,9 +62,13 @@ Xross/themes/<theme_id>/
 ├── sounds/         cursor.wav, category_switch.wav, confirm.wav, drill_in.wav, drill_out.wav,
 │                   back.wav, option.wav, ok.wav, system_ng.wav, trophy.wav, 01. opening.wav,
 │                   gameboot.wav
-├── shader.frag     optional: a CUSTOM background shader (or effects.shaderPath)
+├── shader.frag     optional: a CUSTOM background shader (or effects.shaderPath), and up to
+│                   four PNG / JPEG / WebP images it samples (effects.shaderImages)
 ├── postprocess.agsl optional: a CUSTOM UI filter, Android 13+ (or effects.uiFilterPath)
 ├── wallpaper.png   optional: drawn behind the menu (or .jpg / .webp, or effects.wallpaperPath)
+├── *.mp4 / *.webm  optional: a looping background video named by effects.videoPath, at most 30 MB
+├── scene.json      optional: a layered scene (effects.scenePath), and the images, videos and
+│                   shaders its layers name
 ├── bgm.ogg         optional: ambient music loop, at most 20 MB (or bgm.mp3, or audio.bgmFile)
 └── boot.mp4        optional: cold-start video, at most 30 MB, cut at 15 s (or audio.bootVideo)
 ```
@@ -303,6 +308,179 @@ same way (**Xross wallpaper ▸ An album**, or **Photo ▸ an album ▸ Options 
 wallpaper**): its pictures, from every folder of that name, by file name; it follows the album as
 photos are added or removed.
 
+### Shader images
+
+A pack's own shader (`CUSTOM`) can sample up to four images from the pack, listed in
+`effects.shaderImages` next to `shaderPath`, in any layer that can set a shader:
+
+```json
+"effects": {
+  "shaderPath": "scene.frag",
+  "shaderImages": ["art/painting.webp", { "path": "art/depth.png", "wrap": "CLAMP" }]
+}
+```
+
+They are bound as `uImage0` … `uImage3` in order, upright and with straight alpha, each capped at
+2048 px on its long side, 8 megapixels per shader in all. `uFocus` gives the shader the focused
+item's position for parallax. A path that leaves the pack or isn't PNG, JPEG or WebP, a bad `wrap`
+or `filter`, images with a preset shader, and an image that's missing or over the budget are
+listed with the pack's problems; the shader still draws, with that slot empty. Replacing an image
+is picked up by hot reload like an edit to the shader. The details, and a worked example, are in
+[Shader guide §8](SHADER_GUIDE.md#8-images-and-the-focus).
+
+### Background video
+
+`effects.videoPath` (alias `video`) names a looping, muted video in the pack: an MP4 (H.264 or
+HEVC) or a WebM (VP9), at most 30 MB. `effects.videoFit` places it: `FILL` (the default; `COVER`
+is accepted too), `FIT`, `STRETCH` or `CENTER`. `"none"` turns a video off.
+
+```json
+"effects": { "videoPath": "loops/rain.mp4", "videoFit": "FILL" }
+```
+
+* **Which shader shows it.** With the look's shader left at the wave, the built-in `VIDEO` preset
+  draws the video (the pack needs no shader key). A `CUSTOM` shader reads it as `uVideo` instead,
+  next to its images; the other presets ignore it. The background filter is drawn over it as over
+  any shader. `VIDEO` isn't offered in Settings ▸ Theme ▸ Background shader: it needs the pack's
+  video.
+* **Cascade.** Variants, overrides and rules may set it like the wallpaper. A layer that sets only
+  `videoFit` keeps the video and changes its placement.
+* **It is the pack's art.** While the video shows, the pack's own wallpaper isn't drawn over it. A
+  wallpaper you chose (Set as Xross wallpaper, a folder or an album) still wins: it covers the
+  screen, and the video holds its frame behind it.
+* **When it plays.** It pauses on its last frame while something opaque covers the background,
+  while a video snap or the boot video plays, and when the screen rests: Settings ▸ System ▸
+  Performance ▸ Standby motion, but never sooner than 10 s after the last button (with `Never`
+  it keeps playing). Still (E-Ink) mode shows its first frame and never plays. When a game or app
+  comes to the front, the player lets go of its decoder; back in Xross the loop resumes where it
+  was.
+* **Problems.** A path that leaves the pack or isn't MP4 / WebM, a missing or oversized file, a
+  bad `videoFit`, and a video in the built-in pack are listed with the pack's problems. A file the
+  device can't decode shows a notice and the look's wallpaper, else the wave; one larger than
+  1920 px on its long side plays, with a notice.
+* **Size.** An `.xtheme` is capped at 50 MB, so keep loops short: 720p, 10–20 s, about 2–4 Mbit/s.
+  Shaders sample it at most 1280 px on its long side.
+
+### Layered scenes
+
+*Live backgrounds § 3.* The whole format below is read, checked and drawn: **image, sprite,
+video, shader and particle layers**, with their placement, blend, opacity, mask, parallax (from
+the focus, and the device's tilt when that setting is on) and motion, and `resolution` applies.
+Until its images are loaded, the scene shows its **poster**; a scene too slow for the device, or
+blocked after a crash, is retired to its poster. Timings on a phone are still to be measured, so
+the overdraw cap (8 screens) may change. A complete example ships as
+`tools/shader-preview/examples/scene/` ("Neon Rain": every layer type), and the desktop shader
+preview draws scenes (`?theme=examples/scene/theme.json`).
+
+`effects.scenePath` (alias `scene`) names a `.json` file in the pack that describes a stack of
+layers, drawn bottom to top. `"shaderPreset": "SCENE"` alone reads `scene.json`. A scene is one
+background program: it cascades like a shader (variants, overrides and rules may each pick another
+scene, or a shader instead), and it replaces the other shader keys of the same layer
+(`shaderPreset`, `shaderPath` and `shaderImages` next to a `scenePath` are listed as problems).
+
+```json
+{
+  "resolution": "sharp",
+  "poster": "poster.webp",
+  "layers": [
+    { "type": "image",  "path": "sky.webp", "fit": "COVER", "parallax": 0.1, "scroll": [4, 0], "wrap": "REPEAT" },
+    { "type": "video",  "path": "clouds.mp4", "blend": "SCREEN", "opacity": 0.6 },
+    { "type": "image",  "path": "city.png", "anchor": "BOTTOM", "parallax": 0.4, "audio": { "scale": 0.02 } },
+    { "type": "sprite", "path": "neon.png", "frames": [4, 2], "fps": 8, "rect": [0.62, 0.40, 0.12, 0.10] },
+    { "type": "shader", "path": "rain_glass.frag", "images": ["drops.png"] },
+    { "type": "particles", "path": "ember.png", "rate": 30, "life": [3, 6], "velocity": [[-5, 5], [-40, -20]],
+      "size": [4, 10], "color": ["#ffb354", "#00ff8024"], "parallax": 0.7 },
+    { "type": "image",  "path": "rain_fg.png", "parallax": 1.0, "scroll": [0, 300], "wrap": "REPEAT", "blend": "ADD" }
+  ]
+}
+```
+
+Every path is relative to the pack root, like the rest of `theme.json`.
+
+* **`resolution`:** `soft` (the default, 1280 px on the long side) or `sharp` (1920 px).
+* **`poster`:** an image that stands in for the scene while it loads, in Still mode and if the
+  scene is retired as too slow. Without one, the first `image` layer is the poster.
+* **Layer types:**
+
+  | `type` | Its own keys |
+  | --- | --- |
+  | `image` | `path` (PNG, JPEG or WebP), `wrap` (`CLAMP`, `REPEAT`, `MIRROR`) |
+  | `video` | `path` (MP4 or WebM, folder packs only, at most 30 MB), looped and muted; one file per scene, which several layers may show |
+  | `sprite` | `path`, `frames` `[columns, rows]` (1–64 each), `fps` (default 8), `count` (default every cell) |
+  | `shader` | `path` (a `.frag`), `images` (up to four, as `effects.shaderImages`); it reads the layers below it as `uBelow` |
+  | `particles` | `path` (optional; a soft dot without one), `rate` per second (required), `life` `[min, max]` s (default `[2, 4]`), `velocity` `[[xMin, xMax], [yMin, yMax]]` px/s (default drifting up), `size` `[min, max]` px (default `[4, 8]`), `color` `[start, end]` (default white fading out) |
+
+* **Keys every layer has:** `opacity` (0–1), `blend` (`NORMAL`, `ADD`, `SCREEN`, `MULTIPLY`),
+  `rect` `[x, y, width, height]` (fractions of the screen from its top-left corner) or `fit`
+  (`COVER` / `FILL`, `FIT`, `STRETCH`, `CENTER`) with `anchor` (`CENTER`, `TOP`, `BOTTOM`, `LEFT`,
+  `RIGHT`, `TOP_LEFT`, `TOP_RIGHT`, `BOTTOM_LEFT`, `BOTTOM_RIGHT`), `parallax` (0 stays still, 1
+  moves the most with the focus and the tilt), `mask` (an image whose alpha masks the layer).
+* **Motion:** `scroll` `[x, y]` in texels per second; `sway` (an angle in degrees, or
+  `{ "angle", "offset": [x, y], "period" }`); `pulse` (a scale amount, or
+  `{ "scale", "opacity", "period" }`). `audio`, `transition` and `daylight` each take
+  `{ "scale", "opacity", "offset", "angle" }`: what that input adds at its full strength (the
+  music's bass, a category switch, noon).
+* **Units:** pixels (`velocity`, `size`, `offset`) are at 1280 px on the screen's long side, y
+  down. Colours are `#rrggbb`, or `#aarrggbb` with alpha, as everywhere in a theme. `scroll` is in
+  texels of the image as uploaded (at most 2048 px on its long side) per second.
+* **How layers are drawn.** The theme gradient goes down first, then each layer bottom to top.
+  `fit` without a `rect` places the image (a sprite: one cell) on the screen: `COVER` fills it,
+  `FIT` shows all of it, `STRETCH` distorts it to the screen, `CENTER` shows it at its own size
+  for a 1280 px screen. `anchor` decides which part stays in view. `parallax` shifts a layer
+  away from the focused item, by up to 3 % of the screen at 1. With Settings ▸ System ▸
+  Performance ▸ Tilt parallax on, tilting the device adds to that (12° is the full shift, and a
+  tilt held still drifts back to the middle over a few seconds); the two together never exceed
+  the 3 %. A `COVER` or `STRETCH` layer is enlarged by that much, so its edges never show. `sway` and `pulse` turn and scale about the
+  layer's centre. A `mask` is stretched over the layer's box and doesn't scroll. Sprite sheets
+  are clamped at their edges. Images are blended with premultiplied alpha, so soft edges don't
+  fringe.
+* **Video layers** show the scene's video file like an image layer, posed and blended the same
+  way, at most 1280 px on its long side. It plays under the same rules as `effects.videoPath`
+  (held while resting, covered or in Still mode, released while a game runs). Until its first
+  frame, or if this device can't decode it, the layer draws nothing (with a notice) and the rest
+  of the scene shows.
+* **Shader layers** are full-screen shaders with the whole prelude (see the shader guide), plus
+  `uBelow`: the layers below, already composited, at `gl_FragCoord.xy / uResolution`. What the
+  shader writes replaces them inside the layer's `rect` (else the whole screen), mixed in at its
+  `opacity`. `blend`, `fit`, `anchor`, `parallax`, `mask` and the motions don't apply to a shader
+  layer and are listed as problems. `uPrev` and `uField` aren't available in a layer (`uFresh` is
+  1). A shader layer that doesn't compile is left out with a notice; the rest of the scene draws.
+  A scene with shader layers is pack code: it is crash-guarded as one unit, like a pack's shader.
+* **Particle layers** are drawn on the GPU, all of a layer's particles in one draw. Particles are
+  born evenly at `rate` per second across the layer's box (its `rect`, else the whole screen), each
+  with its own life, velocity and size picked from the ranges. They move in a straight line, fade
+  in over their first moment (at most 0.25 s) and go from the first `color` to the last over their
+  life. The box itself takes `parallax`, `sway`, `pulse` and the drivers, so the whole field moves
+  together; particles may leave it. A `mask` is stretched over the box. `path` tints a premultiplied
+  image by the colour; without it each particle is a soft dot. `scroll` doesn't apply (it is listed
+  as a problem). The field is full from the first frame and never needs warming up, and a pause
+  costs nothing: each particle is worked out from the time alone. In Still mode they freeze.
+* **Ambient particles.** While a scene with particle layers is the background, the theme's
+  foreground particles (`cosmetics.particleField`, or the one you picked) aren't drawn: the scene
+  has its own.
+* **Budget for images:** a scene's drawn images share 16 megapixels, each at most 2048 px on its
+  long side. Images past that are left out (top layers first) with a notice. Shader layers'
+  `images` share another 8 megapixels, as one shader's `shaderImages` do.
+* **Budget:** at most 16 layers, 1 video file (any number of layers may show it), 4 shader layers, 2,000 particles (`rate` × the
+  longest `life`) and 8 screens of pixels per frame (each layer counts the part of the screen it
+  covers, a shader layer twice). Layers are taken bottom to top while they fit; one that doesn't
+  is left out with a problem, and a cheaper one above it may still fit.
+* **Problems** are listed per layer, with the layer's place in the file:
+  `scene.json: layers[3].frames: give [columns, rows], …`. An unknown key or a bad value falls back
+  to its default; an unknown `type` or a bad or missing `path` leaves the layer out. A missing file
+  is listed and its layer draws nothing. A file that isn't valid JSON, or keeps no usable layer,
+  is no scene: the look shows the wave.
+* **Too slow, or crashed.** The frame-budget watchdog times the whole scene as one program. A
+  scene over budget (Settings ▸ System ▸ Performance ▸ Slow shaders on Switch to the wave) is
+  retired to its `poster` (else its first image layer), drawn alone, with a notice, instead of
+  to the wave. So is a scene with shader layers blocked by the crash guard. A scene with no poster
+  file to show is retired to the wave like any shader. Try retired shaders again draws its layers
+  anew.
+* **It is the pack's art.** While a scene shows, the pack's own wallpaper isn't drawn over it. A
+  wallpaper you chose still wins, as over any shader.
+* **Hot reload.** Editing `scene.json` or any file it names reloads the scene.
+* A scene can't be picked in Settings ▸ Theme ▸ Background shader: it needs the pack's files.
+
 ### Focus frames and app icons
 
 `effects.focusFrameStyle` (alias `focusFrame`) frames the focused item:
@@ -414,9 +592,13 @@ instead of being ignored silently, so a typo shows up.
 | --- | --- | --- |
 | `surfaceStyle` | a preset or a surface the pack defines | 2b.2 |
 | `adaptiveGamePalette` | `true` / `false` | 2b.3 |
-| `shaderPreset` (`shader`) | `WAVE`, `ASCII_MATRIX`, `BOKEH`, `STARFIELD`, `CRT`, `BLACK_HOLE`, `MECHA`, `CUSTOM` | 2b.4a (`BLACK_HOLE` 2026-11-16, `MECHA` 2026-11-17) |
+| `shaderPreset` (`shader`) | `WAVE`, `ASCII_MATRIX`, `BOKEH`, `STARFIELD`, `CRT`, `BLACK_HOLE`, `MECHA`, `VIDEO`, `SCENE`, `CUSTOM` | 2b.4a (`BLACK_HOLE` 2026-11-16, `MECHA` 2026-11-17, `VIDEO` Live backgrounds § 2, `SCENE` § 3) |
 | `shaderPath` | a `.frag` in the pack (implies `CUSTOM`) | 2b.4a |
+| `shaderImages` | up to four images in the pack for a `CUSTOM` shader (`uImage0..3`): paths, or `{ "path", "wrap": CLAMP / REPEAT / MIRROR, "filter": LINEAR / NEAREST, "mipmap" }` ([Shader guide §8](SHADER_GUIDE.md#8-images-and-the-focus)) | Live backgrounds § 1 |
+| `scenePath` (`scene`) | a `.json` scene in the pack (implies `SCENE`; [Layered scenes](#layered-scenes)) | Live backgrounds § 3 |
 | `wallpaperPath` (`wallpaper`) | a PNG, JPEG or WebP in the pack, or `none` | 2b.4c |
+| `videoPath` (`video`) | an MP4 or WebM in the pack, or `none` ([Background video](#background-video)) | Live backgrounds § 2 |
+| `videoFit` | `FILL` (`COVER`), `FIT`, `STRETCH`, `CENTER` | Live backgrounds § 2 |
 | `focusFrameStyle` (`focusFrame`) | `BREATHING_HALO`, `STATIC_NEON`, `HARD_SHADOW`, `GOLD_BEZEL` | 2b.4d |
 | `iconMask` | `NONE`, `SQUIRCLE`, `CIRCLE`, `Y2K_CHROME_FRAME` | 2b.4d |
 | `iconFilter` | `NONE`, `DUOTONE`, `MONOCHROME` | 2b.4d |
@@ -436,6 +618,10 @@ instead of being ignored silently, so a typo shows up.
 sounds. **Settings ▸ Theme ▸ Theme variant** (shown only for packs that have them) steps through
 them; the choice is saved as `display.themeVariant` in `settings.json`.
 
+A variant may also set `"layout": { "menuStyle": "XMB" }` (or `SLASH`) to draw the menu in another
+style; it is the only `layout` key a variant reads, and any other is reported. The pack's own style
+is `layout.menuStyle` (`XMB` by default; an unknown name is reported and draws the XMB). See §16.
+
 ### Category and system overrides
 
 `"categoryOverrides": { "MUSIC": {…} }` (`GAMES`, `MUSIC`, `PHOTO`, `VIDEO`, `APPS`, `SETTINGS`)
@@ -443,8 +629,8 @@ applies while that category is open; `"systemOverrides": { "dreamcast": {…} }`
 folder alias such as `dc`) while one of that system's games is focused, after the cursor rests for
 a quarter second.
 
-Each may set `palette` roles, `effects.surfaceStyle`, `effects.shaderPreset`,
-`effects.wallpaperPath`, `effects.focusFrameStyle`, `iconMask`, `iconFilter`,
+Each may set `palette` roles, `effects.surfaceStyle`, `effects.shaderPreset` (with `shaderPath`,
+`shaderImages` or `scenePath`), `effects.wallpaperPath`, `effects.videoPath`, `effects.videoFit`, `effects.focusFrameStyle`, `iconMask`, `iconFilter`,
 `foregroundParticles`, `backgroundFilter`, `uiFilter`, `bootIntro`, `launchCurtain` and `cardAspectRatio` (a system's aspect
 shapes that system's game tiles), `audio.soundGains` and `audio.bgmFile` (§5).
 
@@ -461,7 +647,10 @@ wave crossfades between palettes.
 * `match` takes any of `category` (`MUSIC`), `system` (a platform id or folder alias), `battery`
   (`<= 20`, `< 15`, `>= 80`, `charging`, `discharging`, `full`) and `time` (`21:00..06:00`,
   wrapping past midnight; start included, end excluded); every selector given must hold.
-* `apply` takes `palette` roles, any `effects` key (§8), `cardAspectRatio` and any `layout` key.
+* `apply` takes `palette` roles, any `effects` key (§8), `cardAspectRatio` and any `layout` key
+  except `menuStyle`, which only the pack's `layout` and its variants set, and `slash`, which only
+  the pack's `layout` sets (a rule's is reported and ignored: the whole menu switching or reshaping
+  while you navigate would be jarring).
 * Rules sit above the variant and the overrides, in file order, so the last matching rule wins.
 * A rule whose selector can't be read is reported and dropped, never applied everywhere.
 * Battery and time are re-checked when they change and once a minute, never per frame.
@@ -562,7 +751,11 @@ The APK also bundles **Xross** in
 [`app/src/main/assets/themes/xross/`](../app/src/main/assets/themes/xross): the same sounds and
 surfaces with Phosphor icons (MIT, credited in [`CREDITS.md`](../CREDITS.md)), and **Gargantua** in
 [`app/src/main/assets/themes/blackhole/`](../app/src/main/assets/themes/blackhole): an ASCII black
-hole shader set in Redaction 50 (OFL, also credited there). Bundled packs are listed right
+hole shader set in Redaction 50 (OFL, also credited there). Since 0.2.3.0 it also bundles
+**MEMENTO//MORI** ([`memento_mori/`](../app/src/main/assets/themes/memento_mori)),
+**UNIT//TERMINAL** ([`unit_terminal/`](../app/src/main/assets/themes/unit_terminal)) and
+**BREAKCORE.ERR** ([`breakcore_err/`](../app/src/main/assets/themes/breakcore_err)): full showcase
+packs with their own shaders, surfaces, rules, variants and icons. Bundled packs are listed right
 after Default, load from the APK, and their ids are reserved (`ThemePackLoader.BUNDLED_IDS`).
 
 ### Console logos on system folders
@@ -734,6 +927,33 @@ leaving the rest of the block.
 | `logo` | an SVG, PNG or WebP in the pack, or `none` |
 | `volumeAlways` | `true` / `false` |
 | `tileGlow` (`glow`) | `true` / `false` |
+| `clockLayout` | `INLINE` (the default), `STACKED`, `PLATES` |
+| `clockSize` | 1–3 (default 1) |
+| `clockTilt` | degrees, −12–12 (default 0) |
+| `clockPlate` | a skin (§16) |
+| `hintStyle` | `PILL` (the default), `PLATES`, `PLAIN` |
+| `hintSkew` | degrees, −15–15 (default 0) |
+| `hintPlate` | a skin (§16) |
+| `batteryPlate` | a skin behind the `BATTERY` slot (§16) |
+| `avatarPlate` | a skin behind the collapsed avatar; it fades as the mini-HUD opens (§16) |
+
+### Clock and hint styles
+
+These work under every menu style, the XMB included.
+
+* `clockLayout: STACKED` puts the date letters of `clockFormat` (`y M d E`) on a first, smaller
+  line and the time letters (`H h m a`) on a second. A clock of only a date or only a time stays one
+  line. `clockLayout: PLATES` stacks them too, but puts each line on its own `clockPlate`: the
+  first right beside the next slot (the battery), the second stepping out to the right beneath it; figures are big and words (weekday, AM/PM) small and upper case,
+  the date's figures first ("11/25 WED") and the time's AM/PM first ("PM 7:44"). `clockSize` scales
+  the clock over the status bar's text, `clockTilt` turns it, and `clockPlate` is a skin drawn
+  behind it. The other slots keep their size and line up with the clock's top.
+* `batteryPlate` and `avatarPlate` put the battery and the collapsed avatar on plates of their own.
+* `hintStyle: PLATES` draws each button hint on its own plate: `hintPlate`, or a flat plate in the
+  palette's `surface` color without one. `PLAIN` draws the glyphs and labels alone. `hintSkew` slants
+  the pill, the plates or the bare text.
+* Left at their defaults (`INLINE`, size 1, no tilt, no plate; `PILL`, no skew) the clock and hints
+  draw exactly as before these keys existed. Settings ▸ Theme ▸ Components has no rows for them.
 
 ### Settings ▸ Theme ▸ Components
 
@@ -756,3 +976,119 @@ leaving the rest of the block.
 
 Saved as `display.components` in `settings.json` (`null` follows the pack); Reset to theme
 defaults clears it, quick profiles never touch it.
+
+## 16. Menu styles
+
+`layout.menuStyle` picks how the menu is drawn. Every style reads the same navigation: left and
+right switch category, up and down move the focus, confirm and back drill in and out.
+
+* `XMB` (the default): the cross media bar, shaped by the rest of `layout` (§3).
+* `SLASH`: a bold, slanted list of rows made of the pack's art, with a bigger focused panel that can
+  show the game's logo, categories on an icon bar with a decal, framed hero art, and motion that
+  cascades rows in and wipes or shatters the list it replaces.
+
+The XMB-only `layout` keys (`preset`, `crosshairX`/`Y`, tile aspects, `focusDivider`,
+`drillDownStyle`, `focusedScale`) are ignored under `SLASH` without a problem, so one pack can offer
+both styles through variants (§9). `uiScale`, `itemSpacingDp`, `unfocusedAlpha`, `textOverflow` and
+`motionProfile` apply to both. A pack sets the style in its `layout` or a variant's; a rule can't.
+Settings ▸ Theme ▸ Layout hides the crosshair and focused-scale rows under `SLASH`, and shows a
+*Menu style* row, which switches to the variant drawing the other style, when the pack's variants
+offer more than one.
+
+### Skins
+
+Row and panel art, the category decal, the art frame and the clock and hint plates are **skins**:
+
+```json
+{ "path": "menu/row.webp", "slice": [48, 14, 48, 14], "tint": "accent", "outset": [0, 4, 0, 4] }
+```
+
+* `path`: a PNG, JPEG or WebP inside the pack. A plain string is `{ "path": … }`.
+* `slice`: left, top, right, bottom insets in image pixels. The corners keep their size, the edges
+  stretch along their side and the middle both ways (a nine-slice). Without it the image stretches
+  whole, which suits torn or hand-drawn edges that would smear if stretched along a side.
+* `tint`: `accent`, a palette role name (`surface`, `accentSecondary`, `textPrimary`, …) or a hex
+  color, multiplied in. One grey skin then serves every colorway.
+* `outset`: how far the image reaches past its box, in dp, so stars or splashes can spill over.
+
+Images are found when the pack loads (a missing one is reported, and its element draws its plain
+fallback) and decoded once per look, off the main thread. Each image's long side is capped at 1024
+pixels (2048 for an animated decal's sprite sheet), and all of them together at 6 megapixels. Past
+that the later images are left out and reported. A hot reload picks up edited files.
+
+### The `slash` block
+
+Only the pack's base `layout` reads it. Every key is optional.
+
+```json
+"layout": {
+  "menuStyle": "SLASH",
+  "slash": {
+    "skewDeg": -10, "rowTilt": [-2, 1], "jitter": 0.2, "seed": 3,
+    "listX": 0.16, "listY": 0.40, "listWidth": 0.24, "bleed": false, "textAlign": "START",
+    "rowSkin": [{ "path": "menu/paper_a.webp" }, { "path": "menu/paper_b.webp" }],
+    "rowTextColor": "#141414",
+    "focusedSkin": { "path": "menu/panel.webp", "outset": [6, 4, 6, 4] },
+    "focusedContent": "LOGO_TITLE", "focusedHeight": 0.16, "focusedScale": 1.6,
+    "staggerMs": 28, "transition": "WIPE", "pop": 0.08,
+    "categories": "ICONS", "categoryY": 0.22,
+    "categoryDecal": { "path": "menu/star.webp", "size": 2.0, "frames": [4, 1], "fps": 6 },
+    "art": "HERO", "artRect": [0.56, 0.28, 0.38, 0.44], "artTilt": -3,
+    "artFrame": { "path": "menu/frame.webp", "slice": [64, 64, 64, 64], "outset": [24, 24, 24, 24] }
+  }
+}
+```
+
+| Key | Values (default) |
+| --- | --- |
+| `skewDeg` | every row's horizontal skew, −20–20 (−12) |
+| `rowTilt` | `[min, max]`: the range each row's rotation is drawn from, at most ±6° (`[-3, 2]`) |
+| `jitter` | 0–1: how much row offsets and the highlight's corners vary (0.35) |
+| `seed` | a whole number: rows keep their shape and skin across frames and visits (7) |
+| `listX`, `listY` | where the first row sits, as fractions of the screen (0.08, 0.30) |
+| `listWidth` | the rows' width, 0.15–0.6 of the screen (0.38) |
+| `bleed` | `true`: rows reach past the left edge and `listX` only places the text (`false`) |
+| `textAlign` | `START`, `CENTER`, `END` (`START`) |
+| `rowSkin` | a skin or a list of skins; with a list, neighbouring rows never share one (none: text only) |
+| `rowTextColor` | unfocused rows' text: `accent`, a palette role or a hex color (`#FFFFFF`) |
+| `highlight` | without a `focusedSkin`: `SHARD` (an irregular quad over a smaller offset shard), `SLAB`, `NONE` (`SHARD`) |
+| `highlightColors` | `[front, back]` (`["accent", "#000000"]`) |
+| `focusedSkin` | the panel behind the focused row; replaces `highlight` |
+| `focusedTextColor` | the focused row's text (black or white against the highlight; white on a `focusedSkin`) |
+| `focusedScale` | the focused row's size, 1–2.5 (1.6) |
+| `focusedWidth` | the focused panel's width over the rows', 1–2, growing out on both sides; its title and the drill-down header get the extra room (1.04) |
+| `focusedContent` | `TITLE`, `LOGO` (the game's `WHEEL` art, else its title), `LOGO_TITLE` (`TITLE`) |
+| `focusedHeight` | the panel's height with a logo, 0.08–0.3 of the screen (0.16) |
+| `titleCase` | `AS_IS`, `UPPER` (`UPPER`) |
+| `outline` | a stroke behind the text in dp, 0–4; 0 draws a drop shadow instead (2) |
+| `rowOutline` | the unfocused rows' stroke, 0–4 (the `outline`); 0 suits dark text on paper |
+| `staggerMs` | 0–80: the delay between rows sliding in; a whole cascade takes at most 300 ms (28) |
+| `transition` | how a category switch replaces the list: `WIPE`, `SHARDS`, `FADE` (`WIPE`) |
+| `pop` | 0–0.2: the focused row's overshoot as it lands (0.08) |
+| `categories` | `ICONS`, `LABELS` (a slanted strip of names), `GLYPHS` (the strip with glyphs) (`ICONS`) |
+| `categoryY` | the category bar's height on screen, a fraction (0.22) |
+| `categoryX` | where the category bar starts, a fraction of the width (`listX`) |
+| `categoryDecal` | a skin behind the focused category, plus `size` (1–3 times the icon), `frames` (`[columns, rows]` of a sprite sheet) and `fps` (0–30) |
+| `art` | what the empty side shows for the focused item: `HERO` (its hero art, else its logo), `ICON` (its box art), `NONE` (`NONE`) |
+| `artRect` | `[x, y, width, height]` as screen fractions, kept on screen (`[0.56, 0.28, 0.38, 0.44]`) |
+| `artTilt` | degrees, −10–10 (−3) |
+| `artFrame` | a skin drawn over the art's edge; it hides with the art when the item has none |
+
+Bad values are reported as `layout.slash.<key>` and keep the default (or the Default pack's);
+numbers out of range are clamped.
+
+* **Drill-down.** Confirm on a folder slides the list out to the left, skewed and dimmed, while the
+  new one cascades in, and the folder's title stays above it as a slanted header in the
+  `focusedSkin` (or the highlight color). Back reverses it. `layout.drillDownStyle` doesn't apply.
+* **Logos and art** load like the XMB's game art. A focused row shows its title until its logo
+  arrives. Items without one (folders, utilities, settings) always show their title.
+* **Scenes.** While a category switch or drill-down plays, it holds a scene's `transition` driver
+  (§8, layered scenes) up, so the background moves in step with the menu. Shaders' `uFocus`
+  follows the focused row in either style.
+* **Still and E-Ink.** Under `motionProfile: INSTANT` or still motion, nothing cascades, wipes, pops
+  or morphs: every change happens at once and the decal holds its first frame. Skins still draw.
+  While the screen rests the decal holds still.
+* `uiScale` scales the rows, their text and the skins' fixed edges; `listX`, `listY`, `listWidth`,
+  `categoryX`, `categoryY` and `artRect` stay fractions of the screen.
+* Skinned rows aren't dimmed unless the pack sets `layout.unfocusedAlpha`; bare text rows dim a
+  little.

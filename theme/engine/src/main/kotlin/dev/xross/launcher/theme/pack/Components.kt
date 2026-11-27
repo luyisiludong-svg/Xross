@@ -58,6 +58,42 @@ enum class BadgePill { SYSTEM, YEAR, DEVELOPER, PLAYTIME, RA_PROGRESS }
 /** Which status-bar cluster. */
 enum class StatusSide { LEFT, RIGHT }
 
+/** How the clock's date and time sit (Menu styles slice 5, `components.clockLayout`). */
+enum class ClockLayout {
+    /** One line, date and time two spaces apart: the clock before slice 5. */
+    INLINE,
+
+    /** The date letters on the first line, the time letters on the second. */
+    STACKED,
+
+    /**
+     * Stacked, each line on its own plate, the second set off to the right; figures big and words
+     * (weekday, AM/PM) small and upper case, the date's figures first and the time's AM/PM first
+     * ([ClockFormat.parts]).
+     */
+    PLATES,
+}
+
+/** How the button hints are drawn (Menu styles slice 5, `components.hintStyle`). */
+enum class HintStyle {
+    /** One backed pill holding every hint: the hints before slice 5. */
+    PILL,
+
+    /** Each hint on its own skewed plate. */
+    PLATES,
+
+    /** Text and glyphs only. */
+    PLAIN,
+}
+
+/** Limits of the slice 5 clock and hint values. */
+object ComponentLimits {
+    const val MIN_CLOCK_SIZE = 1f
+    const val MAX_CLOCK_SIZE = 3f
+    const val MAX_CLOCK_TILT = 12f
+    const val MAX_HINT_SKEW = 15f
+}
+
 // endregion
 
 /**
@@ -100,6 +136,24 @@ data class Components(
      * instead of failing the whole manifest ([ComponentsPatch.of] reads it).
      */
     @kotlinx.serialization.json.JsonNames("glow") val tileGlow: kotlinx.serialization.json.JsonElement? = null,
+    /** [ClockLayout] name (Menu styles slice 5). */
+    val clockLayout: String? = null,
+    /** The clock's size over the status bar's text, 1–3. */
+    val clockSize: Float? = null,
+    /** The clock's rotation in degrees, ±12. */
+    val clockTilt: Float? = null,
+    /** A [Skin] behind the clock: a path or an object. */
+    val clockPlate: kotlinx.serialization.json.JsonElement? = null,
+    /** [HintStyle] name. */
+    val hintStyle: String? = null,
+    /** How far plates and hint text slant, in degrees, ±15. */
+    val hintSkew: Float? = null,
+    /** The [HintStyle.PLATES] plate's [Skin]; a flat plate in the surface color without one. */
+    val hintPlate: kotlinx.serialization.json.JsonElement? = null,
+    /** A [Skin] behind the `BATTERY` slot. */
+    val batteryPlate: kotlinx.serialization.json.JsonElement? = null,
+    /** A [Skin] behind the collapsed avatar. */
+    val avatarPlate: kotlinx.serialization.json.JsonElement? = null,
 ) {
     companion object {
         /** Every property `components` recognizes, with its aliases. */
@@ -109,6 +163,7 @@ data class Components(
             "telemetryMode", "telemetry", "miniPlayerMode", "miniPlayer",
             "glyphOverride", "glyphs", "glyphStyle", "badgePills", "logo", "volumeAlways",
             "tileGlow", "glow",
+            "clockLayout", "clockSize", "clockTilt", "clockPlate", "hintStyle", "hintSkew", "hintPlate", "batteryPlate", "avatarPlate",
         )
 
         /**
@@ -205,6 +260,34 @@ object ClockFormat {
         return kept
     }
 
+    /**
+     * The lines of a clock [text] (from `StatusBarState.clockText`, date and time two spaces apart)
+     * in [layout]: one line [ClockLayout.INLINE], else the date over the time. A clock of only a
+     * date or only a time is one line either way.
+     */
+    fun lines(text: String, layout: ClockLayout): List<String> {
+        if (text.isEmpty()) return emptyList()
+        if (layout == ClockLayout.INLINE) return listOf(text)
+        // STACKED and PLATES both split the date from the time.
+        val at = text.indexOf("  ")
+        return if (at < 0) listOf(text) else listOf(text.substring(0, at).trim(), text.substring(at + 2).trim()).filter { it.isNotEmpty() }
+    }
+
+    /**
+     * The pieces of one clock [line] for [ClockLayout.PLATES]: (text, small). Figures ("11/25",
+     * "7:44") are big; words (a weekday, AM/PM) are small and upper case, with commas and dots
+     * dropped ("a.m." is "AM"). On the date line ([time] false) the figures come first ("11/25 WED"); on the time
+     * line the words do ("PM 7:44"). A line is the time when [time] is null and it holds a `:`.
+     */
+    fun parts(line: String, time: Boolean? = null): List<Pair<String, Boolean>> {
+        val isTime = time ?: (':' in line)
+        val tokens = line.split(' ', ',', '\u00A0', '\u202F').map { it.trim().trimEnd('.') }.filter { it.isNotEmpty() }
+        val (words, figures) = tokens.partition { t -> t.none { it.isDigit() } }
+        val big = figures.map { it to false }
+        val small = words.map { it.replace(".", "").uppercase(java.util.Locale.ROOT) to true }.filter { it.first.isNotEmpty() }
+        return if (isTime) small + big else big + small
+    }
+
     /** The date letters of [skeleton] (`y M d E`). */
     fun dateFields(skeleton: String): String = skeleton.filter { it in "yMdE" }
 
@@ -243,6 +326,15 @@ data class ComponentsPatch(
     val logo: String? = null,
     val volumeAlways: Boolean? = null,
     val tileGlow: Boolean? = null,
+    val clockLayout: ClockLayout? = null,
+    val clockSize: Float? = null,
+    val clockTilt: Float? = null,
+    val clockPlate: Skin? = null,
+    val hintStyle: HintStyle? = null,
+    val hintSkew: Float? = null,
+    val hintPlate: Skin? = null,
+    val batteryPlate: Skin? = null,
+    val avatarPlate: Skin? = null,
 ) {
     /** These values with every one [patch] sets replacing them. */
     fun over(patch: ComponentsPatch?): ComponentsPatch = if (patch == null) this else ComponentsPatch(
@@ -258,6 +350,15 @@ data class ComponentsPatch(
         logo = patch.logo ?: logo,
         volumeAlways = patch.volumeAlways ?: volumeAlways,
         tileGlow = patch.tileGlow ?: tileGlow,
+        clockLayout = patch.clockLayout ?: clockLayout,
+        clockSize = patch.clockSize ?: clockSize,
+        clockTilt = patch.clockTilt ?: clockTilt,
+        clockPlate = patch.clockPlate ?: clockPlate,
+        hintStyle = patch.hintStyle ?: hintStyle,
+        hintSkew = patch.hintSkew ?: hintSkew,
+        hintPlate = patch.hintPlate ?: hintPlate,
+        batteryPlate = patch.batteryPlate ?: batteryPlate,
+        avatarPlate = patch.avatarPlate ?: avatarPlate,
     )
 
     val empty: Boolean get() = this == NONE
@@ -278,6 +379,15 @@ data class ComponentsPatch(
             logo = logo.orEmpty(),
             volumeAlways = volumeAlways ?: false,
             tileGlow = tileGlow ?: true,
+            clockLayout = clockLayout ?: ClockLayout.INLINE,
+            clockSize = clockSize ?: 1f,
+            clockTilt = clockTilt ?: 0f,
+            clockPlate = clockPlate,
+            hintStyle = hintStyle ?: HintStyle.PILL,
+            hintSkew = hintSkew ?: 0f,
+            hintPlate = hintPlate,
+            batteryPlate = batteryPlate,
+            avatarPlate = avatarPlate,
         )
     }
 
@@ -357,12 +467,32 @@ data class ComponentsPatch(
                     if (b == null && v !is kotlinx.serialization.json.JsonNull) problems += "$where.components.tileGlow: $v isn't true or false"
                     b
                 },
+                clockLayout = one("clockLayout", c.clockLayout, { t -> t?.let { ClockLayout.entries.firstOrNull { e -> e.name == norm(it) } } }, ClockLayout.entries.toTypedArray()),
+                clockSize = c.clockSize?.let { number(where, "clockSize", it, ComponentLimits.MIN_CLOCK_SIZE, ComponentLimits.MAX_CLOCK_SIZE, problems) },
+                clockTilt = c.clockTilt?.let { number(where, "clockTilt", it, -ComponentLimits.MAX_CLOCK_TILT, ComponentLimits.MAX_CLOCK_TILT, problems) },
+                clockPlate = Skin.of("$where.components.clockPlate", c.clockPlate, problems),
+                hintStyle = one("hintStyle", c.hintStyle, { t -> t?.let { HintStyle.entries.firstOrNull { e -> e.name == norm(it) } } }, HintStyle.entries.toTypedArray()),
+                hintSkew = c.hintSkew?.let { number(where, "hintSkew", it, -ComponentLimits.MAX_HINT_SKEW, ComponentLimits.MAX_HINT_SKEW, problems) },
+                hintPlate = Skin.of("$where.components.hintPlate", c.hintPlate, problems),
+                batteryPlate = Skin.of("$where.components.batteryPlate", c.batteryPlate, problems),
+                avatarPlate = Skin.of("$where.components.avatarPlate", c.avatarPlate, problems),
             )
             return patch.takeUnless { it.empty }
         }
 
         val LOGO_TYPES = setOf("svg", "png", "webp")
+
+        private fun norm(text: String): String = text.trim().replace('-', '_').replace(' ', '_').uppercase(Locale.ROOT)
+
+        private fun number(where: String, key: String, v: Float, lo: Float, hi: Float, problems: MutableList<String>): Float? {
+            if (!v.isFinite()) return null.also { problems += "$where.components.$key: not a number" }
+            if (v < lo || v > hi) problems += "$where.components.$key: $v is outside $lo–$hi"
+            return v.coerceIn(lo, hi)
+        }
     }
+
+    /** Every skin these components name, in load order. */
+    val images: List<String> get() = listOfNotNull(clockPlate?.path, hintPlate?.path, batteryPlate?.path, avatarPlate?.path).distinct()
 }
 
 /**
@@ -387,7 +517,21 @@ data class ResolvedComponents(
     val volumeAlways: Boolean = false,
     /** The focused game tile gets the focus frame. */
     val tileGlow: Boolean = true,
+    /** The clock's look (Menu styles slice 5): [ClockLayout.INLINE] at size 1, level and bare is the clock before it. */
+    val clockLayout: ClockLayout = ClockLayout.INLINE,
+    val clockSize: Float = 1f,
+    val clockTilt: Float = 0f,
+    val clockPlate: Skin? = null,
+    /** The hints' look (slice 5): [HintStyle.PILL] unskewed is the hints before it. */
+    val hintStyle: HintStyle = HintStyle.PILL,
+    val hintSkew: Float = 0f,
+    val hintPlate: Skin? = null,
+    /** A plate behind the battery slot, and one behind the collapsed avatar (slice 5). */
+    val batteryPlate: Skin? = null,
+    val avatarPlate: Skin? = null,
 ) {
+    /** The clock is drawn as it was before slice 5 (one line, status-bar size, level, no plate). */
+    val plainClock: Boolean get() = clockLayout == ClockLayout.INLINE && clockSize == 1f && clockTilt == 0f && clockPlate == null
     /** The avatar (and its mini-HUD) is in the bar. */
     val avatar: Boolean get() = StatusSlot.AVATAR in right
 

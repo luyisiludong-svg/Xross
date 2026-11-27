@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="256" height="256">
+  <!-- UNIT//TERMINAL: shuffle -->
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M8 16L20 16L36 40L44 40L44 44L34 44L18 20L8 20z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M8 44L8 40L18 40L23 32L26 35.5L20 44z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M30 24.5L34 16L44 16L44 20L36 20L33 27z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M44 10L52 18L44 26z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M44 34L52 42L44 50z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M54 54h6v6h-6z"/>
+</svg>

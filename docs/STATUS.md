@@ -24,6 +24,12 @@ Legend: ✅ done and verified · ◐ partial · ❌ not started · 🧊 iced · 
 | Phase 3 — release candidate | ◐ RetroAchievements linking, User Card, achievement lists and unlock toasts done and live; hot-swap and live resolution change done; dual screen, docking, Portal and FTPS not started | [Phase 2 evidence §3.12–§3.14](phase-2/STATUS.md#s3.12) |
 | Phase 4 — v1.0 | ◐ app triage and performance work started | [Performance](status/PERFORMANCE.md) |
 
+**Release 0.2.3.0-beta (2026-11-27):** the SLASH menu style, clock and hint styles, shader images,
+video backgrounds, layered scenes and tilt parallax, plus MEMENTO//MORI, UNIT//TERMINAL and
+BREAKCORE.ERR as built-in packs (`ThemePackLoaderTest`; the bundled wallpaper checked on the API 37
+emulator). `./gradlew check assembleDebug assembleProfiling` passes with 1,139 `:app` tests (4
+opt-in skipped) and 112 in `:theme:engine`. The A55 profiling pass for the new packs is still to do.
+
 **Release 0.2.2.0-beta (2026-11-21):** everything below plus Photo albums as the rotating
 wallpaper and playlists as theme music (`MediaAsBackgroundTest`, checked on the API 37 emulator).
 `./gradlew check assembleDebug assembleProfiling` passes with 1,040 `:app` tests and 91 in

@@ -5,6 +5,7 @@ import dev.xross.launcher.input.NavAction
 import dev.xross.launcher.theme.pack.CrosshairPreset
 import dev.xross.launcher.theme.pack.LayoutLimits
 import dev.xross.launcher.theme.pack.LayoutOverrides
+import dev.xross.launcher.theme.pack.MenuStyle
 import dev.xross.launcher.theme.pack.ThemeLayout
 import java.util.Locale
 import kotlin.math.abs
@@ -17,12 +18,55 @@ enum class LayoutRow(val label: String, val slider: Boolean) {
     SPACING("List spacing", false),
     FOCUSED_SCALE("Focused scale", true),
     RESET("Reset layout", false),
+
+    /** The pack's menu styles (Menu styles slice 6): shown only when its variants offer more than one. */
+    MENU_STYLE("Menu style", false),
 }
 
-/** The open Layout panel; [index] is the focused row. */
+/**
+ * What the Layout panel depends on beyond the values: the menu [style] on screen (the XMB-only
+ * rows hide under another style) and the pack's [styles], one per look (base and variants) that
+ * draws a different style, so the "Menu style" row can switch between them.
+ */
+@Immutable
+data class LayoutPanelContext(
+    val style: MenuStyle = MenuStyle.XMB,
+    /** Each style the pack offers and the look that draws it (variant id; "" is the base), in pack order. */
+    val styles: List<Pair<MenuStyle, String>> = emptyList(),
+) {
+    /** The panel's rows here, in order. */
+    val rows: List<LayoutRow> = buildList {
+        if (styles.map { it.first }.distinct().size > 1) add(LayoutRow.MENU_STYLE)
+        if (style == MenuStyle.XMB) add(LayoutRow.CROSSHAIR)
+        add(LayoutRow.UI_SCALE)
+        add(LayoutRow.SPACING)
+        // SLASH sizes its focused row with its own `slash.focusedScale`.
+        if (style == MenuStyle.XMB) add(LayoutRow.FOCUSED_SCALE)
+        add(LayoutRow.RESET)
+    }
+
+    companion object {
+        val XMB = LayoutPanelContext()
+
+        /**
+         * The context for a pack whose base draws [base] and whose variants draw [variants]
+         * (id → its style, null keeping the base's), while [active] is on screen.
+         */
+        fun of(active: MenuStyle, base: MenuStyle, variants: List<Pair<String, MenuStyle?>>): LayoutPanelContext {
+            val seen = LinkedHashMap<MenuStyle, String>()
+            seen[base] = ""
+            for ((id, st) in variants) if (st != null && st !in seen) seen[st] = id
+            return LayoutPanelContext(active, seen.map { it.key to it.value })
+        }
+    }
+}
+
+/** The open Layout panel; [index] is the focused row of [LayoutPanelContext.rows]. */
 @Immutable
 data class LayoutEditorState(val index: Int = 0) {
-    val row: LayoutRow get() = LayoutRow.entries[index.coerceIn(0, LayoutRow.entries.lastIndex)]
+    val row: LayoutRow get() = row(LayoutPanelContext.XMB)
+
+    fun row(ctx: LayoutPanelContext): LayoutRow = ctx.rows[index.coerceIn(0, ctx.rows.lastIndex)]
 }
 
 /** What an input did: the new panel state, the layout values to save (null = unchanged), and whether to close. */
@@ -32,6 +76,8 @@ data class LayoutEditorOutcome(
     val close: Boolean = false,
     /** The input changed nothing it could (a value at its end, Up on the first row). */
     val blocked: Boolean = false,
+    /** The "Menu style" row picked another look: this variant id ("" the base) to switch to. */
+    val variant: String? = null,
 )
 
 /**
@@ -45,7 +91,8 @@ data class LayoutEditorOutcome(
  * and the largest value is the right end. [pack] is the pack's layout, before the user's.
  */
 object LayoutEditor {
-    val rows: List<LayoutRow> = LayoutRow.entries
+    /** The XMB's rows (no menu style choice). */
+    val rows: List<LayoutRow> = LayoutPanelContext.XMB.rows
 
     /** Crosshair choices after "Theme pack", in row order. */
     val PRESETS: List<CrosshairPreset> = listOf(CrosshairPreset.CLASSIC_PS3, CrosshairPreset.PSP_CENTER, CrosshairPreset.MODERN_WIDESCREEN)
@@ -59,18 +106,38 @@ object LayoutEditor {
     /** Tight, Standard, Spacious (dp). */
     val SPACINGS: List<Pair<Float, String>> = listOf(6f to "Tight", 12f to "Standard", 20f to "Spacious")
 
-    fun onAction(state: LayoutEditorState, action: NavAction, user: LayoutOverrides, pack: ThemeLayout): LayoutEditorOutcome =
-        when (action) {
-            NavAction.UP -> move(state, -1)
-            NavAction.DOWN -> move(state, +1)
-            NavAction.LEFT -> change(state, user, adjust(state.row, user, pack, -1))
-            NavAction.RIGHT -> change(state, user, adjust(state.row, user, pack, +1))
-            NavAction.CONFIRM, NavAction.START -> change(state, user, activate(state.row, user))
+    fun onAction(
+        state: LayoutEditorState,
+        action: NavAction,
+        user: LayoutOverrides,
+        pack: ThemeLayout,
+        ctx: LayoutPanelContext = LayoutPanelContext.XMB,
+    ): LayoutEditorOutcome {
+        val row = state.row(ctx)
+        if (row == LayoutRow.MENU_STYLE && (action == NavAction.LEFT || action == NavAction.RIGHT)) {
+            return styleStep(state, ctx, if (action == NavAction.LEFT) -1 else +1)
+        }
+        return when (action) {
+            NavAction.UP -> move(state, -1, ctx)
+            NavAction.DOWN -> move(state, +1, ctx)
+            NavAction.LEFT -> change(state, user, adjust(row, user, pack, -1))
+            NavAction.RIGHT -> change(state, user, adjust(row, user, pack, +1))
+            NavAction.CONFIRM, NavAction.START -> change(state, user, activate(row, user))
             NavAction.BACK, NavAction.OPTIONS -> LayoutEditorOutcome(state, close = true)
             NavAction.PREV_CATEGORY, NavAction.NEXT_CATEGORY, NavAction.MEDIA -> LayoutEditorOutcome(state)
         }
+    }
 
-    private fun move(state: LayoutEditorState, delta: Int): LayoutEditorOutcome {
+    /** Left/Right on "Menu style": the look drawing the next style the pack offers; the ends hold. */
+    fun styleStep(state: LayoutEditorState, ctx: LayoutPanelContext, direction: Int): LayoutEditorOutcome {
+        val i = ctx.styles.indexOfFirst { it.first == ctx.style }
+        val j = i + direction
+        if (i < 0 || j !in ctx.styles.indices) return LayoutEditorOutcome(state, blocked = true)
+        return LayoutEditorOutcome(state, variant = ctx.styles[j].second)
+    }
+
+    private fun move(state: LayoutEditorState, delta: Int, ctx: LayoutPanelContext = LayoutPanelContext.XMB): LayoutEditorOutcome {
+        val rows = ctx.rows
         val next = (state.index + delta).coerceIn(0, rows.lastIndex)
         return if (next == state.index) LayoutEditorOutcome(state, blocked = true) else LayoutEditorOutcome(state.copy(index = next))
     }
@@ -89,7 +156,7 @@ object LayoutEditor {
         LayoutRow.UI_SCALE -> step(user.uiScale, pack.uiScale, UI_SCALES, direction)?.let { user.copy(uiScale = it.value) }
         LayoutRow.SPACING -> step(user.itemSpacingDp, pack.itemSpacingDp, SPACINGS.map { it.first }, direction)?.let { user.copy(itemSpacingDp = it.value) }
         LayoutRow.FOCUSED_SCALE -> step(user.focusedScale, pack.focusedScale, FOCUS_SCALES, direction)?.let { user.copy(focusedScale = it.value) }
-        LayoutRow.RESET -> null
+        LayoutRow.RESET, LayoutRow.MENU_STYLE -> null
     }
 
     /** A step's result: [value] null is "Theme pack". */
@@ -116,6 +183,7 @@ object LayoutEditor {
         LayoutRow.SPACING -> user.copy(itemSpacingDp = null)
         LayoutRow.FOCUSED_SCALE -> user.copy(focusedScale = null)
         LayoutRow.RESET -> LayoutOverrides.NONE
+        LayoutRow.MENU_STYLE -> user
     }.takeIf { it != user }
 
     /** True when the user set [row] (Reset layout: anything at all). */
@@ -125,10 +193,11 @@ object LayoutEditor {
         LayoutRow.SPACING -> user.itemSpacingDp != null
         LayoutRow.FOCUSED_SCALE -> user.focusedScale != null
         LayoutRow.RESET -> !user.empty
+        LayoutRow.MENU_STYLE -> false
     }
 
     /** Text at the right of a row: the user's value, or "Theme pack · <the pack's>". */
-    fun value(row: LayoutRow, user: LayoutOverrides, pack: ThemeLayout): String {
+    fun value(row: LayoutRow, user: LayoutOverrides, pack: ThemeLayout, ctx: LayoutPanelContext = LayoutPanelContext.XMB): String {
         fun packs(v: String) = "Theme pack · $v"
         return when (row) {
             LayoutRow.CROSSHAIR -> user.crosshair?.label ?: packs(crosshairLabel(pack))
@@ -136,6 +205,7 @@ object LayoutEditor {
             LayoutRow.SPACING -> user.itemSpacingDp?.let(::spacingLabel) ?: packs(spacingLabel(pack.itemSpacingDp))
             LayoutRow.FOCUSED_SCALE -> user.focusedScale?.let(::times) ?: packs(times(pack.focusedScale))
             LayoutRow.RESET -> if (user.empty) "Nothing set" else countOf(user.count)
+            LayoutRow.MENU_STYLE -> "Theme pack · ${ctx.style.label}"
         }
     }
 

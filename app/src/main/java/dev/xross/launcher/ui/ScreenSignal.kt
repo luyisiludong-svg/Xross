@@ -12,6 +12,17 @@ sealed interface ScreenSignal {
     /** A UI filter (2b.4f) couldn't be built: announced once per [key] with [text]. */
     data class UiFilterError(val key: String, val text: String) : ScreenSignal
 
-    /** The crosshair's X over the screen width (0–1) as laid out, for panning the UI sounds (2b.5a). */
-    data class CrosshairX(val x: Float) : ScreenSignal
+    /**
+     * The focused item's centre over the screen as laid out, both 0–1 with y down: [x] pans the UI
+     * sounds (2b.5a), and both drive shaders' `uFocus` (Live backgrounds § 1). In the XMB this is
+     * the crosshair, where the focused item always sits.
+     */
+    data class Focus(val x: Float, val y: Float) : ScreenSignal
+
+    /**
+     * The menu's list transition (Menu styles slice 3): 0 as a category switch or drill-down
+     * begins, 1 when it has settled. Sent every frame while it runs, for scenes' `transition`
+     * driver; the receiver must not recompose on it.
+     */
+    data class MenuTransition(val progress: Float) : ScreenSignal
 }

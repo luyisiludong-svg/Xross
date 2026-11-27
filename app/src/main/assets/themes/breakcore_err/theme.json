@@ -1,0 +1,304 @@
+{
+  "schemaVersion": 2,
+  "name": "BREAKCORE.ERR",
+  "author": "Beluwhal",
+  "version": "1.0",
+  "description": "Breakcore, glitchcore and Y2K brutalism: a 172 BPM glitch shader that tears, stutters and datamoshes on the beat, error-window surfaces with hard shadows, pixel icons, bitcrushed UI sounds and two synthesized breakbeat loops. Everything is original; the fonts are Redaction 50 (OFL).",
+  "imports": [
+    "surfaces.json",
+    "rules.json"
+  ],
+  "palette": {
+    "canvas": "#0A0014",
+    "accent": "#FF1F8E",
+    "accentSecondary": "#C8FF00",
+    "focusGold": "#E8ECF4",
+    "textPrimary": "#FFFFFF",
+    "textSecondary": "#C8FF00",
+    "circadianCurve": false,
+    "batteryTint": true
+  },
+  "wave": {
+    "speed": 1.0,
+    "gradient": [
+      "#0A0014",
+      "#020006"
+    ]
+  },
+  "typography": {
+    "display": "fonts/Redaction50-Bold.ttf",
+    "body": "fonts/Redaction50-Regular.ttf",
+    "mono": "fonts/Redaction50-Italic.ttf"
+  },
+  "audio": {
+    "sounds": {
+      "opening": "boot_glitch.wav",
+      "gameboot": "launch.wav",
+      "cursor": "unit_cursor.wav"
+    },
+    "soundGains": {
+      "cursor": 0.5,
+      "category_switch": 0.6,
+      "confirm": 0.7,
+      "drill_in": 0.6,
+      "drill_out": 0.6,
+      "back": 0.6,
+      "option": 0.6,
+      "ok": 0.6,
+      "system_ng": 0.65,
+      "trophy": 0.8,
+      "opening": 0.85,
+      "gameboot": 0.85
+    },
+    "panAmount": 0.6,
+    "cursorJitter": true,
+    "bgmFile": "none"
+  },
+  "effects": {
+    "shaderPath": "breakcore.frag",
+    "surfaceStyle": "error_window",
+    "adaptiveGamePalette": false,
+    "focusFrameStyle": "HARD_SHADOW",
+    "iconMask": "Y2K_CHROME_FRAME",
+    "iconFilter": "DUOTONE",
+    "foregroundParticles": "NONE",
+    "backgroundFilter": "SCANLINES",
+    "uiFilterPath": "postprocess.agsl",
+    "bootIntro": "SHADER",
+    "launchCurtain": "FLASH"
+  },
+  "layout": {
+    "crosshairX": 0.2,
+    "crosshairY": 0.24,
+    "cardAspectRatio": "4:1",
+    "tile": {
+      "music": "1:1",
+      "photo": "3:4",
+      "video": "16:9"
+    },
+    "itemSpacingDp": 8,
+    "focusedScale": 1.35,
+    "unfocusedAlpha": 0.38,
+    "uiScale": 1.0,
+    "focusDivider": "FULL_BLEED_LINE",
+    "drillDownStyle": "CHEVRON_COLLAPSE",
+    "textOverflow": "MARQUEE",
+    "motionProfile": "SNAPPY",
+    "spring": {
+      "stiffness": 900,
+      "dampingRatio": 0.62
+    }
+  },
+  "components": {
+    "topLeftCluster": "SOCIAL_STACK",
+    "statusBarLeft": [
+      "LOGO",
+      "WIFI",
+      "VOLUME"
+    ],
+    "statusBarRight": [
+      "CLOCK",
+      "BATTERY",
+      "AVATAR"
+    ],
+    "logo": "logo.svg",
+    "batteryMode": "PERCENTAGE",
+    "clockFormat": "yMdHm",
+    "volumeAlways": true,
+    "telemetryMode": "RICH_CARD",
+    "miniPlayerMode": "STATUS_TICKER",
+    "glyphOverride": "MONOCHROME_MINIMAL",
+    "badgePills": [
+      "SYSTEM",
+      "YEAR",
+      "PLAYTIME",
+      "RA_PROGRESS"
+    ],
+    "tileGlow": true
+  },
+  "variants": [
+    {
+      "id": "cyber-blue",
+      "name": "CYBER//BLUE",
+      "palette": {
+        "canvas": "#000A1F",
+        "accent": "#1AEBFF",
+        "accentSecondary": "#E8ECF4",
+        "textSecondary": "#1AEBFF"
+      },
+      "effects": {
+        "surfaceStyle": "chrome_slab",
+        "focusFrameStyle": "GOLD_BEZEL",
+        "backgroundFilter": "LCD_GRID",
+        "launchCurtain": "IRIS"
+      }
+    },
+    {
+      "id": "blood-exe",
+      "name": "BLOOD.EXE",
+      "palette": {
+        "canvas": "#120000",
+        "accent": "#FF2A1A",
+        "accentSecondary": "#FFFFFF",
+        "textSecondary": "#FF7A6E"
+      },
+      "effects": {
+        "surfaceStyle": "low_power",
+        "backgroundFilter": "CRT",
+        "iconFilter": "MONOCHROME",
+        "launchCurtain": "FADE_BLACK"
+      },
+      "audio": {
+        "bgmFile": "none"
+      },
+      "components": {
+        "glyphOverride": "PLAYSTATION",
+        "batteryMode": "CAPSULE_ICON",
+        "telemetryMode": "COMPACT_PILL"
+      }
+    },
+    {
+      "id": "vapor-y2k",
+      "name": "VAPOR.Y2K",
+      "palette": {
+        "canvas": "#1A0630",
+        "accent": "#FF8AE2",
+        "accentSecondary": "#7AF7E8",
+        "focusGold": "#FFD6F5",
+        "textSecondary": "#7AF7E8"
+      },
+      "effects": {
+        "surfaceStyle": "acid_glass",
+        "focusFrameStyle": "BREATHING_HALO",
+        "foregroundParticles": "BOKEH",
+        "backgroundFilter": "NONE",
+        "iconMask": "SQUIRCLE",
+        "iconFilter": "NONE"
+      },
+      "components": {
+        "miniPlayerMode": "FLOATING_CARD",
+        "clockFormat": "EMMMdm"
+      }
+    },
+    {
+      "id": "calm-sys",
+      "name": "CALM.SYS (low stimulation)",
+      "palette": {
+        "canvas": "#0A0014",
+        "accent": "#FF1F8E",
+        "accentSecondary": "#C8FF00"
+      },
+      "effects": {
+        "shaderPreset": "WAVE",
+        "uiFilter": "NONE",
+        "backgroundFilter": "NONE",
+        "launchCurtain": "FADE_BLACK",
+        "bootIntro": "OFF"
+      }
+    }
+  ],
+  "categoryOverrides": {
+    "GAMES": {
+      "effects": {
+        "surfaceStyle": "error_window"
+      }
+    },
+    "MUSIC": {
+      "palette": {
+        "accent": "#1AEBFF"
+      },
+      "effects": {
+        "focusFrameStyle": "STATIC_NEON",
+        "surfaceStyle": "acid_glass"
+      },
+      "audio": {
+        "soundGains": {
+          "cursor": 0.3
+        }
+      }
+    },
+    "PHOTO": {
+      "effects": {
+        "foregroundParticles": "DUST_MOTES",
+        "surfaceStyle": "chrome_slab",
+        "uiFilter": "NONE",
+        "backgroundFilter": "NONE"
+      }
+    },
+    "VIDEO": {
+      "effects": {
+        "backgroundFilter": "NONE",
+        "launchCurtain": "FADE_BLACK",
+        "uiFilter": "NONE"
+      }
+    },
+    "APPS": {
+      "effects": {
+        "iconFilter": "MONOCHROME",
+        "surfaceStyle": "hazard_tape"
+      }
+    },
+    "SETTINGS": {
+      "palette": {
+        "canvas": "#00106E",
+        "accent": "#FFFFFF",
+        "accentSecondary": "#8FB0FF"
+      },
+      "effects": {
+        "surfaceStyle": "bsod",
+        "focusFrameStyle": "HARD_SHADOW",
+        "uiFilter": "NONE"
+      },
+      "audio": {
+        "bgmFile": "none"
+      }
+    }
+  },
+  "systemOverrides": {
+    "gb": {
+      "palette": {
+        "canvas": "#0F1A07",
+        "accent": "#9BBC0F",
+        "accentSecondary": "#8BAC0F"
+      },
+      "effects": {
+        "backgroundFilter": "LCD_GRID",
+        "launchCurtain": "FADE_BLACK"
+      },
+      "cardAspectRatio": "1:1"
+    },
+    "gba": {
+      "effects": {
+        "backgroundFilter": "LCD_GRID"
+      },
+      "cardAspectRatio": "1.5"
+    },
+    "psx": {
+      "palette": {
+        "accent": "#E8ECF4",
+        "accentSecondary": "#FF1F8E"
+      },
+      "effects": {
+        "surfaceStyle": "chrome_slab",
+        "launchCurtain": "IRIS"
+      },
+      "cardAspectRatio": "1:1"
+    },
+    "dreamcast": {
+      "palette": {
+        "accent": "#FF6A00",
+        "accentSecondary": "#FFFFFF"
+      },
+      "effects": {
+        "launchCurtain": "IRIS"
+      }
+    },
+    "arcade": {
+      "effects": {
+        "backgroundFilter": "CRT",
+        "launchCurtain": "FLASH"
+      },
+      "cardAspectRatio": "3:4"
+    }
+  }
+}

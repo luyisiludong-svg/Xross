@@ -1,0 +1,20 @@
+{
+  "resolution": "sharp",
+  "poster": "poster.png",
+  "layers": [
+    { "type": "image", "path": "sky.png", "fit": "COVER", "wrap": "REPEAT", "scroll": [6, 0], "parallax": 0.15,
+      "daylight": { "opacity": -0.25 } },
+    { "type": "video", "path": "clouds.mp4", "blend": "SCREEN", "opacity": 0.3, "parallax": 0.25 },
+    { "type": "particles", "rate": 20, "life": [5, 8], "velocity": [[-6, 6], [18, 34]], "size": [2, 4],
+      "color": ["#ccffffff", "#00ffffff"], "mask": "fade.png", "parallax": 0.3 },
+    { "type": "image", "path": "city.png", "fit": "FIT", "anchor": "BOTTOM", "parallax": 0.5,
+      "audio": { "scale": 0.015 }, "transition": { "offset": [0, 18] } },
+    { "type": "sprite", "path": "neon.png", "frames": [4, 2], "fps": 6, "rect": [0.64, 0.46, 0.11, 0.09],
+      "blend": "ADD", "parallax": 0.5, "pulse": { "opacity": -0.15, "period": 3 } },
+    { "type": "particles", "path": "ember.png", "rate": 30, "life": [3, 6], "velocity": [[-5, 5], [-40, -20]],
+      "size": [4, 10], "color": ["#ffb354", "#00ff8024"], "rect": [0, 0.55, 1, 0.45], "blend": "ADD", "parallax": 0.7 },
+    { "type": "shader", "path": "rain.frag", "images": [{ "path": "drops.png", "wrap": "REPEAT" }] },
+    { "type": "image", "path": "mist.png", "fit": "STRETCH", "wrap": "REPEAT", "scroll": [-14, 0], "blend": "ADD",
+      "opacity": 0.6, "parallax": 1.0, "sway": { "offset": [0, 6], "period": 9 } }
+  ]
+}

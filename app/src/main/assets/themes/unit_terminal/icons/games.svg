@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="256" height="256">
+  <!-- UNIT//TERMINAL: games -->
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M6 18h46v26h-46zM8.5 20.5h41v21h-41z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M14 29h10v4h-10z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M17 26h4v10h-4z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M36 26h5v5h-5z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M42 32h5v5h-5z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M54 54h6v6h-6z"/>
+</svg>

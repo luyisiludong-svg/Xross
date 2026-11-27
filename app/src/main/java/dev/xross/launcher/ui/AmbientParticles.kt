@@ -43,7 +43,10 @@ enum class ParticleState {
 
 /** The particle layer's resting rules (Roadmap §5, "Foreground particles"). */
 object ParticleRest {
-    /** No input for this long and the particles settle and stop. Longer than the wave's 3 s rest. */
+    /**
+     * No input for this long and the particles settle and stop. Longer than the wave's 3 s rest;
+     * a longer Standby motion setting lengthens it ([dev.xross.launcher.data.StandbyMotion.particleTimeoutMs]).
+     */
     const val IDLE_AFTER_MS = 10_000L
 
     fun of(

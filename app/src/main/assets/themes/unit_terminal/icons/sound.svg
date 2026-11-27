@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="256" height="256">
+  <!-- UNIT//TERMINAL: sound -->
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M8 22L18 22L30 12L30 48L18 38L8 38z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M36 22L38 20L42 26L42 34L38 40L36 38L39 33L39 27z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M44 15L46 13L52 22L52 38L46 47L44 45L49 37L49 23z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M54 54h6v6h-6z"/>
+</svg>

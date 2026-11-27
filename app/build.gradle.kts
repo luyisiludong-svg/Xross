@@ -86,9 +86,9 @@ android {
         applicationId = "dev.xross.launcher"
         minSdk = 28
         targetSdk = 36
-        // 0.2.2.0 → 220 (major·1000 + minor·100 + patch·10 + build).
-        versionCode = 220
-        versionName = "0.2.2.0-beta"
+        // 0.2.3.0 → 230 (major·1000 + minor·100 + patch·10 + build).
+        versionCode = 230
+        versionName = "0.2.3.0-beta"
     }
 
     buildTypes {
@@ -110,9 +110,12 @@ android {
         }
         // Release-optimized, debug-signed build for frame-time measurements (installable side by side
         // isn't needed, so it keeps the same applicationId).
+        // -Pxross.profilingReleaseSigned=true signs it with the release key instead, so it installs over
+        // a release build without wiping its data (a release build isn't debuggable, so it can't be backed up).
         create("profiling") {
             initWith(getByName("release"))
-            signingConfig = signingConfigs.getByName("debug")
+            val releaseSigned = providers.gradleProperty("xross.profilingReleaseSigned").orNull == "true"
+            signingConfig = signingConfigs.findByName("release")?.takeIf { releaseSigned } ?: signingConfigs.getByName("debug")
             matchingFallbacks += "release"
             buildConfigField("boolean", "PERF_LOG", "true")
         }

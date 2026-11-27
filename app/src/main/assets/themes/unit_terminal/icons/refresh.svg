@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="256" height="256">
+  <!-- UNIT//TERMINAL: refresh -->
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M12 30L12 12L40 12L40 6L50 15L40 24L40 17L17 17L17 30z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M48 30L48 48L20 48L20 54L10 45L20 36L20 43L43 43L43 30z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M54 54h6v6h-6z"/>
+</svg>

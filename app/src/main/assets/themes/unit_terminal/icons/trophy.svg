@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="256" height="256">
+  <!-- UNIT//TERMINAL: trophy -->
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M14 8L46 8L42 30L34 36L26 36L18 30z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M27 36h6v8h-6z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M18 44h24v8h-24z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M8 10L13 10L15 22L12 22z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M47 10L52 10L48 22L45 22z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M54 54h6v6h-6z"/>
+</svg>

@@ -1,0 +1,42 @@
+// BREAKCORE.ERR UI filter (Android 13+): glitches the menu itself, gently enough to stay readable.
+//   * a constant chromatic fringe: red a little right, blue a little left (about 0.5 dp)
+//   * a very faint interference bar rolling down the screen every ~14 s
+//   * every 9 s, with a 20% chance, a 0.12 s nudge: some 6 dp bands slide up to 3 dp sideways.
+//     Nothing flashes; only positions and fringes change.
+// Xross sets every uniform declared here, and only those; all four are used.
+uniform shader content;
+uniform float2 uResolution;
+uniform float uTime;
+uniform float uPxPerDp;
+
+float hash(float n) {
+    return fract(sin(n * 12.9898) * 43758.5453);
+}
+
+half4 main(float2 p) {
+    float slot = floor(uTime / 9.0);
+    float inSlot = uTime - slot * 9.0;
+    float glitch = step(inSlot, 0.12) * step(0.8, hash(slot * 1.7 + 0.3));
+
+    float shift = 0.0;
+    if (glitch > 0.0) {
+        float band = floor(p.y / (6.0 * uPxPerDp));
+        float h = hash(band * 13.1 + slot * 7.3);
+        shift = step(0.82, h) * (hash(band + slot * 3.1) - 0.5) * 6.0 * uPxPerDp;
+    }
+    float2 q = p + float2(shift, 0.0);
+    float split = (0.5 + 0.75 * glitch) * uPxPerDp;
+
+    half4 c = content.eval(q);
+    half4 r = content.eval(q + float2(split, 0.0));
+    half4 b = content.eval(q - float2(split, 0.0));
+    // Content is premultiplied: each channel keeps its own sample's alpha, the result the largest.
+    half a = max(c.a, max(r.a, b.a));
+    half4 o = half4(r.r, c.g, b.b, a);
+
+    // Interference bar: lifts lit pixels a little where it passes.
+    float barY = fract(uTime / 14.0) * uResolution.y;
+    float bar = exp(-abs(p.y - barY) / (10.0 * uPxPerDp)) * 0.05;
+    o.rgb = min(o.rgb + half3(bar) * o.a, half3(o.a));
+    return o;
+}

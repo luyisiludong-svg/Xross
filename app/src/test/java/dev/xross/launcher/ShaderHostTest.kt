@@ -262,6 +262,36 @@ class ShaderHostTest {
         for (name in listOf("uResolution", "uColorTop", "uColorBottom", "uAccent", "uTime")) assertTrue(name, wave.contains(name))
     }
 
+    /**
+     * A feedback shader that adds a blur of last frame (`col += halo * …`) keeps `keep + glow` of it
+     * each frame. A fixed glow made Gargantua wash out at 120 fps (0.86 + 0.24 > 1); the glow now
+     * holds the per-second gain at its 60 fps value. Modelled here with each file's constants.
+     */
+    @Test fun feedbackBloomStaysStableAtEveryFrameRate() {
+        fun constant(src: String, name: String) =
+            Regex("""const float $name = ([0-9.]+);""").find(src)?.groupValues?.get(1)?.toDouble()
+        val sources = listOf(File(shaderDir, "black_hole.frag"), File("src/main/assets/themes/blackhole/black_hole.frag"))
+        for (file in sources) {
+            val src = file.readText()
+            assertTrue("$file scales its bloom by uFrameDt", src.contains("* glow;") && !src.contains("* GLOW;"))
+            val glow60 = constant(src, "GLOW")!!
+            val trail = constant(src, "TRAIL")
+            val persist = constant(src, "PERSIST")
+            fun keep(dt: Double) = if (trail != null) Math.pow(trail, dt * 30) else Math.pow(2.0, -dt / persist!!)
+            val perFrame60 = keep(1.0 / 60) + glow60
+            assertTrue("$file is stable at 60 fps", perFrame60 < 1)
+            for (fps in listOf(20.0, 60.0, 72.0, 90.0, 120.0, 144.0)) {
+                val dt = 1 / fps
+                val glow = maxOf(Math.pow(perFrame60, dt * 60) - keep(dt), 0.0)
+                val gain = keep(dt) + glow
+                assertTrue("$file at $fps fps keeps $gain a frame", gain < 1)
+                // The same decay per second at every rate.
+                assertEquals("$file at $fps fps", Math.pow(perFrame60, 60.0), Math.pow(gain, fps), 1e-9)
+            }
+            assertEquals(glow60, Math.pow(perFrame60, 1.0) - keep(1.0 / 60), 1e-12)
+        }
+    }
+
     // endregion
 
     // region Watchdog
@@ -308,6 +338,7 @@ class ShaderHostTest {
         assertEquals(Verdict.MEASURING, dog.feed(FrameBudgetWatchdog.SKIP_FIRST + 2) { 344 * ms })
         assertEquals(Verdict.TRIPPED, dog.record(344 * ms, 4 * budget60))
         assertEquals(344 * ms, dog.p90Ns)
+        assertTrue(dog.hopeless)
     }
 
     @Test fun verySlowShaderTripsOnTheEarlyMedian() {
@@ -315,6 +346,8 @@ class ShaderHostTest {
         // 40 ms is under 4× the budget, so it waits for the median check at 6 samples.
         assertEquals(Verdict.MEASURING, dog.feed(FrameBudgetWatchdog.SKIP_FIRST + FrameBudgetWatchdog.EARLY_SAMPLES - 1) { 40 * ms })
         assertEquals(Verdict.TRIPPED, dog.record(40 * ms, 10 * budget60))
+        // Not hopeless: Slow shaders ▸ Keep and warn leaves it on screen.
+        assertFalse(dog.hopeless)
     }
 
     @Test fun oneFastFrameAmongSlowOnesWaitsForTheMedian() {
@@ -444,6 +477,64 @@ class ShaderHostTest {
         val later = ShaderCanary { cache }
         assertEquals(emptyList<String>(), later.recover())
         assertTrue(later.isBlocked("custom:shader.frag:abc"))
+    }
+
+    @Test fun aForceStopOrUpdateSparesAnArmedShaderOnce() {
+        ShaderCanary { cache }.arm("custom:a:1") // force-stopped mid-proof
+        val next = ShaderCanary { cache }
+        var askedAbout = 0L
+        assertEquals(emptyList<String>(), next.recover { askedAbout = it; false })
+        assertTrue(askedAbout > 0) // the marker's time, so an older exit record isn't used
+        assertFalse(next.isBlocked("custom:a:1"))
+        // Dies armed again before it proved itself: blocked, whatever Android says.
+        next.arm("custom:a:1")
+        val third = ShaderCanary { cache }
+        assertEquals(listOf("custom:a:1"), third.recover { false })
+        assertTrue(third.isBlocked("custom:a:1"))
+    }
+
+    @Test fun aProvenShaderIsSparedAgainLater() {
+        ShaderCanary { cache }.arm("custom:a:1")
+        val next = ShaderCanary { cache }
+        next.recover { false }
+        next.arm("custom:a:1")
+        next.disarm("custom:a:1")
+        next.proven("custom:a:1")
+        next.arm("custom:a:1") // a later force-stop
+        assertEquals(emptyList<String>(), ShaderCanary { cache }.recover { false })
+    }
+
+    @Test fun anUnknownExitStillBlocks() {
+        ShaderCanary { cache }.arm("custom:a:1")
+        assertEquals(listOf("custom:a:1"), ShaderCanary { cache }.recover { null })
+        ShaderCanary { cache }.arm("custom:b:1")
+        assertEquals(listOf("custom:b:1"), ShaderCanary { cache }.recover { error("no exit info") })
+    }
+
+    @Test fun retryingRetiredShadersLiftsCrashBlocks() {
+        ShaderCanary { cache }.arm("custom:x:1")
+        val health = ShaderHealth(ShaderCanary { cache }) { true }
+        assertTrue(health.canary.isBlocked("custom:x:1"))
+        val generation = health.retryGeneration
+        health.retryRetired()
+        assertEquals(generation + 1, health.retryGeneration)
+        assertFalse(health.canary.isBlocked("custom:x:1"))
+        assertFalse(File(cache, ShaderCanary.BLOCKED).exists())
+        assertTrue(ShaderCanary { cache }.blockedKeys().isEmpty())
+        // Its next failure is announced again.
+        val fail = ShaderStatus.Failed("custom:x:1", "x", "blocked after a crash", ShaderStatus.Cause.CRASHED)
+        health.report(fail)
+        assertEquals(fail, health.status.value)
+    }
+
+    @Test fun onlyHarmlessExitReasonsSpareAShader() {
+        assertFalse(ProcessExits.crashed(android.app.ApplicationExitInfo.REASON_USER_REQUESTED))
+        assertFalse(ProcessExits.crashed(16)) // package updated
+        assertFalse(ProcessExits.crashed(android.app.ApplicationExitInfo.REASON_LOW_MEMORY))
+        assertTrue(ProcessExits.crashed(android.app.ApplicationExitInfo.REASON_CRASH_NATIVE))
+        assertTrue(ProcessExits.crashed(android.app.ApplicationExitInfo.REASON_SIGNALED))
+        assertTrue(ProcessExits.crashed(android.app.ApplicationExitInfo.REASON_UNKNOWN))
+        assertTrue(ProcessExits.crashed(android.app.ApplicationExitInfo.REASON_ANR))
     }
 
     @Test fun cleanExitLeavesNothingBlocked() {

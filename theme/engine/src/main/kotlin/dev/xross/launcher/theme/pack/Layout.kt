@@ -17,7 +17,8 @@ import java.util.Locale
  *   "itemSpacingDp": 12, "focusedScale": 1.18, "unfocusedAlpha": 0.45, "uiScale": 1.0,
  *   "focusDivider": "FULL_BLEED_LINE", "drillDownStyle": "CHEVRON_COLLAPSE",
  *   "textOverflow": "MARQUEE", "motionProfile": "CRISP",
- *   "spring": { "stiffness": 600, "dampingRatio": 0.9 }
+ *   "spring": { "stiffness": 600, "dampingRatio": 0.9 },
+ *   "menuStyle": "SLASH", "slash": { "skewDeg": -12, "rowSkin": "menu/row.webp" }
  * }
  * ```
  */
@@ -46,6 +47,17 @@ data class LayoutSpec(
     val motion: String? = null,
     /** Optional spring parameters over the motion profile's. */
     val spring: SpringSpecJson? = null,
+    /**
+     * A [MenuStyle] name (Menu styles slice 1). Only the base `layout` and a variant's set it: a
+     * rule that does is reported and ignored, since switching the whole menu while navigating
+     * would be jarring.
+     */
+    val menuStyle: String? = null,
+    /**
+     * The `SLASH` style's block ([SlashLayout], Menu styles slices 2–4), kept as JSON so skins can
+     * be a path or an object and one bad key never costs the manifest. Base `layout` only.
+     */
+    val slash: kotlinx.serialization.json.JsonElement? = null,
 ) {
     @Serializable
     data class SpringSpecJson(val stiffness: Float? = null, val dampingRatio: Float? = null)
@@ -91,6 +103,27 @@ enum class DrillDownStyle {
 
     /** A text path beside the open category: the built-in look. */
     BREADCRUMB,
+}
+
+/**
+ * How the menu is drawn (Menu styles). Every style uses the same navigation state and input;
+ * the XMB-only `layout` fields (crosshair, tiles, divider, drill-down style) are ignored by the
+ * others, without a problem, so one pack can offer several styles as variants.
+ */
+enum class MenuStyle(val label: String) {
+    /** The cross media bar: the built-in look. */
+    XMB("XMB"),
+
+    /** A bold, slanted list of art-skinned rows ([SlashLayout]). */
+    SLASH("Slash"),
+    ;
+
+    companion object {
+        fun byName(name: String?): MenuStyle? = name?.let { n ->
+            val k = n.trim().uppercase(Locale.ROOT).replace(' ', '_').replace('-', '_')
+            entries.firstOrNull { it.name == k }
+        }
+    }
 }
 
 /** Titles too long for their row. */
@@ -171,6 +204,9 @@ data class ThemeLayout(
     val drillDown: DrillDownStyle = DrillDownStyle.BREADCRUMB,
     val textOverflow: TextOverflowMode = TextOverflowMode.ELLIPSIS,
     val motion: Motion = Motion.DEFAULT,
+    val menuStyle: MenuStyle = MenuStyle.XMB,
+    /** How the `SLASH` style draws; read only under [MenuStyle.SLASH]. */
+    val slash: SlashLayout = SlashLayout.DEFAULT,
 ) {
     /** The tile aspect in [categoryId], or null for the tile's own shape. */
     fun aspectFor(categoryId: String): Float? = categoryAspects[categoryId] ?: cardAspect
@@ -290,6 +326,8 @@ fun resolveLayout(
         drillDown = enumOf("drillDownStyle", s.drillDownStyle, DrillDownStyle.entries, base.drillDown),
         textOverflow = enumOf("textOverflow", s.textOverflow, TextOverflowMode.entries, base.textOverflow),
         motion = motion,
+        menuStyle = named("menuStyle", s.menuStyle, MenuStyle::byName, base.menuStyle),
+        slash = SlashLayout.of(s.slash, base.slash, problems),
     )
 }
 

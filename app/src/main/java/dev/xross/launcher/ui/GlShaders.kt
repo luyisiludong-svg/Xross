@@ -2,6 +2,9 @@ package dev.xross.launcher.ui
 
 import android.opengl.GLES30
 import dev.xross.launcher.theme.shader.FrameBudgetWatchdog
+import dev.xross.launcher.theme.shader.ImageFilter
+import dev.xross.launcher.theme.shader.ImageWrap
+import dev.xross.launcher.theme.shader.ShaderImage
 import dev.xross.launcher.theme.shader.ProgramState
 import dev.xross.launcher.theme.shader.ShaderSpec
 import dev.xross.launcher.theme.shader.ShaderSources
@@ -51,6 +54,51 @@ internal class GlProgram(val spec: ShaderSpec) {
 
     /** Field pass: its own low-resolution first pass, and which pass is drawing. */
     var uField = -1; var uPass = -1
+
+    /** The focused item's centre (Live backgrounds § 1). */
+    var uFocus = -1
+    /** `uImage0..3` and `uImageSize0..3`; -1 where unused. */
+    val uImage = IntArray(ShaderImage.MAX) { -1 }
+    val uImageSize = IntArray(ShaderImage.MAX) { -1 }
+
+    /** The background video (Live backgrounds § 2): the copied frame, its size, where `videoFit` places it. */
+    var uVideo = -1; var uVideoSize = -1; var uVideoRect = -1
+
+    /** A scene shader layer's input: the layers below it (Live backgrounds § 3c, unit [GlScene.BELOW_UNIT]). */
+    var uBelow = -1
+
+    /** Reads any of the video uniforms, so the frame is bound for it. */
+    val usesVideo: Boolean get() = uVideo >= 0 || uVideoSize >= 0 || uVideoRect >= 0
+
+    /** Its `effects.shaderImages` on the GPU, once uploaded; null for a program without images. */
+    var textures: ImageTextures? = null
+
+    /**
+     * Live backgrounds § 3b: a SCENE drawn layer by layer ([GlScene]) instead of as its poster. Set
+     * when it starts: the scene has a layer the renderer draws, and the shared quad program linked.
+     */
+    var layered = false
+
+    /** A layered scene's textures and draw; null until it is set up. */
+    var scene: GlScene? = null
+
+    /**
+     * Live backgrounds § 3f: a SCENE retired to its poster (too slow, or blocked after a crash).
+     * Only the built-in poster program runs, so the crash guard doesn't arm for it.
+     */
+    var posterOnly = false
+
+    /** A pack's own code runs in it: armed in the canary until proven ([ShaderSpec.untrusted], unless [posterOnly]). */
+    val guarded: Boolean get() = spec.untrusted && !posterOnly
+
+    /** Waiting for its images to be decoded and uploaded ([ImageTextures], or a layered scene's [GlScene], shader layers' too). */
+    val awaitingImages: Boolean get() = if (layered) scene?.ready != true else spec.images.isNotEmpty() && textures == null
+
+    /**
+     * The state [ShaderFallback] sees: a linked program is still PENDING until its images are on
+     * the GPU, so the one on screen stays and nothing flashes black.
+     */
+    val drawState: ProgramState get() = if (state == ProgramState.READY && awaitingImages) ProgramState.PENDING else state
 
     /** Reads `uField`, so each frame first draws its [FieldTarget]. */
     val usesField: Boolean get() = FieldPolicy.wants(uField)
@@ -121,6 +169,13 @@ internal class GlProgram(val spec: ShaderSpec) {
         uPxPerDp = loc("uPxPerDp")
         uPrev = loc("uPrev"); uFrameDt = loc("uFrameDt"); uFresh = loc("uFresh")
         uField = loc("uField"); uPass = loc("uPass")
+        uFocus = loc("uFocus")
+        uVideo = loc("uVideo"); uVideoSize = loc("uVideoSize"); uVideoRect = loc("uVideoRect")
+        uBelow = loc("uBelow")
+        for (i in 0 until ShaderImage.MAX) {
+            uImage[i] = loc("uImage$i")
+            uImageSize[i] = loc("uImageSize$i")
+        }
         state = ProgramState.READY
         return null
     }
@@ -131,11 +186,88 @@ internal class GlProgram(val spec: ShaderSpec) {
         if (handle != 0) GLES30.glDeleteProgram(handle)
         fs = 0
         handle = 0
+        textures?.release()
+        textures = null
+        scene?.release()
+        scene = null
     }
 
     companion object {
         /** `GL_KHR_parallel_shader_compile`. */
         const val GL_COMPLETION_STATUS_KHR = 0x91B1
+    }
+}
+
+/**
+ * One program's `effects.shaderImages` on the GPU (Live backgrounds § 1): up to four RGBA8
+ * textures, bound to units [ShaderImage.FIRST_UNIT]–5 for each draw. Uploaded once from pixels
+ * [ShaderImageLoader] decoded on IO (straight alpha, rows already bottom-up); the pixels aren't
+ * kept, so a lost context decodes them again.
+ */
+internal class ImageTextures {
+    private val tex = IntArray(ShaderImage.MAX)
+    /** w, h, 1/w, 1/h per slot; zeros for an empty one (`uImageSizeN`). */
+    val sizes = FloatArray(ShaderImage.MAX * 4)
+
+    /** Uploads [slots] (null: an empty slot). False when the driver refused one (it stays empty). */
+    fun upload(slots: List<DecodedImage?>): Boolean {
+        var ok = true
+        for ((i, img) in slots.withIndex()) {
+            if (i >= ShaderImage.MAX || img == null) continue
+            val ids = IntArray(1)
+            GLES30.glGenTextures(1, ids, 0)
+            GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, ids[0])
+            GLES30.glPixelStorei(GLES30.GL_UNPACK_ALIGNMENT, 1)
+            GLES30.glGetError() // clear, so a refusal below is this upload's
+            GLES30.glTexImage2D(GLES30.GL_TEXTURE_2D, 0, GLES30.GL_RGBA8, img.width, img.height, 0, GLES30.GL_RGBA, GLES30.GL_UNSIGNED_BYTE, img.pixels)
+            if (GLES30.glGetError() != GLES30.GL_NO_ERROR) {
+                android.util.Log.e("XrossShader", "shader image ${img.image.path} refused at ${img.width}x${img.height}")
+                GLES30.glDeleteTextures(1, ids, 0)
+                ok = false
+                continue
+            }
+            val wrap = wrapOf(img.image.wrap)
+            val mag = if (img.image.filter == ImageFilter.NEAREST) GLES30.GL_NEAREST else GLES30.GL_LINEAR
+            val min = when {
+                !img.image.mipmap -> mag
+                img.image.filter == ImageFilter.NEAREST -> GLES30.GL_NEAREST_MIPMAP_NEAREST
+                else -> GLES30.GL_LINEAR_MIPMAP_LINEAR
+            }
+            if (img.image.mipmap) GLES30.glGenerateMipmap(GLES30.GL_TEXTURE_2D)
+            GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MIN_FILTER, min)
+            GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MAG_FILTER, mag)
+            GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_S, wrap)
+            GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_T, wrap)
+            tex[i] = ids[0]
+            sizes[i * 4] = img.width.toFloat()
+            sizes[i * 4 + 1] = img.height.toFloat()
+            sizes[i * 4 + 2] = 1f / img.width
+            sizes[i * 4 + 3] = 1f / img.height
+        }
+        GLES30.glPixelStorei(GLES30.GL_UNPACK_ALIGNMENT, 4)
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, 0)
+        return ok
+    }
+
+    /** Puts every slot on its unit (an empty one unbinds, so it samples black), then unit 0 is active again. */
+    fun bind() {
+        for (i in 0 until ShaderImage.MAX) {
+            GLES30.glActiveTexture(GLES30.GL_TEXTURE0 + ShaderImage.FIRST_UNIT + i)
+            GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, tex[i])
+        }
+        GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
+    }
+
+    fun release() {
+        for (i in tex.indices) if (tex[i] != 0) GLES30.glDeleteTextures(1, tex, i)
+        tex.fill(0)
+        sizes.fill(0f)
+    }
+
+    private fun wrapOf(w: ImageWrap): Int = when (w) {
+        ImageWrap.CLAMP -> GLES30.GL_CLAMP_TO_EDGE
+        ImageWrap.REPEAT -> GLES30.GL_REPEAT
+        ImageWrap.MIRROR -> GLES30.GL_MIRRORED_REPEAT
     }
 }
 

@@ -58,6 +58,10 @@ import dev.xross.launcher.state.BootSequence
 import dev.xross.launcher.state.MediaFolderKind
 import dev.xross.launcher.state.TextPrompt
 import dev.xross.launcher.theme.WallpaperSource
+import dev.xross.launcher.theme.pack.VideoFit
+import dev.xross.launcher.theme.pack.VideoSource
+import dev.xross.launcher.theme.shader.ShaderLibrary
+import dev.xross.launcher.theme.shader.ShaderPreset
 import dev.xross.launcher.theme.WaveTint
 import dev.xross.launcher.ui.AdaptiveWave
 import dev.xross.launcher.ui.BootOverlay
@@ -102,10 +106,13 @@ class MainActivity : ComponentActivity() {
 
     private lateinit var gamepad: GamepadHandler
 
-    /** No input for a few seconds: the wave drops to a standby rate and the glows hold still. */
+    /**
+     * No input for a few seconds: the wave drops to a standby rate and the glows hold still. The
+     * timeout follows Settings ▸ System ▸ Performance ▸ Standby motion (see [setContent]).
+     */
     private val inactivity = InactivityTracker(now = android.os.SystemClock::uptimeMillis)
 
-    /** No input for 10 s: the foreground particles (2b.4e) settle and stop. */
+    /** No input for 10 s (or the standby timeout, when longer): the foreground particles (2b.4e) settle and stop. */
     private val particleInactivity = InactivityTracker(
         timeoutMs = ParticleRest.IDLE_AFTER_MS,
         now = android.os.SystemClock::uptimeMillis,
@@ -269,6 +276,28 @@ class MainActivity : ComponentActivity() {
             val profile = resolved.profile
             // The pack's programs plus the user's background shader, all compiled ahead of time.
             val shaderLibrary = androidx.compose.runtime.remember(pack, userEffects.shader) { pack.shaderLibrary(userEffects.shader) }
+            // Live backgrounds § 2: the look's background video, shown by VIDEO or read by a CUSTOM
+            // shader. One the decoder failed on is left out (its key: a replaced file is tried again);
+            // the look's wallpaper shows instead, else the wave.
+            var failedVideo by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
+            // § 3c: a scene's video layers show its one video file through the same player.
+            val isScene = look.shader.preset == ShaderPreset.SCENE
+            val lookVideo = androidx.compose.runtime.remember(pack, look.video, look.shader, shaderLibrary) {
+                if (isScene) {
+                    shaderLibrary.spec(shaderLibrary.keyOf(look.shader))?.scene?.let { src ->
+                        src.scene.video?.let(src.videos::get)?.let { VideoSource(it, VideoFit.FILL) }
+                    }
+                } else {
+                    pack.videoSource(look.video)
+                }
+            }
+            val readsVideo = look.shader.preset == ShaderPreset.VIDEO || look.shader.preset == ShaderPreset.CUSTOM || isScene
+            val shownVideo = lookVideo?.takeIf { readsVideo && it.key != failedVideo }
+            val shaderKey = if (look.shader.preset == ShaderPreset.VIDEO && shownVideo == null) ShaderLibrary.WAVE_KEY else shaderLibrary.keyOf(look.shader)
+            // Live backgrounds § 3: a scene is the pack's art, like its video (its poster for now).
+            val packArtShown = shownVideo != null || look.shader.preset == ShaderPreset.SCENE && shaderKey != ShaderLibrary.WAVE_KEY
+            // § 3d: a scene with particle layers draws its own; the ambient (Compose) ones stay off.
+            val sceneParticles = isScene && shaderLibrary.spec(shaderKey)?.scene?.scene?.hasParticles == true
             if (BuildConfig.PERF_LOG) {
                 androidx.compose.runtime.LaunchedEffect(look.shader, look.cosmetics) {
                     val c = look.cosmetics
@@ -312,11 +341,22 @@ class MainActivity : ComponentActivity() {
                 surfaces.active = resolved.surface
             }
             var backdropCovers by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+            // The focused item's centre as laid out (ScreenSignal.Focus), for shaders' uFocus.
+            var focus by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(ScreenSignal.Focus(0.5f, 0.5f)) }
+            // The menu style's list transition, for the renderer only (no recomposition per frame).
+            val menuTransition = androidx.compose.runtime.remember { dev.xross.launcher.ui.MenuTransitionLevel() }
             // Cold-start intro (2b.5d): the black, the boot video or the shader ramp, then the menu.
             val bootReveal = rememberBootReveal(state.coldBoot, state.bootPending, state.boot)
             var bootCovers by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
             // Resting: no input for a few seconds and nothing playing. Music and video snaps keep
             // the screen awake (the mini player and the snap are live content).
+            val standby = state.settings.standbyMotion
+            androidx.compose.runtime.LaunchedEffect(standby) {
+                inactivity.setTimeout(standby.timeoutMs)
+                particleInactivity.setTimeout(standby.particleTimeoutMs)
+            }
+            val retireSlow = state.settings.slowShaders == dev.xross.launcher.data.SlowShaders.RETIRE
+            androidx.compose.runtime.LaunchedEffect(retireSlow) { container.shaderHealth.retireSlow = retireSlow }
             val noInput by inactivity.idle.collectAsStateWithLifecycle()
             val music by container.music.state.collectAsStateWithLifecycle()
             val snapPlaying by container.snaps.player.collectAsStateWithLifecycle()
@@ -362,13 +402,28 @@ class MainActivity : ComponentActivity() {
                     paused = (backdropCovers && state.waveEditor == null) || bootCovers,
                     idle = uiIdle,
                     shaders = shaderLibrary,
-                    shader = shaderLibrary.keyOf(look.shader),
+                    shader = shaderKey,
                     category = categoryId,
                     health = container.shaderHealth,
                     audio = container.music.energy,
                     filter = look.cosmetics.bgFilter,
                     intro = state.boot?.takeIf { it.plan.mode == BootMode.SHADER }?.let {
                         WaveIntro(it.startedAtNanos, BootSequence.SHADER_MS, it.endedAtNanos)
+                    },
+                    focusX = focus.x,
+                    focusY = focus.y,
+                    menuTransition = menuTransition,
+                    video = shownVideo,
+                    otherVideo = snapPlaying != null,
+                    videoResting = particlesIdle,
+                    onVideoFailed = { v, why ->
+                        failedVideo = v.key
+                        val instead = when {
+                            isScene -> "the scene without it"
+                            WallpaperSource.packWallpaper(pack, look) != null -> "the wallpaper"
+                            else -> "the wave"
+                        }
+                        container.shaderHealth.notice("video:${v.key}", "Background video ${v.file.name}: $why · showing $instead")
                     },
                 )
                 // Focus frame and app-icon look (2b.4d): the look's, colored by the active palette.
@@ -405,7 +460,11 @@ class MainActivity : ComponentActivity() {
                         when (signal) {
                             is ScreenSignal.BackdropCover -> backdropCovers = signal.covers
                             is ScreenSignal.UiFilterError -> container.shaderHealth.notice(signal.key, signal.text)
-                            is ScreenSignal.CrosshairX -> container.sounds.setCrosshair(signal.x)
+                            is ScreenSignal.Focus -> {
+                                container.sounds.setCrosshair(signal.x)
+                                focus = signal
+                            }
+                            is ScreenSignal.MenuTransition -> menuTransition.progress = signal.progress
                         }
                     },
                     snap = container.snaps,
@@ -416,15 +475,19 @@ class MainActivity : ComponentActivity() {
                     },
                     loadBadge = { name, px -> badgeImages.load(name, px) },
                     loadOfferThumb = { offer, px -> viewModel.mediaThumbnail(offer)?.let { container.art.loadFile(it, px) } },
-                    wallpaper = androidx.compose.runtime.remember(rotating, state.settings.customWallpaper, pack, look) {
-                        WallpaperSource.resolve(rotating ?: state.settings.customWallpaper, pack, look)
+                    // While the look's video or scene shows, it is the pack's art: the pack's wallpaper isn't
+                    // drawn over it. A wallpaper the user chose still wins (opaque, covering, video held).
+                    wallpaper = androidx.compose.runtime.remember(rotating, state.settings.customWallpaper, pack, look, packArtShown) {
+                        val custom = rotating ?: state.settings.customWallpaper
+                        if (packArtShown) WallpaperSource.resolve(custom, null, null) else WallpaperSource.resolve(custom, pack, look)
                     },
-                    packWallpaper = androidx.compose.runtime.remember(pack, look) {
-                        WallpaperSource.packWallpaper(pack, look)
+                    packWallpaper = androidx.compose.runtime.remember(pack, look, packArtShown) {
+                        WallpaperSource.packWallpaper(pack, look).takeIf { !packArtShown }
                     },
                     loadWallpaper = { source, px -> container.wallpapers.load(source, px) },
                     wallpaperFit = state.settings.wallpaperFit,
                     particlesIdle = particlesIdle,
+                    sceneParticles = sceneParticles,
                     reveal = { bootReveal.menu },
                 )
                 }

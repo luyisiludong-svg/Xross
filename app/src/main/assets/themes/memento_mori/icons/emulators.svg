@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="256" height="256">
+  <!-- MEMENTO//MORI: emulators -->
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M18.82 16L46.82 16L41.88 44L13.88 44zM21.7 19.5L42.7 19.5L39 40.5L18 40.5z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M25.41 24L37.41 24L35.29 36L23.29 36z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M23.23 8L26.23 8L25.17 14L22.17 14z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M31.23 8L34.23 8L33.17 14L30.17 14z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M39.23 8L42.23 8L41.17 14L38.17 14z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M16.53 46L19.53 46L18.47 52L15.47 52z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M24.53 46L27.53 46L26.47 52L23.47 52z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M32.53 46L35.53 46L34.47 52L31.47 52z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M10.29 19L16.29 19L15.76 22L9.76 22z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M8.88 27L14.88 27L14.35 30L8.35 30z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M7.47 35L13.47 35L12.94 38L6.94 38z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M48.29 19L54.29 19L53.76 22L47.76 22z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M46.88 27L52.88 27L52.35 30L46.35 30z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M45.47 35L51.47 35L50.94 38L44.94 38z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M53.74 50.5L54.96 50.92L55.6 52.15L54.59 54.79L57.16 53.45L58.52 53.89L59.13 54.99L58.89 56.35L57.77 57.55L55.04 57.84L56.72 59.65L56.48 61.16L55.49 62.26L54.12 62.68L52.78 62.19L52.11 59.73L50.57 62.19L49.06 62.68L47.84 62.26L47.24 61.16L47.53 59.65L49.85 57.84L47.22 57.55L46.53 56.35L46.76 54.99L47.76 53.89L49.28 53.45L51.38 54.79L51.29 52.15L52.37 50.92zM54.39 57L53.99 57.9L53.22 58.56L52.27 58.8L51.42 58.56L50.87 57.9L50.79 57L51.19 56.1L51.97 55.44L52.91 55.2L53.77 55.44L54.31 56.1z"/>
+</svg>

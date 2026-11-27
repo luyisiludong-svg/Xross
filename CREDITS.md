@@ -68,6 +68,33 @@ Theme pack by Beluwhal.
   2019 The Redaction Project Authors, SIL Open Font License 1.1; see
   [`fonts/OFL.txt`](app/src/main/assets/themes/blackhole/fonts/OFL.txt).
 
+### MEMENTO//MORI pack (`app/src/main/assets/themes/memento_mori`)
+
+Theme pack by Beluwhal.
+
+- **Wallpaper:** `wallpapers/specimen.png`, the pack author's own fan illustration of Persona 3
+  Reload. Its character, the S.E.E.S. armband and the P3R mark (also written by the shader) belong
+  to ATLUS and SEGA; the pack is not affiliated with or endorsed by them. No game files are used.
+- **Shader, icons and wordmark** were made for this pack.
+- **Fonts:** [Arsenal](https://fonts.google.com/specimen/Arsenal), SIL Open Font License 1.1 (see
+  [`fonts/Arsenal-OFL.txt`](app/src/main/assets/themes/memento_mori/fonts/Arsenal-OFL.txt)), and
+  Redaction 50, Copyright 2019 The Redaction Project Authors, SIL Open Font License 1.1 (see
+  [`fonts/OFL.txt`](app/src/main/assets/themes/memento_mori/fonts/OFL.txt)).
+
+### UNIT//TERMINAL pack (`app/src/main/assets/themes/unit_terminal`)
+
+Theme pack by Beluwhal. Original work: no game assets, fonts, logos, names or music are used. The
+shaders, filters, icons, wordmark and sounds were made for this pack; the audio is synthesized and
+contains no samples.
+
+### BREAKCORE.ERR pack (`app/src/main/assets/themes/breakcore_err`)
+
+Theme pack by Beluwhal. The shader, filter, icons, wordmark and sounds were made for this pack; the
+audio is synthesized and contains no samples.
+
+- **Font:** Redaction 50, Copyright 2019 The Redaction Project Authors, SIL Open Font License 1.1;
+  see [`fonts/OFL.txt`](app/src/main/assets/themes/breakcore_err/fonts/OFL.txt).
+
 ## Console logos (`app/src/main/assets/system_logos`)
 
 The console logos on system folders are by
