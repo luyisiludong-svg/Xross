@@ -107,8 +107,11 @@ fun WaveBackground(
             onFailed = { v, why -> onVideoFailedState.value(v, why) },
             onNotice = { v, text -> health?.notice("video:${v.key}", "Background video ${v.file.name}: $text") },
             onSize = renderer::videoSize,
+            copies = { renderer.videoCopies },
         )
     }
+    // Scenes drawn as their poster (§ 3f): their video isn't shown, so the player lets go of it.
+    val posterScenes = remember { mutableStateOf(emptySet<String>()) }
     onVideoFailedState.value = onVideoFailed
     // The library before the params that may name one of its programs.
     renderer.library = shaders
@@ -137,6 +140,7 @@ fun WaveBackground(
             val main = android.os.Handler(android.os.Looper.getMainLooper())
             renderer.onVideoSurface = { surface -> main.post { bgVideo.setSurface(surface) } }
             renderer.onVideoFrame = { if (renderer.frozen) requestRender() }
+            renderer.onPosterScenes = { keys -> main.post { posterScenes.value = keys } }
         }
     }
     val pacer = remember { VsyncPacer(view, refreshHz) }
@@ -181,6 +185,7 @@ fun WaveBackground(
         covered = paused || !resumed,
         standby = videoResting ?: idle,
         otherVideo = otherVideo,
+        posterOnly = params.shader in posterScenes.value,
     )
     LaunchedEffect(bgVideo, video, videoAction) {
         bgVideo.apply(video, videoAction)

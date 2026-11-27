@@ -9,9 +9,27 @@ Status: ✅ done · ◐ code done, device check open · ⬜ not started.
 
 | # | Feature | Size | Status |
 | --- | --- | --- | --- |
-| 1 | Image inputs for pack shaders (`uImage0..3`, `uFocus`) | M | ◐ on `feat/live-backgrounds-image-inputs`; A55 timing open |
-| 2 | Video backgrounds (`effects.videoPath`, `uVideo`, VIDEO preset) | L | ◐ on `feat/live-backgrounds-image-inputs`; emulator checked, A55 runs open; stretch not started |
-| 3 | Layered scenes (`scene.json`: images, sprites, video, effect shaders, GPU particles) | L × 5–6 | ◐ 3a–3f on `feat/live-backgrounds-image-inputs` (3b–3f emulator checked); A55 timings, tilt tuning and the final overdraw cap open |
+| 1 | Image inputs for pack shaders (`uImage0..3`, `uFocus`) | M | ✅ on `feat/live-backgrounds-image-inputs`; A55 p90 1.5–1.7 ms (2026-11-27) |
+| 2 | Video backgrounds (`effects.videoPath`, `uVideo`, VIDEO preset) | L | ◐ on `feat/live-backgrounds-image-inputs`; A55 timings, codecs and the held-decoder fix done; battery, snap handoff and the stretch open |
+| 3 | Layered scenes (`scene.json`: images, sprites, video, effect shaders, GPU particles) | L × 5–6 | ◐ 3a–3f on `feat/live-backgrounds-image-inputs`; A55 timings, the poster fallback and its video release done; tilt by hand and the shader-layer canary open |
+
+> **A55 run (2026-11-27, profiling build, details in `docs/status/PERFORMANCE.md` § 4.4).**
+> Watchdog p90 at 450 MHz: painted 1.46–1.65 ms, video + `glass.frag` 0.51–0.56 ms, the Neon Rain
+> scene 5.51–5.56 ms sharp and 2.61–2.66 ms soft. Deadline jank ≤ 0.11%. H.264, HEVC and VP9 play
+> on the Exynos hardware decoders. A deliberately slow scene (p90 12–13 ms) retires to its poster
+> when Slow shaders is Retire. Two findings, both fixed the same day:
+> - **A held video still cost CPU.** HOLD only paused ExoPlayer, which keeps the hardware decoder
+>   allocated; the codec service then used 4.5–16% of a core with Xross otherwise idle (0.15%
+>   with Xross stopped). Now a held player **parks** after `HOLD_PARK_MS` (2 s): it is released
+>   once one of its frames has been copied, the copy stays on screen, and the next PLAY prepares
+>   at the saved position. A texture with no frame yet (still mode, a new GL context) gets one
+>   from a short-lived player (`BackgroundVideoPolicy.step`). Parked: 0 codec ticks in 20 s.
+> - **A retired scene's video kept decoding** (~17% of a core), the 3f deviation. The renderer
+>   now reports poster-only scenes (`onPosterScenes`), and the policy releases their video
+>   (`posterOnly`). Measured: released, 0 codec ticks.
+>
+> For the final overdraw cap: the sample scene (8 layers, sharp) uses 56% of the watchdog's
+> 10 ms, so keeping 8 screens looks safe; not yet confirmed.
 
 **Order:** 1, then 2, then 3. Section 2 reuses § 1's texture units and upload path, and § 3 is
 built from § 1 and § 2 layers. Each section ships on its own: § 1 alone already enables painted
@@ -523,8 +541,8 @@ baseline.
 >   - Tilt drives scenes only; `uFocus` for CUSTOM shaders stays the focus alone.
 >   - The sensor stays on while the screen rests (20 fps): tilting is a kind of input, and
 >     turning it off would ease the layers back to the middle on every rest.
->   - A retired scene's video player keeps decoding (its layer is no longer drawn). Stopping it
->     needs the retirement to reach `MainActivity`; left for the A55 battery run to judge.
+>   - A retired scene's video player kept decoding (its layer is no longer drawn). Fixed
+>     2026-11-27: `WaveRenderer.onPosterScenes` reaches `WaveBackground`, which releases it.
 >   - The overdraw budget and the count limits landed in 3a, and the canary as one unit in 3c.
 > - **Tests:**
 >   - `SceneTiltTest` (4, `:theme:engine`): the first sample is the middle; the axes in all four

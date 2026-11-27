@@ -221,6 +221,19 @@ class BackgroundVideoTest {
         assertEquals(Action.HOLD, BackgroundVideoPolicy.action(hasVideo = true, started = true, standby = true))
         assertEquals("one decoder at a time", Action.HOLD, BackgroundVideoPolicy.action(hasVideo = true, started = true, otherVideo = true))
         assertEquals("stopped beats still", Action.RELEASE, BackgroundVideoPolicy.action(hasVideo = true, started = false, still = true))
+        assertEquals("a scene drawn as its poster shows no video", Action.RELEASE,
+            BackgroundVideoPolicy.action(hasVideo = true, started = true, posterOnly = true))
+    }
+
+    @Test fun aHeldPlayerParksAndKeepsItsFrame() {
+        val step = BackgroundVideoPolicy::step
+        assertEquals(BackgroundVideoPolicy.Step.NONE, step(Action.RELEASE, true, true))
+        assertEquals(BackgroundVideoPolicy.Step.KEEP, step(Action.PLAY, true, true))
+        assertEquals("playing again after a park prepares", BackgroundVideoPolicy.Step.CREATE, step(Action.PLAY, false, true))
+        assertEquals("held: paused now, parked later", BackgroundVideoPolicy.Step.KEEP, step(Action.HOLD, true, true))
+        assertEquals("parked with its frame on screen: nothing to do", BackgroundVideoPolicy.Step.NONE, step(Action.HOLD, false, true))
+        assertEquals("still mode's poster or a new GL context: one frame first", BackgroundVideoPolicy.Step.CREATE, step(Action.HOLD, false, false))
+        assertEquals(2_000L, BackgroundVideoPolicy.HOLD_PARK_MS)
     }
 
     @Test fun probeVerdicts() {

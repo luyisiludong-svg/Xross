@@ -204,6 +204,17 @@ class WaveRenderer(
     /** A decoded video frame is waiting (main thread): a still screen draws the frame that copies it. */
     @Volatile var onVideoFrame: (() -> Unit)? = null
 
+    /** How many video frames have been copied into `uVideo` (the player parks only after one). */
+    @Volatile var videoCopies = 0L
+        private set
+
+    /**
+     * The scenes now drawn as their poster (§ 3f: retired as too slow, or blocked by the crash
+     * guard), called on the GL thread when the set changes. Their video layers aren't drawn, so
+     * the caller lets go of the player.
+     */
+    @Volatile var onPosterScenes: ((Set<String>) -> Unit)? = null
+
     /** The video's display size as the player reports it ([videoSize]); 0 while unknown. */
     @Volatile private var videoDims = 0L
 
@@ -542,6 +553,7 @@ class WaveRenderer(
             if (spec.scene?.canRetireToPoster == true) {
                 if (spec.key !in posterReasons) {
                     posterReasons[spec.key] = "blocked after a crash"
+                    posterScenesChanged()
                     health?.notice(spec.key, "Scene ${spec.label} crashed here before · showing its poster")
                 }
                 program.posterOnly = true
@@ -698,10 +710,16 @@ class WaveRenderer(
         }
         if (!video.created) return
         val dims = videoDims
-        if (video.update((dims ushr 32).toInt(), dims.toInt(), width, height) && BuildConfig.PERF_LOG && !loggedVideoFrame) {
+        if (!video.update((dims ushr 32).toInt(), dims.toInt(), width, height)) return
+        videoCopies++
+        if (BuildConfig.PERF_LOG && !loggedVideoFrame) {
             loggedVideoFrame = true
             Log.i(TAG, "video frame copied at %.0fx%.0f".format(video.size[0], video.size[1]))
         }
+    }
+
+    private fun posterScenesChanged() {
+        onPosterScenes?.invoke(posterReasons.keys.toSet())
     }
 
     private var loggedVideoFrame = false
@@ -846,6 +864,7 @@ class WaveRenderer(
         val key = program.spec.key
         verdicts[key] = FrameBudgetWatchdog.Verdict.PASSED
         posterReasons[key] = why
+        posterScenesChanged()
         program.watchdog = null
         health?.notice(key, "Scene ${program.spec.label} is slow here ($why) · showing its poster")
         Log.w(TAG, "watchdog retired scene $key to its poster: $why (${method()})")
@@ -894,7 +913,7 @@ class WaveRenderer(
         }
         // Scenes retired to their poster (§ 3f) draw their layers again and are measured anew;
         // one still blocked by the crash guard stays a poster.
-        posterReasons.keys.retainAll { canary?.isBlocked(it) == true }
+        if (posterReasons.keys.retainAll { canary?.isBlocked(it) == true }) posterScenesChanged()
         val postered = programs.values.filter { it.posterOnly && it.spec.key !in posterReasons }
         for (program in postered) {
             programs.remove(program.spec.key)

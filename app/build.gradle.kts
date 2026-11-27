@@ -110,9 +110,12 @@ android {
         }
         // Release-optimized, debug-signed build for frame-time measurements (installable side by side
         // isn't needed, so it keeps the same applicationId).
+        // -Pxross.profilingReleaseSigned=true signs it with the release key instead, so it installs over
+        // a release build without wiping its data (a release build isn't debuggable, so it can't be backed up).
         create("profiling") {
             initWith(getByName("release"))
-            signingConfig = signingConfigs.getByName("debug")
+            val releaseSigned = providers.gradleProperty("xross.profilingReleaseSigned").orNull == "true"
+            signingConfig = signingConfigs.findByName("release")?.takeIf { releaseSigned } ?: signingConfigs.getByName("debug")
             matchingFallbacks += "release"
             buildConfigField("boolean", "PERF_LOG", "true")
         }
