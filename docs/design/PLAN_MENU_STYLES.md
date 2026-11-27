@@ -2,29 +2,92 @@
 
 A proposal, not yet scheduled to a release. It lets a theme pack replace the XMB menu with
 another built-in menu style. The first new style, `SLASH`, is a bold, slanted, high-contrast
-list with shard-shaped highlights and staggered motion, inspired by the menus of Persona-era
-JRPGs. Written against `main` at `14ed5aa` (2026-11-25). The companion plan is
-`PLAN_LIVE_BACKGROUNDS.md`, which covers what is drawn behind the menu.
+list with art-skinned rows, shard-shaped highlights and staggered motion, inspired by the menus
+of Persona-era JRPGs. Written against `main` at `14ed5aa` (2026-11-25); revised 2026-11-27
+against `feat/live-backgrounds-image-inputs` at `f824014` to reach the reference mockups (see
+"Target looks"). The companion plan is `PLAN_LIVE_BACKGROUNDS.md`, which covers what is drawn
+behind the menu.
 
 Sizes: **XS** under an hour · **S** half a day · **M** one to two days · **L** three days or more.
+Status: ✅ done · ◐ partly done · ⬜ not started.
 
 | # | Slice | Size | Status |
 | --- | --- | --- | --- |
-| 1 | Renderer seam: `layout.menuStyle`, `MenuAnchors`, `ScreenSignal.Focus` | M | ⬜ |
-| 2 | `SLASH` list: slanted rows, shard highlight, typography | M | ⬜ |
+| 1 | Renderer seam: `layout.menuStyle`, `MenuAnchors`, `ScreenSignal.Focus`, menu image loading | M | ◐ `ScreenSignal.Focus` landed with Live backgrounds § 1 |
+| 2 | `SLASH` list: slanted rows, row skins, highlight, focused content, alignment, typography | M–L | ⬜ |
 | 3 | `SLASH` motion: entrance stagger, category transition, focus pop | M | ⬜ |
-| 4 | `SLASH` categories and drill-down | S–M | ⬜ |
-| 5 | Rules (E-Ink, standby, `uiScale`), Layout panel, docs, sample pack, A55 timings | S–M | ⬜ |
+| 4 | `SLASH` categories (icon bar with a focus decal, labels, glyphs), drill-down, framed art | M | ⬜ |
+| 5 | Clock and hint styles (`components`, every menu style) | S–M | ⬜ |
+| 6 | Rules (E-Ink, standby, `uiScale`), Layout panel, docs, sample pack, A55 timings | M | ⬜ |
 
-**Total:** about L, 1.5–2 weeks.
-**Order:** 1 to 5. Slice 1 ships alone with no visible change: XMB is drawn through the new seam.
-Slice 1 should land before or with Live backgrounds § 1, because that section's `uFocus` comes
-from the new `ScreenSignal.Focus`.
+**Total:** about 2.5–3 weeks (was 1.5–2 before the mockup revision: skins, focused logos, the
+category decal, framed art and slice 5 add about a week).
+**Order:** 1 to 6. Slice 1 ships alone with no visible change: XMB is drawn through the new seam.
+Slice 5 depends only on slice 1's image loading and can land any time after it, also for XMB
+packs.
 **Not planned:**
 - A pack-scriptable menu (keyframes, a layout DSL). It would be XL, with a large surface to
   validate, and a fixed renderer with parameters gets most of the effect. See "Decisions".
-- Shipping any game's fonts, art, logos or exact screen layouts. The sample pack uses original
-  art and freely licensed fonts.
+- Widgets with no data in Xross, such as the mockups' "current wallet" figure. A pack can paint
+  one into its background art.
+- Shipping any game's fonts, art, logos or exact screen layouts. The reference mockups use
+  Persona characters and logos; they set the target feel only. The sample pack uses original art
+  and freely licensed fonts.
+
+## Target looks
+
+Three mockups in `xross_themePacks/References/` (`P3inspo.jpg`, `P4inspo.jpg`, `P5inspo.jpg`)
+are the bar this plan is written to reach. They share one layout:
+
+- **Top left:** the horizontal category icon bar, the focused icon on a decal (P5 a star burst,
+  P4 a glow with rays, P3 a paint splash) with its name underneath.
+- **Left, below the bar:** a vertical list of slanted rows made of art: P5 torn beige paper, P4
+  black slabs with houndstooth edges that bleed off the left edge with right-aligned text, P3
+  black slabs with a silver border.
+- **The focused row:** a bigger panel in a stronger skin. P5 shows the title on a pink and black
+  torn slab; P4 and P3 show the game's logo on the panel, P3 with the title beside it.
+- **Right:** character art. In P3 and P4 it's part of the background (a Live backgrounds scene);
+  in P5 it's the focused game's hero art in a tilted, decorated frame.
+- **Top right:** a big, slanted, two-line date and time, on a plate in P5 and P4.
+- **Bottom right:** the button hints, as skewed plates in P5 and plain italic text in P3 and P4.
+- **Everywhere:** busy, layered background art with particles (bubbles, stars, static), which
+  Live backgrounds § 3 already draws.
+
+What each element maps to:
+
+| Element | Where it comes from |
+| --- | --- |
+| Background art, character art, particles | Live backgrounds § 3 (`scenePath`), built |
+| Category bar and its decal | Slice 4: `slash.categories: ICONS`, `slash.categoryDecal` |
+| Slanted, art-skinned rows | Slice 2: `skewDeg`, `rowTilt`, `rowSkin` |
+| The focused panel, logo and title | Slice 2: `focusedSkin`, `focusedContent` |
+| Right-aligned text, rows bleeding off the edge | Slice 2: `textAlign`, `bleed`, `listWidth` |
+| Framed hero art (P5) | Slice 4: `art: HERO`, `artRect`, `artTilt`, `artFrame` |
+| The big clock | Slice 5: `components.clockLayout`, `clockSize`, `clockTilt`, `clockPlate` |
+| Hint plates | Slice 5: `components.hintStyle`, `hintPlate` |
+| Fonts | `typography.display` and `typography.body`, existing |
+
+A P3-like look, as a sketch of the finished format:
+
+```json
+"layout": {
+  "menuStyle": "SLASH",
+  "slash": {
+    "skewDeg": -10, "rowTilt": [-2, 1], "jitter": 0.2, "seed": 3,
+    "listX": 0.16, "listY": 0.40, "listWidth": 0.24,
+    "rowSkin": { "path": "menu/row.webp", "slice": [48, 14, 48, 14] },
+    "focusedSkin": { "path": "menu/panel.webp", "slice": [40, 40, 40, 40], "tint": "accent" },
+    "focusedContent": "LOGO_TITLE",
+    "categories": "ICONS",
+    "categoryDecal": { "path": "menu/splash.webp", "size": 2.0 }
+  }
+},
+"components": {
+  "clockFormat": "MdEhma",
+  "clockLayout": "STACKED", "clockSize": 2.2, "clockTilt": -6,
+  "hintStyle": "PLAIN"
+}
+```
 
 ## Where things stand
 
@@ -36,7 +99,8 @@ from the new `ScreenSignal.Focus`.
   `barY`, `focusedY`, `aboveY`) appear only in `XmbScreen.kt`, 14 times. That's what keeps the
   seam an M and not an L. The anchor values are used in four places outside the menu itself:
   - the status bar's `leftMaxHeight` (the left cluster stops above the category bar)
-  - `ScreenSignal.CrosshairX`, which `MainActivity` sends to `sounds.setCrosshair` for panning
+  - `ScreenSignal.Focus` (was `CrosshairX`), which `MainActivity` sends to `sounds.setCrosshair`
+    for panning and the renderer uses as `uFocus`
   - the focus point `Offset(m.anchorX, m.focusedY)`
   - the drill-down overlays (folder column, breadcrumb, chevron)
 - The `layout` block (`theme/engine/.../pack/Layout.kt`) only adjusts the XMB: crosshair, tile
@@ -45,8 +109,14 @@ from the new `ScreenSignal.Focus`.
   `MenuTree`. Left and right switch category, up and down move the focus, and confirm and back
   drill in and out. A new style uses the same state and input, so **the view model doesn't
   change**.
-- Packs already ship fonts (`typography.display`, `typography.body`), palettes, focus frames
-  and motion profiles. `SLASH` reuses all of them.
+- Packs already ship fonts (`typography.display`, `typography.body`), palettes, category icons,
+  focus frames and motion profiles. `SLASH` reuses all of them. Focus frames
+  (`effects.focusFrameStyle`) are built-in drawn styles, not images, so the mockups' decals and
+  plates need the image skins below.
+- Games carry scraped logos as `ArtKind.WHEEL` art and hero art as `ArtKind.HERO`.
+- The status bar (`components`, spec § 15) already has a `CLOCK` slot with `clockFormat` and the
+  display font, but a fixed size, one line and no tilt or plate. The hints are one pill
+  (`buttonHints`, `glyphOverride`).
 
 ---
 
@@ -60,7 +130,7 @@ they are.
 ```json
 "layout": {
   "menuStyle": "SLASH",
-  "slash": { "...": "see § 2" }
+  "slash": { "...": "see § 2 and § 4" }
 }
 ```
 
@@ -93,23 +163,49 @@ data class MenuAnchors(
 )
 ```
 
-- `ScreenSignal.CrosshairX` becomes `ScreenSignal.Focus(x, y)`, both 0..1, eased. *Done with
-  Live backgrounds § 1 (2026-11-25): the XMB sends its crosshair, and the renderer does the
-  easing; `MenuAnchors` should send the focused item's centre through the same signal.* `MainActivity`
-  passes `x` to `sounds.setCrosshair` as today. It also becomes the source of Live backgrounds
-  § 1's `uFocus`, so a pack shader's parallax follows the focus in either style.
+- `ScreenSignal.Focus(x, y)`, both 0..1, landed with Live backgrounds § 1 (2026-11-25): the XMB
+  sends its crosshair, and the renderer does the easing. Here it switches to
+  `MenuAnchors.focus`, the focused item's centre, so a pack shader's parallax follows the focus
+  in either style. `MainActivity` keeps passing `x` to `sounds.setCrosshair`.
+- **Menu images.** Slices 2, 4 and 5 add images a pack names for the UI: row and panel skins, the
+  category decal, the art frame, the clock and hint plates. A `MenuImages` loader (next to
+  `WallpaperLoader`) finds and decodes them once per look, off the main thread, into
+  `ImageBitmap`s that the composables read from a `CompositionLocal`. Paths get the same checks
+  as every pack path (inside the pack, no `..`; png, jpg, webp). The long side is capped at 1024
+  (2048 for a sprite sheet), and the whole set at 6 megapixels. Over the budget, the loader
+  reports the problem and drops the images from the end of the list; a style whose image is
+  missing draws its flat fallback. A hot reload (`ThemeWatcher`) reloads them when a file
+  changes. Slice 1 ships the loader and the `Skin` type (below) with no user yet.
+- **Skins.** One shape for every stretchable image:
+
+```json
+{ "path": "menu/row.webp", "slice": [48, 14, 48, 14], "tint": "accent", "outset": [0, 0, 0, 0] }
+```
+
+  - `slice` is left, top, right, bottom in image pixels: the corners keep their size, the edges
+    stretch one way, the middle both ways (a nine-slice). Without it the image stretches whole.
+  - `tint`, optional: `accent`, a palette role name or a hex color, multiplied in. One grey skin
+    then works for a red, a yellow and a blue variant.
+  - `outset`, optional, in dp: how far the image reaches past the box it skins, so torn edges,
+    stars or splashes can spill over.
+  - A plain string is `{ "path": … }`.
+  - Drawn with `drawImage(srcOffset, srcSize, dstOffset, dstSize)`, nine calls per skin, cached
+    in `drawWithCache` by size. Nothing is allocated per frame.
 - `LayoutSettingsPanel` hides the XMB-only rows when the active style is not `XMB`, and gains a
   "Menu style" row only when the pack offers more than one through variants.
 
 **Tests.** `LayoutSpec` parsing (`menuStyle` names, a problem in a rule or patch, XMB fields
-ignored under `SLASH`). `MenuAnchors` for XMB matching today's numbers at the three crosshair
-presets, so the move changes nothing. Emulator (`-gpu host`): a screenshot diff of the home
-screen before and after the move.
+ignored under `SLASH`). `Skin` parsing (strings and objects, bad slices, slices larger than the
+image, tint names). The image budget and the order images are dropped in. Nine-slice geometry as
+a pure function (corners keep their size, a box smaller than the corners scales them down evenly).
+`MenuAnchors` for XMB matching today's numbers at the three crosshair presets, so the move
+changes nothing. Emulator (`-gpu host`): a screenshot diff of the home screen before and after
+the move.
 
-## 2. `SLASH` list (M)
+## 2. `SLASH` list (M–L)
 
-**Goal.** The menu as a vertical list of slanted slabs. Each row tilts a little differently, and
-the focused row is large, high-contrast and backed by a jagged highlight.
+**Goal.** The menu as a vertical list of slanted rows. Each row tilts a little differently and
+can wear a skin; the focused row is a bigger panel that can show the game's logo.
 
 **Format.** Every field is optional:
 
@@ -119,41 +215,72 @@ the focused row is large, high-contrast and backed by a jagged highlight.
   "rowTilt": [-3, 2],
   "jitter": 0.35,
   "seed": 7,
-  "highlight": "SHARD",
-  "highlightColors": ["accent", "#000000"],
-  "focusedScale": 1.6,
-  "titleCase": "UPPER",
-  "outline": 2,
   "listX": 0.08,
   "listY": 0.30,
-  "art": "HERO"
+  "listWidth": 0.38,
+  "bleed": false,
+  "textAlign": "START",
+  "rowSkin": [
+    { "path": "menu/paper_a.webp", "slice": [40, 16, 40, 16] },
+    { "path": "menu/paper_b.webp", "slice": [40, 16, 40, 16] }
+  ],
+  "highlight": "SHARD",
+  "highlightColors": ["accent", "#000000"],
+  "focusedSkin": { "path": "menu/slab.webp", "slice": [60, 24, 60, 24], "outset": [8, 6, 8, 6] },
+  "focusedScale": 1.6,
+  "focusedContent": "TITLE",
+  "focusedHeight": 0.16,
+  "titleCase": "UPPER",
+  "outline": 2
 }
 ```
 
-- `skewDeg`: the horizontal skew of every row, −20 to 20. `rowTilt`: the range each row's
-  rotation is drawn from, in degrees, at most ±6.
-- `jitter` 0..1, with `seed`: how much row offsets and the highlight's corners vary. The values
-  come from `hash(seed, row index)`, so a row keeps its shape across frames and visits.
-- `highlight`: `SHARD` (an irregular quad plus a smaller offset shard), `SLAB` (a skewed
-  rectangle) or `NONE`. `highlightColors`: front and back shard, as `accent`, a palette role name
-  or a hex color.
-- `titleCase`: `AS_IS` or `UPPER`. `outline`: a stroke behind the text, in dp, 0–4.
-- `listX` and `listY`: where the list's first row sits, as fractions of the screen.
-- `art`: what the empty side of the screen shows for the focused item: `HERO` (the game's hero
-  art, else its logo), `ICON` or `NONE`.
+- **Geometry.**
+  - `skewDeg`: the horizontal skew of every row, −20 to 20. `rowTilt`: the range each row's
+    rotation is drawn from, in degrees, at most ±6.
+  - `jitter` 0..1, with `seed`: how much row offsets and the highlight's corners vary. The
+    values come from `hash(seed, row index)`, so a row keeps its shape across frames and visits.
+  - `listX`, `listY`: where the list's first row sits, as fractions of the screen. `listWidth`:
+    the rows' width, a fraction of the screen (0.15–0.6).
+  - `bleed`: rows reach past the left edge of the screen; `listX` then only places the text (P4).
+  - `textAlign`: `START`, `CENTER` or `END`, inside the row.
+- **Row skins.**
+  - `rowSkin`: a skin, or a list of skins. With a list, each row takes
+    `hash(seed, index) % n`, so torn paper doesn't repeat row after row.
+  - A skin is drawn in the row's skewed, tilted box. Draw the art straight and let `skewDeg`
+    slant it, or set `skewDeg` to 0 and draw the slant into the art.
+  - Without a skin, rows are text only, as in the first draft.
+- **The focused row.**
+  - `focusedSkin`: the panel behind the focused row. When set, it replaces `highlight`.
+  - `highlight`, used without a `focusedSkin`: `SHARD` (an irregular quad plus a smaller offset
+    shard), `SLAB` (a skewed rectangle) or `NONE`. `highlightColors`: front and back shard, as
+    `accent`, a palette role name or a hex color.
+  - `focusedContent`: `TITLE` (the default), `LOGO` (the game's `WHEEL` art, the title when it
+    has none) or `LOGO_TITLE` (the logo on the panel, the title beside it, P3). Items without a
+    logo (folders, utilities, settings) always show their title.
+  - `focusedScale` sizes the focused title. With a logo, the panel is `focusedHeight` tall
+    (a fraction of the screen, 0.08–0.3) and the logo fits inside its padding.
+- **Text.** `titleCase`: `AS_IS` or `UPPER`. `outline`: a stroke behind the text, in dp, 0–4.
 
 **Drawing.**
-- Rows are Compose `Text` in `graphicsLayer { rotationZ; transform skew }`. Skew isn't a
-  `graphicsLayer` property, so it's applied with a `Matrix` in `drawWithContent`. Nothing is
-  allocated per frame.
+- Rows are Compose `Text` in `graphicsLayer { rotationZ }`. Skew isn't a `graphicsLayer`
+  property, so it's applied with a `Matrix` in `drawWithContent`, together with the skin.
+  Nothing is allocated per frame.
 - The highlight is a `Path` built from `(seed, index, size)` and cached per focused index. It
-  morphs to its new shape with the focus spring.
+  morphs to its new shape with the focus spring. A `focusedSkin` doesn't morph: it moves and
+  resizes with the spring.
+- Logos load through the same image path as the XMB's game art. While a logo loads, the title
+  shows; it doesn't flash in once per scroll step, because the panel keeps the last logo for the
+  length of the focus spring.
 - Only the rows that fit are composed, as `XmbMetrics` already does for the XMB.
 - Unfocused rows use `layout.unfocusedAlpha`. Long titles use `layout.textOverflow`.
 - Fonts come from the pack's `typography.display`. With none, the built-in bold weight.
 
 **Tests.** Unit: the highlight geometry as a pure function (same input gives the same corners,
-corners stay inside the row's padded box at any `jitter`), `slash` parsing and clamping.
+corners stay inside the row's padded box at any `jitter`); the skin chosen per row (stable, and
+spread across the list); `focusedContent` fallbacks (no logo, a folder); row boxes for every
+`textAlign` and with `bleed`; `slash` parsing and clamping. Emulator: each mockup's list rebuilt
+with original placeholder art, as screenshots for review.
 
 ## 3. `SLASH` motion (M)
 
@@ -188,45 +315,119 @@ wipe, and the focused item lands with a small overshoot.
 **Tests.** Unit: stagger timing as a pure function (the cap, `INSTANT` gives zero), shard polygons
 covering the old list's bounds. Emulator: a screen recording of a category switch for review.
 
-## 4. `SLASH` categories and drill-down (S–M)
+## 4. `SLASH` categories, drill-down and framed art (M)
 
-**Goal.** Categories and sub-lists work the way they do in the XMB, drawn in this style.
+**Goal.** Categories and sub-lists work the way they do in the XMB, drawn in this style, and
+the focused game's art can sit in a decorated frame.
 
-- **Categories:** a slanted strip of labels (or the category glyphs, by `slash.categories`:
-  `LABELS` or `GLYPHS`) along the top. The current one is in the highlight color, the others
-  dimmed. Left and right still switch category.
-- **Drill-down:** confirm on a folder slides the parent list out to the left, skewed and dimmed,
+**Format.**
+
+```json
+"slash": {
+  "categories": "ICONS",
+  "categoryDecal": { "path": "menu/star.webp", "size": 1.8, "frames": [4, 1], "fps": 6 },
+  "categoryY": 0.22,
+  "art": "HERO",
+  "artRect": [0.56, 0.28, 0.38, 0.44],
+  "artTilt": -3,
+  "artFrame": { "path": "menu/frame.webp", "slice": [64, 64, 64, 64], "outset": [24, 24, 24, 24] }
+}
+```
+
+- **Categories.** `categories` picks how they're drawn:
+  - `ICONS`, the default: the horizontal icon row, as in the XMB and all three mockups, using the
+    pack's category icons, with the focused category's name under its icon. It is placed at
+    `categoryY` and starts at `listX`. Left and right still switch category.
+  - `LABELS`: a slanted strip of names along the top, the current one in the highlight color,
+    the others dimmed.
+  - `GLYPHS`: the same strip with the category glyphs.
+- **The focus decal.** `categoryDecal` is a skin drawn behind the focused category, `size` times
+  the icon (1–3). With `frames` and `fps` it is a sprite sheet, read like a Live backgrounds
+  sprite layer. It follows the focus with the nav spring and holds its frame at rest.
+- **Framed art.** `art` says what the empty side of the screen shows for the focused item:
+  `HERO` (the game's `HERO` art, else its logo), `ICON` or `NONE`. `artRect` places it (screen
+  fractions, x, y, w, h); `artTilt` turns it (±10°); `artFrame` is a skin drawn over its edge,
+  usually with an `outset` so decorations spill past it (P5). `art: NONE` suits packs whose
+  character art is in the background scene (P3, P4).
+- **Drill-down.** Confirm on a folder slides the parent list out to the left, skewed and dimmed,
   with the new list cascading in (§ 3). The opened folder's title stays as a large, slanted
-  header above the new list. Back reverses it. `layout.drillDownStyle` doesn't apply.
-- **Hints and status bar:** unchanged components, placed by `MenuAnchors.statusClearance`.
+  header above the new list, in the `focusedSkin`. Back reverses it. `layout.drillDownStyle`
+  doesn't apply.
+- **Hints and status bar:** placed by `MenuAnchors.statusClearance`; their look is slice 5.
 - **Info panel, details, options and the other overlays:** unchanged. They only use the size
   values of `XmbMetrics`.
 
-**Tests.** Emulator: drill two levels into Games, back out, switch category during a
-transition. Device (A55): the same with a real library of several hundred games.
+**Tests.** Unit: decal frame selection over time and at rest; the art box with tilt and outset;
+`categories` parsing. Emulator: drill two levels into Games, back out, switch category during a
+transition; hero art changing as the focus moves, with and without a frame. Device (A55): the
+same with a real library of several hundred games.
 
-## 5. Rules, settings, docs and sample (S–M)
+## 5. Clock and hint styles (S–M)
+
+**Goal.** The mockups' big slanted clock and plated hints. They live in `components` next to
+the existing clock and hint settings, so an XMB pack can use them too.
+
+**Format.**
+
+```json
+"components": {
+  "clockFormat": "MdEhma",
+  "clockLayout": "STACKED",
+  "clockSize": 2.4,
+  "clockTilt": -6,
+  "clockPlate": { "path": "menu/clock_plate.webp", "slice": [32, 32, 32, 32] },
+  "hintStyle": "PLATES",
+  "hintSkew": -10,
+  "hintPlate": { "path": "menu/hint.webp", "slice": [12, 8, 12, 8], "tint": "#000000" }
+}
+```
+
+- `clockLayout`: `INLINE` (today) or `STACKED`, where the date letters of `clockFormat`
+  (`y M d E`) form the first line and the time letters (`H h m a`) the second. No new format
+  string.
+- `clockSize` scales the clock (1–3), `clockTilt` turns it (±12°), and `clockPlate` is a skin
+  behind it. The other status bar slots keep their size and stay level.
+- `hintStyle`: `PILL` (today's pill), `PLATES` (each hint on its own skewed plate, P5) or `PLAIN`
+  (text and glyphs only, P3, P4). `hintSkew` slants plates and text (±15°); `hintPlate` is the
+  plate's skin, else a flat plate in the surface color.
+- Settings ▸ Theme ▸ Components follows the pack for these; no new device rows.
+
+**Tests.** Unit: splitting a skeleton into its date and time lines (date only, time only, both);
+parsing and clamping; `PILL` and `INLINE` staying pixel-identical to today. Emulator: each style
+at `uiScale` 0.8 and 1.3, and with every status bar slot on.
+
+## 6. Rules, settings, docs and sample (M)
 
 **Protections the new style must keep:**
 - `MotionProfile.INSTANT` and still/E-Ink mode: no stagger, no transition, no pop, no morphing
-  highlight. Every change happens at once.
-- Standby (`LocalUiIdle`): nothing animates while the screen rests. The highlight holds still.
-- `uiScale` scales the whole list; `listX` and `listY` stay fractions of the screen.
+  highlight, decals on their first frame. Every change happens at once. Skins still draw.
+- Standby (`LocalUiIdle`): nothing animates while the screen rests. The highlight and the decal
+  hold still.
+- `uiScale` scales the whole list, the skins' fixed edges and the clock; `listX`, `listY`,
+  `listWidth`, `categoryY` and `artRect` stay fractions of the screen.
 - Pausing when an opaque layer covers the screen, as today.
 
 **Performance.** The style is Compose only: no GL program, so the `FrameBudgetWatchdog` and
-`ShaderCanary` aren't involved. It's measured on a profiling build (`assembleProfiling`; debug
-builds show false stutter), on the A55, three rounds interleaved with XMB:
-deadline jank while scrolling a long list fast, and during category switches with each
-`transition`. Results go in `docs/status/PERFORMANCE.md`. The target is no more deadline jank
-than XMB on the same pack.
+`ShaderCanary` aren't involved. A skinned row costs nine image draws, so a full screen of rows is
+under a hundred; the logo panel and decal add a few more. It's measured on a profiling build
+(`assembleProfiling`; debug builds show false stutter), on the A55, three rounds interleaved
+with XMB, over the sample pack's scene (the cost that matters is the menu on top of a busy
+background): deadline jank while scrolling a long list fast, and during category switches with
+each `transition`. Results go in `docs/status/PERFORMANCE.md`. The target is no more deadline
+jank than XMB on the same pack.
 
 **Docs and sample.**
-- `THEME_SPECIFICATION.md`: `layout.menuStyle` and the `slash` block.
-- A "menu styles" chapter in the theme guide, with screenshots.
-- A sample pack in `xross_themePacks`: `SLASH` over a Live backgrounds § 1 shader with three
-  painted layers moving with `uFocus`. Original art and an OFL-licensed display font. It also
-  ships an `XMB` variant, to show the Layout panel's style row.
+- `THEME_SPECIFICATION.md`: `layout.menuStyle`, the `slash` block, skins, and the new
+  `components` keys.
+- A "menu styles" chapter in the theme guide, with screenshots, and a short "drawing skins"
+  section (slices, outsets, drawing for a tint).
+- The shader preview (`tools/shader-preview`) gets a skin viewer: open an image, drag the slice
+  lines, see it at several sizes. Small, and it saves pack authors guesswork.
+- A sample pack in `xross_themePacks`, aiming at the mockups' level with original art and an
+  OFL-licensed display font: a Live backgrounds scene behind, paper row skins, a slab panel with
+  `LOGO_TITLE`, a category decal, a framed hero, a stacked clock on a plate and plated hints. It
+  also ships an `XMB` variant, to show the Layout panel's style row, and two color variants that
+  share grey skins through `tint`.
 
 ---
 
@@ -236,6 +437,8 @@ than XMB on the same pack.
   replaces "CrosshairX + the focused row's height" in that plan.
 - § 3's `transition` driver reads `ScreenSignal.MenuTransition` from this plan's slice 3. Under
   XMB it's driven by the category bar's slide.
+- § 3 scenes carry the mockups' background and character art; `slash.art: NONE` leaves them
+  room.
 - Nothing else depends on the other plan. Each slice here works over the wave, a wallpaper or a
   shader.
 
@@ -250,4 +453,9 @@ than XMB on the same pack.
 3. **Pack-scriptable motion.** Proposed: not planned. Packs tune the fixed parameters above. If
    later packs need more, add another built-in style before a scripting format.
 4. **`schemaVersion`.** Proposed: stays 2. All the new fields are optional, and an older Xross
-   ignores `menuStyle` and draws the XMB.
+   ignores `menuStyle` and the new `components` keys and draws the XMB.
+5. **How skins are sliced.** Proposed: `slice` insets in the JSON on a plain png, jpg or webp.
+   The alternative is Android `.9.png` files. JSON insets work with webp, in the shader preview
+   and in tools on any machine, and can be tuned without re-exporting the art.
+6. **Clock and hint styles in `components`, not in `slash`.** Proposed: `components`, so XMB
+   packs get them too and they sit with the existing clock and hint settings.
