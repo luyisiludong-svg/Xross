@@ -7,7 +7,7 @@
 ![Android API 28+](https://img.shields.io/badge/Android-API%2028%2B-3DDC84?logo=android&logoColor=white)
 ![Jetpack Compose](https://img.shields.io/badge/Jetpack-Compose-4285F4?logo=jetpackcompose&logoColor=white)
 ![OpenGL ES 3.0](https://img.shields.io/badge/OpenGL%20ES-3.0-5586A4?logo=opengl&logoColor=white)
-![Release](https://img.shields.io/badge/release-0.2.2.0--beta-orange)
+![Release](https://img.shields.io/badge/release-0.2.3.0--beta-orange)
 ![Unit tests](https://img.shields.io/badge/unit%20tests-990%2B%20passing-brightgreen)
 ![Architecture](https://img.shields.io/badge/architecture-MVVM%20%C2%B7%20multi--module-blueviolet)
 ![License](https://img.shields.io/badge/license-Apache%202.0-blue)
@@ -19,7 +19,7 @@
 **A 100% FOSS, XMB-style launcher for Android handhelds and TVs — no paywalls, no closed binaries, no telemetry.**
 
 
-> **Status: 0.2.2.0-beta.** The library, scraping, RetroAchievements and
+> **Status: 0.2.3.0-beta.** The library, scraping, RetroAchievements and
 > the full Theme 2.0 engine are in. Expect rough edges: so far it has been tested on the Android
 > emulator and on a Samsung Galaxy A55, but not yet on a gaming handheld or with a physical
 > controller. See [`CHANGELOG.md`](CHANGELOG.md) for what changed, [`Roadmap.md`](Roadmap.md) for
@@ -111,8 +111,11 @@ screen.
 
 ### 🎨 Theme 2.0 engine
 
-- Two built-in packs: **XMB** (the default), the classic cross-media bar look, and **Xross**, with Phosphor
-  icons. Both come with synthesized UI sounds.
+- Six built-in packs: **XMB** (the default), the classic cross-media bar look; **Xross**, with
+  Phosphor icons; **Gargantua**, an ASCII black hole; and the showcase packs **MEMENTO//MORI**,
+  **UNIT//TERMINAL** and **BREAKCORE.ERR**, each with its own shader, surfaces, rules and variants.
+- Two menu styles: the cross media bar, or **SLASH**, a bold slanted list skinned with the theme's
+  own art, with stacked or plated clocks and slanted hint tags.
 - Theme packs in plain JSON (palettes, font roles, surfaces, icons, sounds) that hot-reload while
   you edit them, or install from one `.xtheme` file.
 - A Live Theme Mixer for layout, scale and spacing, and export of your look as a pack or a

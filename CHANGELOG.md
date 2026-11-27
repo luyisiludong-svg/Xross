@@ -1,7 +1,14 @@
 # Changelog
 
-## Unreleased
+## 0.2.3.0-beta — 2026-11-27
 
+- **Three more built-in theme packs.** MEMENTO//MORI (cobalt and aqua, a dithered moon shader and
+  an illustrated specimen sheet), UNIT//TERMINAL (sepia line work on umber paper, a ring scanner and
+  a printed-menu filter) and BREAKCORE.ERR (a glitchcore showcase that sets nearly everything a pack
+  can) now ship in the APK, listed after Gargantua. Their ids are reserved, so a folder pack of the
+  same name in `Xross/themes/` is shadowed by the built-in one.
+- Built-in packs can bring a wallpaper: it is copied once into the app's cache and drawn like a
+  folder pack's.
 - **Menu styles: SLASH.** A theme can draw the menu as a bold, slanted list instead of the cross
   media bar (`layout.menuStyle: "SLASH"`, with a `layout.slash` block). Rows can be made of the
   theme's own art (torn paper, slabs), and the focused row becomes a bigger panel that can show

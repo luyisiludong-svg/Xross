@@ -64,7 +64,7 @@ Merged into this file on 2026-11-11 (the originals are in git history):
 | **XMB fidelity** | Look and feel exactly like the XMB, plus Xross's extras | ◐ Layout, motion, navigation, status bar, game art and backgrounds, the monthly color, the busy icon and the sound roles match. The typeface, Resume/Quit Game, the folder drill-down and the playback control panel don't yet (§4.6) |
 
 **Codebase at a glance:** Kotlin + Jetpack Compose, one `:app` module (plus the test-only
-`:emulator-stub`), minSdk 28 / targetSdk 36, version `0.2.2.0-beta`. Room database at schema v6,
+`:emulator-stub`), minSdk 28 / targetSdk 36, version `0.2.3.0-beta`. Room database at schema v6,
 23 platforms plus your own (`systems.json`), 13 emulator launch recipes plus your own (`emulators.json`), 8 color themes (one follows the month), three metadata
 services (Hasheous, SteamGridDB, ScreenScraper) plus RetroAchievements, settings in four JSON files
 in `Xross/config/` (kotlinx.serialization), art in `Xross/media` in ES-DE's layout, theme packs in
